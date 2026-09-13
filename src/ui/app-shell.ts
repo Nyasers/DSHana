@@ -217,15 +217,82 @@ import { injectDshIndex, installTransport } from "#/ui/dsh-inject.ts";
   // 两个消费方：设置视图（FP 齿轮点开 → 主卡开面板）与会话选中（FP 点会话 → 主卡跟随）。
   // 作用域：我们单 DSH 源，只按**卡片实例**配对（宿主文档：主卡与其 FP 具有同一 cardInstanceId）；
   // 样例额外按 sourceId 分域，单源下不需要，日后多源时再补。
-  // 键在调用时才算：context 可能后到，算早了会拼出错误作用域。
+  // 身份门（为什么需要它）：键里带 cardInstanceId，而 cardInstanceId 由宿主经 surface context
+  // **异步**交到（页面挂载时通常还没有）。读 / 写在调用那一刻算键，晚一步算就是对的作用域；
+  // 订阅不行——storage.onChanged 把「匹配哪个键」和回调一起交出去，键在**注册那一刻**就定死。
+  // 此前订阅直接用 sharedKey()：身份未到位会拼出 dshana.card.unknown.*，真实身份到了也不重绑，
+  // 于是写侧一切正常（值落在真实键上）、订阅侧永久收不到——静默失效，界面上只是「对面不跟随」，
+  // 没有任何报错。三条规则：
+  //   ① 身份未就绪：不注册、不写；挂进等待队列，身份（或存储）到位后自动补挂、补发；
+  //   ② 回调里用**当刻**算出来的键过滤，正确性不再依赖注册时机；
+  //   ③ 身份变化 = 换作用域：重绑并立刻重读一次（不继承旧作用域的值）。
+  var IDENTITY_WAIT_MS = [150, 300, 600, 1200, 2400, 4000]; // 补挂预算（约 9s，用尽即放弃）
+  var identityWaiters: Array<() => void> = [];
+  var identityTimer: ReturnType<typeof setTimeout> | null = null;
+  var identityRetry = 0;
+  var identityWatching = false;
+  var lastKnownIdentity: string | null = null;
+  var warnedNoIdentity = false;
+
   function cardInstanceIdOf() {
     try {
       var c = hana && hana.surface && typeof hana.surface.getContext === "function" ? hana.surface.getContext() : null;
       return c && typeof c.cardInstanceId === "string" && c.cardInstanceId ? c.cardInstanceId : null;
     } catch (e) { return null; }
   }
+  /** 共享键；身份未就绪返回 null（调用方据此拒绝这次读 / 写，不落到 unknown 作用域）。 */
   function sharedKey(kind) {
-    return "dshana.card." + (cardInstanceIdOf() || "unknown") + "." + kind;
+    var id = cardInstanceIdOf();
+    return id ? "dshana.card." + id + "." + kind : null;
+  }
+  function warnNoIdentity() {
+    if (warnedNoIdentity) return;
+    warnedNoIdentity = true;
+    try {
+      console.warn("[dshana] 共享状态订阅暂时挂起：cardInstanceId 还没到（等宿主 surface context），到位后自动绑定");
+    } catch (e) { /* 忽略 */ }
+  }
+  /** 身份（或存储）到位后：清空等待队列并补挂，owner 的快照同时重发一次。 */
+  function whenSharedReady() {
+    var id = cardInstanceIdOf();
+    if (id !== lastKnownIdentity) {
+      var changed = lastKnownIdentity !== null; // 首次到位不算「变化」，不重复重读
+      lastKnownIdentity = id;
+      if (changed) onIdentityChanged();
+    }
+    if (!id || !sharedStore()) { scheduleIdentityWait(); return false; }
+    var waiters = identityWaiters;
+    identityWaiters = [];
+    for (var i = 0; i < waiters.length; i++) { try { waiters[i](); } catch (e) { /* 忽略 */ } }
+    return true;
+  }
+  function scheduleIdentityWait() {
+    if (identityTimer || !identityWaiters.length) return;
+    if (identityRetry >= IDENTITY_WAIT_MS.length) return; // 预算用尽：放弃补挂，不再无限重试
+    var delay = IDENTITY_WAIT_MS[identityRetry++];
+    identityTimer = setTimeout(function () {
+      identityTimer = null;
+      whenSharedReady();
+      scheduleIdentityWait();
+    }, delay);
+  }
+  function watchIdentity() {
+    if (identityWatching) return;
+    identityWatching = true;
+    // 宿主交面（context 到达 / 变化）是最强的一次信号；旧宿主没有这个门，靠上面的定时补挂兜。
+    try {
+      if (hana && hana.surface && typeof hana.surface.onContextChanged === "function") {
+        hana.surface.onContextChanged(function () { whenSharedReady(); });
+      }
+    } catch (e) { /* 忽略 */ }
+    whenSharedReady();
+  }
+  function onIdentityChanged() {
+    // 换作用域：owner 重发一次快照，轮询立刻对一次新作用域的值（旧作用域的值不适用）。
+    lastPublishedSig = null;
+    if (!shell) return;
+    if (!isSidebar && lastSnapshot) publishBootState(lastSnapshot);
+    schedulePoll(0);
   }
   // storage.global 在 SDK 里即可调用对象、也可能是工厂（两边兼容地取）。
   function sharedStore() {
@@ -238,25 +305,63 @@ import { injectDshIndex, installTransport } from "#/ui/dsh-inject.ts";
   }
   function readShared(kind) {
     var st = sharedStore();
-    if (!st) return Promise.resolve(null);
-    return Promise.resolve(st.get(sharedKey(kind))).then(function (entry) {
+    var key = sharedKey(kind);
+    if (!st || !key) { watchIdentity(); return Promise.resolve(null); }
+    return Promise.resolve(st.get(key)).then(function (entry) {
       var v = entry && typeof entry === "object" ? entry.value : null;
       return v && typeof v === "object" ? v : null;
     }, function () { return null; });
   }
   function writeShared(kind, value) {
     var st = sharedStore();
-    if (!st) return Promise.reject(new Error("hana.storage.global \u4e0d\u53ef\u7528"));
-    return Promise.resolve(st.set(sharedKey(kind), value));
-  }
-  function onSharedChanged(kind, listener) {
-    var st = sharedStore();
-    if (!st || typeof st.onChanged !== "function") return function () { /* 无通知面则只靠读时刷新 */ };
     var key = sharedKey(kind);
-    var off = st.onChanged(function (keys) {
-      if (Array.isArray(keys) && keys.indexOf(key) >= 0) { try { listener(); } catch (e) { /* 忽略 */ } }
-    });
-    return typeof off === "function" ? off : function () { /* 无取消句柄 */ };
+    if (!st || !key) {
+      watchIdentity();
+      return Promise.reject(new Error("\u5171\u4eab\u72b6\u6001\u8eab\u4efd\u672a\u5c31\u7eea\uff1acardInstanceId \u7f3a\u5931"));
+    }
+    return Promise.resolve(st.set(key, value));
+  }
+  /**
+   * 订阅一个共享键的变化。身份 / 存储未就绪时挂进等待队列，就绪后自动绑定（不再静默失效）。
+   * @param kind 共享键的种类（settings-view / selection / boot-state）
+   * @param listener 变化回调（不带参数，调用方自己重读）
+   * @returns disposer
+   */
+  function onSharedChanged(kind, listener) {
+    var disposed = false;
+    var off: (() => void) | null = null;
+    var boundIdentity: string | null = null;
+    function invoke() { try { listener(); } catch (e) { /* 忽略 */ } }
+    // 补挂点：身份与存储都就绪后由身份门调用（见 whenSharedReady）。
+    function bind() {
+      if (disposed) return;
+      var id = cardInstanceIdOf();
+      if (!id) { warnNoIdentity(); return; } // 身份未到：就绪后重跑本函数
+      if (boundIdentity === id && off) return;
+      var st = sharedStore();
+      if (!st || typeof st.onChanged !== "function") { scheduleIdentityWait(); return; }
+      var rebind = boundIdentity !== null;
+      if (off) { try { off(); } catch (e) { /* 忽略 */ } off = null; }
+      boundIdentity = id;
+      off = st.onChanged(function (keys) {
+        if (disposed) return;
+        // 键在回调里算：身份晚到、或中途换了作用域，都不影响匹配。
+        var key = sharedKey(kind);
+        if (!key || !Array.isArray(keys) || keys.indexOf(key) < 0) return;
+        invoke();
+      });
+      // 首次挂载由调用方自己初始化；只有重绑（换了作用域）才补一次重读。
+      if (rebind) invoke();
+    }
+    identityWaiters.push(bind);
+    watchIdentity();
+    bind();
+    return function () {
+      disposed = true;
+      var i = identityWaiters.indexOf(bind);
+      if (i >= 0) identityWaiters.splice(i, 1);
+      if (off) { try { off(); } catch (e) { /* 忽略 */ } off = null; }
+    };
   }
 
   // 设置视图：{ open, section }。
@@ -503,9 +608,11 @@ import { injectDshIndex, installTransport } from "#/ui/dsh-inject.ts";
   function publishBootState(s) {
     var sig = bootSig(s);
     if (sig === lastPublishedSig) return; // 状态没变就不写，免存储抖动
-    lastPublishedSig = sig;
+    // 只在**写成功之后**记 sig：身份未就绪时这次写会被拒，不能让同一份状态被永久跳过
+    // （身份门到位后会重发一次，这里配合着保证「一次失败不吞掉一次状态」）。
     writeShared("boot-state", { at: Date.now(), state: s })
-      .catch(function () { /* 拿不到共享面就当没有，本面照常自取 */ });
+      .then(function () { lastPublishedSig = sig; })
+      .catch(function () { /* 拿不到共享面就当没有，本面照常自取；下次 poll 重试 */ });
   }
   function fetchOwnState() {
     fetchState().then(function (s) {
@@ -825,7 +932,10 @@ import { injectDshIndex, installTransport } from "#/ui/dsh-inject.ts";
         if (injected.dispose) { try { injected.dispose(); } catch (e) { /* 忽略 */ } }
         // owner 下线：把快照标成过期（at: 0），FP 不必等 5 分钟安全网就能接上
         if (!isSidebar && lastSnapshot) {
-          try { writeShared("boot-state", { at: 0, state: lastSnapshot }); } catch (e) { /* 忽略 */ }
+          try {
+            writeShared("boot-state", { at: 0, state: lastSnapshot })
+              .catch(function () { /* 身份未就绪 / 存储不可达：下线标记没落也没关系，接收端有 STALE_MS 安全网 */ });
+          } catch (e) { /* 忽略 */ }
         }
       }, { once: true });
       // 主题不再定时推送（原有一个 1.5s 轮询，只为等“壳页就绪后再推”）：首屏由
