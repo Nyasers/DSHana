@@ -197,6 +197,12 @@ function main(): void {
     console.error("[market-index] 拿不到 --base-url（且无法从 git remote 推导）");
     process.exit(1);
   }
+  // 自留字段不走构建器的 URL 替换，基址的 https 约束要在这里先立住：
+  // 非 https 或相对值一旦写进自留字段，就没有别的步骤会拦它。
+  if (!/^https:\/\//.test(baseUrl)) {
+    console.error(`[market-index] --base-url 必须是绝对 https 地址（收到 ${JSON.stringify(baseUrl)}）`);
+    process.exit(1);
+  }
   const targets = buildTargets(all, version, baseUrl);
 
   // 1) 为所有本版本产物写 entry（多目标各一份，便于以后按平台取用）
