@@ -10,6 +10,8 @@
 
 3. **验证**：让 Agent 跑一次 `dshana(action="open", task="…", cwd="<工作目录>")`，任务正常回投即安装成功。
 
+**按平台安装**：Release 里除通用包（`dshana-v<version>.zip`）外，还有各平台包（`dshana-v<version>-<target>.zip`，体积明显更小）。按平台取件与安装的完整流程见 [`dshana-install-skill/SKILL.md`](dshana-install-skill/SKILL.md)：取 `index.v2.json` → 选本机 target → 核 sha256 → 先卸旧版 → 走宿主端点安装 → 验证。那份手册可以直接交给 Agent 执行。
+
 **无需配置 API Key / 模型**：推理经受管 runtime 内宿主 `ctx.models` 发起，provider 凭据不进 DSH 进程。默认模型读 DSH 自身配置（`DSH_HOME/settings.yaml` 的 `agent-default-model`），也可在 DSH 内直接改；`dshana` 的 `provider` / `model` / `reasoningEffort` 参数可显式覆盖单次任务。
 
 ## 设置
