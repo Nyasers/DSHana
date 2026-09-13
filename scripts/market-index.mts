@@ -28,6 +28,13 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const HANA_HOME = process.env.HANA_HOME || join(process.env.USERPROFILE || process.env.HOME || "", ".hanako");
 const RELEASES = join(ROOT, "releases");
 
+interface Archive {
+  url: string;
+  sha256: string;
+  size: number;
+  format: "zip";
+}
+
 interface Entry {
   kind: string;
   id: string;
@@ -38,7 +45,14 @@ interface Entry {
   permissions: { capability: string }[];
   compatibility?: { minAppVersion?: string };
   icon?: string;
-  archive: { url: string; sha256: string; size: number; format: "zip" };
+  archive: Archive;
+  /**
+   * 自留字段（宿主不读也不拒，未知字段会原样透传）：本版本全量 target → archive 映射。
+   * 索引格式没有平台维度（消费侧只按版本文本匹配版本），平台包只能放在 release 资产里按名取用；
+   * 这块给“知道目标名”的人与脚本一个稳定入口，将来格式长出平台维度时按它迁移。
+   * baseUrl 在此处已是绝对地址（构建器只替换 archive.url 里的占位符，不认这里）。
+   */
+  "x-dshana-targets"?: Record<string, Archive>;
 }
 
 /** --flag value / --flag=value 两种写法。 */
@@ -101,7 +115,33 @@ function defaultBaseUrl(version: string): string | null {
   return null;
 }
 
-function buildEntry(zipName: string, sha256File: string): Entry {
+/** 产物事实：字节数 + .sha256（归一成小写）。 */
+function zipFacts(zipName: string): { size: number; sha256: string } {
+  const size = fs.statSync(join(RELEASES, zipName)).size;
+  const sha256 = fs.readFileSync(join(RELEASES, `${zipName}.sha256`), "utf8").trim().split(/\s+/)[0].toLowerCase();
+  return { size, sha256 };
+}
+
+/** target 名：`<id>-v<version>-<target>.zip` → `<target>`；无后缀（通用包）→ `universal`。 */
+function targetOf(zipName: string, prefix: string): string {
+  const rest = zipName.slice(prefix.length).replace(/\.zip$/, "");
+  return rest.startsWith("-") ? rest.slice(1) : "universal";
+}
+
+/** 本版本全量 target → archive（绝对地址）映射，写进自留字段。 */
+function buildTargets(zips: string[], version: string, baseUrl: string): Record<string, Archive> {
+  const manifest = fs.readJsonSync(join(ROOT, "src", "manifest.json"));
+  const prefix = `${manifest.id}-v${version}`;
+  const out: Record<string, Archive> = {};
+  for (const zipName of zips) {
+    if (!fs.existsSync(join(RELEASES, `${zipName}.sha256`))) continue;
+    const { size, sha256 } = zipFacts(zipName);
+    out[targetOf(zipName, prefix)] = { url: `${baseUrl}/${zipName}`, sha256, size, format: "zip" };
+  }
+  return out;
+}
+
+function buildEntry(zipName: string, sha256File: string, targets: Record<string, Archive>): Entry {
   const manifest = fs.readJsonSync(join(ROOT, "src", "manifest.json"));
   const pkg = fs.readJsonSync(join(ROOT, "package.json"));
   const size = fs.statSync(join(RELEASES, zipName)).size;
@@ -117,6 +157,7 @@ function buildEntry(zipName: string, sha256File: string): Entry {
     permissions: (Array.isArray(manifest.capabilities) ? manifest.capabilities : []).map((capability: string) => ({ capability })),
     archive: { url: `{{BASE_URL}}/${zipName}`, sha256, size, format: "zip" },
   };
+  if (Object.keys(targets).length > 0) entry["x-dshana-targets"] = targets;
   if (manifest.minAppVersion) entry.compatibility = { minAppVersion: manifest.minAppVersion };
   const icon = iconDataUri(manifest.icon);
   if (icon) entry.icon = icon;
@@ -150,6 +191,14 @@ function main(): void {
     process.exit(1);
   }
 
+  // 基址在写 entry 之前定下来：自留字段里用的是绝对地址（构建器只替换 archive.url 的占位符）
+  const baseUrl = arg("--base-url") || defaultBaseUrl(version);
+  if (!baseUrl) {
+    console.error("[market-index] 拿不到 --base-url（且无法从 git remote 推导）");
+    process.exit(1);
+  }
+  const targets = buildTargets(all, version, baseUrl);
+
   // 1) 为所有本版本产物写 entry（多目标各一份，便于以后按平台取用）
   const entries: string[] = [];
   for (const zip of all) {
@@ -159,7 +208,7 @@ function main(): void {
       continue;
     }
     const entryPath = join(RELEASES, `${zip.replace(/\.zip$/, "")}.entry.json`);
-    fs.writeFileSync(entryPath, `${JSON.stringify(buildEntry(zip, sha256File), null, 2)}\n`, "utf8");
+    fs.writeFileSync(entryPath, `${JSON.stringify(buildEntry(zip, sha256File, targets), null, 2)}\n`, "utf8");
     entries.push(entryPath);
   }
 
@@ -180,13 +229,6 @@ function main(): void {
   const builder = findIndexBuilder();
   if (!builder) {
     console.error("[market-index] 找不到 extension-index-build.mjs（仓库内与本机都没有）");
-    fs.removeSync(stageDir);
-    process.exit(1);
-  }
-
-  const baseUrl = arg("--base-url") || defaultBaseUrl(version);
-  if (!baseUrl) {
-    console.error("[market-index] 拿不到 --base-url（且无法从 git remote 推导）");
     fs.removeSync(stageDir);
     process.exit(1);
   }
