@@ -48,6 +48,7 @@ export const description =
   "get=回看某一轮最终结论；approve=应答挂起审批（approvalId 必填）。" +
   "用法心智同 subagent：开、续、关；本项目另有 get/approve 两个特色动作。" +
   "调用模型：句柄默认（taskId/approvalId，按宿主记录的来源会话校验归属）、凭证显式（sessionId = 我要跨对话）。" +
+  "审批与回合边界：越界/敏感操作会挂起审批，通知（含 approvalId，并可读具体操作）只在回合边界送达——open/reply 提交后请结束本回合，别在同回合内空等或连续重发（同回合内等待会撞上宿主工具回调的 30 秒上限，并可能让该会话卡住）；下一回合再用 approve 应答。" +
   "完整调用手册见 SKILL: skills/dshana/SKILL.md";
 
 /** 参数 Schema：顶层 action + oneOf 分支（每个子命令独立的参数字段集）。 */

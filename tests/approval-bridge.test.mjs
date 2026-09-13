@@ -16,6 +16,10 @@ import {
   ToolCallCache,
   DEFAULT_APPROVAL_TIMEOUT_MS,
   TOOL_ARGS_PREVIEW_MAX,
+  clipForLabel,
+  summarizeOperation,
+  describeEscalation,
+  buildApprovalLabel,
 } from "../src/runtime/approval-bridge.ts";
 
 test("approvalOwnsTask：parentTaskId 一致才放行", () => {
@@ -75,4 +79,67 @@ test("ToolCallCache：有界 + 按会话隔离 + 取不到返回 null", () => {
 
 test("常量：默认审批超时是 App 侧策略值，不是宿主默认（宿主默认 0 = 不超时）", () => {
   assert.equal(DEFAULT_APPROVAL_TIMEOUT_MS, 30000);
+});
+
+// —— 审批载荷的"具体操作" ——
+// 宿主通知正文是 `Approval requested: <label>`，label 之外的内容不保证写进审批方的视线；
+// 审批是 Agent 的活，只给工具名等于让它凭信任签字。下列用例锁住 label 里的实义。
+
+test("clipForLabel：压平空白 + 保头保尾截断", () => {
+  assert.equal(clipForLabel("  a   b\tc  ", 40), "a b c");
+  const long = "A".repeat(80) + "Z".repeat(80);
+  const cut = clipForLabel(long, 40);
+  assert.equal(cut.length, 40, "截断到上限");
+  assert.ok(cut.includes("…"), cut);
+  assert.ok(cut.startsWith("A") && cut.endsWith("Z"), "路径尾部也承载信息，两头都留");
+});
+
+test("summarizeOperation：说出要动什么（写/改/命令/URL/兜底）", () => {
+  const writeArgs = JSON.stringify({
+    file_path: "E:\\Hanako\\probe.txt",
+    content: "x".repeat(61),
+    sandbox_permissions: "danger-full-access",
+  });
+  assert.equal(summarizeOperation("write", writeArgs), "写文件 E:\\Hanako\\probe.txt（61 字符）");
+  assert.equal(
+    summarizeOperation("edit", JSON.stringify({ file_path: "a.ts", old_string: "abc", new_string: "de" })),
+    "改文件 a.ts（替换 3 → 2 字符）",
+  );
+  assert.equal(summarizeOperation("bash", '{"command":"ls -la","cwd":"/x"}'), "执行命令 ls -la");
+  assert.equal(summarizeOperation("fetch", '{"url":"https://example.com"}'), "请求 https://example.com");
+  assert.equal(summarizeOperation("write", '{"file_path":"a.txt"}'), "访问 a.txt");
+  assert.equal(summarizeOperation("mystery", '{"a":1}'), '调用 mystery（{"a":1}）');
+  assert.equal(summarizeOperation("write", null), "调用 write");
+  assert.equal(
+    summarizeOperation("write", '{"file_path":"a.txt",'),
+    '调用 write（{"file_path":"a.txt",）',
+    "预览被截断/非法 JSON 退回兜底，不抛",
+  );
+});
+
+test("describeEscalation：读出申请的沙箱档 + 一句人话（未知档不臆测）", () => {
+  assert.deepEqual(describeEscalation('{"sandbox_permissions":"danger-full-access"}'), {
+    mode: "danger-full-access",
+    note: "越过工作区限制（工作区外读写、更宽执行面）",
+  });
+  assert.equal(describeEscalation('{"command":"ls"}'), null, "没有档位字段就不编造");
+  assert.equal(describeEscalation(null), null);
+  const unknown = describeEscalation('{"sandbox":"weird-mode"}');
+  assert.equal(unknown.mode, "weird-mode");
+  assert.ok(unknown.note.includes("未登记"), unknown.note);
+});
+
+test("buildApprovalLabel：label 自带具体操作与申请的权限档，并保留既有前缀", () => {
+  const args = JSON.stringify({
+    file_path: "E:\\Hanako\\probe.txt",
+    content: "x".repeat(61),
+    sandbox_permissions: "danger-full-access",
+  });
+  const label = buildApprovalLabel("write", summarizeOperation("write", args), describeEscalation(args));
+  assert.ok(label.startsWith("DSH 请求执行越界/敏感操作（write）"), label);
+  assert.ok(label.includes("probe.txt"), label);
+  assert.ok(label.includes("61 字符"), label);
+  assert.ok(label.includes("danger-full-access"), label);
+  const bare = buildApprovalLabel("mystery", summarizeOperation("mystery", null), describeEscalation(null));
+  assert.equal(bare, "DSH 请求执行越界/敏感操作（mystery）：调用 mystery", "拿不到 args 时不编造档位");
 });

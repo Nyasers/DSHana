@@ -25,6 +25,12 @@
 //   DSH 请求侧取消（req.signal abort / 回合中止）：宿主审批若仍 pending → 应答 rejected
 //   收尾（不留孤儿审批；父任务终态兜底），DSH 侧 resolve 'cancelled'——不把取消当授权。
 //
+// 审批载荷写出**具体操作**：宿主那条通知的正文是 `Approval requested: <label>`，label 之外的部分
+// 不保证写进审批方的视线；而审批是 Agent 的活，拿不到"要动什么"就只能凭信任签字。所以 label 由
+// `buildApprovalLabel` 拼出工具名之外的实义（目标路径 / 命令 / 替换规模 + 申请的权限档），details
+// 同源带上 operation / escalationMode / escalationNote / task（提示片段，来自映射 500 字上限）/
+// approvalTimeoutMs（审批方还有多久）。
+//
 // 审批等待不计入执行超时：任务执行超时走 cancel 链（session-run 看门狗 → session.cancel
 // → 本桥 answerer 的 req.signal 中止 → 上面收尾路径），宿主审批由 approval 的 timeoutMs
 // 独立自动拒绝。
@@ -106,6 +112,99 @@ export function previewArgs(value: unknown, max: number = TOOL_ARGS_PREVIEW_MAX)
   return s.length > max ? s.slice(0, max) + "…" : s;
 }
 
+/** 压平空白 + 截断到上限（保头也保尾，路径这类值的尾部同样承载信息）。 */
+export function clipForLabel(value: unknown, max: number): string {
+  const s = String(value === null || value === undefined ? "" : value).replace(/\s+/g, " ").trim();
+  if (s.length <= max) return s;
+  const head = Math.max(1, Math.floor(max * 0.4));
+  const tail = Math.max(1, max - head - 1);
+  return s.slice(0, head) + "…" + s.slice(-tail);
+}
+
+/** 解析 args 预览为对象；失败/非对象返回 null（预览被截断过也会走这条路）。 */
+function parseArgsObject(argsJson: string | null): Record<string, unknown> | null {
+  if (!argsJson) return null;
+  try {
+    const v = JSON.parse(argsJson);
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+// 各工具族的字段别名（DSH 工具面用 snake_case，Hana 侧偶见 camelCase）
+const PATH_KEYS = ["file_path", "filePath", "path", "target", "targetPath", "notebook_path", "file"];
+const COMMAND_KEYS = ["command", "cmd", "script", "shell_command"];
+const CONTENT_KEYS = ["content", "contents", "new_string", "new_str", "text", "data"];
+const OLD_KEYS = ["old_string", "old_str"];
+const URL_KEYS = ["url", "endpoint"];
+const MODE_KEYS = ["sandbox_permissions", "sandboxPermissions", "sandbox", "permission_mode"];
+
+function firstStringOf(obj: Record<string, unknown> | null, keys: string[]): string | null {
+  if (!obj) return null;
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === "string" && v.trim()) return v;
+  }
+  return null;
+}
+
+function firstKeyOf(obj: Record<string, unknown> | null, keys: string[]): unknown {
+  if (!obj) return null;
+  for (const k of keys) {
+    if (Object.prototype.hasOwnProperty.call(obj, k)) return obj[k];
+  }
+  return null;
+}
+
+function sizeOf(value: unknown): number {
+  if (typeof value === "string") return value.length;
+  if (value === null || value === undefined) return 0;
+  try { return JSON.stringify(value).length; } catch { return 0; }
+}
+
+/** 纯函数：把一次待审批的工具调用写成"具体操作"一句（审批方要判的第一件事）。
+ *
+ *  这是通知里唯一保证写进视线的实义（label 的一部分），所以宁可具体、宁可截断：
+ *  `写文件 <path>（n 字符）` / `改文件 <path>（替换 a → b 字符）` / `执行命令 <cmd>` /
+ *  `访问 <path>` / `请求 <url>`，认不出的工具退回 `调用 <tool>（args 摘要）`。
+ */
+export function summarizeOperation(toolName: string, argsJson: string | null, max: number = 160): string {
+  const tool = clipForLabel(toolName || "tool", 40);
+  const obj = parseArgsObject(argsJson);
+  if (!obj) {
+    return argsJson ? "调用 " + tool + "（" + clipForLabel(argsJson, max) + "）" : "调用 " + tool;
+  }
+  const command = firstStringOf(obj, COMMAND_KEYS);
+  if (command) return "执行命令 " + clipForLabel(command, max);
+  const target = firstStringOf(obj, PATH_KEYS);
+  const oldText = firstStringOf(obj, OLD_KEYS);
+  const hasContent = firstKeyOf(obj, CONTENT_KEYS) !== null || firstStringOf(obj, CONTENT_KEYS) !== null;
+  if (target && oldText) {
+    return "改文件 " + clipForLabel(target, max) + "（替换 " + oldText.length + " → " + sizeOf(firstKeyOf(obj, CONTENT_KEYS)) + " 字符）";
+  }
+  if (target && hasContent) {
+    return "写文件 " + clipForLabel(target, max) + "（" + sizeOf(firstKeyOf(obj, CONTENT_KEYS)) + " 字符）";
+  }
+  if (target) return "访问 " + clipForLabel(target, max);
+  const url = firstStringOf(obj, URL_KEYS);
+  if (url) return "请求 " + clipForLabel(url, max);
+  return "调用 " + tool + "（" + clipForLabel(JSON.stringify(obj), max) + "）";
+}
+
+/** 纯函数：读出这次要申请的沙箱档位，附一句人话（未登记档位原样回显，不臆测语义）。 */
+export function describeEscalation(argsJson: string | null): { mode: string; note: string } | null {
+  const mode = firstStringOf(parseArgsObject(argsJson), MODE_KEYS);
+  if (!mode) return null;
+  const notes: Record<string, string> = {
+    "danger-full-access": "越过工作区限制（工作区外读写、更宽执行面）",
+    "require_escalated": "升级到受审的更宽模式",
+    "workspace-write": "限工作区内写入",
+    "read-only": "只读",
+  };
+  return { mode, note: notes[mode] || "未登记的模式，按宿主沙箱语义执行" };
+}
+
 /** 纯函数：宿主审批记录是否确实属于我们以为的那条任务（以宿主字段为准）。
  *
  *  契约上 `AppTaskApprovalRecordV2.parentTaskId` 必填；**缺失按不一致处理**（fail-closed）——
@@ -171,8 +270,21 @@ export class ToolCallCache {
   }
 }
 
-/**
- * 挂载审批桥。@returns stop 函数（幂等）：退订 ctx 事件、中止全部等待中的审批 watcher。
+/** 纯函数：审批 label。宿主那条通知的正文是 `Approval requested: <label>`，label 之外的内容
+ *  不保证写进审批方的视线，所以实义（具体操作 + 申请的权限档）都拼在这里。
+ */
+export function buildApprovalLabel(
+  toolName: string,
+  operation: string,
+  escalation: { mode: string; note: string } | null,
+): string {
+  return (
+    "DSH 请求执行越界/敏感操作（" + toolName + "）：" + operation +
+    (escalation ? "；申请 " + escalation.mode + "：" + escalation.note : "")
+  );
+}
+
+/** 挂载审批桥。@returns stop 函数（幂等）：退订 ctx 事件、中止全部等待中的审批 watcher。
  * 挂载失败抛错由 main.js 决定（不阻断 ready——审批不可用时 DSH 等待者 fail-closed）。
  */
 export function startApprovalBridge({ ctx, hana, dataDir, log }: { ctx: any; hana: any; dataDir: string; log?: (msg: string) => void }): () => void {
@@ -255,18 +367,25 @@ export function startApprovalBridge({ ctx, hana, dataDir, log }: { ctx: any; han
       else signal.addEventListener("abort", onAbort, { once: true });
     }
     // 宿主审批创建
+    // 具体操作一句（label 的实义部分）+ 申请的权限档：审批方要判的第一件事
+    const operation = summarizeOperation(toolName, args);
+    const escalation = describeEscalation(args);
     let approval: AppTaskApprovalRecordV2 | null = null;
     try {
       const request: AppTaskApprovalRequestV2 = {
         taskId: map.taskId,
-        label: "DSH 请求执行越界/敏感操作（" + toolName + "）",
+        label: buildApprovalLabel(toolName, operation, escalation),
         details: {
           dshSessionId: sessionId,
           rpcId,
           toolName,
+          operation,
+          ...(escalation ? { escalationMode: escalation.mode, escalationNote: escalation.note } : {}),
+          ...(typeof map.task === "string" && map.task ? { task: map.task } : {}),
           ...(callId ? { callId } : {}),
           ...(reason ? { reason } : {}),
           ...(args ? { args } : {}),
+          approvalTimeoutMs: timeoutMs,
           kind: "dsh-approval",
         },
         timeoutMs,
