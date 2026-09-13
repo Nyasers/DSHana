@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.0-rc.2+dsh-0.1.5-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.1%2Bdsh-0.1.5-rc.2...v1.0.0-rc.2%2Bdsh-0.1.5-rc.2) (2026-09-13)
+
+### Features
+
+* **approval:** 审批载荷写出具体操作，工具描述点明回合边界 ([539ba66](https://github.com/Nyasers/DSHana/commit/539ba66b17595a1f216f549b78b63dba63ddb2e7))
+* **release:** 出市场清单（entry 派生 + index.v2.json） ([1355a43](https://github.com/Nyasers/DSHana/commit/1355a436b512a662d216cec0b5e3071f5092683d))
+
+### Bug Fixes
+
+* **ci:** 应答 review —— market-index 先同步 manifest；tag 经 env 传入 ([1769f60](https://github.com/Nyasers/DSHana/commit/1769f60d86aaf26f3eac32d3dfcb4b9c2f5dbfed)), references [#102](https://github.com/Nyasers/DSHana/issues/102) [package.json#version](https://github.com/package.json/issues/version)
+* **license:** 仓库改名 DSHana 后，NOTICE 的源码地址跟上 ([a66517a](https://github.com/Nyasers/DSHana/commit/a66517ad6e22b2e646b2244aa4330965682de6b3))
+
 ## [1.0.0-rc.1+dsh-0.1.5-rc.2](https://github.com/Nyasers/dshana/compare/v1.0.0-beta.5%2Bdsh-0.1.2-rc.1...v1.0.0-rc.1%2Bdsh-0.1.5-rc.2) (2026-09-13)
 
 ### ⚠ BREAKING CHANGES
@@ -393,6 +405,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
