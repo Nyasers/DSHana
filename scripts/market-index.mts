@@ -167,9 +167,13 @@ function main(): void {
   const stageDir = join(RELEASES, "_index-input");
   fs.removeSync(stageDir);
   fs.ensureDirSync(stageDir);
+  // 按**精确文件名**匹配：universal 包名是各平台包名的前缀（平台包只多一段 `-<os>-<cpu>`），
+  // 前缀判定会把五个包一起喂给构建器，构建器再按版本取首（同版本时按输入顺序，即文件名排序）
+  // 就会把 darwin-arm64 选成主 archive。
+  const chosenEntryNames = new Set(chosen.map((zip: string) => `${zip.replace(/\.zip$/, "")}.entry.json`));
   for (const e of entries) {
     const name = basename(e);
-    if (!chosen.some((zip: string) => name.startsWith(zip.replace(/\.zip$/, "")))) continue;
+    if (!chosenEntryNames.has(name)) continue;
     fs.copySync(e, join(stageDir, name));
   }
 
