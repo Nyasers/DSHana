@@ -107,9 +107,59 @@ jobs:
             releases/*.zip.sha256
           if-no-files-found: error
 
+  # 市场清单：从各 target 的产物派生 entry，并拼出 index.v2.json。
+  # 索引模型是「每版本一个归档位」（item 只有 archive.url，没有平台维度），所以只放 universal，
+  # 平台包留在 release 资产里按名取用——详见 scripts/market-index.mts 头注。
+  market-index:
+    needs: package
+    if: ${{ needs.package.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Derive market index
+        run: |
+          set -e
+          mkdir -p releases
+          find artifacts -name '*.zip' -exec cp {} releases/ \;
+          find artifacts -name '*.zip.sha256' -exec cp {} releases/ \;
+          pnpm run index -- \
+            --target universal \
+            --base-url "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}" \
+            --publisher "${{ github.repository_owner }}" \
+            --source-id "dshana" \
+            --name "DSHana" \
+            --out index.v2.json
+          echo "--- index.v2.json (head) ---"
+          head -c 400 index.v2.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: market-index
+          retention-days: 3
+          path: index.v2.json
+          if-no-files-found: error
+
   # 单点发布：所有出包成功后才跑到这里；任一出包失败则本 job 不执行，release 留在 draft。
   publish:
-    needs: package
+    needs: [package, market-index]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -137,7 +187,7 @@ jobs:
             echo "  uploading $f"
             gh release upload "${{ github.ref_name }}" "$f" --clobber
             found=$((found+1))
-          done < <(find artifacts -type f \( -name '*.zip' -o -name '*.zip.sha256' \) -print0)
+          done < <(find artifacts -type f \( -name '*.zip' -o -name '*.zip.sha256' -o -name 'index.v2.json' \) -print0)
           [ "$found" -gt 0 ] || { echo "::error::no package assets found in artifacts/"; exit 1; }
 
       # 硬校验：必需资产缺一个就 fail，release 停在 draft 供人工检查（不出现"残缺发布"）
@@ -156,6 +206,8 @@ jobs:
             REQUIRED="$REQUIRED dshana-v${VER}-${t}.zip dshana-v${VER}-${t}.zip.sha256"
           done
           REQUIRED="$REQUIRED dshana-v${VER}.zip dshana-v${VER}.zip.sha256"
+          # 市场清单：客户端指向 releases/latest/download/index.v2.json 就能装包
+          REQUIRED="$REQUIRED index.v2.json"
 
           MISSING=()
           for f in $REQUIRED; do
@@ -168,7 +220,7 @@ jobs:
             echo "release 保持 draft 供人工检查"
             exit 1
           fi
-          echo "✓ 全部必需资产齐备（4 平台包 + 通用包，各带 sha256）"
+          echo "✓ 全部必需资产齐备（4 平台包 + 通用包，各带 sha256，外加市场清单 index.v2.json）"
 
       # 全部构建成功且资产齐备 → 去掉 draft、保留 prerelease（稳定版由人工标 latest）
       - name: Un-draft (keep prerelease)
