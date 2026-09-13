@@ -93,7 +93,8 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 
 - **approvalId 必填**（审批通知里带；同一任务可挂起多个审批，逐个应答）——它是唯一句柄，会话由工具解析（句柄路径会校验归属）；`sessionId` 仅在"我要跨对话"时显式传
 - **outcome**：`allowed-once`（默认，放行本次）/ `rejected`（拒绝）
-- **决策看 args（具体要执行什么），不听 reason（模型自述不可尽信）**：合理放行，危险拒绝
+- **决策看 args（具体要执行什么），不听 reason（模型自述不可尽信）**：合理放行，危险拒绝。审批请求的 `label` 写作“工具名 + 具体操作 + 申请的权限档”，`details` 同源带 `operation` / `escalationMode` / `escalationNote` / `task`（该工作单元的提示片段）/ `approvalTimeoutMs`
+- **回合边界**：审批通知只在**回合边界**送达。`open`/`reply` 提交后要**结束本回合**，下一回合才会收到 `app-task-approval-requested`（含 `approvalId`）。在同一个回合里空等或连续重发，会撞上宿主工具回调的 30 秒上限（`RPC callback.tools.execute timed out after 30000ms`），而且该会话可能就此卡住（后续 `reply` 一律超时，`close` 也难得到 DSH 确认）；遇到这种会话换新的，不要原地重试
 - 审批超时未应答按 `approvalTimeoutSec` 自动拒绝（本 App 缺省 30 秒；显式设 0 则禁用自动拒绝）。注意宿主自身的 `timeoutMs` 默认是 0（不禁用即不超时）——30 秒是 App 侧策略
 
 ### list（会话清单，冻结禁用）
@@ -106,7 +107,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 
 - 开活：`open`（新任务）或 `reply`（往已有子代理续；先 `get` 确认）
 - 回看：`get`（最终结论）
-- 止损：`close`；越界权限：`approve`
+- 止损：`close`；越界权限：`approve`（提交后先让出回合，审批通知下一回合才到）
 
 `sessionId` 即访问凭证；`get` 纯本地读会话文件，DSH 未启动时不可用。
 
@@ -126,10 +127,11 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 | 默认模型改了不生效 | DSH 内存态与文件不一致 | 重启 DSH（停止后重新启动）再确认 |
 | 主题没跟随宿主 | DSH 主题偏好是 light/dark 而非 system | 在 DSH 设置里改回 system |
 | bash 报 `E_ACCESSDENIED` | DSH bash 沙箱 Windows 限制 | 改用文件系统工具（write/read/edit） |
+| `reply` 连续 30 秒超时（`RPC callback.tools.execute`）/ 该会话后续提交全失败 | 上一轮的审批没能在回合边界被应答，宿主工具回调超时，会话卡住 | 不要原地重试：换新会话（`open`）；旧会话用 `close` 收敛（可能只得到宿主升级标记的 canceled） |
 
 ## 已知限制
 
 - **升级 DSH = 装新 App 包 + 重启宿主**：DSH 版本随 App 声明，无独立升级通道。
 - 拆窗、钉回、切页面都不停 DSH 后台；停 App 或退出 Hana 才由宿主回收进程。
-- 越界权限默认走审批：deferred 通知 → `dshana(action="approve", …)` 应答；`approvalTimeoutSec` 内无人应答自动拒绝（缺省 30 秒；仅显式设 0 禁用）。
+- 越界权限默认走审批：deferred 通知 → `dshana(action="approve", …)` 应答；`approvalTimeoutSec` 内无人应答自动拒绝（缺省 30 秒；仅显式设 0 禁用）。审批**只能在新回合被应答**：同回合内等待会撞上宿主回调上限，见排错表。
 - 任务默认新建会话；`reply` 传 taskId 句柄或 sessionId 凭证续用（resume）；会话与账本在 App 数据目录内（不碰 `~/.dsh`）。
