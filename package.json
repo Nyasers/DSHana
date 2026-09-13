@@ -26,6 +26,7 @@
     "prepackage": "pnpm run derive && pnpm run build",
     "package": "node scripts/pack.mts",
     "postpackage": "node scripts/clean-tmp.mts",
+    "index": "node scripts/market-index.mts",
     "package:linux:x64": "pnpm run package --target=linux-x64",
     "package:linux:arm64": "pnpm run package --target=linux-arm64",
     "package:mac:x64": "pnpm run package --target=darwin-x64",

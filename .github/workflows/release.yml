@@ -49,14 +49,16 @@ jobs:
       - name: Create draft pre-release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # tag 名经 env 传入，不在 shell 里裸插值 ${{ }}——见文件末尾「注入防护」注释
+          TAG: ${{ github.ref_name }}
         run: |
-          if gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
-            echo "Release ${{ github.ref_name }} already exists, skipping create"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists, skipping create"
           else
-            gh release create "${{ github.ref_name }}" \
+            gh release create "$TAG" \
               --draft \
               --prerelease \
-              --title "${{ github.ref_name }}" \
+              --title "$TAG" \
               --generate-notes
           fi
 
@@ -107,9 +109,71 @@ jobs:
             releases/*.zip.sha256
           if-no-files-found: error
 
+  # 市场清单：从各 target 的产物派生 entry，并拼出 index.v2.json。
+  # 索引模型是「每版本一个归档位」（item 只有 archive.url，没有平台维度），所以只放 universal，
+  # 平台包留在 release 资产里按名取用——详见 scripts/market-index.mts 头注。
+  market-index:
+    needs: package
+    if: ${{ needs.package.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # package 作业在 job 内跑 prepackage（derive + build）后才打包，**derive 的结果不提交**；
+      # 而本作业要按版本号筛归档，读的是仓库里已提交的 src/manifest.json。若 tag 上那份 manifest
+      # 落后于 package.json（历史出现过只 bump package.json 的情况），这里会按旧版本号筛空、
+      # 连带把 publish 拖住。故先同步一次——manifest 任务只做 package.json#version → manifest，
+      # 纯文件改写，不碰 submodule / git / build。
+      - name: Derive manifest
+        run: pnpm run derive:manifest
+
+      - name: Download package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Derive market index
+        env:
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -e
+          mkdir -p releases
+          find artifacts -name '*.zip' -exec cp {} releases/ \;
+          find artifacts -name '*.zip.sha256' -exec cp {} releases/ \;
+          pnpm run index -- \
+            --target universal \
+            --base-url "https://github.com/${REPO}/releases/download/${TAG}" \
+            --publisher "${OWNER}" \
+            --source-id "dshana" \
+            --name "DSHana" \
+            --out index.v2.json
+          echo "--- index.v2.json (head) ---"
+          head -c 400 index.v2.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: market-index
+          retention-days: 3
+          path: index.v2.json
+          if-no-files-found: error
+
   # 单点发布：所有出包成功后才跑到这里；任一出包失败则本 job 不执行，release 留在 draft。
   publish:
-    needs: package
+    needs: [package, market-index]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -130,23 +194,24 @@ jobs:
       - name: Upload release assets (single writer)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
         run: |
           set -e
           found=0
           while IFS= read -r -d '' f; do
             echo "  uploading $f"
-            gh release upload "${{ github.ref_name }}" "$f" --clobber
+            gh release upload "$TAG" "$f" --clobber
             found=$((found+1))
-          done < <(find artifacts -type f \( -name '*.zip' -o -name '*.zip.sha256' \) -print0)
+          done < <(find artifacts -type f \( -name '*.zip' -o -name '*.zip.sha256' -o -name 'index.v2.json' \) -print0)
           [ "$found" -gt 0 ] || { echo "::error::no package assets found in artifacts/"; exit 1; }
 
       # 硬校验：必需资产缺一个就 fail，release 停在 draft 供人工检查（不出现"残缺发布"）
       - name: Verify required assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
         run: |
           set -e
-          TAG="${{ github.ref_name }}"
           VER="${TAG#v}"
           ASSETS=$(gh release view "$TAG" --json assets --jq '.assets[].name')
           echo "=== release assets ==="; echo "$ASSETS"; echo ""
@@ -156,6 +221,8 @@ jobs:
             REQUIRED="$REQUIRED dshana-v${VER}-${t}.zip dshana-v${VER}-${t}.zip.sha256"
           done
           REQUIRED="$REQUIRED dshana-v${VER}.zip dshana-v${VER}.zip.sha256"
+          # 市场清单：客户端指向 releases/latest/download/index.v2.json 就能装包
+          REQUIRED="$REQUIRED index.v2.json"
 
           MISSING=()
           for f in $REQUIRED; do
@@ -168,10 +235,19 @@ jobs:
             echo "release 保持 draft 供人工检查"
             exit 1
           fi
-          echo "✓ 全部必需资产齐备（4 平台包 + 通用包，各带 sha256）"
+          echo "✓ 全部必需资产齐备（4 平台包 + 通用包，各带 sha256，外加市场清单 index.v2.json）"
 
       # 全部构建成功且资产齐备 → 去掉 draft、保留 prerelease（稳定版由人工标 latest）
       - name: Un-draft (keep prerelease)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit "${{ github.ref_name }}" --prerelease --draft=false
+          TAG: ${{ github.ref_name }}
+        run: gh release edit "$TAG" --prerelease --draft=false
+
+# 注入防护：run 块内不裸插值 ${{ github.* }}。GitHub 在 Bash 解析**之前**展开表达式，
+# tag 里一个 " 加 ; 就能越出引号执行命令（CWE-78）。约定：凡进 shell 的 github 上下文字段
+# 一律先经步骤级 env 落成 shell 变量（TAG/REPO/OWNER 等）再引用。
+#
+# 遗留（未随本 PR 处理）：package 作业的 `pnpm run package --target=${{ matrix.target }}`
+# 与 upload-artifact 的 name 仍在裸插值。它们的取值来自本仓库自己的 matrix 定义、不是外部输入，
+# 风险面不同（tag 是外部可触发的那一类），故单独留待统一处理。
