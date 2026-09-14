@@ -35,7 +35,7 @@ DSH 数据固定落在 App 内置独立目录，开箱即用；共享或切换�
 
 ## 主题
 
-DSH 主题偏好为 `system` 时跟随宿主配色；在 DSH 内显式选 light/dark 时完全用 DSH Web UI 自己的主题。宿主切主题后已打开的页面实时跟随。
+DSH 主题偏好为 `system` 时跟随宿主配色，宿主切主题后已打开的页面实时跟随；在 DSH 内显式选 light/dark 时完全用 DSH Web UI 自己的主题。
 
 ## 排错
 
