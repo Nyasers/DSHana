@@ -83,8 +83,8 @@ function sleep(ms: number) {
 
 /** 常规两项：字段名与提示语（值本身由后端与 config.ts 的缺省值决定）。 */
 const FIELDS: { key: string; label: string; hint: string }[] = [
-  { key: "approvalTimeoutSec", label: "审批超时（秒）", hint: "审批超时自动拒绝；填 0 = 禁用自动拒绝。" },
-  { key: "defaultTimeoutSec", label: "任务默认超时（秒）", hint: "单次任务默认超时；填 0 按缺省 1800 秒。" },
+  { key: "approvalTimeoutSec", label: "审批超时", hint: "审批超时自动拒绝，单位秒；填 0 = 禁用自动拒绝。" },
+  { key: "defaultTimeoutSec", label: "任务超时", hint: "单次任务超时，单位秒；填 0 按缺省 1800 兜底。" },
 ];
 
 type CatalogModel = { id?: string; name?: string; efforts?: { id?: string; name?: string }[] };

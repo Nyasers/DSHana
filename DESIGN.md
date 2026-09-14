@@ -71,7 +71,7 @@ DSHana 以**单卡 + 自带功能面板**注册（manifest `contributes.cards[0]
 
 ### 设置面
 
-- **DSH 内设置**：`agent-default-model`（默认模型，Provider/模型/思考强度三级联动）与 DSH 版本显示，由 `@dshana/settings` 子插件在 DSH 设置页的分页承载。
+- **DSH 内设置**：`agent-default-model`（默认模型，Provider/模型/推理强度三级联动）与 DSH 版本显示，由 `@dshana/settings` 子插件在 DSH 设置页的分页承载。
 - **App 级设置**（数据源、两个超时）：迁到 App 自绘设置页，由宿主设置区渲染（`contributes.settings.ui.route`），不依赖 DSH 运行。见 `specs/current/sample-align`。
 
 ## 主题跟随

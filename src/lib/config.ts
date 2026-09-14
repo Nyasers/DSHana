@@ -120,7 +120,7 @@ export function resolveApprovalTimeoutSec(cfg) {
   return 0; // 快照缺失/非数字/0/负数：禁用超时拒绝（0，调用方判断）
 }
 
-// defaultTimeoutSec 解析（单次任务默认超时，单位：秒）：优先直读 dataDir/config.json 的
+// defaultTimeoutSec 解析（单次任务超时，单位：秒）：优先直读 dataDir/config.json 的
 // global.defaultTimeoutSec（设置界面改动即时生效）：新键为合法数字即权威——正数采用，
 // 0/负数与缺失同义，一并回落 APP_SETTING_DEFAULTS.defaultTimeoutSec（缺省与兜底单点同源，
 // 不再有第二个落点）；新键缺失/非数字回退配置快照 cfg.defaultTimeoutSec。旧键兼容：
