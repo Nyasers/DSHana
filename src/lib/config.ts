@@ -120,18 +120,18 @@ export function resolveApprovalTimeoutSec(cfg) {
   return 0; // 快照缺失/非数字/0/负数：禁用超时拒绝（0，调用方判断）
 }
 
-// defaultTimeoutSec 解析（单次任务默认超时，单位：秒）：优先直读 dataDir/config.json 的
-// global.defaultTimeoutSec（设置界面改动即时生效）：新键为合法数值即权威——正数采用，
-// 0/负数回落 600s 兑底（与旧 `|| 600000` 把 0 视为未设置的语义一致，不再 consult 旧键）；
-// 新键缺失/非数字回退配置快照 cfg.defaultTimeoutSec（manifest 默认 1800）。旧键兼容：
-// 新键不可用时旧毫秒键存在则按毫秒换算（迁移尚未跑时的兜底，保证升级不丢用户配置）。
+// defaultTimeoutSec 解析（单次任务超时，单位：秒）：优先直读 dataDir/config.json 的
+// global.defaultTimeoutSec（设置界面改动即时生效）：新键为合法数字即权威——正数采用，
+// 0/负数与缺失同义，一并回落 APP_SETTING_DEFAULTS.defaultTimeoutSec（缺省与兜底单点同源，
+// 不再有第二个落点）；新键缺失/非数字回退配置快照 cfg.defaultTimeoutSec。旧键兼容：
+// 新键不可用时旧毫秒键存在则按毫秒换算（迁移未跑时的兜底，保证升级不丢用户配置）。
 export function resolveDefaultTimeoutSec(cfg) {
   try {
     const cf = join(cfg.dataDir, "config.json");
     if (existsSync(cf)) {
       const j = JSON.parse(readFileSync(cf, "utf8"));
       const v = j?.global?.defaultTimeoutSec;
-      if (typeof v === "number" && Number.isFinite(v)) return v > 0 ? v : 600;
+      if (typeof v === "number" && Number.isFinite(v)) return v > 0 ? v : APP_SETTING_DEFAULTS.defaultTimeoutSec;
       const old = msToSec(j?.global?.defaultTimeoutMs);
       if (old !== null && old > 0) return old;
     }
@@ -142,7 +142,7 @@ export function resolveDefaultTimeoutSec(cfg) {
   if (Number.isFinite(v) && v > 0) return v;
   const old = msToSec(Number(cfg.defaultTimeoutMs));
   if (old !== null && old > 0) return old;
-  return 600; // 快照缺失/非数字/0：600s（10 分钟，与旧 `|| 600000` 兜底语义一致）
+  return APP_SETTING_DEFAULTS.defaultTimeoutSec; // 快照缺失/非数字/0：回落缺省值
 }
 
 // dshTag 解析（DSH 更新基线 dist-tag，vX 起）：优先直读 dataDir/config.json 的

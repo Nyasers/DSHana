@@ -37,8 +37,8 @@ test("cancelAccepted: 空值/ok/accepted 视为接受", () => {
 
 test("resolveTaskTimeoutSec / resolveApprovalTimeoutMs：无宿主回落与自持设置注入", () => {
   initAppRuntime(null); // 无宿主：回落
-  assert.equal(resolveTaskTimeoutSec(0), 600);
-  assert.equal(resolveTaskTimeoutSec(undefined), 600);
+  assert.equal(resolveTaskTimeoutSec(0), 1800);
+  assert.equal(resolveTaskTimeoutSec(undefined), 1800);
   assert.equal(resolveTaskTimeoutSec(120), 120);
   assert.equal(resolveApprovalTimeoutMs(), 30000); // 缺省 30s
 
@@ -61,7 +61,7 @@ test("resolveTaskTimeoutSec / resolveApprovalTimeoutMs：无宿主回落与自�
 
     write({ ...base, defaultTimeoutSec: 0, approvalTimeoutSec: 0 });
     assert.equal(resolveApprovalTimeoutMs(), 0, "approvalTimeoutSec=0 = 显式禁用");
-    assert.equal(resolveTaskTimeoutSec(0), 600, "defaultTimeoutSec=0 不采用，回落 600");
+    assert.equal(resolveTaskTimeoutSec(0), 1800, "defaultTimeoutSec=0 视同未设，回落缺省 1800");
   } finally {
     initAppRuntime(null);
     rmSync(dir, { recursive: true, force: true });
