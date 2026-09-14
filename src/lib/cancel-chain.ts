@@ -19,6 +19,7 @@
 // 与宿主「取消 UI」的反向触发（host task canceled/aborted → DSH cancel）在受管 runtime
 // 的 task-bridge 侧实现（watch 宿主任务 SSE），不在此模块（App 进程内看不到 DSH 事件）。
 import { appCtx, appDataDir, appConfig } from "#/lib/app-runtime.ts";
+import { APP_SETTING_DEFAULTS } from "#/lib/config.ts";
 import { errText } from "#/lib/err-text.ts";
 import { readTaskMap, markCancelRequested } from "#/lib/task-map.ts";
 import { rpcSessionCancel, cancelAccepted } from "#/lib/dsh-rpc.ts";
@@ -176,13 +177,13 @@ function settingsOrNull() {
   }
 }
 
-/** 执行超时秒解析（纯函数面）：显式值 > 0 采用；否则 App 设置 defaultTimeoutSec；
- * 读不到/非法/0 回落 600（与工具描述同语义）。 */
+/** 执行超时秒解析（纯函数面）：显式值 > 0 采用；否则取 App 设置 defaultTimeoutSec；
+ * 读不到/非法/0 回落 APP_SETTING_DEFAULTS.defaultTimeoutSec（与缺省单点同源）。 */
 export function resolveTaskTimeoutSec(explicitSec) {
   if (Number.isFinite(Number(explicitSec)) && Number(explicitSec) > 0) return Math.round(Number(explicitSec));
   const v = Number(settingsOrNull()?.defaultTimeoutSec);
   if (Number.isFinite(v) && v > 0) return Math.round(v);
-  return 600;
+  return APP_SETTING_DEFAULTS.defaultTimeoutSec;
 }
 
 /** 审批自动拒绝超时毫秒（approval-bridge 经映射下传；0 = 宿主不自动拒绝）。 */

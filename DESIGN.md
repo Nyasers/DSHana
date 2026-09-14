@@ -190,8 +190,8 @@ DSHana 以**单卡 + 自带功能面板**注册（manifest `contributes.cards[0]
   addApproval/settleApproval/markCancelRequested）。DSH 侧事件单飞 + App 同会话串行化
   使同文件并发写窗口极小；损坏/缺失一律 null 容错。callToken 依旧绝不落盘。
 - **决策 I（执行超时 = 走 cancel 链，不是只 fail task）**：session-run 提交后台
-  waitTaskTerminalWithTimeout：timeoutSec（显式参数或 App defaultTimeoutSec，manifest 默认
-  1800/非法回落 600）超时 → cancelSessionWork(reason='timeout')（标记 + session.cancel +
+  waitTaskTerminalWithTimeout：timeoutSec（显式参数或 App defaultTimeoutSec，非法/0 回落到
+  同一缺省 1800）超时 → cancelSessionWork(reason='timeout')（标记 + session.cancel +
   确认窗口）→ DSH 真中止后宿主 canceled。审批等待期间不触发（DSH turn 未结束 + 宿主审批
   timeoutMs 独立拒绝；DSH 回合中止经由 abort 信号路径）。
 - **决策 J（活动模型 requestId 注册表 = globalThis，跨 bundle 共享）**：provider adapter
