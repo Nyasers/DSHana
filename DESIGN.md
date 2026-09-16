@@ -19,6 +19,17 @@
 理由：覆盖层越像上游，与上游重新对齐越容易，漂移闸的 diff 也越可读；注释里的“我们/样例/当时”
 会把一份官方文件变成半自述文件，下次对齐时全是噪音。
 
+## 工具链前提
+
+Node 版本由 `.nvmrc` 与 `package.json` 的 `engines.node` 共同约束（`^22.18.0 || >=23.6.0`）。
+下界不是随手定的：`scripts/**/*.mts` 全部以 `node <file>.mts` 直接运行（`package.json` 的
+scripts 都这么调），靠的是 Node 原生类型剥离（22.18 / 23.6 起默认启用，此前需要
+`--experimental-strip-types`）。低于下界时这批脚本在**运行期**才炸，而
+`scripts/check/typecheck.mts` 只做静态检查、管不到运行期，所以这条约束只能落在版本号上。
+
+`.nvmrc` 保持单行版本号：解析方（`actions/setup-node` 的 `node-version-file`、各家 nvm 实现）
+不保证忽略注释，往里写说明有让 CI 直接失败的风险。
+
 ## 架构总览（受管 runtime）
 
 ```text
