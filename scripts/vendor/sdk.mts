@@ -144,6 +144,10 @@ function main(): void {
   }
 
   const srcVersion = packedVersion(src);
+  if (!srcVersion) {
+    console.error(`[sync-vendor-sdk] 源 manifest 无效：${rel(src)} 的 packedVersion 读不出（字段缺失或 JSON 损坏）`);
+    process.exit(2);
+  }
   const destVersion = packedVersion(DEST);
   console.log(`[sync-vendor-sdk] 源 ${rel(src)}（packedVersion ${srcVersion ?? "未知"}）`);
   console.log(`[sync-vendor-sdk] 目标 ${rel(DEST)}（packedVersion ${destVersion ?? "未知"}）`);

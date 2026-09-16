@@ -31,15 +31,6 @@ const HOST_TARGETS: TargetSpec[] = [
   { name: "win32-x64", os: ["win32"], cpu: ["x64"], assets: ["@koromix/koffi-win32-x64", "node-addon-require-builtin-win32-x64-msvc", "@img/sharp-win32-x64"] },
 ];
 
-// 通用兜底包：os × cpu 全叉乘（比宿主矩阵多出 win32-arm64 / linux-arm64 等）；体量更大，
-// 用于兜底（用户在宿主矩阵外也能跑，代价是下载大）。
-const UNIVERSAL_TARGET: TargetSpec = {
-  name: "universal",
-  os: ["win32", "darwin", "linux"],
-  cpu: ["x64", "arm64"],
-  assets: HOST_TARGETS.flatMap((t) => t.assets),
-};
-
 // 非宿主矩阵、**仅手动编译**的目标（不进 CI 主线）：宿主未承诺这些平台，但预编译资产实测存在，
 // 需要时点名出包（`package:<os>:<cpu>` 别名已备）。资产清单同样按实测形态写。
 // 注：这些目标不进 `--targets=all`，只能点名；否则 CI 会产出宿主不支持的包。
@@ -47,6 +38,16 @@ const EXTRA_TARGETS: TargetSpec[] = [
   { name: "linux-arm64", os: ["linux"], cpu: ["arm64"], libc: ["glibc"], assets: ["@koromix/koffi-linux-arm64", "node-addon-require-builtin-linux-arm64-gnu", "@img/sharp-linux-arm64", "@img/sharp-libvips-linux-arm64"] },
   { name: "win32-arm64", os: ["win32"], cpu: ["arm64"], assets: ["@koromix/koffi-win32-arm64", "node-addon-require-builtin-win32-arm64-msvc", "@img/sharp-win32-arm64"] },
 ];
+
+// 通用兜底包：os × cpu 全叉乘（比宿主矩阵多出 win32-arm64 / linux-arm64 等）；体量更大，
+// 用于兜底（用户在宿主矩阵外也能跑，代价是下载大）。断言清单要盖住它声明的全部 os×cpu，
+// 所以 HOST 与 EXTRA 的资产都在内（缺哪个 arm64 资产就该当场拒包，而不是静默通过）。
+const UNIVERSAL_TARGET: TargetSpec = {
+  name: "universal",
+  os: ["win32", "darwin", "linux"],
+  cpu: ["x64", "arm64"],
+  assets: [...HOST_TARGETS, ...EXTRA_TARGETS].flatMap((t) => t.assets),
+};
 
 /** 目标名 → 目标描述（未知名返回 null）。 */
 export function targetSpec(name: string): TargetSpec | null {

@@ -26,6 +26,11 @@ import { dshVersionOf, sha256, tagForVersion, verifyIntegrations } from "./verif
 
 async function main() {
   const cmd = process.argv[2] || "verify";
+  const commands = new Set(["verify", "hash", "list", "stage", "build"]);
+  if (!commands.has(cmd)) {
+    console.error(`[integrations] 未知子命令：${cmd}（支持 ${[...commands].join("/")}）`);
+    process.exit(2);
+  }
   const pkgJson = JSON.parse(readFileSync(join(REPO_ROOT, "package.json"), "utf8"));
   const version = dshVersionOf(pkgJson);
   if (!version) {
