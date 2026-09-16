@@ -16,6 +16,8 @@ import fs from "fs-extra";
 import { serviceBundle } from "#/build/service-config.mts"; // preset 层（src-cordis/build/）
 import { buildClientBundle } from "#/build/client-config.mts";
 import { collectSource, makeUrlRewriter, assertNoStaticFileUrl } from "../scripts/build/common.mts"; // scripts/build/ 共享
+// 仅为加载 Node 版本断言（本入口以 TypeScript 直跑，依赖原生类型剥离）
+import "../scripts/shared/root.mts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), ".."); // src-cordis/ → 仓库根
 const SRC_ROOT = join(ROOT, "src-cordis");

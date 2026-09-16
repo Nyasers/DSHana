@@ -31,6 +31,8 @@ import {
   extraMinify,
   assertNoStaticFileUrl,
 } from "../scripts/build/common.mts";
+// 仅为加载 Node 版本断言（本入口以 TypeScript 直跑，依赖原生类型剥离）
+import "../scripts/shared/root.mts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), ".."); // src/ → 仓库根
 const DIST_DIR = join(ROOT, "dist");

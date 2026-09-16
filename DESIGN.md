@@ -21,21 +21,26 @@
 
 ## 工具链前提
 
-Node 版本下界是 `^22.18.0 || >=23.6.0`，三处各司其职：
+Node 版本下界是 `^22.18.0 || >=23.6.0`，四件事各管一职：
 
 - `.nvmrc`（26.8.1）是实际使用的版本；
-- `package.json` 的 `engines.node` 是机器可读的声明；
-- `scripts/shared/root.mts` 加载时断言版本，不满足即抛出可读错误：主要入口都 import 它，
-  这一处才是真正拦得住的。pnpm 对**根项目**的 engines 不做强制（实测即便 `--engine-strict`
-  也照常安装），所以不能只靠 engines。
+- `package.json` 的 `engines.node` 是唯一真源（机器可读声明）；
+- `scripts/shared/root.mts` 加载时**从 `engines.node` 读范围**并断言版本，不满足即抛出可读错误，
+  退出码 1（环境前提不满足，与“用户输入错误”的 2 分开）；主要入口都 import 它，这是真正拦得住的
+  那一处（pnpm 对**根项目**的 engines 不做强制，实测即便 `--engine-strict` 也照常安装）；
+- `tests/node-version.test.mjs` 枚举 `package.json` 里所有以 TypeScript 直跑的入口，断言它们的
+  import 闭包都触达 `shared/root.mts`——“新增入口忘了 import”这条只能靠它抦住。
 
-下界的依据：`scripts/**/*.mts` 全部以 `node <file>.mts` 直接运行（`package.json` 的 scripts 都
-这么调），靠 Node 原生类型剥离（22.18 / 23.6 起默认启用，此前需要 `--experimental-strip-types`）；
-低于下界时这批脚本在运行期才炸，而 `scripts/check/typecheck.mts` 只做静态检查、管不到运行期。
+下界的依据：`scripts/**/*.mts` 与 `src/build.ts` / `src-cordis/build.ts` 都以 `node <file>` 直跑
+（`package.json` 的 scripts 都这么调），靠 Node 原生类型剥离（22.18 / 23.6 起默认启用，此前需要
+`--experimental-strip-types`）；低于下界时这批脚本在运行期才炸，而 `scripts/check/typecheck.mts`
+只做静态检查、管不到运行期。
 
-`.nvmrc` 保持单行版本号：解析方（`actions/setup-node` 的 `node-version-file`、各家 nvm 实现）
-不保证忽略注释，往里写说明有让 CI 直接失败的风险。`engines.node` 不参与 lockfile 解析，改这个
-区间不需要、也不应期待 `pnpm-lock.yaml` 变化。
+范围的写法限定为 `^x.y.z` / `>=x.y.z` / `x.y.z` 并用 `||` 连接（见 `satisfiesNodeRange`）；
+遇到别的写法断言会当场抛错，不静默放行。`.nvmrc` 保持单行版本号：解析方
+（`actions/setup-node` 的 `node-version-file`、各家 nvm 实现）不保证忽略注释，往里写说明有让
+CI 直接失败的风险。`engines.node` 不参与 lockfile 解析，改这个区间不需要、也不应期待
+`pnpm-lock.yaml` 变化。
 
 ## 架构总览（受管 runtime）
 

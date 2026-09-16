@@ -29,6 +29,8 @@ import {
 import fs from "node:fs";
 
 import { errText } from "../shared/err-text.mts";
+// 仅为加载 Node 版本断言（本仓脚本以 TypeScript 直跑，依赖原生类型剥离）
+import "../shared/root.mts";
 
 function usage() {
   console.log(`
