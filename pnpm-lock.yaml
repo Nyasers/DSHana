@@ -121,7 +121,7 @@ importers:
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: 4.0.2
-        version: 4.0.2
+        version: 4.0.2(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
       '@deepseek-ai/dsh-host-open-in-app':
         specifier: 0.1.5-rc.2
         version: 0.1.5-rc.2(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-http-proxy@0.1.5-rc.2(@deepseek-ai/cordis@4.0.2))
@@ -2344,8 +2344,8 @@ packages:
         optional: true
 
   '@hana/app-sdk@file:vendor/hana-app-sdk/hana-app-sdk.tgz':
-    resolution: {integrity: sha512-24T0zracqOq9NESbMvuF2ILLJnsKSWtRVrXzxb0p42ydCaq+3vWyIJL9zcM/xrORTqSvt8aOZiftWgT+sGyy7Q==, tarball: file:vendor/hana-app-sdk/hana-app-sdk.tgz}
-    version: 0.970.9
+    resolution: {integrity: sha512-pE3o32NfmlOk/JSInhC8HeG9EogW1WGZTXD4FPD+aVAibe3V6gQH5dFdakQ333JtjhOssDAMPaTf6WH1E8T5hA==, tarball: file:vendor/hana-app-sdk/hana-app-sdk.tgz}
+    version: 0.999.1
     peerDependencies:
       react: '>=19'
       react-dom: '>=19'
@@ -2356,18 +2356,18 @@ packages:
         optional: true
 
   '@hana/plugin-components@file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz':
-    resolution: {integrity: sha512-OIPB1RKx/Ccv4Uk2f3Qb52p2zGWX3Hq+xn6dBx4aXzKC4Ad5EkYOlShDAOn6nTLytBDa8rFEiOAhukBOSPFizw==, tarball: file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz}
+    resolution: {integrity: sha512-wCDvHOXi+KSCE8Pe3wCEYVNekPML/MUom8HXNqn1Z2uPbmOKjJniK43Urg/PBVTufRFHcptvdfz/N6cOPvjfgw==, tarball: file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz}
     version: 0.0.0
     peerDependencies:
       react: '>=19'
       react-dom: '>=19'
 
   '@hana/plugin-protocol@file:vendor/hana-app-sdk/hana-plugin-protocol-0.0.0.tgz':
-    resolution: {integrity: sha512-dUyMJDrtbKzF0ievbj7Kc+BRLtifP83Og+otbzyFn4sSBlqGpEfTxYiCz7GmEgs0G1PSbMa6Oa9liXw3SdbP/Q==, tarball: file:vendor/hana-app-sdk/hana-plugin-protocol-0.0.0.tgz}
+    resolution: {integrity: sha512-pHu67CzSLpOsTXfHHYJSqn7WMLqnaGoDQK8E5VpgNu/t8okUr7TlyO7LZbhBAzDM2zJg+dIWCvgCbejp6aKbGg==, tarball: file:vendor/hana-app-sdk/hana-plugin-protocol-0.0.0.tgz}
     version: 0.0.0
 
   '@hana/plugin-sdk@file:vendor/hana-app-sdk/hana-plugin-sdk-0.0.0.tgz':
-    resolution: {integrity: sha512-iaePHp6hLugU8tkGEv7BIBr6zqIb3EDPPWAfQwWZiLCJZibtws3OEJhYxYwgOp2y3Ekt0rLu5fePXAnDCxI4Qw==, tarball: file:vendor/hana-app-sdk/hana-plugin-sdk-0.0.0.tgz}
+    resolution: {integrity: sha512-X+YpOspu+lH/yvChXk+/iOjnjLyemyBjkDWwHhoRobYlcY/qlh+1coPACA59xc44PNF+yrUGsslBcCIihou4sw==, tarball: file:vendor/hana-app-sdk/hana-plugin-sdk-0.0.0.tgz}
     version: 0.0.0
     bundledDependencies:
       - '@hana/plugin-protocol'
