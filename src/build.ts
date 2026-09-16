@@ -3,7 +3,7 @@
 //
 // src/build.ts — 主 bundle（src 域）构建入口（App 交付形态）
 // 布局：领域专用脚本随各自源码——rspack.config.mts（本目录，配置源）与本入口放 src/，
-// 共享工具（collect/walk/terser/assert + minify/template loader）在 scripts/（根级）。
+// 共享工具（collect/walk/terser/assert + minify/template loader）在 scripts/build/。
 // 产物（dist/ = App 安装目录形态；宿主读 dist 根 manifest.json + entry）：
 //   manifest.json       App v2 manifest（entry "index.js" / icon "assets/icon.png"）
 //   index.js            rspack 单 bundle（入口具名导出 apply + default.apply）
@@ -30,7 +30,9 @@ import {
   makeUrlRewriter,
   extraMinify,
   assertNoStaticFileUrl,
-} from "../scripts/build-common.mts";
+} from "../scripts/build/common.mts";
+// 仅为加载 Node 版本断言（本入口以 TypeScript 直跑，依赖原生类型剥离）
+import "../scripts/shared/root.mts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), ".."); // src/ → 仓库根
 const DIST_DIR = join(ROOT, "dist");

@@ -79,7 +79,7 @@ function cssModuleSource(id, fileId, css) {
     prefixed[local] = pname;
   }
   // 仅改写已知 local class 选择器（保留 data 属性/伪类等非 class 语法；本包 css 无
-  // url()/带点字符串内容，tokenRe 替换安全——vendor 复核见 scripts/sync-vendor-layout.mjs）
+  // url()/带点字符串内容，tokenRe 替换安全）
   const rewritten = css.replace(/\.([A-Za-z_][A-Za-z0-9_-]*)/g, (full, name) =>
     prefixed[name] ? "." + prefixed[name] : full);
   const tagId = styleTagId(id, fileId);

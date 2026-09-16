@@ -126,10 +126,10 @@ target 名即产物名里 `-v<版本>` 之后那段（通用包没有后缀，�
 | 现象 | 原因 | 处理 |
 |---|---|---|
 | 卸载重装后，本会话里该 App 的工具报 `RPC peer closed; cannot call callback.tools.execute` | 会话引擎在建立时捕获了当时那个 App 实例的工具对象，实例被替换后旧对象失效 | 开新会话或重启宿主；App 本身是好的（路由与 runtime 正常） |
-| `index.v2.json` 的主 `archive.url` 指向某个平台包 | 生成期把不该进清单的 entry 喂给了构建器 | 索引按约定只该指 universal，见 `scripts/market-index.mts` 的目标选择 |
+| `index.v2.json` 的主 `archive.url` 指向某个平台包 | 生成期把不该进清单的 entry 喂给了构建器 | 索引按约定只该指 universal，见 `scripts/release/market-index.mts` 的目标选择 |
 | `latest` 指向的不是你以为的版本 | `latest` 跳过 prerelease，而流水线默认把新发布标为 prerelease | 目标版本是 prerelease 时用带 tag 的地址，或 `gh release download <tag>` |
 | 拿不到 `x-dshana-targets` | 该索引没带这块字段 | 用主 `archive`（universal）兜底，功能等同，只是体积更大 |
 
 ## 这个目录不进发行包
 
-打包是从构建产物组装的（`scripts/pack.mts` 里 `fs.copySync(distDir, pkgDir)`），仓库根目录下的目录都在包外。这份手册只在仓库里给读它的人或 Agent 读，运行时不依赖它。
+打包是从构建产物组装的（`scripts/release/pack/index.mts` 里 `fs.copySync(distDir, pkgDir)`），仓库根目录下的目录都在包外。这份手册只在仓库里给读它的人或 Agent 读，运行时不依赖它。

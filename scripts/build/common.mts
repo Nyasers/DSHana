@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// scripts/build-common.mts — 构建共享工具（根级通用：src 半与 src-cordis 半构建复用）
-// 布局原则：跨域共享构件放根 scripts/，领域专用随各自源码（src/ 与 src-cordis/）。
+// scripts/build/common.mts — 构建共享工具（src 半与 src-cordis 半构建复用）
+// 布局原则：跨域共享构件放 scripts/<域>/，领域特有随各自源码（src/ 与 src-cordis/）。
 // 提供：collectSource（收集会被 rspack 内联的源码 file:// URL）、walk 工厂（静态化
 // import.meta.url 回写）、extraTerser（rspack 产物二次压缩）、assertNoStaticFileUrl
 // （产物不得残留构建机路径字面量）。
@@ -10,7 +10,7 @@ import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { minifyJs, minifyHtml } from "./minify-assets.mts";
-import { errText } from "./err-text.mts";
+import { errText } from "../shared/err-text.mts";
 
 // 收集目录下全部 .js 的 file:// URL（rspack 会把 import.meta.url 静态化为构建机源码
 // 绝对路径；构建后产物出现这些字面量一律替换回 import.meta.url——分发路径失效根因）。

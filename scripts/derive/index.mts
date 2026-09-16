@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// scripts/derive.mts — 派生同步统一入口（apply / --check）
+// scripts/derive/index.mts — 派生同步统一入口（apply / --check）
 //
 // 口径：**派生同步** = 从某个源推导、写回目标文件。凡"能推导 + 被抄了多份 + 抄漏会坏"
 // 的事实都走这里；只有人能定的东西（设计取舍、文案措辞、许可范围）不进本表。
@@ -20,22 +20,23 @@
 // changelog（源是 git log，只有发版时有意义，不是"随时可校验"那类）。
 //
 // 用法：
-//   node scripts/derive.mts                # 全部写回
-//   node scripts/derive.mts --check        # 全部校验（CI 门禁）
-//   node scripts/derive.mts <task> [...]   # 指定任务
+//   node scripts/derive/index.mts                # 全部写回
+//   node scripts/derive/index.mts --check        # 全部校验（CI 门禁）
+//   node scripts/derive/index.mts <task> [...]   # 指定任务
 //
 // 派生目标一律"整份期望内容"比较：框架拿任务算出的内容与磁盘逐字比对，不一致才写。
 // 好处是 diff 稳定（任务里不做局部替换，就没有顺序抖动的余地）。
 import fs from "node:fs";
 import path from "node:path";
-import { execSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 
-import { cordisPkgPaths, readPkg } from "./version-common.mts";
-import { mirrorPathEntries } from "./overlay-typecheck.mts";
-import { thirdpartyTask } from "./derive-thirdparty.mts";
+import { mirrorPathEntries } from "../shared/mirror-paths.mts";
+import { ROOT } from "../shared/root.mts";
+import { isDirectRun } from "../shared/run.mts";
+import { cordisPkgPaths, readPkg } from "../shared/version.mts";
+import { dshTask } from "../vendor/dsh.mts";
+import { thirdpartyTask } from "./thirdparty.mts";
 
-export const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+export { ROOT };
 
 /** 一个派生文件的期望产物（rel 相对仓库根）。 */
 export interface DerivedFile {
@@ -123,7 +124,7 @@ const pathsTask: FileTask = {
       {
         rel: "src-integrations/tsconfig.paths.json",
         content: jsonText({
-          "//": "由 node scripts/derive.mts paths 生成，勿手改。供 src-integrations/<集成>/tsconfig.json 继承。",
+          "//": "由 node scripts/derive/index.mts paths 生成，勿手改。供 src-integrations/<集成>/tsconfig.json 继承。",
           compilerOptions: { paths },
         }),
       },
@@ -131,57 +132,14 @@ const pathsTask: FileTask = {
   },
 };
 
-/** 读一条 git 输出（trim；失败返回 null）。 */
-function gitOut(cmd: string): string | null {
-  try {
-    return execSync(cmd, { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-  } catch {
-    return null;
-  }
-}
-
 /**
- * 任务：vendor —— 让 vendor/deepseek-harness 站在 `dependencies["@deepseek-ai/dsh"]`
- * 对应的 tag 上。
+ * 任务：vendor —— 让 vendor/deepseek-harness 站在 `dependencies["@deepseek-ai/dsh"]` 对应的
+ * tag 上（gitlink 与工作树 HEAD 两处都要对，缘由见该模块的文件头）。
  *
- * 为何是两条：build 的上游源用 `git show <tag>`（走 tag），而类型解析（mirrorPathEntries）
- * 走**工作树**。只对一条，就会重现「同一份上游被读成两个版本」那类假阳性（曾报出
- * usePanelInfo / MainPanelId 一族）。所以 gitlink 与工作树 HEAD 都要在 tag 上。
- *
- * repair 会 `checkout` 并 `git add`（后者把 gitlink 更新进 index）——它改的是仓库状态，
- * 所以只在 apply 且确有差异时跑，--check 绝不碰。
+ * 检查与修复在 scripts/vendor/dsh.mts，与 `pnpm run sync:vendor:dsh` 共用一份实现；
+ * 这里只把它挂进本表，让 derive --check 与全量派生一并覆盖。
  */
-const vendorTask: StateTask = {
-  kind: "state",
-  name: "vendor",
-  about: "package.json#dependencies[@deepseek-ai/dsh] → vendor/deepseek-harness 的 checkout",
-  inspect() {
-    const dep = readPkg("package.json")?.dependencies?.["@deepseek-ai/dsh"];
-    if (typeof dep !== "string" || !dep) return ["package.json 未声明 dependencies['@deepseek-ai/dsh']"];
-    const tag = "dsh-v" + dep;
-    // 用 refs/tags/ 全名：避免与同名分支歧义，也绕开 `^` 在 cmd 下是转义符的坑。
-    const tagSha = gitOut(`git -C vendor/deepseek-harness rev-parse --verify --quiet refs/tags/${tag}`);
-    if (!tagSha) return [`vendor/deepseek-harness 无 ${tag}（镜像未 fetch 到该 tag？）`];
-    const out: string[] = [];
-    // gitlink：父仓库 tree 记录的 submodule commit（.gitmodules 是配置，这个是"版本"）
-    const linkLine = gitOut("git ls-tree HEAD -- vendor/deepseek-harness");
-    const linkSha = linkLine ? linkLine.split(/\s+/)[2] : null;
-    if (linkSha !== tagSha) out.push(`gitlink ${short(linkSha)} ≠ ${tag}（${short(tagSha)}）`);
-    const headSha = gitOut("git -C vendor/deepseek-harness rev-parse HEAD");
-    if (headSha !== tagSha) out.push(`工作树 HEAD ${short(headSha)} ≠ ${tag}（${short(tagSha)}）`);
-    return out;
-  },
-  repair() {
-    const dep = readPkg("package.json")?.dependencies?.["@deepseek-ai/dsh"];
-    const tag = "dsh-v" + dep;
-    console.log(`[derive] vendor: git -C vendor/deepseek-harness checkout ${tag}`);
-    execSync(`git -C vendor/deepseek-harness checkout ${tag}`, { cwd: ROOT, stdio: "inherit" });
-    execSync("git add vendor/deepseek-harness", { cwd: ROOT, stdio: "inherit" });
-    console.log("[derive] vendor: gitlink 已暂存——随下次 commit 带上（别让它悬着）");
-  },
-};
-
-const short = (sha: string | null) => (sha ? sha.slice(0, 12) : "（无）");
+const vendorTask: StateTask = dshTask;
 
 /** 全部任务（main 按名筛选用）。 */
 export const TASKS: DeriveTask[] = [manifestTask, cordisTask, pathsTask, vendorTask, thirdpartyTask];
@@ -233,11 +191,10 @@ function main() {
   let drift = 0;
   for (const task of tasks) drift += runTask(task, { checkOnly });
   if (checkOnly && drift) {
-    console.error(`[derive] 派生文件漂移 ${drift} 处——跑 node scripts/derive.mts 写回后提交`);
+    console.error(`[derive] 派生文件漂移 ${drift} 处——跑 node scripts/derive/index.mts 写回后提交`);
     process.exit(1);
   }
   console.log(`[derive] ${checkOnly ? "校验" : "派生"}完成：${tasks.length} 个任务，${drift} 个文件${checkOnly ? "漂移" : "写回"}`);
 }
 
-const invokedDirectly = process.argv[1] && process.argv[1].endsWith("derive.mts");
-if (invokedDirectly) main();
+if (isDirectRun(import.meta.url)) main();

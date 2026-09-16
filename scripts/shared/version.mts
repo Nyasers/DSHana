@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// scripts/version-common.mts — 版本域共享模块（根级通用：version-hook/derive/changelog 复用）
-// 布局原则：跨脚本共享/流程性构件放根级（scripts/），领域特有随源码（src-cordis/build）。
+// scripts/shared/version.mts — 版本域共享模块（release/version、derive、changelog 复用）
+// 布局原则：跨脚本共享/流程性构件放 scripts/shared/，领域特有随各自域或源码（src-cordis/build）。
 // 提供 cordis 包清单（src-cordis 顶层 roster bundle + plugins/*）与派生同步目标
 // （manifest + cordis 包）——版本单一事实源 = 主 package.json（pnpm version 是改版本唯一入口，
-// 派生同步见 scripts/derive.mts，git 收口见 scripts/version-hook.mts）。
+// 派生同步见 scripts/derive/index.mts，git 收口见 scripts/release/version.mts）。
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { ROOT } from "./root.mts";
 
-export const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+export { ROOT };
 
 // cordis 包 package.json 清单（相对 ROOT；随插件整体发版不独立发布，历史独立号废弃）
 export function cordisPkgPaths() {
