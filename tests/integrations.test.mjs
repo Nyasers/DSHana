@@ -5,6 +5,7 @@
 // 重点：闸必须在「上游变了」时响，且报错要指名该 rebase 哪个文件、哈希改成什么。
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -22,6 +23,15 @@ import {
 import { extractRequires } from "../scripts/integrations/build.mts";
 
 const upstreamFile = "packages/client/ui-layout/src/client/index.ts";
+
+test("CLI: 未知子命令 exit 2（不再落进默认分支白跑一次 verify）", () => {
+  const r = spawnSync(process.execPath, ["scripts/integrations/index.mts", "buid"], {
+    cwd: REPO_ROOT,
+    encoding: "utf8",
+  });
+  assert.equal(r.status, 2);
+  assert.match(`${r.stdout}${r.stderr}`, /未知子命令/);
+});
 
 test("tagForVersion: pin 的版本 → 上游 tag", () => {
   assert.equal(tagForVersion("0.1.5-rc.2"), "dsh-v0.1.5-rc.2");

@@ -14,7 +14,7 @@
 // 于是"拷贝即冻结"在流程上不可能发生。
 //
 // 分工：校验纯函数在 verify.mts，镜像访问与落盘在 mirror.mts，编译进包在 build.mts；
-// 本文件只解析参数并按序编排。
+// 本文件是 CLI 门面（子命令表 + 过闸），退出码 2 = 用法/子命令错，1 = 运行期失败。
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -24,11 +24,70 @@ import { buildIntegrations } from "./build.mts";
 import { REPO_ROOT, loadIntegrations, mirrorHasTag, readUpstreamFromMirror, stageIntegrations } from "./mirror.mts";
 import { dshVersionOf, sha256, tagForVersion, verifyIntegrations } from "./verify.mts";
 
+/**
+ * 过闸：镜像 tag 必须在，漂移校验必须过。失败一律抛错，由 main 统一收口成 exit 1。
+ * @returns {any[]} 集成清单（stage / build 接着用）
+ */
+async function gate(tag, version) {
+  const commit = mirrorHasTag(tag);
+  if (!commit) {
+    throw new Error(
+      `源码镜像不一致：vendor/deepseek-harness 里没有 tag ${tag}。\n` +
+        `  pin 的 DSH 版本是 ${version}；请先把镜像跟到该版本：\n` +
+        `  git -C vendor/deepseek-harness fetch --no-tags origin tag ${tag}`,
+    );
+  }
+  console.log(`[integrations] 镜像 ${tag} = ${commit.slice(0, 9)}（pin ${version}）`);
+  const integrations = loadIntegrations();
+  const result = verifyIntegrations(integrations, (rel) => readUpstreamFromMirror(rel, tag));
+  console.log(`[integrations] 漂移闸通过：${result.packages} 个集成、${result.files} 个 overlay 文件`);
+  if (result.empty.length) {
+    console.log(`[integrations] 注意：以下集成尚无 overlay（批次未落地）：${result.empty.join(", ")}`);
+  }
+  return integrations;
+}
+
+/**
+ * 子命令表：**键即白名单、值即实现**。校验与分发同一份事实源，加子命令只需在这里加一项。
+ * 未知子命令当场 exit 2——否则拼错的 `buid` 会落进默认分支，白跑一次 verify 后报成功。
+ */
+const COMMANDS: Record<string, (ctx: { tag: string; version: string }) => Promise<void>> = {
+  hash: async ({ tag }) => {
+    const rel = process.argv[3];
+    if (!rel) throw new Error("用法：node scripts/integrations/index.mts hash <仓库相对路径>");
+    const buf = readUpstreamFromMirror(rel, tag);
+    if (buf === null) throw new Error(`镜像 ${tag} 下不存在：${rel}`);
+    console.log(sha256(buf));
+  },
+  list: async () => {
+    for (const it of loadIntegrations()) {
+      console.log(`${it.dir}  → ${it.package}  overlay=${(it.files || []).length}`);
+    }
+  },
+  verify: async ({ tag, version }) => {
+    await gate(tag, version);
+  },
+  stage: async ({ tag, version }) => {
+    const integrations = await gate(tag, version);
+    console.log(`[integrations] 已落盘 ${stageIntegrations(integrations).length} 个文件到 _tmp/integrations/`);
+  },
+  build: async ({ tag, version }) => {
+    const integrations = await gate(tag, version);
+    let built;
+    try {
+      built = await buildIntegrations(integrations, { tag, log: (m) => console.log(m) });
+    } catch (e) {
+      throw new Error("编译失败：" + errText(e));
+    }
+    for (const b of built) console.log(`[integrations] 产物：${b.out}`);
+  },
+};
+
 async function main() {
   const cmd = process.argv[2] || "verify";
-  const commands = new Set(["verify", "hash", "list", "stage", "build"]);
-  if (!commands.has(cmd)) {
-    console.error(`[integrations] 未知子命令：${cmd}（支持 ${[...commands].join("/")}）`);
+  const run = COMMANDS[cmd];
+  if (!run) {
+    console.error(`[integrations] 未知子命令：${cmd}（支持 ${Object.keys(COMMANDS).join("/")}）`);
     process.exit(2);
   }
   const pkgJson = JSON.parse(readFileSync(join(REPO_ROOT, "package.json"), "utf8"));
@@ -37,71 +96,7 @@ async function main() {
     console.error("[integrations] package.json 未声明 dependencies['@deepseek-ai/dsh']");
     process.exit(1);
   }
-  const tag = tagForVersion(version);
-
-  if (cmd === "hash") {
-    const rel = process.argv[3];
-    if (!rel) {
-      console.error("[integrations] 用法：node scripts/integrations/index.mts hash <仓库相对路径>");
-      process.exit(1);
-    }
-    const buf = readUpstreamFromMirror(rel, tag);
-    if (buf === null) {
-      console.error(`[integrations] 镜像 ${tag} 下不存在：${rel}`);
-      process.exit(1);
-    }
-    console.log(sha256(buf));
-    return;
-  }
-
-  const integrations = loadIntegrations();
-  if (cmd === "list") {
-    for (const it of integrations) {
-      console.log(`${it.dir}  → ${it.package}  overlay=${(it.files || []).length}`);
-    }
-    return;
-  }
-
-  // verify / stage 都要先过闸
-  const commit = mirrorHasTag(tag);
-  if (!commit) {
-    console.error(
-      `[integrations] 源码镜像不一致：vendor/deepseek-harness 里没有 tag ${tag}。\n` +
-        `  pin 的 DSH 版本是 ${version}；请先把镜像跟到该版本：\n` +
-        `  git -C vendor/deepseek-harness fetch --no-tags origin tag ${tag}`,
-    );
-    process.exit(1);
-  }
-  console.log(`[integrations] 镜像 ${tag} = ${commit.slice(0, 9)}（pin ${version}）`);
-
-  let result;
-  try {
-    result = verifyIntegrations(integrations, (rel) => readUpstreamFromMirror(rel, tag));
-  } catch (e) {
-    console.error("[integrations] " + errText(e));
-    process.exit(1);
-  }
-  console.log(`[integrations] 漂移闸通过：${result.packages} 个集成、${result.files} 个 overlay 文件`);
-  if (result.empty.length) {
-    console.log(`[integrations] 注意：以下集成尚无 overlay（批次未落地）：${result.empty.join(", ")}`);
-  }
-
-  if (cmd === "stage") {
-    const staged = stageIntegrations(integrations);
-    console.log(`[integrations] 已落盘 ${staged.length} 个文件到 _tmp/integrations/`);
-    return;
-  }
-
-  if (cmd === "build") {
-    try {
-      const built = await buildIntegrations(integrations, { tag, log: (m) => console.log(m) });
-      for (const b of built) console.log(`[integrations] 产物：${b.out}`);
-    } catch (e) {
-      console.error("[integrations] 编译失败：" + errText(e));
-      process.exit(1);
-    }
-    return;
-  }
+  await run({ tag: tagForVersion(version), version });
 }
 
 if (isDirectRun(import.meta.url)) {
