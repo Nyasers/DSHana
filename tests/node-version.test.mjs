@@ -25,6 +25,15 @@ test("satisfiesNodeRange：本仓范围的边界", () => {
   }
 });
 
+test("satisfiesNodeRange：三种写法各自的语义（支持集是契约）", () => {
+  assert.equal(satisfiesNodeRange("22.18.0", "22.18.0"), true);
+  assert.equal(satisfiesNodeRange("22.18.0", "22.18.1"), false);
+  assert.equal(satisfiesNodeRange(">=22.18.0", "23.0.0"), true);
+  assert.equal(satisfiesNodeRange(">=22.18.0", "22.17.9"), false);
+  assert.equal(satisfiesNodeRange("^22.18.0", "22.19.0"), true);
+  assert.equal(satisfiesNodeRange("^22.18.0", "23.0.0"), false);
+});
+
 test("satisfiesNodeRange：不认识的写法当场抛错（不静默放行）", () => {
   assert.throws(() => satisfiesNodeRange("~22.18.0", "26.8.1"), /不支持的写法/);
   assert.throws(() => satisfiesNodeRange(">=22.18.0 <24", "26.8.1"), /不支持的写法/);

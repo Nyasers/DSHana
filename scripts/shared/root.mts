@@ -56,7 +56,9 @@ export function satisfiesNodeRange(range: string, version: string): boolean {
     const exact = parseVersion(clause);
     if (exact) return compare(current, exact) === 0;
     throw new Error(
-      `engines.node 含不支持的写法：${clause}（scripts/shared/root.mts 只认 ^x.y.z / >=x.y.z / x.y.z，用 || 连接）`,
+      `engines.node 含本仓解析器不支持的写法：${clause}。` +
+        "支持集只有 ^x.y.z / >=x.y.z / x.y.z 与 || 连接（见 DESIGN.md「工具链前提」）。" +
+        "要放宽就改 scripts/shared/root.mts 的 satisfiesNodeRange 并补测试，不要只改 package.json。",
     );
   });
 }
