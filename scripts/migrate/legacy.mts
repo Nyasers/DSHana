@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// scripts/migrate-legacy.mts — dsh-hanako v1 旧插件数据迁移 CLI（独立运行；零第三方依赖）
+// scripts/migrate/legacy.mts — dsh-hanako v1 旧插件数据迁移 CLI（独立运行；零第三方依赖）
 //
 // 用法：
-//   node scripts/migrate-legacy.mts --check \
+//   node scripts/migrate/legacy.mts --check \
 //       --hanako-home <HANA_HOME> [--target <App dataDir>]
-//   node scripts/migrate-legacy.mts --apply --source <legacy plugin-data/dsh-hanako> \
+//   node scripts/migrate/legacy.mts --apply --source <legacy plugin-data/dsh-hanako> \
 //       --target <App dataDir> [--force] [--backup-dir <dir>]
 //
 // 环境变量缺省：--source 缺省取 DSHANA_LEGACY_HOME；--target 缺省取 DSHANA_DATA_DIR。
@@ -14,7 +14,6 @@
 //
 // 本脚本不真跑于本刀（旧插件数据是活的）——只交付代码与 --check 只读验证路径；--apply 的
 // 停机指引：迁移窗口内旧插件应先停止写入，脚本对源只读、不删除。
-import { fileURLToPath } from "node:url";
 import { dirname, join, basename } from "node:path";
 import {
   planLegacyMigration,
@@ -26,11 +25,10 @@ import {
   legacySettingsSuggestions,
   DSH_HOME_COPY_ENTRIES,
   targetDshHomeOf,
-} from "../src/lib/legacy-migrate.js";
+} from "../../src/lib/legacy-migrate.js";
 import fs from "node:fs";
-import { errText } from "./err-text.mts";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+import { errText } from "../shared/err-text.mts";
 
 function usage() {
   console.log(`

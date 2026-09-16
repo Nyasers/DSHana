@@ -1,89 +1,27 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// scripts/overlay-typecheck.mts — 覆盖层类型检查（只查我们自己写进上游包里的那些文件）
+// scripts/check/overlay.mts — 覆盖层类型检查（只查我们自己写进上游包里的那些文件）
 //
 // 为什么需要：我们的构建是**转译**（bundle 不做类型检查），所以覆盖层里的自由变量、
 // 拼错的成员这类错能一路过构建、过单测，直到真机才炸——`role is not defined` 就是这么
 // 漏出去的（清注释时连带删了一行代码，TS 只转译，构建和测试都没看见）。
 //
 // 为什么在**暂存树**里查：覆盖层是"盖进别人包里"才成立的（相对 import 指向上游文件），
-// 在仓库树上单独查会一片解析失败。integrations.mts 摊好上游源、盖好覆盖之后调本模块，
+// 在仓库树上单独查会一片解析失败。scripts/integrations/index.mts 摊好上游源、盖好覆盖之后调本模块，
 // 用一份临时 tsconfig 在整个 src/ 上查，**只报我们自己那几个文件的诊断**：上游代码在
 // 另一套 tsconfig 下不保证干净，混进来就是噪音；我们自己的文件必须干净。
 //
 // 严格度：strict 但不要求 implicit-any（本仓的覆盖层多为改写上游 JS 风格代码，先把
 // "未定义的名字 / 不存在的成员 / 签名不符"这类真错拦住）。strict 全量迁移另算一刀。
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { TS_FILE, classifyDiagnostics, formatDiagnostics, parseTsDiagnostics } from "./ts-diagnostics.mts";
+import { TS_FILE, classifyDiagnostics, formatDiagnostics, parseTsDiagnostics } from "../shared/ts-diagnostics.mts";
+import { mirrorPathEntries } from "../shared/mirror-paths.mts";
 
 const TSC_REL = ["node_modules", "typescript", "bin", "tsc"];
-
-/**
- * 从源码镜像生出「DSH 包名 → 源入口」表：**只补本仓 .pnpm 里没装的那些包**。
- *
- * 为何需要：覆盖层会用到 DSH 自己那批包（且它们 `declare module` 增强 cordis 的 `Context`）。
- * 这些包对本仓构建而言是运行时外部、不一定装，于是不映射就解析不到声明；而**混用**
- * （一部分取本仓已装的 lib/types/*.d.ts、一部分取镜像源）会把插槽契约聚合成两套、
- * 反过来报我们的文件“属性不存在”。所以口径定死：**一律以上游源为准**（我们改的就是那份
- * 源），也即镜像优先，本仓产物只当兵底。
- */
-const mirrorCache = new Map<string, Record<string, string[]>>();
-export function mirrorPathEntries(mirrorDir, hiddenDir): Record<string, string[]> {
-  const key = `${mirrorDir}|${hiddenDir}`;
-  const hit = mirrorCache.get(key);
-  if (hit) return hit;
-  const out: Record<string, string[]> = {};
-  const groupsDir = join(mirrorDir, "packages");
-  if (existsSync(groupsDir)) {
-    for (const group of readdirSync(groupsDir, { withFileTypes: true })) {
-      if (!group.isDirectory()) continue;
-      const gDir = join(groupsDir, group.name);
-      for (const pkg of readdirSync(gDir, { withFileTypes: true })) {
-        if (!pkg.isDirectory()) continue;
-        const dir = join(gDir, pkg.name);
-        const pj = join(dir, "package.json");
-        if (!existsSync(pj)) continue;
-        let meta: Record<string, any> | null = null;
-        try {
-          meta = JSON.parse(readFileSync(pj, "utf8"));
-        } catch {
-          continue;
-        }
-        const name = String((meta && meta.name) || "");
-        if (!name) continue;
-        const installed = join(hiddenDir, name);
-        const fallback = existsSync(installed) ? [installed] : [];
-        const entry = join(dir, "src", "index.ts");
-        if (existsSync(entry)) out[name] = [entry, ...fallback];
-        const clientEntry = join(dir, "src", "client", "index.ts");
-        if (existsSync(clientEntry)) out[`${name}/client`] = [clientEntry, ...fallback];
-        // 子路径导出（pkg/types、pkg/remote、pkg/surface…）：按 package.json exports 的
-        // types 字段反推源文件（lib/types/<x>.d.ts → src/<x>.ts）。缺这条时这类 import
-        // 在暂存树里解析不到（TS2307），覆盖层文件与上游 contract 会连片报红。
-        const exportsMap = meta && meta.exports && typeof meta.exports === "object" ? meta.exports : {};
-        for (const [subKey, val] of Object.entries(exportsMap)) {
-          if (subKey === "." || subKey === "./package.json" || subKey.startsWith("./src/")) continue;
-          const sub = subKey.replace(/^\.\//, "");
-          if (!sub || sub.includes("*")) continue;
-          const v: any = val;
-          const spec = typeof v === "string" ? v : String((v && (v.types || v.default)) || "");
-          const m = spec.match(/lib\/types\/(.+)\.d\.ts$/) || spec.match(/lib\/(.+)\.js$/);
-          if (!m) continue;
-          const srcFile = join(dir, "src", m[1] + ".ts");
-          if (existsSync(srcFile) && out[`${name}/${sub}`] === undefined) {
-            out[`${name}/${sub}`] = [srcFile, ...fallback];
-          }
-        }
-      }
-    }
-  }
-  mirrorCache.set(key, out);
-  return out;
-}
 
 /** 覆盖层里需要类型检查的文件（暂存树相对路径）。 */
 export function overlayTsFiles(files) {
@@ -149,7 +87,7 @@ export function overlayTsconfig(repoRoot, mirrorDir) {
 }
 
 /**
- * 把 tsc 输出按文件归成四份（纯函数；分类口径在 scripts/ts-diagnostics.mts，与逐域检查共用）：
+ * 把 tsc 输出按文件归成四份（纯函数；分类口径在 scripts/shared/ts-diagnostics.mts，与逐域检查共用）：
  * mine=我们的文件+失败码 / other=我们的文件+其它码 / upstream=其它源码 / config=非源码（检查器没跑）。
  */
 export function parseOverlayDiagnostics(stdout, ours) {

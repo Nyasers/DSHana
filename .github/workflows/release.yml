@@ -111,7 +111,7 @@ jobs:
 
   # 市场清单：从各 target 的产物派生 entry，并拼出 index.v2.json。
   # 索引模型是「每版本一个归档位」（item 只有 archive.url，没有平台维度），所以只放 universal，
-  # 平台包留在 release 资产里按名取用——详见 scripts/market-index.mts 头注。
+  # 平台包留在 release 资产里按名取用——详见 scripts/release/market-index.mts 头注。
   market-index:
     needs: package
     if: ${{ needs.package.result == 'success' }}

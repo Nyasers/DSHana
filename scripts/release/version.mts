@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// scripts/version-hook.mts — pnpm version 的 version 生命周期钩子（git 收口，完整版号一次成型）
+// scripts/release/version.mts — pnpm version 的 version 生命周期钩子（git 收口，完整版号一次成型）
 //
 // 编排链：
 //   pnpm version <patch|minor|major|prerelease|<semver>> --no-git-tag-version
@@ -38,11 +38,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { versionCommitFiles, readPkg, writePkg } from "./version-common.mts";
-import { errText } from "./err-text.mts";
 
-const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+import { errText } from "../shared/err-text.mts";
+import { ROOT } from "../shared/root.mts";
+import { versionCommitFiles, readPkg, writePkg } from "../shared/version.mts";
 const run = (cmd, desc) => {
   console.log("[version-hook] " + desc + "...");
   try {
@@ -68,10 +67,10 @@ function main() {
   pkg.version = full;
   writePkg("package.json", pkg);
   console.log("[version-hook] 主版本拼回完整版: " + bare + " -> " + full);
-  // 2) 派生同步（manifest + cordis 包 + vendor 的 checkout：见 scripts/derive.mts）
-  run("node scripts/derive.mts", "derive 派生同步");
+  // 2) 派生同步（manifest + cordis 包 + vendor 的 checkout：见 scripts/derive/index.mts）
+  run("node scripts/derive/index.mts", "derive 派生同步");
   // 3) changelog 增量生成（读主 version = 完整版）
-  run("node scripts/changelog.mts", "changelog 增量生成");
+  run("node scripts/release/changelog.mts", "changelog 增量生成");
   // 4) HEAD 门禁：完整版相对 HEAD 未变化（未真实 bump / 同版本重跑）→ 拒绝提交
   let headVersion = null;
   try {

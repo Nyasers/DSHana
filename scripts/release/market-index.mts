@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// scripts/market-index.mts — 从 releases/ 的产物派生市场条目与市场清单。
+// scripts/release/market-index.mts — 从 releases/ 的产物派生市场条目与市场清单。
 //
-// 为什么是独立的派生脚本，而不是改 pack.mts：
-//   pack.mts 负责「物化依赖 → zip → SHA256」，那些中间态纪律（暂存树、多目标磁盘占用）都压在它
+// 为什么是独立的派生脚本，而不是并进打包脚本：
+//   scripts/release/pack/index.mts 负责「物化依赖 → zip → SHA256」，那些中间态纪律（暂存树、多目标磁盘占用）都压在它
 //   身上；市场元数据是**对已出产物的派生**，放这里可以按需重跑、可以只对某个 target 生成，
 //   也不必让 pack 知道市场的事（单一职责：产物是产物，市场是市场）。
 //
@@ -16,15 +16,14 @@
 //   `universal` 包放进清单，平台包留在 release 资产里按名取用。
 //
 // 用法：
-//   node scripts/market-index.mts                                  # 当前版本 + universal
-//   node scripts/market-index.mts --target win32-x64 --base-url https://…/download/v1.0.0
-//   node scripts/market-index.mts --publisher Nyasers --out releases/index.v2.json
+//   node scripts/release/market-index.mts                                  # 当前版本 + universal
+//   node scripts/release/market-index.mts --target win32-x64 --base-url https://…/download/v1.0.0
+//   node scripts/release/market-index.mts --publisher Nyasers --out releases/index.v2.json
 import fs from "fs-extra";
-import { basename, dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { basename, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+import { ROOT } from "../shared/root.mts";
 const HANA_HOME = process.env.HANA_HOME || join(process.env.USERPROFILE || process.env.HOME || "", ".hanako");
 const RELEASES = join(ROOT, "releases");
 
@@ -80,7 +79,7 @@ function iconDataUri(iconRel: string): string | undefined {
 
 /** 索引构建器：仓库内拷贝优先（只依赖 node 内建），其次 HANA_APP_TOOLS_ROOT，再次本机 Hana（取最新版本）。 */
 function findIndexBuilder(): string | null {
-  const cands: string[] = [join(ROOT, "scripts", "hana-app-tools", "extension-index-build.mjs")];
+  const cands: string[] = [join(ROOT, "scripts", "vendor", "official", "hana-app-tools", "extension-index-build.mjs")];
   if (process.env.HANA_APP_TOOLS_ROOT) {
     cands.push(join(process.env.HANA_APP_TOOLS_ROOT, "scripts", "extension-index-build.mjs"));
   }
@@ -145,7 +144,7 @@ function buildEntry(zipName: string, sha256File: string, targets: Record<string,
   const manifest = fs.readJsonSync(join(ROOT, "src", "manifest.json"));
   const pkg = fs.readJsonSync(join(ROOT, "package.json"));
   const size = fs.statSync(join(RELEASES, zipName)).size;
-  // pack.mts 写的 .sha256 是「纯大写哈希」（不带文件名）——取第一个空白段再归一成小写
+  // scripts/release/pack/index.mts 写的 .sha256 是「纯大写哈希」（不带文件名）——取第一个空白段再归一成小写
   const sha256 = fs.readFileSync(sha256File, "utf8").trim().split(/\s+/)[0].toLowerCase();
   const entry: Entry = {
     kind: "app",

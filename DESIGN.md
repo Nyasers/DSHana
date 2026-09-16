@@ -6,7 +6,7 @@
 
 **注释写现状与原因，不写演变史。** 代码注释回答“现在是什么、为什么这样”；“以前是什么、怎么变成
 今天这样”属于 commit 与 CHANGELOG（仓库用 conventional-changelog：`pnpm run changelog` +
-`scripts/version-hook.mts`，历史自动成文）。
+`scripts/release/version.mts`，历史自动成文）。
 
 - 不写日期栈记（“2026-xx-xx 定调”）、不写迁移步骤编号（“步骤 3 接线”）、不写“已退役/已删除”的注记。
 - 保留现状事实（依赖怎样装、路径在哪、失败向哪侧回落）、保留设计取舍的**理由**。
@@ -39,7 +39,7 @@ Hana 宿主进程（App 隔离进程内加载 dist/index.js）
 ```
 
 - **受管 runtime**：DSH 跑在 `ctx.runtime.start` 拉起的独立 Node 子进程中（不再是宿主进程内 boot）。App 侧与子进程分责：App 管启动/停止/状态，子进程管 DSH 的 cordis 生命周期；崩溃可被父侧识别并重起。
-- **依赖形态（自包含打包）**：DSH 及其依赖树由 `scripts/pack.mts` 在构建时物化进**安装目录** `node_modules`，运行时**不再安装、不再 spawn pnpm**（v1 的 `ensure-deps` / `lib/pnpm.js` / `lib/bootstrap.js` / `lib/errclass.js` 已删除）。版本单一事实源 = 包内依赖树。
+- **依赖形态（自包含打包）**：DSH 及其依赖树由 `scripts/release/pack/index.mts` 在构建时物化进**安装目录** `node_modules`，运行时**不再安装、不再 spawn pnpm**（v1 的 `ensure-deps` / `lib/pnpm.js` / `lib/bootstrap.js` / `lib/errclass.js` 已删除）。版本单一事实源 = 包内依赖树。
 - **更新 = 装新 App 包 + 重启宿主**：无独立升级通道；升级后需重启宿主以清掉旧模块缓存。
 - **连接与鉴权交回官方**：`@dshana/bridge` 已退役；`dsh-web-app` 层的官方 connection（BrowserAuth token/cookie）与 frontend-static 各自负责其位，App 侧只经 runtime 中继补 cookie。
 - **DSH Web UI**：DSH 前端以**同文档注入**方式挂进壳页（`dsh-inject.js`：取 index → 搬 link/script → 装配 `__DSH_TRANSPORT__` + 流 mux），不再用 iframe 内嵌；到 runtime 的请求走宿主代理前缀 + 路径票据。
@@ -312,7 +312,7 @@ DSHana 以**单卡 + 自带功能面板**注册（manifest `contributes.cards[0]
 
 ### 交付 4：旧插件数据迁移（交付代码与 --check 路径，本刀不真跑）
 
-- src/lib/legacy-migrate.js（纯 node 内置）+ scripts/migrate-legacy.mts CLI：
+- src/lib/legacy-migrate.js（纯 node 内置）+ scripts/migrate/legacy.mts CLI：
   `--check`（默认，只读计划）/`--apply`/`--force`/`--source|--hanako-home`/`--target`
   （缺省取 DSHANA_LEGACY_HOME/DSHANA_DATA_DIR）。流程 = 备份（目标数据区
   `migration-backup/`，**已存在不覆盖唯一备份**）→ 复制 dsh-home/{sessions,storages,
@@ -331,7 +331,7 @@ DSHana 以**单卡 + 自带功能面板**注册（manifest `contributes.cards[0]
 - 版本线为单一 1.x 线（开发期停在最后已发布基线、发版经 `pnpm version` 推进、DSH 跟随策略），
   细节与依据见 `specs/dshana-v2-定案与待议-2026-09-10.md` §5；cordis 包（roster + plugins，
   10 个 package.json）**等值跟随**主版本（无独立版本线）；build metadata（+dsh-<dsh 依赖>）由
-  version-hook 发版时统一拼回再同步。版本线语义见 scripts/version-common.mts 头注释。
+  version-hook 发版时统一拼回再同步。版本线语义见 scripts/shared/version.mts 头注释。
 - pack.mts：静态项补 THIRD_PARTY_NOTICES.md；cordis dist 断言按清单校验（现 10 包）；
   新增 dist/ui 断言（route 资源 fail-closed）；zip 形态不变（dist 根 manifest/index.js +
   三件套 + NOTICE/THIRD_PARTY_NOTICES + cordis + ui，无 node_modules）。

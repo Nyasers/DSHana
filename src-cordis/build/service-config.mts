@@ -20,7 +20,7 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.dirname(path.dirname(path.dirname(fileURLToPath(import.meta.url)))); // src-cordis/build → repo 根
-const MINIFY_LOADER = path.join(ROOT, "scripts", "minify-loader.mts");
+const MINIFY_LOADER = path.join(ROOT, "scripts", "build", "minify-loader.mts");
 
 /** 服务半入口：优先 index.ts（TS 源），否则 index.js。产物名始终是 index.js。 */
 export function serviceEntry(pkgDir) {

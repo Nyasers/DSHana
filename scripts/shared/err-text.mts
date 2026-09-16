@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// scripts/err-text.mts — 抛出值 → 可读文本，以及"带结构化字段的 Error"（脚本侧 catch 到的形状统一走这里）
+// scripts/shared/err-text.mts — 抛出值 → 可读文本，以及"带结构化字段的 Error"（脚本侧 catch 到的形状统一走这里）
 //
 // 为什么单独成文件：`catch (e)` 的 e 在 strict 下是 unknown，`e && e.message` 的 truthiness
 // 收窄会把它变成 `{}`，访问 .message 即 TS2339；`new Error` 上直接挂自定义字段（如 problems）
