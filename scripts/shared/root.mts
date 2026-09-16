@@ -10,6 +10,25 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+/**
+ * Node 版本断言：本仓脚本全部以 `node <file>.mts` 直跑（package.json 的 scripts 都这么调），
+ * 靠 Node 原生类型剥离（22.18 / 23.6 起默认启用，此前需 --experimental-strip-types）。低于下界时
+ * 报错发生在运行期，typecheck 管不到；所以在共享入口断言一次，主要入口 import 本模块就会
+ * 拿到可读的失败，而不是 .mts 的语法错。
+ *
+ * package.json 的 engines.node 是同一份声明的机器可读面；pnpm 对**根项目**的 engines 不做强制
+ * （实测即便 --engine-strict 也照常安装），所以真正的拦在这里。
+ */
+const [NODE_MAJOR, NODE_MINOR] = process.versions.node.split(".").map(Number);
+const NODE_OK =
+  (NODE_MAJOR === 22 && NODE_MINOR >= 18) || (NODE_MAJOR === 23 && NODE_MINOR >= 6) || NODE_MAJOR >= 24;
+if (!NODE_OK) {
+  throw new Error(
+    `本仓脚本需要 Node ^22.18.0 || >=23.6.0（当前 ${process.versions.node}）：` +
+      "scripts 以 .mts 直跑，依赖 Node 原生类型剥离。",
+  );
+}
+
 /** 从给定文件向上找最近的含 package.json 的目录。 */
 export function findRepoRoot(from: string): string {
   let dir = path.dirname(from);
