@@ -24,6 +24,11 @@ import { buildIntegrations } from "./build.mts";
 import { REPO_ROOT, loadIntegrations, mirrorHasTag, readUpstreamFromMirror, stageIntegrations } from "./mirror.mts";
 import { dshVersionOf, sha256, tagForVersion, verifyIntegrations } from "./verify.mts";
 
+interface CommandContext {
+  tag: string;
+  version: string;
+}
+
 /**
  * 过闸：镜像 tag 必须在，漂移校验必须过。失败一律抛错，由 main 统一收口成 exit 1。
  * @returns {any[]} 集成清单（stage / build 接着用）
@@ -50,9 +55,11 @@ async function gate(tag, version) {
 /**
  * 子命令表：**键即白名单、值即实现**。校验与分发同一份事实源，加子命令只需在这里加一项。
  * 未知子命令当场 exit 2——否则拼错的 `buid` 会落进默认分支，白跑一次 verify 后报成功。
+ *
+ * 用 satisfies 而非类型注解：既校验值的形状，又保留键的字面量类型，默认值靠它约束。
  */
-const COMMANDS: Record<string, (ctx: { tag: string; version: string }) => Promise<void>> = {
-  hash: async ({ tag }) => {
+const COMMANDS = {
+  hash: async ({ tag }: CommandContext) => {
     const rel = process.argv[3];
     if (!rel) throw new Error("用法：node scripts/integrations/index.mts hash <仓库相对路径>");
     const buf = readUpstreamFromMirror(rel, tag);
@@ -64,14 +71,14 @@ const COMMANDS: Record<string, (ctx: { tag: string; version: string }) => Promis
       console.log(`${it.dir}  → ${it.package}  overlay=${(it.files || []).length}`);
     }
   },
-  verify: async ({ tag, version }) => {
+  verify: async ({ tag, version }: CommandContext) => {
     await gate(tag, version);
   },
-  stage: async ({ tag, version }) => {
+  stage: async ({ tag, version }: CommandContext) => {
     const integrations = await gate(tag, version);
     console.log(`[integrations] 已落盘 ${stageIntegrations(integrations).length} 个文件到 _tmp/integrations/`);
   },
-  build: async ({ tag, version }) => {
+  build: async ({ tag, version }: CommandContext) => {
     const integrations = await gate(tag, version);
     let built;
     try {
@@ -81,12 +88,17 @@ const COMMANDS: Record<string, (ctx: { tag: string; version: string }) => Promis
     }
     for (const b of built) console.log(`[integrations] 产物：${b.out}`);
   },
-};
+} satisfies Record<string, (ctx: CommandContext) => Promise<void>>;
+
+/** 默认子命令：与 COMMANDS 的键共用真源——表里改名而这里没跟上，类型检查会当场报错。 */
+const DEFAULT_COMMAND: keyof typeof COMMANDS = "verify";
+
+/** 子命令名守卫：把任意 argv 收窄成表内的键（这一步同时也是白名单校验）。 */
+const isCommand = (name: string): name is keyof typeof COMMANDS => name in COMMANDS;
 
 async function main() {
-  const cmd = process.argv[2] || "verify";
-  const run = COMMANDS[cmd];
-  if (!run) {
+  const cmd = process.argv[2] || DEFAULT_COMMAND;
+  if (!isCommand(cmd)) {
     console.error(`[integrations] 未知子命令：${cmd}（支持 ${Object.keys(COMMANDS).join("/")}）`);
     process.exit(2);
   }
@@ -96,7 +108,7 @@ async function main() {
     console.error("[integrations] package.json 未声明 dependencies['@deepseek-ai/dsh']");
     process.exit(1);
   }
-  await run({ tag: tagForVersion(version), version });
+  await COMMANDS[cmd]({ tag: tagForVersion(version), version });
 }
 
 if (isDirectRun(import.meta.url)) {
