@@ -10,7 +10,7 @@
 // 算出期望内容"，比较 / 写回 / 报告由框架统一做——不再各自发明 CLI 和 check。
 //
 // 一个任务 = 一类读者（再细就成"一个文件一个任务"，derive: 后面排长队反而难用）：
-//   manifest     主 package.json#version         → src/manifest.json（宿主读的 App 契约）
+//   manifest     主 package.json#version + SDK 快照 packedVersion → src/manifest.json（宿主读的 App 契约）
 //   cordis       主 package.json#version         → src-cordis/**/package.json（profile loader 读的 bundle 层）
 //   thirdparty   vendor/hana-app-sdk 的 manifest → THIRD_PARTY_NOTICES.md（分发合规）
 //   paths        镜像包清单                       → src-integrations/tsconfig.paths.json（编辑器）
@@ -34,7 +34,7 @@ import { ROOT } from "../shared/root.mts";
 import { isDirectRun } from "../shared/run.mts";
 import { cordisPkgPaths, readPkg } from "../shared/version.mts";
 import { dshTask } from "../vendor/dsh.mts";
-import { thirdpartyTask } from "./thirdparty.mts";
+import { packedVersion, thirdpartyTask } from "./thirdparty.mts";
 
 export { ROOT };
 
@@ -87,12 +87,23 @@ function versionFiles(rels: string[]): DerivedFile[] {
   });
 }
 
-/** 任务：manifest —— 主版本 → src/manifest.json（宿主读的 App 契约）。 */
+/**
+ * 任务：manifest —— 两个来源合成一份契约：主 package.json#version → manifest#version（宿主读的 App 契约），
+ * 随包 SDK 快照的 packedVersion → manifest#minAppVersion（App 要求的最低宿主版本）。
+ *
+ * 为何 minAppVersion 也派生：它与 SDK 快照同源（同步 SDK 时忘了抬它就是「能推导却抄漏」的典型）。
+ * 两个字段同属一份文件，必须由同一任务产出完整内容，否则两个 FileTask 会互相覆盖。
+ */
 const manifestTask: FileTask = {
   kind: "file",
   name: "manifest",
-  about: "package.json#version → src/manifest.json",
-  plan: () => versionFiles(["src/manifest.json"]),
+  about: "package.json#version + vendor SDK 的 packedVersion → src/manifest.json",
+  plan: () => {
+    const j = readPkg("src/manifest.json");
+    j.version = readPkg("package.json").version;
+    j.minAppVersion = packedVersion();
+    return [{ rel: "src/manifest.json", content: jsonText(j) }];
+  },
 };
 
 /** 任务：cordis —— 主版本 → cordis 包（roster bundle + plugins/*，无独立版本线）。 */

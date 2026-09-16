@@ -115,15 +115,15 @@ function lockBehind(): string[] {
   });
 }
 
-/** 同步后的衍生待办：锁文件、第三方声明。 */
+/** 同步后的衍生待办：锁文件，以及 derive（第三方声明与 manifest#minAppVersion 都取自这份快照）。 */
 function reportFollowUps(): void {
   const behind = lockBehind();
   if (behind.length) {
     console.log(`[sync-vendor-sdk] 锁文件停在旧 tgz（${behind.length} 个 integrity 未更新）：`);
-    console.log("  pnpm install --no-prefer-frozen-lockfile && pnpm run derive thirdparty");
+    console.log("  pnpm install --no-prefer-frozen-lockfile && pnpm run derive");
     return;
   }
-  console.log("[sync-vendor-sdk] 锁文件 integrity 已匹配；THIRD_PARTY_NOTICES 的版本号跑 pnpm run derive thirdparty");
+  console.log("[sync-vendor-sdk] 锁文件 integrity 已匹配；THIRD_PARTY_NOTICES 与 manifest#minAppVersion 跑 pnpm run derive 同步");
 }
 
 function main(): void {

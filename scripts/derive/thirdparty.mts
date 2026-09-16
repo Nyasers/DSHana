@@ -82,7 +82,7 @@ function apacheText(): string {
 }
 
 /** 读随包 SDK 的 packedVersion（宿主打包时写入，仓库内快照）。 */
-function packedVersion(): string {
+export function packedVersion(): string {
   const j = JSON.parse(fs.readFileSync(join(SDK_MANIFEST), "utf8"));
   const v = j && j.packedVersion;
   if (typeof v !== "string" || !v) throw new Error(`${SDK_MANIFEST} has no packedVersion`);
