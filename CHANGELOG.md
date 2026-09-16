@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.0-rc.3+dsh-0.1.5-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.2%2Bdsh-0.1.5-rc.2...v1.0.0-rc.3%2Bdsh-0.1.5-rc.2) (2026-09-16)
+
+### Bug Fixes
+
+* **scripts:** 处理 CodeRabbit 三处评审 ([960bfc9](https://github.com/Nyasers/DSHana/commit/960bfc9965034b5610432ca06803344e8bcfc140))
+* **scripts:** Node 版本约束放到真拦得住的那一处（共享入口断言） ([51e8fd6](https://github.com/Nyasers/DSHana/commit/51e8fd678ef85ffa3e1af5f89b3bee11a86a022d))
+* **timeout:** 任务默认超时兜底与缺省同源（600 → 1800） ([a4d3257](https://github.com/Nyasers/DSHana/commit/a4d3257412d90538fdcd20ee4462dd7c5d101e1e))
+
 ## [1.0.0-rc.2+dsh-0.1.5-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.1%2Bdsh-0.1.5-rc.2...v1.0.0-rc.2%2Bdsh-0.1.5-rc.2) (2026-09-13)
 
 ### Features
@@ -405,6 +413,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
