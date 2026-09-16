@@ -9,7 +9,7 @@
 //   - src/assets 只剩 icon.png（App 图标，由 build.ts 原样 copy，不进 bundle）；v1 的 jinja2
 //     模板与 card.js/css 已随 W6 清理删除，本配置不再需要 asset 规则
 //   - externalsPresets.node：node 内置模块保持外部 import（零运行时依赖）
-// rspack 解析路径走 scripts/build.mjs 的 resolveRspackEntry（RSPACK_ENV 或本地 node_modules）
+// rspack 解析路径走 src/build.ts 的 resolveRspackEntry（RSPACK_ENV 或本地 node_modules）
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 

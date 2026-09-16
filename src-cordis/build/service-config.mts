@@ -3,8 +3,8 @@
 //
 // src-cordis/build/service-config.mts — cordis 子插件服务端半共享 preset（rspack）
 // 学官方 dsh 组织：每包自持构建描述（plugins/<pkg>/cordis.config.mjs），
-// 共享 preset 层消费描述生成实际打包配置。本模块 = 原 scripts/cordis.config.mjs
-// 单包逻辑的参数化提取（两源两产物：src → 插件本体；src-cordis → 子插件包）。
+// 共享 preset 层消费描述生成实际打包配置：单包逻辑的参数化抽取（两源两产物：
+// src → 插件本体；src-cordis → 子插件包）。
 //
 // 服务端半（service 半）：包 index.js 为 entry 打 ESM bundle（cordis loader 按
 // package.json main=index.js 原生 import，具名导出 name/inject/provide/apply 保留
