@@ -44,6 +44,14 @@ Node 版本下界是 `^22.18.0 || >=23.6.0`，四件事各管一职：
 CI 直接失败的风险。`engines.node` 不参与 lockfile 解析，改这个区间不需要、也不应期待
 `pnpm-lock.yaml` 变化。
 
+## App 契约的派生
+
+`src/manifest.json` 的两个字段都来自 derive，不手写：`version` 取主 `package.json`，
+`minAppVersion` 取 `vendor/hana-app-sdk/source-manifest.json` 的 `packedVersion`（随包 SDK 快照
+打包时的宿主版本，也就是 App 要求的最低宿主版本）。两者由**同一个** manifest 任务产出完整内容
+（同文件两个任务会互相覆盖）。同步随包 SDK 后跑 `pnpm run derive`，`derive --check` 会在漂移时
+报出来。
+
 ## 架构总览（受管 runtime）
 
 ```text
