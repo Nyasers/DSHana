@@ -16,6 +16,7 @@
 import { hana } from "@hana/plugin-sdk";
 import { injectDshIndex, installTransport } from "#/ui/dsh-inject.ts";
 import { isFaceView, roleForView } from "#/lib/face-role.ts";
+import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
 
 (function () {
   "use strict";
@@ -325,6 +326,7 @@ import { isFaceView, roleForView } from "#/lib/face-role.ts";
     if (injected.started) return;
     injected.started = true;
     var view = resolveView(shell);
+    seedView = view;
     var privatePrefix = withSurfaceTicket(prefix, surfaceSession());
     var base = new URL(privatePrefix, location.origin);
     injected.dispose = installTransport(base, {
@@ -345,6 +347,8 @@ import { isFaceView, roleForView } from "#/lib/face-role.ts";
       .then(function (html) {
         // 先取走 boot-theme 行的偏好再注入：桥在 index 解析时就跑，它要立刻知道门开不开。
         dshPreference = readIndexThemePreference(html);
+        // 注入前再垫一次：首屏那一帧之前宿主主题多半已到，垫上就不会先画 DSH 的近白底。
+        seedDshTokens();
         return injectDshIndex(html, base);
       })
       // 注入完成后推一次（桥此刻已在文档里）；再开标题栏交互区域的上报。此后主题完全由
@@ -700,8 +704,27 @@ import { isFaceView, roleForView } from "#/lib/face-role.ts";
       else root.removeAttribute("data-appearance");
     } catch (e) { /* 忽略 */ }
     applyThemeCss(snap.cssUrl);
+    seedDshTokens();
   }
 
+  // ---- 注入前先垫上 DSW 自己的底色 token（见 src/lib/seed-tokens.ts）----
+  // 写 body 的内联 style、不加 !important：赢过 DSH 的静态样式表，输给主题桥的 !important。
+  // 值按面取（侧栏面垫侧栏色），宿主变量取不到就跳过——不发明用户没选过的颜色。
+  // 同时在 <html> 上声明这一面的底座 token：桥落地后按它把 base 也压成同色（桥的映射表是
+  // 一张、没有面的概念，这行声明就是那个面的维度）；两边写法不同、值同源。
+  var seedView = "default";
+  function seedDshTokens() {
+    if (!document.body) return;
+    try {
+      document.documentElement.setAttribute("data-dshana-backdrop", backdropTokenForView(seedView));
+    } catch (e) { /* 忽略 */ }
+    var spec = seedTokensForView(seedView);
+    var cs = getComputedStyle(document.documentElement);
+    for (var i = 0; i < spec.length; i++) {
+      var value = cs.getPropertyValue(spec[i][1]).trim();
+      if (value) document.body.style.setProperty(spec[i][0], value);
+    }
+  }
   // 首屏主题：官方读法 hana.theme.getSnapshot()（宿主报过来的实况）；
   // 拿不到再退 URL 参数（宿主白名单参数名）。
   try {

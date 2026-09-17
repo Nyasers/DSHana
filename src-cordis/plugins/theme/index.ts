@@ -25,6 +25,11 @@
 //   桥向壳页索取主题变量（preference 为 system 时），写 body 层 !important 覆盖
 //   （压 dsh presenter 的 body inline）。**不再注入任何静态兜底样式**：拿不到宿主主题时
 //   就保持 dsh 内置 token（官方明暗），不从宿主搬一套固定值来充数。
+//   底座一格按面取：壳页在 <html> 上声明 data-dshana-backdrop = 该面可见底那格 token
+//   （源在 src/lib/seed-tokens.ts 的 FACE_BACKDROP；侧栏面是 --dsw-specific-sidebar-fill，
+//   其余面是 --dsw-alias-bg-base），桥用它把 base 换成同一张表里那格的宿主变量。
+//   为什么：dsh 的 .frame 与它的启动屏都画 var(--dsw-alias-bg-base, …)，而映射表是一张、
+//   没有面的概念，一律压 --bg 会让侧栏面的启动屏亮一次中列色。
 //
 // 注入脚本内容文件化 + 打包内联（review 修订）：桥脚本正文存独立文件
 // assets/theme-bridge.js（纯浏览器 JS），经 rspack asset/source 内联进本包

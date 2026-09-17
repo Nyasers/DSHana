@@ -11,7 +11,10 @@
 //   · LHS 不重复（重复会让后一条静默覆盖前一条）。
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { TOKEN_MAP } from "../src-cordis/plugins/theme/token-map.ts";
+import { FACE_VIEWS } from "../src/lib/face-role.ts";
+import { VIEW_SEEDS, FACE_BACKDROP, seedTokensForView } from "../src/lib/seed-tokens.ts";
 
 // 宿主主题变量的允许清单（壳页从 hana.theme 拿到的 --* 变量；未选中的颜色绝不发明）
 const HOST_VARS = new Set([
@@ -108,4 +111,60 @@ test("TOKEN_MAP：层次位用叠色而非拿面去顶", () => {
   ]) {
     assert.equal(map.get(token), "--overlay-medium", token + " 应为叠色");
   }
+});
+
+test("闪白兜底：每面垫的底色 = 这一面可见底 token 在映射表里的宿主变量", () => {
+  const map = new Map(TOKEN_MAP);
+  const hostVars = new Set(TOKEN_MAP.map(([, hostVar]) => hostVar));
+  for (const view of FACE_VIEWS) {
+    const backdrop = FACE_BACKDROP[view];
+    assert.ok(backdrop, view + " 面没声明可见底 token");
+    const hostVar = map.get(backdrop);
+    assert.ok(hostVar, view + " 面的可见底 token 不在映射表里：" + backdrop);
+    const spec = VIEW_SEEDS[view];
+    assert.ok(spec && spec.length > 0, view + " 面没有垫片规格（注入时那一面会先画 DSH 的近白底）");
+    const seeded = new Map(spec);
+    assert.equal(
+      seeded.get("--dsw-alias-bg-base"),
+      hostVar,
+      view + " 面：.frame / DSH 加载屏那一层垫的颜色与这一面的可见底不同源",
+    );
+    assert.equal(seeded.get(backdrop), hostVar, view + " 面：可见底那一格没垫成同源色");
+    for (const [token, value] of spec) {
+      assert.ok(hostVars.has(value), token + " 垫的不是映射表里的宿主变量：" + value);
+    }
+  }
+});
+
+test("闪白兜底：垫的底色 = 这一面加载完之后真正显示的底色", () => {
+  for (const view of ["default", "main", "stream", "settings"]) {
+    assert.equal(
+      new Map(seedTokensForView(view)).get("--dsw-alias-bg-base"),
+      "--bg",
+      view + " 面（中列）垫的颜色该是内容底色",
+    );
+  }
+  // 侧栏面：可见区就是侧栏列（列画 --dsw-specific-sidebar-fill ← --sidebar-bg），
+  // 所以列身后那一层（.frame / DSH 加载屏）也必须是侧栏色，否则自举台面已是侧栏色、
+  // DSH 一加载又退回中列色——加载时换一次底，就是这条测试拦的事。
+  assert.equal(
+    new Map(seedTokensForView("sidebar")).get("--dsw-alias-bg-base"),
+    "--sidebar-bg",
+    "侧栏面的加载底色没跟侧栏列同源",
+  );
+});
+
+test("侧栏面的加载底色与注入后同源（同一对映射 + 页面取色顺序）", () => {
+  const map = new Map(TOKEN_MAP);
+  assert.equal(
+    map.get("--dsw-specific-sidebar-fill"),
+    "--sidebar-bg",
+    "“侧栏注入后用哪个色”是页面取色顺序的依据，这对映射变了页面也得改",
+  );
+  const html = readFileSync(new URL("../src/ui/sidebar.html", import.meta.url), "utf8");
+  assert.match(
+    html,
+    /background:\s*var\(--dsw-specific-sidebar-fill,\s*var\(--sidebar-bg,\s*#F5EFE4\)\)/,
+    "侧栏页底色要按「DSH token → 同一个宿主变量 → 纸张」逐级兜底，才能在注入前后不跳色",
+  );
 });
