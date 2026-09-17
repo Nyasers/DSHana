@@ -15,6 +15,7 @@
 // fallback 纸张色），数据语义 v2 boot-state（phase idle/starting/ready/error/stopped）。
 import { hana } from "@hana/plugin-sdk";
 import { injectDshIndex, installTransport } from "#/ui/dsh-inject.ts";
+import { isFaceView, roleForView } from "#/lib/face-role.ts";
 
 (function () {
   "use strict";
@@ -292,6 +293,15 @@ import { injectDshIndex, installTransport } from "#/ui/dsh-inject.ts";
     });
   }
 
+  // 钉住的会话（只读会话流面用）：?sid=<DSH session id> 打开时钉住那一段，不跟随跨面切换；
+  // 没有这个参数时返回 null，表示「跟随跨面共用的当前会话」。
+  function readPinnedSession() {
+    try {
+      var sid = new URLSearchParams(location.search).get("sid");
+      return Promise.resolve(sid && sid.trim() ? sid.trim() : null);
+    } catch (e) { return Promise.resolve(null); }
+  }
+
   // 挂到宿主桥（__DSHANA__）上的跨面接口：
   //   设置视图 → src-integrations/ui-settings-general；会话选中 → src-integrations/ui-session；
   //   剪贴板 → @dshana/clipboard 的 client 半（同文档，直接调，无消息协议）。
@@ -302,6 +312,7 @@ import { injectDshIndex, installTransport } from "#/ui/dsh-inject.ts";
     readSelection: readSelection,
     writeSelection: writeSelection,
     onSelectionChanged: function (listener) { return onSharedChanged("selection", listener); },
+    readPinnedSession: readPinnedSession,
     clipboardWrite: writeClipboard,
   };
 
@@ -320,7 +331,7 @@ import { injectDshIndex, installTransport } from "#/ui/dsh-inject.ts";
       // 面 → DSH 侧上游角色词：sidebar（FP）= navigation（只有侧栏）；
       // default（full / 拆窗）= standalone（整幅 DSH UI，可折叠）；main 与 settings = workspace
       // （中列 + 右列，无 DSH 侧栏）。
-      role: view === "sidebar" ? "navigation" : view === "default" ? "standalone" : "workspace",
+      role: roleForView(view),
       bridge: SURFACE_API,
     });
     // 取 index：privatePrefix 已是完整代理路径（含 _surface 票据，宿主路由直认），用原生同源
@@ -338,8 +349,39 @@ import { injectDshIndex, installTransport } from "#/ui/dsh-inject.ts";
       })
       // 注入完成后推一次（桥此刻已在文档里）；再开标题栏交互区域的上报。此后主题完全由
       // hana.theme.subscribe 事件驱动。
-      .then(function () { pushThemeNow(); startInteractiveRegions(); })
+      .then(function () { pushThemeNow(); startInteractiveRegions(); mountCardStrip(); })
       .catch(function (err) { showInjectionError(err); });
+  }
+
+  // ---- 卡状态条：URL 带 sid 的面（工具出卡时钉住的那一段 DSH 会话）在顶部挂一行跟踪态 ----
+  // 片段与卡页同源：App 后端 /dshana/card-state 返回的就是可直接换进 DOM 的状态行。
+  // 只取一次（不轮询）；取不到就整条撤掉，不占版面。行内样式：这条只属于带 sid 的面，
+  // 不为它往四个页面的 CSS 里各拄一份（片段里的 .state/.dot/.detail 由页面提供）。
+  function mountCardStrip() {
+    let pinned: string | null = null;
+    try { pinned = new URLSearchParams(location.search).get("sid"); } catch (e) { pinned = null; }
+    const sid = pinned !== null && pinned.trim() ? pinned.trim() : "";
+    if (!sid) return;
+    const root = document.getElementById("root");
+    if (root === null || root.parentNode === null) return;
+    const parent: Node = root.parentNode;
+    const strip = document.createElement("div");
+    strip.id = "dshana-card-strip";
+    parent.insertBefore(strip, root);
+    root.style.height = "calc(100% - 31px)";
+    const drop = (): void => {
+      try { root.style.height = ""; } catch (e) { /* 忽略 */ }
+      if (strip.parentNode !== null) strip.parentNode.removeChild(strip);
+    };
+    hana.api.fetch("dshana/card-state?sessionId=" + encodeURIComponent(sid), {
+      method: "GET", cache: "no-store", headers: { Accept: "text/html" }
+    }).then((res: Response) => {
+      if (!res.ok) throw new Error("card-state HTTP " + res.status);
+      return res.text();
+    }).then((html: string) => {
+      if (html && html.trim()) strip.innerHTML = html;
+      else drop();
+    }).catch(() => { drop(); });
   }
   // DSH index 的 boot-theme 行（ui-theme/src/boot-theme.ts 生成，紧跟 <body> 开标签）：
   //   const preference = "system"|"light"|"dark"
@@ -659,6 +701,7 @@ import { injectDshIndex, installTransport } from "#/ui/dsh-inject.ts";
     } catch (e) { /* 忽略 */ }
     applyThemeCss(snap.cssUrl);
   }
+
   // 首屏主题：官方读法 hana.theme.getSnapshot()（宿主报过来的实况）；
   // 拿不到再退 URL 参数（宿主白名单参数名）。
   try {
@@ -684,16 +727,17 @@ import { injectDshIndex, installTransport } from "#/ui/dsh-inject.ts";
   // ---- 认面：页面自己声明为准，宿主 slot 只作兜底 ----
   // 与样例 hana-dsh 同一姿势："我是哪个面"写在**页面自己身上**（样例用 <meta name="hana-dsh-role">，
   // 我们用 <meta name="hana-dshana-role"> + 壳属性 data-dshana-view）。
-  // 三态模型：
+  // 三态模型（词表见 src/lib/face-role.ts）：
   //   default —— full（整幅 DSH UI）与 detached（拆窗）共用一页，内容一样；
   //   main    —— 主卡，无 DSH 侧栏（侧栏归 FP）；
-  //   sidebar —— FP，只有侧栏。
-  // 另有 settings（App 自己的设置页，不注入 DSH），它是宿主设置标签页的面，不属于上面三态。
-  // 映射到 DSH 侧上游的角色词：default→standalone、sidebar→navigation、main/settings→workspace。
+  //   sidebar —— FP，只有侧栏；
+  //   stream  —— 只读会话流，只有中列（输入位收起），会话按 ?sid= 钉住或跟随跨面选中。
+  // 另有 settings（App 自己的设置页，不注入 DSH），它是宿主设置标签页的面，不属于上面几态。
+  // 映射到 DSH 侧上游的角色词由 face-role.ts 给：default→standalone、sidebar→navigation、
+  // main/settings→workspace、stream→stream。
   // 为何不反过来靠宿主：宿主把本页挂进 FP 用的是 functionPanel.routeUrl，不带我们的任何参数；
   // 而 hostSlot() 可能报 page / widget 这类广义值，比静态声明更不确定。
   var SLOT_VIEW = { "card": "main", "function-panel": "sidebar", "settings": "settings" };
-  var VIEWS = ["default", "main", "sidebar", "settings"];
   function hostSlot() {
     try {
       if (!hana || !hana.surface || typeof hana.surface.getContext !== "function") return null;
@@ -705,10 +749,10 @@ import { injectDshIndex, installTransport } from "#/ui/dsh-inject.ts";
     try {
       var m = document.querySelector('meta[name="hana-dshana-role"]');
       var v = m && m.getAttribute("content");
-      if (v && VIEWS.indexOf(v) >= 0) return v;
+      if (isFaceView(v)) return v;
     } catch (e) { /* 忽略 */ }
     var a = root && root.getAttribute("data-dshana-view");
-    return a && VIEWS.indexOf(a) >= 0 ? a : null;
+    return isFaceView(a) ? a : null;
   }
   function resolveView(root) {
     // 兜底到 default（full）而不是 main：认不出面时按上游本来的行为画整幅 DSH UI，

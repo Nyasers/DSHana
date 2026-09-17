@@ -138,6 +138,8 @@ export function AppFrame({
     settings: 'settings',
     standalone: 'standalone',
     workspace: 'workspace',
+    // 只读会话流：只有中列（见下方渲染分支与 CSS 里的输入位收起）。
+    stream: 'stream',
   }
   const surface = ROLE_SURFACES[role ?? ''] ?? 'standalone'
 
@@ -216,7 +218,7 @@ export function AppFrame({
       ref={frameRef}
       className={css.frame}
       style={{
-        gridTemplateColumns: surface === 'navigation'
+        gridTemplateColumns: surface === 'navigation' || surface === 'stream'
           ? 'minmax(0, 1fr)'
           : `${cols.sidebar}px minmax(0, 1fr) ${cols.rightbar}px`,
       }}
@@ -245,6 +247,8 @@ export function AppFrame({
           </RightbarColumn>
         </>
       )}
+      {/* 只读会话流：中列独占整幅（CSS 再把输入位收起），没有侧栏、没有右列、没有拖拽把手。 */}
+      {surface === 'stream' && <CenterColumn>{main}</CenterColumn>}
       {surface === 'workspace' && (
         <div className={css.settingsShell}>
           {sidebar}
