@@ -225,12 +225,23 @@ function logLine(log, msg) {
  *   promise —— 后台继续等到 Hana task 终态并释放同会话串行化锁（fire-and-forget；
  *             终态结果由宿主投递到来源会话）。调用方 catch 记录即可，不 await。
  */
+/**
+ * 后台结果的投递档位：宿主任务字段，只在 create 时定死（update 改不了）。
+ * 宿主不替作者默选档位——要哪一种必须显式声明；两档与 session:send 的 deliverAs 是同一套语义：
+ *   · `next-step`（本 App 选用）＝ 结果在下一个输入收集点贴回来源会话，即 `steer`：
+ *     不打断在途模型请求，也不要求模型为等结果而结束回合；会话空闲时才另起一轮；
+ *   · `next-turn` ＝ 本回合结束后另起一轮，即 `followUp`。
+ * create 入参、工具回执的 `delivery`、结果通知的措辞都读这一处，改它即改全 App 的投递语义。
+ */
+export const TASK_DELIVERY = "next-step";
+
 /** 提交定位键：prompt 被 DSH 接受后可得的坐标。 */
 export interface DshSubmitLoc {
   action: string;
   sessionId: string;
   rpcId: string;
   taskId: string;
+  delivery: string;
   cwd?: string | null;
 }
 
@@ -289,9 +300,10 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
           // 档位显式声明：宿主默认就是这两个（有令牌 ⇒ session；delivery 默认 next-turn），
           // 写出来是为了不吃隐式默认——改默认值不会静默改变本 App 的形状（APPS.md
           // “后台任务与审批”节：档位只在创建时确定，update 改不了）。
+          // 我们要 next-step：结果贴回下一个输入点，不必让模型为等结果结束回合。
           // create 时 DSH 会话尚未诞生，sessionId 由建会话后的 update 回写。
           scope: "session",
-          delivery: "next-turn",
+          delivery: TASK_DELIVERY,
           metadata: {
             dsh: {
               action: parsed.action,
@@ -401,6 +413,7 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
         sessionId,
         rpcId,
         taskId,
+        delivery: TASK_DELIVERY,
         cwd: established.effectiveCwd || parsed.cwd || null,
       };
       resolveReady(loc);

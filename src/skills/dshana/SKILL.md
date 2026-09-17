@@ -59,7 +59,8 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 ### action=open：开一个子代理并交首件活
 
 - **task + cwd 必填**；不允许传 `sessionId`（续会话用 `reply`）
-- **固定异步**：立即返回 `{ content, details: { dsh: { action: "open", taskId, sessionId, rpcId, status: "running", cwd }, card } }`；任务在后台执行，完成/失败作为后台结果投递回发起会话，Agent 结束回合即可收到；要看过程或最终结论用 `get`
+- **固定异步**：立即返回 `{ content, details: { dsh: { action: "open", taskId, sessionId, rpcId, status: "running", delivery: "next-step", cwd }, card } }`；任务在后台执行，完成/失败按回执里的 `delivery` 档投递回发起会话：结果在下一个输入点自动贴回，不必为等它结束回合（会话空闲时自动起新一轮）；要看过程或最终结论用 `get`
+- **投递档位（回执里的 `delivery`）**：宿主不替作者默选档位，本 App 在 create 时显式声明，档位定死后 update 改不了。`next-step`（当前值）＝结果在下一个输入收集点贴回本会话，相当于 `session:send` 的 `steer`：不打断在途请求，也不要求模型结束回合专门等；`next-turn` 才是本回合结束后另起一轮（`followUp`）。回执里的值就是实际档位，别自行推断。
 - **句柄**：返回值里的 `taskId` 就是后续 `reply` / `close` / `get` 用的句柄，优先用它
 - `label` 是显示名（宿主任务列表与结果通知里可见），缺省按动作给默认前缀
 - 提交链路：`ctx.tasks.create` → 受管 runtime 就绪 → `session.create` →（显式传 provider/model/effort 时才 `selectModel`）→ 会话↔任务认领（控制面 `bind-task`，落会话日志投影）→ `session.prompt`（queue）→ runtime task-bridge 回投终态
