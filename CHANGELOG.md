@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.0-rc.4+dsh-0.1.5-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.3%2Bdsh-0.1.5-rc.2...v1.0.0-rc.4%2Bdsh-0.1.5-rc.2) (2026-09-17)
+
+### Features
+
+* **dshana:** 后台结果按 next-step 档投回本会话 ([dba0176](https://github.com/Nyasers/DSHana/commit/dba0176f924bb203599a1d93df1b35b816a4bf8d))
+* **dshana:** 卡改成只读会话流的聊天流卡 ([522b1c4](https://github.com/Nyasers/DSHana/commit/522b1c4a8390f9f646653bc55de9a49815d2cea5))
+* **dshana:** 只读会话流面（stream） ([51bd5ee](https://github.com/Nyasers/DSHana/commit/51bd5ee60229b41531366f9bf5c02e5d7b00d813))
+
+### Bug Fixes
+
+* **derive:** minAppVersion 也走派生（从 SDK 快照的 packedVersion） ([3b08f89](https://github.com/Nyasers/DSHana/commit/3b08f895e340b223a31c8c34826751e3a458af74))
+* **dshana:** 未钉住的会话流面跟随共用选中，不再清空 ([cfd8859](https://github.com/Nyasers/DSHana/commit/cfd8859e40bd0c12364207902be3b3aa4cb2f08a))
+* **dshana:** default 面恢复收起侧栏 ([97ad61d](https://github.com/Nyasers/DSHana/commit/97ad61da4a7d797c56dd28adf129e439e88c52c3))
+* **dshana:** DSH 加载屏按面取底色，不闪白也不换底 ([acb30e8](https://github.com/Nyasers/DSHana/commit/acb30e8fd30b7afcf5c5d7e35c2d9d748e3618fc))
+
 ## [1.0.0-rc.3+dsh-0.1.5-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.2%2Bdsh-0.1.5-rc.2...v1.0.0-rc.3%2Bdsh-0.1.5-rc.2) (2026-09-16)
 
 ### Bug Fixes
@@ -413,6 +428,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
