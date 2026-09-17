@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- 本页的面（role）的事实源：静态声明。stream 面 = **只读会话流**——
+     复用 DSH 前端、只留中列那一段转录，DSH 侧栏、右列与输入卡（composer card）全部收起。
+     语义：看，不参与。输入与打断仍走 dshana 工具链，这一面不提供任何写入口。 -->
+<meta name="hana-dshana-role" content="stream">
+<title>DSHana 会话流</title>
+<!-- src/ui/stream.html — dshana App v2 的 stream 面（只读会话流）。
+     两种进入方式，同一页：
+       · 工具出卡的会话流卡（open/reply 的 details.card 指向本页，查询串带 sid=<DSH session id>）：
+         会话被钉住，app-shell 在顶部再挂一行跟踪态（取一次 /dshana/card-state）；
+       · 直接开页（不带 sid）：跟随跨面共用的当前 DSH 会话，不钉住。
+     与 main / default 同一副自举台面（./face-stage.css），ready 后把整幅让给注入的 DSH
+     Web UI，由 ui-layout 覆盖层按 surface=stream 只画中列、并由 CSS 摘掉 [data-composer-card]（输入卡）；
+     座位（[data-composer-seat]）留着，统计信息行就挂在它里面。
+     本页自己的样式只有一条卡状态行。到本 App 后端路由一律 hana.api.fetch（surface session
+     凭据，见 app-shell.js）。body 上的 data-dshana-shell 是壳脚本的根锚（boot() 取它，缺失则不轮询）。 -->
+<link rel="stylesheet" href="./face-stage.css">
+<style>
+  /* 卡状态行（app-shell 在带 sid 的面顶部挂的一条）：内容就是 App 后端 /dshana/card-state
+     返回的那段片段（.state / .dot / .detail），所以那三个类名是卡页的渲染契约。 */
+  #dshana-card-strip {
+    display: flex; align-items: center; gap: 6px;
+    height: 31px; box-sizing: border-box; padding: 0 12px;
+    font-size: 12.5px; color: var(--text-muted, #6B6158);
+    background: var(--bg-card, #FBF7EE);
+    border-bottom: 1px solid var(--border, #D8CFBE);
+    overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  }
+  #dshana-card-strip .state { display: flex; align-items: center; gap: 6px; margin: 0; min-width: 0; }
+  #dshana-card-strip .dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--accent, #537D96); }
+  #dshana-card-strip .state[data-state="ended"] .dot { background: var(--text-muted, #6B6158); }
+  #dshana-card-strip .state[data-state="cancelling"] .dot { background: var(--danger, #B0453E); }
+  #dshana-card-strip .state[data-state="unknown"] .dot { background: var(--border, #D8CFBE); }
+  #dshana-card-strip .detail { overflow: hidden; text-overflow: ellipsis; }
+</style>
+</head>
+<body data-view="idle" data-dshana-shell data-dshana-view="stream">
+  <div id="dsh-stage">
+    <div class="loader">
+      <span class="wordmark">DSHANA</span>
+      <span class="ring" id="dsh-spin" hidden></span>
+      <p id="dsh-status">正在读取状态…</p>
+    </div>
+    <div id="boot-panel"></div>
+  </div>
+  <script type="module" src="./app-shell.js"></script>
+</body>
+</html>

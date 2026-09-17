@@ -218,7 +218,10 @@ export function SidebarRoot({
         )}
         {/* Rail resting state is the whale mark; hovering swaps in the panel
             icon (the expand affordance, figma sidebar-hover flow). */}
-        {surfaceRole !== 'navigation' && surfaceRole !== 'standalone' && (
+        {/* 只有 navigation（FP）不渲染折叠钮：那一面本页就是侧栏，没有可供收起的轨。
+            standalone（default 面）照旧渲染：那里的收起是真的（sidebar=0 → 56px 轨），
+            AppFrame 按同一语义算轨道宽。 */}
+        {surfaceRole !== 'navigation' && (
           <Tooltip label={collapsed ? t('toggle.open') : t('toggle.collapse')} delayMs={500}>
             <button
               type="button"

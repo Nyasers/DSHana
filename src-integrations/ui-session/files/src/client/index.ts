@@ -536,6 +536,8 @@ interface SurfaceSelectionBridge {
   readSelection?(): Promise<{ sessionId: string | null; at?: number }>
   writeSelection?(sessionId: string | null): Promise<void>
   onSelectionChanged?(listener: () => void): () => void
+  /** 只读会话流面：钉住的一段会话（未钉住时 null，表示跟随共用选中）。 */
+  readPinnedSession?(): Promise<string | null>
 }
 
 function selectionBridge(): SurfaceSelectionBridge | undefined {
@@ -549,11 +551,14 @@ function installCrossSurfaceSelection(ctx: Context): void {
   const bridge = selectionBridge()
   if (bridge === undefined) return
   const role = bridge.role
-  if (role !== 'navigation' && role !== 'workspace') return
+  // 只读会话流面只读不写：钉住时跳开共用选中，未钉住时跟随。
+  const readOnly = role === 'stream'
+  if (role !== 'navigation' && role !== 'workspace' && !readOnly) return
   const read = bridge.readSelection
   const write = bridge.writeSelection
   const onChanged = bridge.onSelectionChanged
   if (read === undefined || write === undefined || onChanged === undefined) return
+  const readPinned = readOnly ? bridge.readPinnedSession : undefined
   const list = ctx.sessions.list
   const snap0 = list.getSnapshot()
   let generation = 0
@@ -563,12 +568,31 @@ function installCrossSurfaceSelection(ctx: Context): void {
   // 面上线时列表已就绪 ⇒ 恢复早已落地，往后的选中变化都算用户动作。
   let settled = snap0.phase === 'ready'
 
+  /** 共用的当前选中（带它的写入时刻；没有就报 null 与 0）。 */
+  const sharedSelection = (): Promise<{ id: string | null; at: number }> =>
+    read().then((next) => ({
+      id: next?.sessionId ?? null,
+      at: typeof next?.at === 'number' ? next.at : 0,
+    }))
+
+  /** 本次该显示哪一段：钉住的 sid 优先，否则共用的当前选中。 */
+  const desired = (): Promise<{ id: string | null; at: number }> => {
+    if (readPinned === undefined) return sharedSelection()
+    return readPinned().then((sid) => {
+      // 没钉住（直接开页、不带 sid）= 跟随共用选中。这里若给 MAX_SAFE_INTEGER，
+      // 这一面就被钉死在「没有会话」上：applyRemote 随后调用 clear()。
+      if (sid === null) return sharedSelection()
+      // 钉住即定论：不受共用选中写入时刻的影响。
+      return { id: sid, at: Number.MAX_SAFE_INTEGER }
+    })
+  }
+
   const applyRemote = (): void => {
     const request = ++generation
-    void read().then((next) => {
+    void desired().then((next) => {
       if (request !== generation) return
-      const id = next?.sessionId ?? null
-      const at = typeof next?.at === 'number' ? next.at : 0
+      const id = next.id
+      const at = next.at
       if (at <= localAt) return
       if (id === (list.getSnapshot().current ?? null)) return
       applying = true
@@ -594,6 +618,8 @@ function installCrossSurfaceSelection(ctx: Context): void {
         return
       }
       if (applying) return
+      // 只读面不宣告本地变化：它只是在看，不该把另一个面的选中拉过来。
+      if (readOnly) return
       localAt = Date.now()
       void Promise.resolve(write(current)).catch(() => { /* 写失败不回滚本地 */ })
       applyRemote()

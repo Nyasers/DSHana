@@ -46,10 +46,34 @@
     } catch (e) { /* 忽略 */ }
     return bootPref;
   }
+  // 这一面声明的底座 token（壳页写在 <html> 的 data-dshana-backdrop 上，值 = 该面可见底那格
+  // DSW token 名）。壳页那侧的同源实现在 src/lib/seed-tokens.ts。
+  function backdropKey() {
+    try {
+      var k = document.documentElement.getAttribute("data-dshana-backdrop");
+      if (k && k.charAt(0) === "-") return k;
+    } catch (e) { /* 忽略 */ }
+    return null;
+  }
   function cssOf(v) {
+    // 底座那一格按面取：DSH 的 .frame 与它的启动屏都画 var(--dsw-alias-bg-base, …)，而本表是
+    // 一张、没有面的概念——一律把 base 压成 --bg，侧栏面（可见底是 --dsw-specific-sidebar-fill）
+    // 的启动屏就会先亮一次中列色。声明只给 token 名，值仍从同一张表取（表里那格的宿主变量）。
+    var baseKey = "--dsw-alias-bg-base";
+    var back = backdropKey();
+    var baseVal = "";
+    if (back && back !== baseKey) {
+      for (var j = 0; j < m.length; j++) {
+        if (m[j][0] !== back) continue;
+        var hk = m[j][1];
+        baseVal = hk.charAt(0) === "~" ? hk.slice(1) : (v[hk] || "");
+        break;
+      }
+    }
     var c = "";
     for (var i = 0; i < m.length; i++) {
       var val = m[i][1][0] === "~" ? m[i][1].slice(1) : (v[m[i][1]] || "");
+      if (baseVal && m[i][0] === baseKey) val = baseVal;
       if (!val) continue; // 空值不出手：空自定义属性会让 var() “无效于计算值”（bg 系变 transparent）
       c += m[i][0] + ":" + val + "!important;";
     }

@@ -64,7 +64,7 @@ export async function run(input: OpenInput, ctx: ToolCtx, deps?: SubmitDeps): Pr
   const text =
     "已开启 DSH 子代理（open）：taskId " + loc.taskId + "（后续续/关优先用它），sessionId " + sid + "，rpcId " + rpc +
     (loc.cwd ? "，cwd " + loc.cwd : "") +
-    "。任务在后台执行，完成/失败会作为后台结果投递到本会话；要看执行过程或最终结论用 dshana action=get（taskId " +
+    "。任务在后台执行，完成/失败按 " + loc.delivery + " 档投递回本会话（下一个输入点自动贴回，不必为等结果结束回合）；要看执行过程或最终结论用 dshana action=get（taskId " +
     loc.taskId + "）。";
   return {
     content: [{ type: "text", text }],
@@ -75,9 +75,10 @@ export async function run(input: OpenInput, ctx: ToolCtx, deps?: SubmitDeps): Pr
         rpcId: rpc,
         taskId: loc.taskId,
         status: "running",
+        delivery: loc.delivery,
         cwd: loc.cwd || undefined,
       },
-      card: sessionCard({ action: "open", sessionId: sid, taskId: loc.taskId, cwd: loc.cwd }),
+      card: sessionCard({ action: "open", sessionId: sid, taskId: loc.taskId, delivery: loc.delivery, cwd: loc.cwd }),
     },
   };
 }

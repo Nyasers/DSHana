@@ -21,7 +21,11 @@
     font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
     font-size: 13px;
     color: var(--text, #2A2622);
-    background: var(--bg, #F5EFE4);
+    /* 加载底色要落在“注入后 DSH 侧栏真正的填色”上，不是纸张底：
+       DSH 侧栏画的是 --dsw-specific-sidebar-fill，而 token-map 里它映的是宿主 --sidebar-bg。
+       于是这里的取色顺序：DSH 主题桥落地后读它自己的 token；未落地时读同一个宿主变量
+       （值相同，所以不跳色）；连宿主主题样式表都还没到位时才用纸张兜底。 */
+    background: var(--dsw-specific-sidebar-fill, var(--sidebar-bg, #F5EFE4));
   }
   .panel { padding: 12px 14px; box-sizing: border-box; height: 100%; display: flex; flex-direction: column; }
   /* 注入模式就绪：本页整块让给注入的 DSH 侧栏（#root 占满，无内边距/分隔线） */

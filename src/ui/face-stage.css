@@ -1,0 +1,85 @@
+/* SPDX-License-Identifier: MPL-2.0
+   Copyright (c) 2026 Nyasers
+
+   src/ui/face-stage.css — 壳页共用的自举台面（main / default / stream 三个面同一副）。
+
+   只收三个面完全一样的部分：页面底色与字体、#root 容器、自举台（字标 + 细圆环 + 一行状态）、
+   日志/报错块（.diag-progress）、台面上的按钮。面的差异留在各自页面里：
+     · default：无（拆窗/整幅共用本套）；
+     · main   ：无；
+     · stream ：多一条卡状态行（#dshana-card-strip）。
+   sidebar 面不是这一套（它画的是 .panel 侧栏 chrome），不引本文件。
+   页面用 <link rel="stylesheet" href="./face-stage.css"> 相对引入：宿主按 ui/ 静态树取页，
+   相对路径与 ./app-shell.js 同一套纪律，页面内不出现根路径绝对 URL。 */
+
+html, body { height: 100%; margin: 0; }
+html { color-scheme: light dark; }
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+  color: var(--text, #2A2622);
+  background: var(--bg, #F5EFE4);
+}
+
+/* 注入进来的 DSH 前端容器：整幅给 DSH（main / default 的卡片 titlebar 是 solid，
+   不透明标题栏占位而非浮层，所以页面从顶部开始，不留白）。 */
+#root {
+  height: 100%;
+  box-sizing: border-box;
+}
+
+/* 自举台（非 ready 全屏覆盖，booting / idle / action 共用）：对齐官方 loading 的形态。 */
+#dsh-stage {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 20px;
+  padding: 24px; box-sizing: border-box; overflow: auto;
+}
+body[data-view="ready"] #dsh-stage { display: none; }
+.loader { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.wordmark {
+  font-size: 21px; font-weight: 600;
+  letter-spacing: .34em; text-indent: .34em;
+  color: var(--text, #2A2622);
+}
+.ring {
+  width: 22px; height: 22px; flex: none;
+  border: 2px solid var(--border, #D8CFBE);
+  border-top-color: var(--accent, #537D96);
+  border-radius: 50%;
+  animation: dsh-spin 0.9s linear infinite;
+}
+@keyframes dsh-spin { to { transform: rotate(360deg); } }
+#dsh-status { font-size: 12.5px; color: var(--text-muted, #6B6158); margin: 0; }
+
+/* 诊断容器：空则完全不占版面；有内容时就是一块 <pre>。 */
+#boot-panel { width: 100%; max-width: 620px; text-align: left; }
+#boot-panel:empty { display: none; }
+/* 实时日志/报错块（隐藏滚动条 + 内容置底跟随）。 */
+.diag-progress {
+  white-space: pre-wrap; word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Courier New", monospace;
+  font-size: 12px; line-height: 1.6;
+  color: var(--text-light, #4A433C);
+  background: var(--accent-light, rgba(83,125,150,0.08));
+  border-radius: 4px; padding: 8px 10px; margin: 10px 0 0;
+  max-height: 200px; overflow-y: auto;
+  scrollbar-width: none; -ms-overflow-style: none;
+}
+.diag-progress::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
+/* 动作区 */
+.actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 12px 0 0; }
+/* 只打自己的按钮：DSH 前端是**注入同一文档**的，裸 button 选择器会把 padding / border-radius
+   泼到 DSH 的控件上（真机：输入栏那颗 28×28 / border-radius:999px 的圆钮被撑成椭圆）。
+   壳页所有 tag 选择器都必须先落到自己的容器上。 */
+#dsh-stage button {
+  font: inherit; font-size: 13.5px;
+  padding: 8px 20px; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--border, #D8CFBE);
+  background: var(--bg-card, #FBF7EE);
+  color: var(--text, #2A2622);
+}
+#dsh-stage button.primary { background: var(--accent, #537D96); border-color: var(--accent, #537D96); color: #fff; }
+#dsh-stage button:hover { filter: brightness(0.97); }
+#dsh-stage button.ghost { background: transparent; }
