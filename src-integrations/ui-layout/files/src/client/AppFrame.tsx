@@ -19,7 +19,7 @@ import type { ReactNode } from 'react'
 import type {
   PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore,
 } from '@deepseek-ai/dsh-client-ui-slots'
-import { computeColumns, RIGHTBAR_DEFAULT_RATIO, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
+import { computeColumns, RIGHTBAR_DEFAULT_RATIO, SIDEBAR_AUTO_COLLAPSE } from './columns.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
@@ -170,10 +170,14 @@ export function AppFrame({
     }
   }, [actions])
 
-  const narrow = surface === 'standalone' && viewport < SIDEBAR_AUTO_COLLAPSE
-  const sidebarCollapsed = false
-  const sidebarPreference = layoutInfo.sidebar > 0 ? layoutInfo.sidebar : SIDEBAR_DEFAULT
+  // 「本面有没有侧栏轨」（columns.ts 第四参）与「侧栏是不是收起」（sidebar === 0 → 56px 图标轨）
+  // 是两件事，别混用：workspace / settings 本来就没有自己的侧栏轨；navigation（FP）整页就是侧栏；
+  // stream 只画中列；只有 standalone（default 面）有轨且可收起。收起状态按上游语义算——
+  // 窄幅看 narrowExpanded（toggle 只翻它），宽幅看 sidebar === 0（toggle 在 0 与默认宽之间切）。
   const sidebarPresent = surface === 'standalone'
+  const narrow = sidebarPresent && viewport < SIDEBAR_AUTO_COLLAPSE
+  const sidebarCollapsed = sidebarPresent && (narrow ? !layoutInfo.narrowExpanded : layoutInfo.sidebar === 0)
+  const sidebarPreference = sidebarCollapsed ? 0 : layoutInfo.sidebar
   const frameSidebarPreference = sidebarPresent ? sidebarPreference : 0
   const rightbarPreference = layoutInfo.rightbar ?? viewport * RIGHTBAR_DEFAULT_RATIO
   // Opening on a narrow frame collapses the left sidebar. Eligibility must
@@ -203,7 +207,7 @@ export function AppFrame({
     actions.setRightbar(rightbarBase.current - dx)
   }, [actions])
   const productTitle = process.env.DSH_CLIENT_TITLE ?? t('brand.localBuild')
-  const renderedSidebarWidth = surface === 'standalone' ? cols.sidebar : viewport
+  const renderedSidebarWidth = sidebarPresent ? cols.sidebar : viewport
   const sidebar = useMemo(() => renderSlot('sidebar', {
     collapsed: sidebarCollapsed,
     width: renderedSidebarWidth,
@@ -263,7 +267,7 @@ export function AppFrame({
         {overlays}
       </div>
       {/* The collapsed rail is fixed-width: no resize handle while closed. */}
-      {surface === 'standalone' && !sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
+      {sidebarPresent && !sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
       {(surface === 'workspace' || surface === 'standalone') && layoutInfo.rightbarShown && !layoutInfo.rightbarFullscreen && normal.rightbar > 0 && (
         <DragHandle side="rightbar" left={viewport - normal.rightbar} onStart={onRightbarStart} onDrag={onRightbarDrag} onEnd={onDragEnd} />
       )}
