@@ -568,19 +568,23 @@ function installCrossSurfaceSelection(ctx: Context): void {
   // 面上线时列表已就绪 ⇒ 恢复早已落地，往后的选中变化都算用户动作。
   let settled = snap0.phase === 'ready'
 
+  /** 共用的当前选中（带它的写入时刻；没有就报 null 与 0）。 */
+  const sharedSelection = (): Promise<{ id: string | null; at: number }> =>
+    read().then((next) => ({
+      id: next?.sessionId ?? null,
+      at: typeof next?.at === 'number' ? next.at : 0,
+    }))
+
   /** 本次该显示哪一段：钉住的 sid 优先，否则共用的当前选中。 */
   const desired = (): Promise<{ id: string | null; at: number }> => {
-    if (readPinned === undefined) {
-      return read().then((next) => ({
-        id: next?.sessionId ?? null,
-        at: typeof next?.at === 'number' ? next.at : 0,
-      }))
-    }
-    return readPinned().then((sid) => ({
-      id: sid ?? null,
+    if (readPinned === undefined) return sharedSelection()
+    return readPinned().then((sid) => {
+      // 没钉住（直接开页、不带 sid）= 跟随共用选中。这里若给 MAX_SAFE_INTEGER，
+      // 这一面就被钉死在「没有会话」上：applyRemote 随后调用 clear()。
+      if (sid === null) return sharedSelection()
       // 钉住即定论：不受共用选中写入时刻的影响。
-      at: Number.MAX_SAFE_INTEGER,
-    }))
+      return { id: sid, at: Number.MAX_SAFE_INTEGER }
+    })
   }
 
   const applyRemote = (): void => {

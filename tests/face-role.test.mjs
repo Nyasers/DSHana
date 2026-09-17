@@ -48,6 +48,14 @@ test("只读会话流面：摘的是输入卡，不是整座（座位里挂着�
   );
 });
 
+test("只读会话流面：未钉住时跟随共用选中，不把会话清空", () => {
+  const src = readFileSync(join(here, "..", "src-integrations", "ui-session", "files", "src", "client", "index.ts"), "utf8");
+  // 不带 sid 直接开页 = 跟随跨面共用的当前会话（见 ui/stream.html 的注释）。
+  // 若这一支也报 MAX_SAFE_INTEGER，applyRemote 就会把它当成「最新的意思：没有会话」而 clear()。
+  assert.match(src, /if \(sid === null\) return sharedSelection\(\)/, "未钉住要回落到共用选中");
+  assert.ok(!/id: sid \?\? null/.test(src), "不再把「没钉住」当成「就是没有会话」");
+});
+
 const here = dirname(fileURLToPath(import.meta.url));
 const APP_FRAME = join(here, "..", "src-integrations", "ui-layout", "files", "src", "client", "AppFrame.tsx");
 
