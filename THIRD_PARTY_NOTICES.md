@@ -13,7 +13,7 @@ These are inlined into `dist/` at build time. Their original packages and LICENS
 
 ### @hana/plugin-protocol
 
-- Version: 0.999.1
+- Version: 0.1011.8
 - Purpose: Message-protocol constants and types exchanged between the host and plugins (for example the theme-change notification `THEME_CHANGED`).
 - Form: devDependency (`file:vendor/hana-app-sdk/hana-plugin-protocol-0.0.0.tgz`); inlined together with @hana/plugin-sdk — it has no entry point of its own in the distribution.
 - Source: Hana App Creator SDK shipped with the host (snapshot under `vendor/hana-app-sdk`; see `source-manifest.json` in the same directory)
@@ -21,7 +21,7 @@ These are inlined into `dist/` at build time. Their original packages and LICENS
 
 ### @hana/plugin-sdk
 
-- Version: 0.999.1
+- Version: 0.1011.8
 - Purpose: Browser-side App shell surface: `hana.api.fetch` and `hana.api.url` (App-surface session credential injection and runtime proxy path tickets), plus the surface / theme / clipboard / storage faces.
 - Form: devDependency (`file:vendor/hana-app-sdk/hana-plugin-sdk-0.0.0.tgz`), inlined at build time by rspack into `dist/ui/app-shell.js` and `dist/ui/settings.js`; no vendored copy is shipped separately.
 - Source: Hana App Creator SDK shipped with the host (snapshot under `vendor/hana-app-sdk`; see `source-manifest.json` in the same directory)
@@ -29,7 +29,7 @@ These are inlined into `dist/` at build time. Their original packages and LICENS
 
 ### @hana/plugin-components
 
-- Version: 0.999.1
+- Version: 0.1011.8
 - Purpose: Host settings components (`@hana/plugin-components/settings` and its `settings.css`), so the settings surface matches the host.
 - Form: devDependency (`file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz`), inlined by rspack into `dist/ui/settings.js`.
 - Source: Hana App Creator SDK shipped with the host (snapshot under `vendor/hana-app-sdk`; see `source-manifest.json` in the same directory)
@@ -37,7 +37,7 @@ These are inlined into `dist/` at build time. Their original packages and LICENS
 
 ### @hana/app-sdk
 
-- Version: 0.999.1
+- Version: 0.1011.8
 - Purpose: The `connectAppRuntime()` client runtime for the managed runtime's private IPC (tasks / models / network.fetch / close).
 - Form: devDependency (`file:vendor/hana-app-sdk/hana-app-sdk.tgz`), statically inlined by rspack into `dist/runtime/dsh-host.mjs`.
 - Source: Hana App Creator SDK shipped with the host (snapshot under `vendor/hana-app-sdk`; see `source-manifest.json` in the same directory)
