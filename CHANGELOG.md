@@ -1,5 +1,7 @@
 # Changelog
 
+## [1.0.0-rc.5+dsh-0.1.5-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.4%2Bdsh-0.1.5-rc.2...v1.0.0-rc.5%2Bdsh-0.1.5-rc.2) (2026-09-18)
+
 ## [1.0.0-rc.4+dsh-0.1.5-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.3%2Bdsh-0.1.5-rc.2...v1.0.0-rc.4%2Bdsh-0.1.5-rc.2) (2026-09-17)
 
 ### Features
@@ -428,6 +430,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
