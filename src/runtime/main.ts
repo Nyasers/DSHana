@@ -197,14 +197,12 @@ function makeShutdown(state, exitCodeLog) {
  * 结果写 resultPath（{ok:true} 或 {ok:false,error}，0600）后立即退出——父侧等终态读结果。
  * 退出码对齐 classify：0 = 预检通过；4 = deps/locate；5 = profile 种子化未完成。
  */
-async function runPreflight({ opts, dataDir, dshHome, runtimeDir, depsRoot, cordisSrc }): Promise<never> {
+async function runPreflight({ opts, dataDir, dshHome, depsRoot, cordisSrc }): Promise<never> {
   const write = (payload) => writeFileSync(opts.resultPath, JSON.stringify(payload), { mode: 0o600 });
   try {
     process.env.DSH_HOME = dshHome;
     process.env.DSHANA_HOME = dataDir;
-    process.env.DSHANA_ROOT = runtimeDir;
     mkdirSync(dshHome, { recursive: true });
-    mkdirSync(runtimeDir, { recursive: true });
     info(`预检开始：dshHome=${dshHome} depsRoot=${depsRoot}`);
     const located = await locateDsh({ depsRoot, log: (s) => info("locate", s) });
     const outcome = await seedDshanaProfile({
@@ -265,14 +263,13 @@ export async function main(argv: string[]): Promise<number> {
     return EXIT.INTERNAL;
   }
   const dataDir = resolve(opts.dataDir);
-  const runtimeDir = join(dataDir, "runtime");
   // 依赖根默认指向 App 安装目录（随包物化的 node_modules）；--deps-root 可覆盖（调试）。
   const depsRoot = resolve(opts.depsRoot || join(installRoot, "node_modules"));
   const cordisSrc = resolve(opts.cordisSrc || join(installRoot, "cordis"));
   const dshHome = opts.dshHome ? resolve(opts.dshHome) : join(dataDir, ".dsh");
   // ---- 0) 预检模式（数据源切换探针）：不连宿主 IPC、不起服务，只验证目标 home 可用性 ----
   if (opts.preflight) {
-    return await runPreflight({ opts, dataDir, dshHome, runtimeDir, depsRoot, cordisSrc });
+    return await runPreflight({ opts, dataDir, dshHome, depsRoot, cordisSrc });
   }
   const state: {
     hana: any;
@@ -317,12 +314,10 @@ export async function main(argv: string[]): Promise<number> {
   // ---- 2) 进程级 env（自有受管进程内设置，不改宿主进程环境）----
   // DSH_HOME 已在上方定下（当前数据源 / 旧行为回落）。
   mkdirSync(dshHome, { recursive: true });
-  mkdirSync(runtimeDir, { recursive: true });
   process.env.DSH_HOME = dshHome;
   process.env.DSHANA_HOME = dataDir;
-  process.env.DSHANA_ROOT = runtimeDir; // loadDeps 基座（v1 = 插件根；v2 = dataDir 依赖区）
   if (!process.env.DSHANA_BUS_SECRET) process.env.DSHANA_BUS_SECRET = randomUUID();
-  info(`env：DSH_HOME=${dshHome} DSHANA_ROOT=${runtimeDir} DSHANA_HOME=${dataDir}`);
+  info(`env：DSH_HOME=${dshHome} DSHANA_HOME=${dataDir}`);
 
   // ---- 3) 依赖就位（自包含打包：依赖随包在 <installRoot>/node_modules，无运行时安装）----
   info(`依赖区：${depsRoot}（随包物化，无 ensure）`);

@@ -39,7 +39,7 @@ export async function locateDsh({ depsRoot, log = (..._args) => {} }) {
   if (!existsSync(join(dshPkg, "package.json"))) {
     throw new Error(
       `DSH 包未就绪：${join(depsRoot, "@deepseek-ai", "dsh")} 不存在（depsRoot=${depsRoot}）。
-依赖部署方案：默认由 dsh-host 首启 ensure 装入 <data-dir>/runtime；
+依赖随包物化在安装目录 node_modules（depsRoot 默认指向）；
 当前可用 --deps-root <dir> 覆盖（预置/调试场景）。`,
     );
   }
