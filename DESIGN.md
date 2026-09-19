@@ -100,7 +100,7 @@ DSHana 以**单卡 + 自带功能面板**注册（manifest `contributes.cards[0]
 
 - **自举台**：DSHANA 字标 + 细圆环 + 一行状态小字；报错时下方直接一块 `<pre>`（时间线/折叠详情已撤）。boot-state 由**主卡单独轮询**，FP 只读跨面共享快照（订阅，不重复取）；owner 不在场（快照不存在/下线/过旧）时 FP 才自取。
 - **三态 + 设置页**：default（full / detached 共用一页 = 整幅 DSH UI，顶部 44px 让位宿主 chrome）/ main（主卡，无 DSH 侧栏——侧栏归 FP）/ sidebar（FP，只有侧栏）；settings 是 App 自己的设置页（`ui.route`，不注入 DSH）。面由**页面静态声明**（`<meta name="hana-dshana-role">` + `data-dshana-view`）；映射到 DSH 侧上游角色词：default→standalone / sidebar→navigation / main→workspace。`?dshana-view=` 与 `@dshana/view` 均已退役。
-- **注入鉴权**：壳页以 `appSurfaceSession` 作为 `_surface` 路径段取得运行时代理凭据（同源预请求种 `hana_app_runtime` cookie 兜住子请求）；未取得票据时不下挂内容，面板上说明原因。
+- **注入鉴权**：壳页以 `appSurfaceSession` 作为 `_surface` 路径段取得运行时代理凭据（同源预请求种 `hana_app_runtime` cookie 兜住子请求）；未取得票据时不下挂内容，面板上说明原因。装配只做一次（本文档里 DSH 前端实例、它的载体与监听都绑在这唯一一次装配上），而中继前缀里含 runtimeId：宿主重启或运行体重建之后这份前缀就是死端点（宿主对它的 WS 升级当场断开，DSH 的流载体连试两次后折成 `gateway/internal`，界面停在「历史加载失败」）。重载是唯一干净的出路——旧实例在文档里还活着，就地重注入会留下两套。故壳页在**取到的新快照说 `runtimeId` 与装配时不同**时重载本页；判断放在取到快照之后，凭据本已失效的页面不会去重载（那只会撞上宿主的 403），照旧停在凭据缺失的提示上。
 
 ### 设置面
 
