@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.0-rc.8+dsh-0.1.5-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.7%2Bdsh-0.1.5-rc.2...v1.0.0-rc.8%2Bdsh-0.1.5-rc.2) (2026-09-19)
+
+### Bug Fixes
+
+* **ui:** 运行时代次变了就重载壳页（死前缀不再拖成历史加载失败） ([5846382](https://github.com/Nyasers/DSHana/commit/5846382b61c447bf68d4b0a801d75afe45b65953))
+
 ## [1.0.0-rc.7+dsh-0.1.5-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.6%2Bdsh-0.1.5-rc.2...v1.0.0-rc.7%2Bdsh-0.1.5-rc.2) (2026-09-19)
 
 ### Bug Fixes
@@ -443,6 +449,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
