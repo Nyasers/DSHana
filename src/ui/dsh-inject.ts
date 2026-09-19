@@ -16,6 +16,14 @@
 // 依赖：全部走浏览器原生 API（DOMParser / fetch / WebSocket / <script> 注入），无第三方包。
 
 import { installClipboardShadow } from "#/ui/clipboard-shadow.ts";
+import {
+  ChunkAssembler,
+  MUX_CHUNK_QUERY,
+  MUX_CHUNK_QUERY_VALUE,
+  decodeMuxControlFrame,
+  decodeUtf8,
+  encodeAck,
+} from "#/lib/mux-chunks.ts";
 
 const DSH_INTERNAL_ORIGIN = "http://dsh.internal";
 
@@ -299,9 +307,14 @@ class Inbox {
 export function createStreamMux(privateBase, WebSocketCtor = window.WebSocket) {
   const wsUrl = new URL("api/remote.mux", privateBase);
   wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
+  // 声明本页支持承载面分片：中继据此把超限帧按尺寸切开（宿主的 1 MiB 上游帧上限）。
+  // 不声明就走原来的原样透传——旧文档与新中继不会互相看不懂（约定见 lib/mux-chunks.ts）。
+  wsUrl.searchParams.set(MUX_CHUNK_QUERY, MUX_CHUNK_QUERY_VALUE);
   let socket: WebSocket | null = null;
   const streams = new Map<string, any>();
   let nextId = 0;
+  /** 分片重组：一条消息的分片在同一载体上连续到达，换载体即作废。 */
+  const assembler = new ChunkAssembler();
 
   /** 让当前全部在途流以同一失败收场（先摘表再逐个 finish：收场期间到达的帧无处投递）。 */
   const failAll = (error) => {
@@ -318,10 +331,11 @@ export function createStreamMux(privateBase, WebSocketCtor = window.WebSocket) {
   const lost = (s, error) => {
     if (s !== socket) return;
     socket = null;
+    assembler.reset();
     failAll(error);
   };
 
-  const receive = (raw, s) => {
+  const receiveText = (raw, s) => {
     let frame;
     try { frame = JSON.parse(String(raw)); } catch {
       // 帧不合协议：对端状态已不可信，连整条载体一起摘下（重开一条），
@@ -345,12 +359,33 @@ export function createStreamMux(privateBase, WebSocketCtor = window.WebSocket) {
     }
   };
 
+  /**
+   * 一帧入站数据：文本是 DSH 的 mux 帧；二进制只可能是分片信封（见 lib/mux-chunks.ts）。
+   * 每收一片回一次执，中继据此放行后续分片——宿主对下游缓冲另有一条 1 MiB 守卫，
+   * 只把帧切小不够，发得快一样会被它掐掉。
+   */
+  const receive = (data, s) => {
+    if (typeof data === "string") { receiveText(data, s); return; }
+    const bytes = data instanceof ArrayBuffer ? new Uint8Array(data)
+      : ArrayBuffer.isView(data) ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+        : null;
+    if (bytes === null) return;
+    const control = decodeMuxControlFrame(bytes);
+    if (control === null || control.kind !== "chunk") return; // 不是本模块的约定：忽略
+    const done = assembler.push(control.payload, control.last);
+    try { s.send(encodeAck(control.payload.length)); } catch { /* 载体已断：等 onclose 收场 */ }
+    if (done === null) return;
+    receiveText(decodeUtf8(done), s);
+  };
+
   const connect = () => {
     if (socket && (socket.readyState === WebSocketCtor.OPEN || socket.readyState === WebSocketCtor.CONNECTING)) return socket;
     // 换代前先把旧载体收场：CLOSING/CLOSED 的 socket 上还挂着在途流，而它的 close 事件
     // 已经在路上（因身份判定会被丢弃），不显式收掉那些流就永久悬挂在 streams 里。
     if (socket) lost(socket, carrierFailure("DSH stream carrier closed"));
     const s = new WebSocketCtor(wsUrl.toString());
+    s.binaryType = "arraybuffer"; // 分片是二进制帧：按 ArrayBuffer 收（免 Blob 的异步读取）
+    assembler.reset(); // 新载体上不会再有上一条消息的分片
     socket = s; // 先登记：onerror/onclose 与 onmessage 都按身份判定
     s.onmessage = (event) => { if (s === socket) receive(event.data, s); };
     s.onerror = () => lost(s, carrierFailure("DSH stream carrier failed"));

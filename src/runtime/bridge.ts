@@ -27,6 +27,8 @@ import { createServer, type IncomingHttpHeaders } from "node:http";
 import { connect as netConnect } from "node:net";
 import { timingSafeEqual } from "node:crypto";
 import { errText } from "#/lib/err-text.ts";
+import { MUX_CHUNK_QUERY, MUX_CHUNK_QUERY_VALUE } from "#/lib/mux-chunks.ts";
+import { startFrameRelay } from "#/runtime/mux-relay.ts";
 
 const MAX_WS_BUFFER = 1024 * 1024;
 const FREEZE_CLOSE_CODE = 1013; // 数据源切换中：请稍后重连
@@ -340,11 +342,16 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
     }
   });
 
-  // WS 升级：原始 socket 双向透传（握手请求改写 Host/Origin/Cookie 后转上游，响应原样回写）。
+  // WS 升级：默认原始 socket 双向透传（握手请求改写 Host/Origin/Cookie 后转上游，响应原样回写）。
+  // 页面声明支持分片（URL 带 MUX_CHUNK_QUERY）时改走帧搬运：宿主对受管服务的上游帧有
+  // 1 MiB 上限，超限即 close(1011) —— DSH 打开长会话的首帧就是整段 snapshot，必须在中继
+  // 这一侧按尺寸切分。开关显式：未声明的旧文档仍走原路，新旧不会互相看不懂。
   server.on("upgrade", (req, clientSocket, head) => {
     const requested = new URL(req.url || "/", "http://bridge.invalid");
     const queryKey = requested.searchParams.get("dshBridge");
     requested.searchParams.delete("dshBridge");
+    const chunked = requested.searchParams.get(MUX_CHUNK_QUERY) === MUX_CHUNK_QUERY_VALUE;
+    requested.searchParams.delete(MUX_CHUNK_QUERY);
     const authorized = authorizeBridgeRequest(`${requested.pathname}${requested.search}`, queryKey, bridgeKey);
     if (!authorized || frozen) {
       clientSocket.destroy();
@@ -361,6 +368,17 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
       if (head && head.length) upstreamSocket.write(head);
     });
     upstreamSockets.add(upstreamSocket);
+    if (chunked) {
+      // 帧搬运接管两个 socket 的读写（含握手响应头原样回写），不再 pipe。
+      startFrameRelay({ clientSocket, upstreamSocket, log });
+      const drop = () => {
+        upstreamSockets.delete(upstreamSocket);
+        clientSockets.delete(clientSocket);
+      };
+      upstreamSocket.on("close", drop);
+      clientSocket.on("close", drop);
+      return;
+    }
     const closeBoth = () => {
       upstreamSockets.delete(upstreamSocket);
       upstreamSocket.destroy();

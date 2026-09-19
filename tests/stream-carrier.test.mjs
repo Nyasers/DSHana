@@ -15,6 +15,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { createStreamMux } from "../src/ui/dsh-inject.ts";
+import {
+  MUX_CHUNK_QUERY,
+  MUX_CHUNK_QUERY_VALUE,
+  decodeMuxControlFrame,
+  encodeUtf8,
+  splitTextMessage,
+} from "../src/lib/mux-chunks.ts";
 
 const BASE = new URL("https://hana.local/api/apps/dshana/routes/_runtime/r1/_surface/tok/");
 const MARK = "dshRemoteStreamFailure";
@@ -63,6 +70,12 @@ class FakeWebSocket {
     for (const fn of [...(this.listeners.get("open") || [])]) fn();
   }
   deliver(frame) { if (this.onmessage) this.onmessage({ data: typeof frame === "string" ? frame : JSON.stringify(frame) }); }
+  /** 交付一帧二进制（分片信封）：binaryType=arraybuffer 时浏览器就是这个形态。 */
+  deliverBinary(bytes) {
+    const copy = new Uint8Array(bytes.length);
+    copy.set(bytes);
+    if (this.onmessage) this.onmessage({ data: copy.buffer });
+  }
   /** 对端正常关闭（只有 close 事件，浏览器两端 TCP 断开就是这样）。 */
   drop() { this.readyState = FakeWebSocket.CLOSED; this.onclose?.({}); }
   /** 传输层失败：error 先到、close 随后（两条都要驱动，先到者定音）。 */
@@ -206,4 +219,52 @@ test("dispose 是页面收尾，不是载体丢失：终态错、无 carrier 标
   assert.equal(error.message, "DSH stream carrier disposed");
   assert.equal(error[MARK], undefined);
   assert.equal(ws.readyState, FakeWebSocket.CLOSED);
+});
+
+// ---- 承载面分片（见 src/lib/mux-chunks.ts）：宿主的 1 MiB 上游帧上限使长会话的首帧打不开，
+// 中继把超限帧按尺寸切开、载体在页面侧重组成一条消息再交给 DSH；每片回执驱动中继的窗口。
+test("分片信封：载体逐片重组后交给 DSH，并按片回执", async () => {
+  const mux = newMux();
+  const { pending, ws, streamId } = startStream(mux);
+  const text = JSON.stringify({ type: "item", streamId, value: { seq: 7, note: "中文内容" } });
+  const chunks = splitTextMessage(text, 8); // 切得碎，逼出逐片重组
+  assert.ok(chunks.length > 3, "测试前提：消息应被切成多片");
+  for (const chunk of chunks) ws.deliverBinary(chunk);
+
+  const first = await pending;
+  assert.deepEqual(first.value, { seq: 7, note: "中文内容" });
+
+  const acks = ws.sent.slice(1).map((frame) => decodeMuxControlFrame(new Uint8Array(frame)));
+  assert.equal(acks.length, chunks.length, "每收一片回一次执");
+  assert.ok(acks.every((ack) => ack?.kind === "ack"), "回执帧应被识别为 ack");
+  assert.equal(acks.reduce((sum, ack) => sum + ack.bytes, 0), encodeUtf8(text).length, "回执字节合计等于原文长度");
+});
+
+test("分片信封：切点落在多字节码点中间也还原（先拼字节再解码）", async () => {
+  const mux = newMux();
+  const { pending, ws, streamId } = startStream(mux);
+  const text = JSON.stringify({ type: "item", streamId, value: { note: "中文字" } });
+  for (const chunk of splitTextMessage(text, 1)) ws.deliverBinary(chunk);
+  const first = await pending;
+  assert.deepEqual(first.value, { note: "中文字" });
+});
+
+test("分片信封：非本模块的二进制帧不当作消息（不猜）", async () => {
+  const mux = newMux();
+  const { pending, ws, streamId } = startStream(mux);
+  ws.deliverBinary(new Uint8Array([0x00, 0x01, 0x02, 0x03]));
+  ws.deliver({ type: "item", streamId, value: { seq: 1 } });
+  const first = await pending;
+  assert.deepEqual(first.value, { seq: 1 }, "陌生二进制帧应被忽略，随后的文本帧照常投递");
+});
+
+test("载体在 mux URL 上声明分片能力（中继据此启用）", () => {
+  const mux = newMux();
+  const iterator = mux.openStream("session/follow", { args: {} }, signal());
+  void iterator.next().catch(() => {});
+  const ws = FakeWebSocket.last();
+  const url = new URL(ws.url);
+  assert.equal(url.pathname, BASE.pathname + "api/remote.mux");
+  assert.equal(url.searchParams.get(MUX_CHUNK_QUERY), MUX_CHUNK_QUERY_VALUE);
+  void iterator.return?.();
 });
