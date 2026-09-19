@@ -279,7 +279,10 @@ class Inbox {
     if (this.done) return;
     this.done = true;
     this.failure = error || null;
-    this.values.length = 0;
+    // 失败丢弃已缓冲的帧（那些帧属于一条已经不可信的流）；**正常收尾（end 帧）不清缓冲**——
+    // item 先到、end 后到而消费端此刻没挂在 next() 上时，清掉就是真丢数据，
+    // 日志流会看到「干净收尾但少一条 entry」而判协议违规。
+    if (this.failure) this.values.length = 0;
     if (this.wake) { const w = this.wake; this.wake = null; w(); }
   }
   async next() {
@@ -344,6 +347,9 @@ export function createStreamMux(privateBase, WebSocketCtor = window.WebSocket) {
 
   const connect = () => {
     if (socket && (socket.readyState === WebSocketCtor.OPEN || socket.readyState === WebSocketCtor.CONNECTING)) return socket;
+    // 换代前先把旧载体收场：CLOSING/CLOSED 的 socket 上还挂着在途流，而它的 close 事件
+    // 已经在路上（因身份判定会被丢弃），不显式收掉那些流就永久悬挂在 streams 里。
+    if (socket) lost(socket, carrierFailure("DSH stream carrier closed"));
     const s = new WebSocketCtor(wsUrl.toString());
     socket = s; // 先登记：onerror/onclose 与 onmessage 都按身份判定
     s.onmessage = (event) => { if (s === socket) receive(event.data, s); };
@@ -377,6 +383,13 @@ export function createStreamMux(privateBase, WebSocketCtor = window.WebSocket) {
       if (streams.size >= MAX_STREAMS) throw new Error("Too many DSH remote streams");
       const streamId = "hana-" + (++nextId);
       const inbox = new Inbox();
+      // 先发 open 帧再登记：帧只可能在 open 之后到达，而 send 期间可能发生载体换代——
+      // 登记早了会把这条刚发出去的流一并收掉（open 帧已出门，本地却当它死了）。
+      // payload 必须成键出现：宿主按 exactKeys 校验 open 帧，缺键会关掉整条载体（1008），
+      // 不是在途的一条流。undefined 由 JSON 丢弃，这里补成 null（正常路径永远是参数信封对象）。
+      if (!send({ type: "open", streamId, endpoint, payload: payload === undefined ? null : payload })) {
+        throw carrierFailure("DSH stream carrier closed before opening stream");
+      }
       streams.set(streamId, inbox);
       const abort = () => {
         try { send({ type: "cancel", streamId }); } catch { /* 忽略 */ }
@@ -385,12 +398,6 @@ export function createStreamMux(privateBase, WebSocketCtor = window.WebSocket) {
       };
       if (signal) signal.addEventListener("abort", abort, { once: true });
       try {
-        // payload 必须成键出现：宿主按 exactKeys 校验 open 帧，缺键会关掉整条载体（1008），
-        // 不是在途的一条流。undefined 由 JSON 丢弃，这里补成 null（正常路径永远是参数信封对象）。
-        if (!send({ type: "open", streamId, endpoint, payload: payload === undefined ? null : payload })) {
-          streams.delete(streamId);
-          throw carrierFailure("DSH stream carrier closed before opening stream");
-        }
         for (;;) {
           const next = await inbox.next();
           if (next.done) return;

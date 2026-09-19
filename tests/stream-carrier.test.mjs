@@ -140,6 +140,19 @@ test("旧 socket 迟到的 error/close 不误杀新载体上的流", async () =>
   assert.deepEqual(await second.pending, { value: { seq: 2 }, done: false });
 });
 
+test("旧 socket 还在 CLOSING 就被换代：先按载体失败收场，不留悬挂的流", async () => {
+  const mux = newMux();
+  const first = startStream(mux);
+  // 对端已开始关闭（close 事件还没到）：此刻新 open 会触发换代
+  first.ws.readyState = FakeWebSocket.CLOSING;
+  const second = startStream(mux);
+  assert.notEqual(second.ws, first.ws);
+  assert.deepEqual((await rejection(first.pending))[MARK], { kind: "carrier" });
+  // 换代之后的帧照常送达新载体上的流
+  second.ws.deliver({ type: "item", streamId: second.streamId, value: { seq: 2 } });
+  assert.deepEqual(await second.pending, { value: { seq: 2 }, done: false });
+});
+
 test("畸形帧：机制整条载体（carrier 标记 + 4002 关闭），不是只废一条流", async () => {
   const mux = newMux();
   const { pending, ws } = startStream(mux);
@@ -158,6 +171,17 @@ test("end 帧是正常收尾：done，不额外发 cancel", async () => {
   ws.deliver({ type: "end", streamId });
   assert.deepEqual(await next, { value: undefined, done: true });
   assert.equal(ws.sent.length, 1); // 只有 open：已收尾的流不该再收到 cancel
+});
+
+test("item 后紧跟 end 而消费端没在等：缓冲的 item 不丢，然后才是 done", async () => {
+  const mux = newMux();
+  const { iterator, pending, ws, streamId } = startStream(mux);
+  ws.deliver({ type: "item", streamId, value: { seq: 1 } });
+  await pending; // 这一刻消费端不挂在 next() 上（日志流在做异步处理）
+  ws.deliver({ type: "item", streamId, value: { seq: 2 } });
+  ws.deliver({ type: "end", streamId });
+  assert.deepEqual(await iterator.next(), { value: { seq: 2 }, done: false });
+  assert.deepEqual(await iterator.next(), { value: undefined, done: true });
 });
 
 test("open 帧永远带 payload 成键（缺键会被宿主当非法帧关掉整条载体）", async () => {
