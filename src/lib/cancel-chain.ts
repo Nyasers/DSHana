@@ -9,19 +9,19 @@
 //   ② DSH 侧中止：经 loopback HTTP RPC session/cancel（DSH 中止 agent 回合 → provider
 //      adapter 流 signal abort → hana.models.cancel(requestId)，工具/终端由 DSH 回合
 //      中止机制收尾——v1 同款语义）；
-//   ③ 只关本工作资源：取消按 sessionId 定位（task-map 文件键 = sessionId）；单例受管
+//   ③ 只关本工作资源：取消按 sessionId 定位（先经宿主任务记录解出 taskId）；单例受管
 //      runtime 服务多会话时 session/cancel 只作用该会话，绝不停整个 runtime/他人会话；
-//   ④ 确定取消状态：映射写 cancel 标记（先于 RPC）→ task-bridge 在 DSH turn/end
-//      (aborted) 时据此把宿主任务结算成 canceled（真中止后才取消，不是先标 canceled）→
-//      App 侧等宿主任务终态（确认窗口内轮询 get）给用户确定状态；DSH 超窗未确认时
-//      升级 ctx.tasks.cancel 兜底并如实告知（残留风险见 DESIGN 边界）。
+//   ④ 确定取消状态：任务 metadata.dsh 写 cancel 标记（先于 RPC）→ task-bridge 在 DSH
+//      turn/end(aborted) 时据此把宿主任务结算成 canceled（真中止后才取消，不是先标
+//      canceled）→ App 侧等宿主任务终态（确认窗口内轮询 get）给用户确定状态；DSH 超窗
+//      未确认时升级 ctx.tasks.cancel 兜底并如实告知（残留风险见 DESIGN 边界）。
 //
 // 与宿主「取消 UI」的反向触发（host task canceled/aborted → DSH cancel）在受管 runtime
 // 的 task-bridge 侧实现（watch 宿主任务 SSE），不在此模块（App 进程内看不到 DSH 事件）。
 import { appCtx, appDataDir, appConfig } from "#/lib/app-runtime.ts";
 import { APP_SETTING_DEFAULTS } from "#/lib/config.ts";
 import { errText } from "#/lib/err-text.ts";
-import { readTaskMap, markCancelRequested } from "#/lib/task-map.ts";
+import { createTaskBindingIndex, type TaskBinding } from "#/lib/task-binding.ts";
 import { rpcSessionCancel, cancelAccepted } from "#/lib/dsh-rpc.ts";
 import { rpcViaControl } from "#/lib/controller.ts";
 import { readSettingsSync } from "#/lib/data-source.ts";
@@ -34,8 +34,8 @@ type HostTaskRecord = Awaited<
 export const CANCEL_CONFIRM_MS = 15000; // DSH 中止确认窗口（超窗升级宿主 cancel）
 export const CANCEL_ESCALATE_REASON = "cancel-confirm-timeout";
 
-/** 纯函数：按映射条目给出取消编排计划（供单测与执行器共用）。 */
-export function planCancel(entry) {
+/** 纯函数：按绑定条目给出取消编排计划（供单测与执行器共用）。 */
+export function planCancel(entry: TaskBinding | null | undefined) {
   const sid = String((entry && entry.dshSessionId) || "");
   const taskId = String((entry && entry.taskId) || "");
   return {
@@ -54,7 +54,7 @@ function logWarn(log, msg) {
 /**
  * 取消编排执行（cancel 工具 / 执行超时共用）。返回 { status, taskId, reason }：
  *   status = 'cancelling'（DSH cancel 已请求，宿主终态随后由 task-bridge 结算）
- *          | 'no-active-work'（无映射/空闲会话；仍发幂等 session.cancel）
+ *          | 'no-active-work'（无绑定/空闲会话；仍发幂等 session.cancel）
  *          | 'already-requested'（取消标记已存在——幂等，不再重复发）
  *          | 'dsh-rpc-failed'（DSH 侧不可达：已尽力，任务仍会由宿主侧终结兜底）
  */
@@ -74,36 +74,42 @@ export interface CancelWorkResult {
   terminal?: unknown;
 }
 
-export async function executeCancel({ dataDir, sessionId, reason, log }): Promise<CancelWorkResult> {
+export async function executeCancel({ sessionId, reason, log }): Promise<CancelWorkResult> {
   const ctx = appCtx();
-  if (!ctx || !dataDir) throw new Error("App 运行包未初始化（apply 未注入宿主 ctx/dataDir）");
+  if (!ctx) throw new Error("App 运行包未初始化（apply 未注入宿主 ctx）");
   const sid = String(sessionId || "").trim();
   if (!sid) throw new Error("cancel 需要 sessionId");
-  const entry = readTaskMap(dataDir, sid);
+  // 绑定读取失败（宿主不可达/记录畸形）按 fail-closed 拒绝取消：状态丢了还发 DSH cancel，
+  // 等于在不知道归属的情况下停别人的会话，且后续终态判定没有依据。
+  let entry: TaskBinding | null = null;
+  try {
+    entry = await createTaskBindingIndex((ctx as any).tasks).bySession(sid, { fresh: true });
+  } catch (e) {
+    throw new Error("取消前读会话任务绑定失败（fail-closed，未发任何取消）：" + errText(e));
+  }
   const plan = planCancel(entry);
   if (!entry) {
-    // 无映射（空闲/映射已清）：仍向 DSH 发幂等 cancel，防「宿主侧已清、DSH 仍在跑」
+    // 无绑定（空闲会话/绑定已被回收）：仍向 DSH 发幂等 cancel，防「宿主侧已清、DSH 仍在跑」
     let dshAccepted: boolean | null = null;
     try {
       const value = await rpcViaControl(ctx, { method: "session/cancel", payload: { sessionId: String(sid || "") } });
       dshAccepted = cancelAccepted(value);
     } catch (e) {
-      logWarn(log, "[dsh-session] cancel RPC（无映射兜底）失败：" + errText(e));
+      logWarn(log, "[dsh-session] cancel RPC（无绑定兜底）失败：" + errText(e));
     }
     return { status: "no-active-work", sessionId: sid, dshAccepted, taskId: null, reason };
   }
   if (!plan.dshCancelNeeded) {
     return { status: "already-requested", sessionId: sid, taskId: entry.taskId, reason: (entry.cancel && entry.cancel.reason) || reason };
   }
-  // ① 写取消标记（先于 RPC：终态判定据此把 aborted 结算成 canceled）
+  // ① 写取消标记（先于 RPC：终态判定据此把 aborted 结算成 canceled）。标记落在宿主任务记录
+  //    的 metadata.dsh.cancel（读-改-写全量 dsh）；App 侧与 runtime 侧（task-bridge 的
+  //    onHostCancel）写同一格——App 进程拿不到会话句柄，取消不经会话事件日志。
   try {
-    markCancelRequested(dataDir, sid, reason || "user");
+    await createTaskBindingIndex((ctx as any).tasks).markCancel(entry.taskId, reason || "user");
   } catch (e) {
     logWarn(log, "[dsh-session] cancel 标记写失败（继续取消）：" + errText(e));
   }
-  // ①b 取消标记只落映射文件（App 与 runtime 共用的跨进程事实源）：App 侧在上面 ① 写，runtime
-  //     侧的宿主取消路径（task-bridge 的 onHostCancel）写同一文件。App 进程拿不到会话句柄，
-  //     取消不经会话事件日志。
   // ② DSH session.cancel（loopback；失败不阻断——记录并交由终态兜底）
   let dshAccepted: boolean | null = null;
   let dshError: string | null = null;
@@ -143,9 +149,8 @@ export async function awaitCancelTerminal({ taskId, timeoutMs = CANCEL_CONFIRM_M
  * ctx.tasks.cancel（如实告知——见 DESIGN 边界）。返回 { status, terminal?, escalated?, ... }。
  */
 export async function cancelSessionWork({ sessionId, reason, log, confirmMs = CANCEL_CONFIRM_MS }): Promise<CancelWorkResult> {
-  const dataDir = appDataDir();
   const ctx = appCtx();
-  const res = await executeCancel({ dataDir, sessionId, reason, log });
+  const res = await executeCancel({ sessionId, reason, log });
   if (res.status === "no-active-work" || res.status === "already-requested" || res.status === "dsh-rpc-failed") {
     return res;
   }
@@ -186,7 +191,8 @@ export function resolveTaskTimeoutSec(explicitSec) {
   return APP_SETTING_DEFAULTS.defaultTimeoutSec;
 }
 
-/** 审批自动拒绝超时毫秒（approval-bridge 经映射下传；0 = 宿主不自动拒绝）。 */
+/** 审批自动拒绝超时毫秒（随 metadata.dsh 下传宿主任务记录，供 approval-bridge 读取；
+ * 0 = 宿主不自动拒绝）。 */
 export function resolveApprovalTimeoutMs() {
   const v = Number(settingsOrNull()?.approvalTimeoutSec);
   if (!Number.isFinite(v)) return 30000;

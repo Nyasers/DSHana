@@ -24,7 +24,7 @@
 //   POST /dshana/stop        停止受管 runtime（幂等）
 //   GET  /dshana/model       默认模型（读自 DSH 的 settings 段 agent-default-model）+ 候选模型目
 //   POST /dshana/model       改默认模型（整段替换；带 expectedRevision，落后就 409）
-//   GET  /dshana/card-state  会话流卡页的状态面（一次性取数：读 App 自己的 task-map；回卡页
+//   GET  /dshana/card-state  会话流卡页的状态面（一次性取数：读宿主任务记录的绑定；回卡页
 //                            可直接换进 DOM 的状态行 HTML）
 //
 // 依赖注入（可测性）：deps = { appId, version, getSnapshot(), start(), stop(), log() }。
@@ -36,7 +36,12 @@ import { buildBootSnapshot, APP_ID } from "#/lib/boot-state.ts";
 import { dataSources, sourceOf } from "#/lib/data-source.ts";
 // 数据源切换（lib/source-switch.ts）的入口暂时撤下：链未在真机验证过，见 POST /dshana/settings/restart。
 import { readDefaultModel, writeDefaultModel } from "#/lib/model-settings.ts";
-import { readTaskMap, isValidSessionId } from "#/lib/task-map.ts";
+import {
+  createTaskBindingIndex,
+  isValidSessionId,
+  isTerminalTaskStatus,
+  type TaskBinding,
+} from "#/lib/task-binding.ts";
 export const DASHANA_ROUTE_PREFIX = "/dshana";
 
 // ---- 应用设置（GET/POST /dshana/settings）----
@@ -126,28 +131,35 @@ export function defaultDshanaRouteDeps(ctx) {
     appId: (ctx && ctx.appId) || APP_ID,
     version: "",
     log,
-    // 卡数据面：读 App 自己的 task-map（<dataDir>/dshana/taskmaps/<sid>.json，App 主进程与
-    // 受管 runtime 共用的跨进程事实源）。无记录一律 unknown——不猜「也许还在跑」。
-    readCardState: (sessionId) => {
-      const entry = dataDir ? readTaskMap(dataDir, sessionId) : null;
-      if (!entry) {
+    // 卡数据面：读宿主任务记录里的绑定（metadata.dsh.sessionId = 该会话；见 lib/task-binding.ts）。
+    // 无绑定一律 unknown——不猜「也许还在跑」。读取失败也报 unknown 并在 detail 说明（卡页
+    // 是只读展示面，不该因为宿主一跳失败就 500）。
+    readCardState: async (sessionId) => {
+      let binding: TaskBinding | null = null;
+      try {
+        binding = await createTaskBindingIndex(ctx && ctx.tasks).bySession(sessionId, { fresh: true });
+      } catch (e) {
+        return { state: "unknown", label: "状态读取失败", detail: "宿主任务记录不可读：" + errText(e) };
+      }
+      if (!binding) {
         return {
           state: "unknown",
           label: "无跟踪记录",
-          detail: "App 侧没有这个会话的提交记录（可能已回收，或不是本 App 提交的会话）",
+          detail: "宿主任务记录里没有这个会话的绑定（可能已回收，或不是本 App 提交的会话）",
         };
       }
-      if (entry.ended) {
+      if (isTerminalTaskStatus(binding.status)) {
+        const at = binding.completedAt || binding.updatedAt;
         return {
           state: "ended",
           label: "已终结",
-          detail: "终态 " + String(entry.ended.status || "terminal") + (stampMinute(entry.ended.at) ? " · " + stampMinute(entry.ended.at) : ""),
+          detail: "终态 " + String(binding.status || "terminal") + (stampMinute(at) ? " · " + stampMinute(at) : ""),
         };
       }
-      if (entry.cancel) {
-        return { state: "cancelling", label: "已请求取消", detail: "reason " + String(entry.cancel.reason || "user") };
+      if (binding.cancel) {
+        return { state: "cancelling", label: "已请求取消", detail: "reason " + String(binding.cancel.reason || "user") };
       }
-      return { state: "tracked", label: "运行中", detail: "App 侧仍在跟踪（rpcId " + String(entry.rpcId || "") + "）" };
+      return { state: "tracked", label: "运行中", detail: "App 侧仍在跟踪（rpcId " + String(binding.rpcId || "") + "）" };
     },
     readSettings: () => readSettingsView(ctx, dataDir),
     readModel: () => {
@@ -285,8 +297,8 @@ export function registerDshanaRoutes(app, deps) {
     });
 
     // ---- GET /dshana/card-state：会话流卡页的状态面（一次性取数，无 SSE / 无轮询）----
-    // 卡页（ui/card.html，宿主以 /api/apps/<appId>/ui/card.html 服务）加载后取一次：读 App
-    // 自己的 task-map 给出该 DSH 会话在 App 侧的跟踪态。响应是卡页可直接换进 DOM 的状态行
+    // 卡页（ui/card.html，宿主以 /api/apps/<appId>/ui/card.html 服务）加载后取一次：读宿主
+    // 任务记录里的绑定给出该 DSH 会话的跟踪态。响应是卡页可直接换进 DOM 的状态行
     // HTML（形制见 cardStateHtml）。会话 id 形态不对回 400（形状错，不是「没状态」）。
     app.get(DASHANA_ROUTE_PREFIX + "/card-state", async (c) => {
       const sid = String((c && c.req && typeof c.req.query === "function" ? c.req.query("sessionId") : "") || "").trim();

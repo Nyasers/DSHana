@@ -37,6 +37,7 @@ import { info, warn, err } from "#/runtime/log.ts";
 import { connectAppRuntime } from "@hana/app-sdk";
 import { startTaskBridge } from "#/runtime/task-bridge.ts"; // DSH 事件 → Hana task 回投
 import { startApprovalBridge } from "#/runtime/approval-bridge.ts"; // DSH 审批 → Hana requestApproval / watch 对账
+import { createTaskBindingIndex, publishTaskBindingIndex } from "#/lib/task-binding.ts"; // 绑定事实源 = 宿主任务记录
 import { resolveInstallRoot, locateDsh } from "#/runtime/locate.ts";
 // 依赖随包物化在安装目录 node_modules（无运行时 ensure）。
 import { seedDshanaProfile } from "#/runtime/seed.ts";
@@ -143,8 +144,9 @@ function makeShutdown(state, exitCodeLog) {
     info(`shutdown：${reason}（exit ${code}）`);
     const ctx = state.ctx;
     const hana = state.hana;
-    // 先停任务桥与审批桥（退订 ctx 事件，防关闭中再触发回投/流消费）再 dispose
-    for (const key of ["stopBridge", "stopApproval"]) {
+    // 先停任务桥与审批桥（退订 ctx 事件，防关闭中再触发回投/流消费）再 dispose；
+    // 最后撤掉绑定索引的 globalThis 暴露（provider 若仍在跑会得到 BINDING_UNAVAILABLE）。
+    for (const key of ["stopBridge", "stopApproval", "stopBindings"]) {
       const fn = state[key];
       if (typeof fn === "function") {
         try {
@@ -279,8 +281,9 @@ export async function main(argv: string[]): Promise<number> {
     ctx: any;
     stopBridge: (() => void) | null;
     stopApproval: (() => void) | null;
+    stopBindings: (() => void) | null;
     bridge: BridgeHandle | null;
-  } = { hana: null, ctx: null, stopBridge: null, stopApproval: null, bridge: null };
+  } = { hana: null, ctx: null, stopBridge: null, stopApproval: null, stopBindings: null, bridge: null };
   const shutdown = makeShutdown(state, info);
 
   // ---- 1) 宿主 IPC（先于一切：非受管运行时立刻给出可操作报错，不输出 READY）----
@@ -457,6 +460,7 @@ export async function main(argv: string[]): Promise<number> {
         if (!body || typeof body !== "object" || typeof body.method !== "string") {
           throw new Error("rpc 控制动作需要客户端信封 body（{ type, rpcId, method, payload }）");
         }
+        invalidateBindings(body.method);
         const res = await fetch(upstreamOrigin + "/api/" + body.method, {
           method: "POST",
           headers: { "content-type": "application/json", cookie: dshCookie },
@@ -478,11 +482,25 @@ export async function main(argv: string[]): Promise<number> {
   }
   // 反向 session.cancel 经中继（带 bridgeKey）；不再直连免鉴权 DSH 端口。
   const serviceBaseUrl = "http://127.0.0.1:" + opts.bridgePort;
+  // 绑定事实源 = 宿主任务记录的 metadata.dsh：两桥共用同一个索引（各自进程内短 TTL 缓存，
+  // 模型请求热路径不至于每请求往返宿主）。读取失败在各自读点显式处理（fail-closed）。
+  const bindings = createTaskBindingIndex(hana.tasks);
+  // provider 是 cordis 子插件 bundle，与本 runtime bundle 同进程但不能互相 import：
+  // 绑定索引经 globalThis 约定交付（键名见 lib/task-binding.ts），供模型请求的身份判定读取。
+  state.stopBindings = publishTaskBindingIndex(bindings);
+  // 写点之后失效缓存：App 在 session/prompt 之前回写 metadata.dsh（session/cancel 之前写取消标记），
+  // 那两个 RPC 到达即代表宿主记录刚被改过——不吃 3s TTL 里的陈旧快照（陈旧 = 新绑定读不到，
+  // provider 会误判成 App 身份）。schedule 类只读 RPC 不失效，避免无谓的宿主往返。
+  const invalidateOn = new Set(["session/prompt", "session/cancel"]);
+  const invalidateBindings = (method: unknown) => {
+    if (!invalidateOn.has(String(method))) return;
+    try { bindings.invalidate(); } catch { /* 忽略 */ }
+  };
   try {
     state.stopBridge = startTaskBridge({
       ctx: boot.ctx,
       hana,
-      dataDir,
+      bindings,
       serviceBaseUrl, // 宿主任务取消反向触发 → 本进程 DSH session.cancel（只本会话，经中继）
       bridgeKey: opts.bridgeKey,
       log: (s) => info("bridge", s),
@@ -494,7 +512,7 @@ export async function main(argv: string[]): Promise<number> {
     state.stopApproval = startApprovalBridge({
       ctx: boot.ctx,
       hana,
-      dataDir,
+      bindings,
       log: (s) => info("approval", s),
     });
   } catch (e) {

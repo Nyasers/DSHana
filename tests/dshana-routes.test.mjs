@@ -13,7 +13,6 @@ import {
   DASHANA_ROUTE_PREFIX,
   dshanaRoutesTable,
 } from "../src/routes/dshana-routes.ts";
-import { writeTaskMap, markTaskMapEnded } from "../src/lib/task-map.ts";
 import { initAppRuntime } from "../src/lib/app-runtime.ts";
 import { resetDataSourceStore } from "../src/lib/data-source.ts";
 
@@ -462,19 +461,68 @@ test("GET /dshana/card-state: sessionId 形态不对 → 400（形状错，不�
   assert.equal(called, 0, "id 不合法时不去读状态面");
 });
 
-test("GET /dshana/card-state: 默认实现读 task-map（无记录 / 跟踪中 / 已终结）", async () => {
+/** 假宿主任务面：按记录列表回答 tasks.get/list（卡状态面的唯一事实源）。 */
+function tasksWith(records) {
+  const store = new Map(records.map((r) => [r.taskId, r]));
+  return {
+    list: async () => [...store.values()],
+    get: async (id) => store.get(id) || null,
+    update: async (id, patch) => ({ ...(store.get(id) || {}), ...patch }),
+  };
+}
+
+/** 一条带绑定的宿主任务记录（metadata.dsh.sessionId = 该会话）。 */
+function boundTask({ taskId = "task-1", status = "running", rpcId = "rpc-1", cancel = null } = {}) {
+  return {
+    taskId,
+    status,
+    metadata: { dsh: { action: "create", sessionId: CARD_SID, rpcId, ...(cancel ? { cancel } : {}) } },
+    createdAt: 1,
+    updatedAt: 2,
+    ...(status === "completed" ? { completedAt: 3 } : {}),
+  };
+}
+
+test("GET /dshana/card-state: 默认实现读宿主任务记录（无绑定 / 跟踪中 / 已终结 / 取消中）", async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "dshana-card-state-"));
   try {
-    const deps = defaultDshanaRouteDeps({ appId: "dshana", dataDir, logger: { info() {} } });
-    assert.equal((await deps.readCardState(CARD_SID)).state, "unknown", "没有映射就是没有记录（不猜还在跑）");
-    writeTaskMap(dataDir, { taskId: "task-1", dshSessionId: CARD_SID, action: "create", rpcId: "rpc-1" });
-    const tracked = await deps.readCardState(CARD_SID);
-    assert.equal(tracked.state, "tracked");
-    assert.match(tracked.detail, /rpc-1/);
-    markTaskMapEnded(dataDir, CARD_SID, "success");
-    const ended = await deps.readCardState(CARD_SID);
-    assert.equal(ended.state, "ended", "终态优先于跟踪中");
-    assert.match(ended.detail, /success/);
+    const deps = defaultDshanaRouteDeps({ appId: "dshana", dataDir, logger: { info() {} }, tasks: tasksWith([]) });
+    assert.equal((await deps.readCardState(CARD_SID)).state, "unknown", "没有绑定就是没有记录（不猜还在跑）");
+
+    const tracked = defaultDshanaRouteDeps({
+      appId: "dshana", dataDir, logger: { info() {} }, tasks: tasksWith([boundTask()]),
+    });
+    const trackedState = await tracked.readCardState(CARD_SID);
+    assert.equal(trackedState.state, "tracked");
+    assert.match(trackedState.detail, /rpc-1/);
+
+    const cancelling = defaultDshanaRouteDeps({
+      appId: "dshana", dataDir, logger: { info() {} },
+      tasks: tasksWith([boundTask({ cancel: { at: 5, reason: "user" } })]),
+    });
+    assert.equal((await cancelling.readCardState(CARD_SID)).state, "cancelling");
+
+    const ended = defaultDshanaRouteDeps({
+      appId: "dshana", dataDir, logger: { info() {} }, tasks: tasksWith([boundTask({ status: "completed" })]),
+    });
+    const endedState = await ended.readCardState(CARD_SID);
+    assert.equal(endedState.state, "ended", "宿主终态优先于跟踪中");
+    assert.match(endedState.detail, /completed/);
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("GET /dshana/card-state: 宿主任务面读取失败 → unknown 并如实说明（不 500）", async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "dshana-card-state-broken-"));
+  try {
+    const deps = defaultDshanaRouteDeps({
+      appId: "dshana", dataDir, logger: { info() {} },
+      tasks: { list: async () => { throw new Error("host down"); } },
+    });
+    const st = await deps.readCardState(CARD_SID);
+    assert.equal(st.state, "unknown");
+    assert.match(st.detail, /host down/);
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
@@ -491,6 +539,7 @@ function hostLikeCtx(dataDir) {
     dataDir,
     logger: { info() {} },
     config: { get: () => undefined, getAll: () => ({}), set() {}, setMany() {} },
+    tasks: tasksWith([boundTask()]),
   };
 }
 
@@ -498,9 +547,7 @@ test("defaultDshanaRouteDeps: 数据目录取宿主顶层 ctx.dataDir（ctx.conf
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "dshana-host-ctx-"));
   try {
     const deps = defaultDshanaRouteDeps(hostLikeCtx(dataDir));
-    assert.equal((await deps.readCardState(CARD_SID)).state, "unknown");
-    writeTaskMap(dataDir, { taskId: "task-1", dshSessionId: CARD_SID, action: "create", rpcId: "rpc-1" });
-    assert.equal((await deps.readCardState(CARD_SID)).state, "tracked", "顶层 dataDir 必须真的接进 task-map 读取");
+    assert.equal((await deps.readCardState(CARD_SID)).state, "tracked", "卡状态面读的是 ctx.tasks 上的宿主任务记录");
 
     // 写设置：旧写法在这份 ctx 下恒空 → 必抛；顶层取值后应能落盘并回新视图
     resetDataSourceStore();

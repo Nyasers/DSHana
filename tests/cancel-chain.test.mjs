@@ -19,7 +19,7 @@ import { cancelAccepted } from "../src/lib/dsh-rpc.ts";
 const SID = "session-11111111-2222-3333-4444-555555555555";
 
 test("planCancel: 无取消标记 → 需 DSH cancel；有标记 → 幂等不重复", () => {
-  const fresh = { dshSessionId: SID, taskId: "task-1", rpcId: "r_1", at: 1 };
+  const fresh = { dshSessionId: SID, taskId: "task-1", rpcId: "r_1", status: "running", cancel: null };
   assert.deepEqual(planCancel(fresh), { sessionId: SID, taskId: "task-1", dshCancelNeeded: true, hostEscalateAvailable: true });
   const marked = { ...fresh, cancel: { at: 2, reason: "user" } };
   assert.deepEqual(planCancel(marked), { sessionId: SID, taskId: "task-1", dshCancelNeeded: false, hostEscalateAvailable: true });

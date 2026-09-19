@@ -63,7 +63,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 - **投递档位（回执里的 `delivery`）**：宿主不替作者默选档位，本 App 在 create 时显式声明，档位定死后 update 改不了。`next-step`（当前值）＝结果在下一个输入收集点贴回本会话，相当于 `session:send` 的 `steer`：不打断在途请求，也不要求模型结束回合专门等；`next-turn` 才是本回合结束后另起一轮（`followUp`）。回执里的值就是实际档位，别自行推断。
 - **句柄**：返回值里的 `taskId` 就是后续 `reply` / `close` / `get` 用的句柄，优先用它
 - `label` 是显示名（宿主任务列表与结果通知里可见），缺省按动作给默认前缀
-- 提交链路：`ctx.tasks.create` → 受管 runtime 就绪 → `session.create` →（显式传 provider/model/effort 时才 `selectModel`）→ 会话↔任务认领（控制面 `bind-task`，落会话日志投影）→ `session.prompt`（queue）→ runtime task-bridge 回投终态
+- 提交链路：`ctx.tasks.create` → 受管 runtime 就绪 → `session.create` →（显式传 provider/model/effort 时才 `selectModel`）→ 绑定回写宿主任务记录（`ctx.tasks.update` 的 `metadata.dsh`，DSH 坐标的事实源）→ `session.prompt`（queue）→ runtime task-bridge 回投终态
 
 ### action=reply：续同一个子代理
 
@@ -76,7 +76,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 - 目标二选一：`taskId`（句柄，默认）或 `sessionId`（凭证）
 - 链路：通知 DSH `session.cancel`（中止模型流 / 工具 / 终端）→ 收敛为明确取消终态；只停本工作，不影响共享 runtime 上的其他会话
 - **与 subagent_close 的差异**：DSH 会话是持久的、随时可 resume，没有实例槽位这回事，`close` 只取消当前活动任务，不"释放实例"
-- 句柄反查不到（任务已被回收 / 映射已清理）会**明确报错**，不会拿猜出来的会话继续操作
+- 句柄反查不到（任务已被回收 / 宿主记录里的绑定已缺失）会**明确报错**，不会拿猜出来的会话继续操作
 
 ### action=get：回看某一轮最终结论
 
@@ -94,7 +94,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 
 - **approvalId 必填**（审批通知里带；同一任务可挂起多个审批，逐个应答）——它是唯一句柄，会话由工具解析（句柄路径会校验归属）；`sessionId` 仅在"我要跨对话"时显式传
 - **outcome**：`allowed-once`（默认，放行本次）/ `rejected`（拒绝）
-- **决策看 args（具体要执行什么），不听 reason（模型自述不可尽信）**：合理放行，危险拒绝。审批请求的 `label` 写作“工具名 + 具体操作 + 申请的权限档”，`details` 同源带 `operation` / `escalationMode` / `escalationNote` / `task`（该工作单元的提示片段）/ `approvalTimeoutMs`
+- **决策看 args（具体要执行什么），不听 reason（模型自述不可尽信）**：合理放行，危险拒绝。审批请求的 `label` 写作“工具名 + 具体操作 + 申请的权限档”，`details` 同源带 `operation` / `escalationMode` / `escalationNote` / `approvalTimeoutMs`
 - **回合边界**：审批通知只在**回合边界**送达。`open`/`reply` 提交后要**结束本回合**，下一回合才会收到 `app-task-approval-requested`（含 `approvalId`）。在同一个回合里空等或连续重发，会撞上宿主工具回调的 30 秒上限（`RPC callback.tools.execute timed out after 30000ms`），而且该会话可能就此卡住（后续 `reply` 一律超时，`close` 也难得到 DSH 确认）；遇到这种会话换新的，不要原地重试
 - 审批超时未应答按 `approvalTimeoutSec` 自动拒绝（本 App 缺省 30 秒；显式设 0 则禁用自动拒绝）。注意宿主自身的 `timeoutMs` 默认是 0（不禁用即不超时）——30 秒是 App 侧策略
 

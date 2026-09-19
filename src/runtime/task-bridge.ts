@@ -5,9 +5,9 @@
 //
 // 位置与角色：本模块随 dist/runtime/dsh-host.mjs 打进受管 runtime（与 DSH 同进程），
 // main.js 在 DSH boot 就绪后挂载。它订阅 DSH cordis ctx 的会话事件（进程内 ctx.on——
-// `$events` 广播层只带 api-session/*，turn 生命周期在 ctx 事件源直订才可见），按
-// <dataDir>/dshana/taskmaps/<sessionId>.json 映射（App 主进程写入，
-// 见 src/lib/task-map.ts——本 bundle 直接复用同一实现）把事件回投宿主：
+// `$events` 广播层只带 api-session/*，turn 生命周期在 ctx 事件源直订才可见），按**宿主任务
+// 记录**里的 metadata.dsh.sessionId（App 主进程提交前写入；本进程的 hana.tasks 直接读，
+// 见 src/lib/task-binding.ts 的绑定索引）把事件回投宿主：
 //   running 进度 → hana.tasks.update(taskId, { status:"running", progress })
 //   终态（成功）  → hana.tasks.complete(taskId, minimal 定位结果)
 //   终态（失败）  → hana.tasks.fail(taskId, message)
@@ -17,8 +17,8 @@
 // 事件按 sessionId 路由到唯一当前任务，无跨任务串扰。
 //
 // 取消链：
-//   · 取消确认 = DSH 真中止后：App 侧 cancel/执行超时先在映射写 cancel 标记（先于
-//     session.cancel RPC）；本桥在 DSH turn/end(aborted) 或自然终态但已有 cancel 标记时
+//   · 取消确认 = DSH 真中止后：App 侧 cancel/执行超时先在任务的 metadata.dsh 写 cancel 标记
+//     （先于 session.cancel RPC）；本桥在 DSH turn/end(aborted) 或自然终态但已有 cancel 标记时
 //     把宿主任务结算成 hana.tasks.cancel——绝不先标
 //     canceled 而 DSH 还在跑。
 //   · 宿主侧取消反向触发（Hana task canceled/aborted，来源会话停止按钮/App 生命周期）：
@@ -28,9 +28,10 @@
 //     requestId（model-requests.js）——只停本工作资源，单例 runtime 内不误停他人会话。
 //   · 宿主取消路径可能先于 DSH turn/end 到达：DSH 回合随后中止事件照常到，settle 幂等。
 //
-// 容错纪律：订阅/回投失败只记日志不阻断 runtime；映射不存在（非 dshana 发起的
-// 会话，如 DSH Web UI 直开）的事件直接忽略。
-import { readTaskMap, markTaskMapEnded, markCancelRequested } from "#/lib/task-map.ts";
+// 容错纪律：订阅/回投失败只记日志不阻断 runtime；宿主记录里没有绑定
+// （非 dshana 发起的会话，如 DSH Web UI 直开）的事件直接忽略；绑定**读取失败**与
+// "没有绑定"是两回事——前者记日志并放弃该帧，不把它当成用户自建会话。
+import { createTaskBindingIndex, type TaskBinding, type TaskBindingIndex } from "#/lib/task-binding.ts";
 import { runWatchReconcile } from "#/lib/watch-sse.ts";
 import { rpcSessionCancel } from "#/lib/dsh-rpc.ts";
 import { cancelSessionModelRequests } from "#/lib/model-requests.ts";
@@ -113,12 +114,12 @@ class SessionBridge {
   settled = false; // 已 complete/fail/cancel（幂等）
   // ---- 注入面与状态（构造期写入）----
   hana: any;
-  dataDir: string;
+  bindings: TaskBindingIndex;
   log?: (msg: string) => void;
   serviceBaseUrl: string | null;
   bridgeKey: string | null;
   cancelModelRequests?: (sessionId: string) => unknown;
-  map: any; // task-map 记录（进入首个事件时载入）
+  binding: TaskBinding | null; // 会话当前绑定（进入首个事件时载入）
   taskId: string | null;
   sessionId: string | null;
   pendingFailure: string | null; // api-session/error 记录（终态时判失败）
@@ -126,14 +127,14 @@ class SessionBridge {
   hostWatchStarted: boolean; // 宿主任务 watch 已启动
   hostWatchStopped: boolean; // watch 停止标记
   hostCancelDone: boolean; // 宿主取消反向触发只做一次
-  constructor({ hana, dataDir, log, serviceBaseUrl, bridgeKey, cancelModelRequests }) {
+  constructor({ hana, bindings, log, serviceBaseUrl, bridgeKey, cancelModelRequests }) {
     this.hana = hana;
-    this.dataDir = dataDir;
+    this.bindings = bindings;
     this.log = log;
     this.serviceBaseUrl = typeof serviceBaseUrl === "string" && serviceBaseUrl ? serviceBaseUrl : null;
     this.bridgeKey = typeof bridgeKey === "string" && bridgeKey ? bridgeKey : null;
     this.cancelModelRequests = cancelModelRequests; // (sessionId) => Promise（可注入便于测试）
-    this.map = null; // task-map 记录（进入首个事件时载入）
+    this.binding = null; // 会话绑定（进入首个事件时载入）
     this.taskId = null;
     this.sessionId = null;
     this.pendingFailure = null; // api-session/error 记录（终态时判失败）
@@ -144,25 +145,28 @@ class SessionBridge {
     this.hostCancelDone = false; // 宿主取消反向触发只做一次
   }
 
-  /** 首个事件载入映射；无映射（非 dshana 会话）返回 false。 */
-  load() {
-    if (this.map) return true;
-    const m = readTaskMap(this.dataDir, this.sessionId);
-    if (!m || !m.taskId) return false;
-    this.map = m;
-    this.taskId = m.taskId;
+  /** 首个事件载入绑定；无绑定（非 dshana 会话）返回 false。读取失败也返回 false（记日志）。 */
+  async load() {
+    if (this.binding) return true;
+    let b: TaskBinding | null = null;
+    try {
+      b = await this.bindings.bySession(this.sessionId as string, { fresh: true });
+    } catch (e) {
+      // 读不出 ≠ 没有绑定：不按 App 身份继续，但也不能让一条读错误卡死整个桥——
+      // 记日志并放弃这一帧（下一次事件会重试）。
+      this.note("会话绑定读取失败（本帧忽略，不按无绑定处理）：" + errText(e));
+      return false;
+    }
+    if (!b) return false;
+    this.binding = b;
+    this.taskId = b.taskId;
     return true;
-  }
-
-  /** 取消标记已请求（App cancel 工具/执行超时写；先于 DSH session.cancel）。 */
-  mapCancelRequested() {
-    return !!(this.map && this.map.cancel && this.map.cancel.at);
   }
 
   async onFrame(frame) {
     if (this.settled) return;
-    if (!this.load()) return; // 非本 App 发起会话：忽略
-    this.ensureHostWatch(); // 映射就绪即开始宿主任务 watch（宿主取消反向触发覆盖整个任务期）
+    if (!(await this.load())) return; // 非本 App 发起会话：忽略
+    this.ensureHostWatch(); // 绑定就绪即开始宿主任务 watch（宿主取消反向触发覆盖整个任务期）
     if (frame.kind === "status") {
       if (frame.running) {
         await this.markRunning();
@@ -209,7 +213,7 @@ class SessionBridge {
     }
   }
 
-  /** 宿主取消反向 watch（映射就绪即挂一次；终态/停桥时回收）。 */
+  /** 宿主取消反向 watch（绑定就绪即挂一次；终态/停桥时回收）。 */
   ensureHostWatch() {
     if (!this.hostWatchStarted && this.serviceBaseUrl && this.hana && this.hana.tasks) {
       this.startHostWatch();
@@ -231,7 +235,7 @@ class SessionBridge {
             const st = rec && String((rec as any).status || "");
             if (st === "canceled" || st === "aborted") {
               await this.onHostCancel(rec);
-              return false; // 本 watcher 使命完成（settle 会停桥/清映射）
+              return false; // 本 watcher 使命完成（settle 会停桥）
             }
             return true;
           },
@@ -258,13 +262,15 @@ class SessionBridge {
       "宿主任务 " + (rec && rec.status) + "（task=" + this.taskId + "）——反向触发 DSH cancel（session=" +
       (this.sessionId || "").slice(0, 12) + "）",
     );
-    // ① 取消标记先落进映射文件，**先于** DSH cancel。这个动作只能在 runtime 里做：App 进程
-    //     没有 sessions 句柄（宿主 ctx 也不提供 get），而子进程/重启后的终态判定读的是
-    //     映射——不落就等于“没取消过”。幂等：重复写只是覆盖同一 reason/时间戳。
+    // ① 取消标记先落进**宿主任务记录**（metadata.dsh.cancel，读改写全量 dsh），**先于** DSH cancel。
+    //     本进程的终态判定与 App 侧的取消编排都读同一格，不落就等于“没取消过”；幂等：重复写只是
+    //     覆盖同一 reason/时间戳。
     try {
-      markCancelRequested(this.dataDir, this.sessionId, "user");
+      if (this.bindings && typeof this.bindings.markCancel === "function" && this.taskId) {
+        await this.bindings.markCancel(this.taskId, "user");
+      }
     } catch (e) {
-      this.note("取消标记写入映射失败（继续收尾）：" + ((e as any)?.message || e));
+      this.note("取消标记写入宿主任务记录失败（继续收尾）：" + ((e as any)?.message || e));
     }
     // ② 通知 DSH session.cancel（本机回环 RPC）；失败记录（DSH 可能已自行中止）
     try {
@@ -287,14 +293,14 @@ class SessionBridge {
     } catch (e) {
       this.note("定向模型取消失败（继续收尾）：" + ((e as any)?.message || e));
     }
-    // ④ 结算：宿主任务已是终态，标记 cancelOverride 走 cancel/fail 幂等收尾 + 清映射
+    // ④ 结算：宿主任务已是终态，标记 cancelOverride 走 cancel/fail 幂等收尾
     await this.settle({ ok: false, aborted: true, cancelOverride: true, message: "宿主任务已取消/中止" });
   }
 
   /**
    * 终态回投。决策：
    *   ok=true 且无取消请求 → complete(result)；
-   *   ok=true/false 但取消已请求（cancel 标记 / cancelOverride）→ hana.tasks.cancel
+   *   ok=true/false 但取消已请求（任务记录里的 cancel 标记 / cancelOverride）→ hana.tasks.cancel
    *     （v1 cancelledRequested 语义：取消请求先到则终态按取消结算，防取消被误判完成）；
    *   ok=false（aborted 未请求取消）→ fail（aborted 文案）；
    *   ok=false（error）→ fail(message)。
@@ -304,9 +310,20 @@ class SessionBridge {
     this.settled = true;
     this.stopHostWatch();
     const { ok, message } = decision || {};
-    // 本进程亲手请求过取消（hostCancelDone）也算：那是我们发出的动作，不依赖映射的回读是否及时。
-    const cancel =
-      this.mapCancelRequested() || this.hostCancelDone || (decision && decision.cancelOverride === true);
+    // 本进程亲手请求过取消（hostCancelDone）也算：那是我们发出的动作，不依赖记录回读是否及时。
+    let cancel = this.hostCancelDone || (decision && decision.cancelOverride === true);
+    // 取消标记的权威格是宿主任务记录：终态判定前 fresh 读一次（App 侧先写标记再发 RPC）。
+    if (!cancel) {
+      try {
+        const fresh = await this.bindings.byTask(this.taskId);
+        if (fresh) {
+          this.binding = fresh;
+          cancel = !!fresh.cancel;
+        }
+      } catch (e) {
+        this.note("终态判定读取任务记录失败（按无取消标记处理）：" + ((e as any)?.message || e));
+      }
+    }
     try {
       if (this.hana && this.hana.tasks) {
         if (cancel && typeof this.hana.tasks.cancel === "function") {
@@ -315,9 +332,9 @@ class SessionBridge {
         } else if (ok) {
           const result = {
             dsh: {
-              action: (this.map && this.map.action) || null,
+              action: (this.binding && this.binding.action) || null,
               sessionId: this.sessionId,
-              rpcId: (this.map && this.map.rpcId) || "",
+              rpcId: (this.binding && this.binding.rpcId) || "",
               status: "completed",
               ok: true,
             },
@@ -329,16 +346,13 @@ class SessionBridge {
         }
       }
     } catch (e) {
-      // 终态回投失败：任务可能已被他方终态（App 卸载/取消/宿主已终态）——幂等语义，忽略并清映射
+      // 终态回投失败：任务可能已被他方终态（App 卸载/取消/宿主已终态）——幂等语义，忽略
       this.note("任务终态回投失败（task=" + this.taskId + "）：" + ((e as any)?.message || e));
     } finally {
+      // 终态回投改了宿主任务记录（status），让本进程的绑定索引下次重建，别把活动态读成陈旧值。
       try {
-        // 终态只标记 ended，**不删文件**：删了就分不出“用户自建会话”与“我们建的但状态丢了”，
-        // 而这两者在模型请求身份上是两种判定（见 provider/lib/identity.js 三态）。
-        markTaskMapEnded(this.dataDir, this.sessionId, "task-terminal");
-      } catch {
-        /* 忽略 */
-      }
+        if (this.bindings && typeof this.bindings.invalidate === "function") this.bindings.invalidate();
+      } catch { /* 忽略 */ }
     }
   }
 
@@ -352,11 +366,11 @@ class SessionBridge {
 }
 
 /**
- * 挂载任务桥：订阅 ctx 会话事件并把归属本 App task-map 的事件回投宿主。
- * @param opts { ctx, hana, dataDir, log, serviceBaseUrl? , cancelModelRequests? }
+ * 挂载任务桥：订阅 ctx 会话事件并把归属本 App 任务的事件回投宿主。
+ * @param opts { ctx, hana, bindings?, log, serviceBaseUrl?, cancelModelRequests? }
  *   serviceBaseUrl —— 受管 DSH web 回环基址（宿主任务取消反向触发 session.cancel 用；
  *   缺省 = 不做反向 watch）；cancelModelRequests —— (sessionId) 定向模型取消（缺省回落
- *   lib/model-requests.js 实现）。
+ *   lib/model-requests.js 实现）；bindings —— 绑定索引（缺省用 hana.tasks 建一个）。
  * @returns 卸载函数（幂等）
  */
 const BRIDGE_PRUNE_AT = 128; // bridges 有界（已终态条目在超限时清理）
@@ -365,10 +379,10 @@ const BRIDGE_PRUNE_AT = 128; // bridges 有界（已终态条目在超限时清�
 export interface TaskBridgeOptions {
   /** 宿主/受管 runtime 的 ctx（事件订阅面）。 */
   ctx: any;
-  /** DSH hana 句柄（模型取消等反向调用）。 */
+  /** DSH hana 句柄（任务回投/绑定读取/模型取消等反向调用）。 */
   hana: any;
-  /** App dataDir（task-map 位置）。 */
-  dataDir: string;
+  /** 绑定索引（缺省用 hana.tasks 建：读宿主任务记录里的 metadata.dsh）。 */
+  bindings?: TaskBindingIndex;
   log?: (msg: string) => void;
   /** 受管 DSH web 回环基址（缺省 = 不做反向 watch）。 */
   serviceBaseUrl?: string;
@@ -380,7 +394,7 @@ export interface TaskBridgeOptions {
 export function startTaskBridge({
   ctx,
   hana,
-  dataDir,
+  bindings,
   log,
   serviceBaseUrl,
   bridgeKey,
@@ -388,6 +402,7 @@ export function startTaskBridge({
 }: TaskBridgeOptions): () => void {
   const offs: Array<() => void> = [];
   const bridges = new Map(); // sessionId → SessionBridge（终态后惰性清理）
+  const index = bindings || createTaskBindingIndex(hana && hana.tasks);
   const doCancelModels = typeof cancelModelRequests === "function"
     ? cancelModelRequests
     : (sessionId) => cancelSessionModelRequests(hana, sessionId);
@@ -418,7 +433,7 @@ export function startTaskBridge({
         let b = bridges.get(frame.sessionId);
         if (!b) {
           pruneSettled();
-          b = new SessionBridge({ hana, dataDir, log, serviceBaseUrl, bridgeKey, cancelModelRequests: doCancelModels });
+          b = new SessionBridge({ hana, bindings: index, log, serviceBaseUrl, bridgeKey, cancelModelRequests: doCancelModels });
           b.sessionId = frame.sessionId;
           bridges.set(frame.sessionId, b);
         }
