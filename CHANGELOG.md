@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.0-rc.11+dsh-0.1.5-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.10%2Bdsh-0.1.5-rc.2...v1.0.0-rc.11%2Bdsh-0.1.5-rc.2) (2026-09-19)
+
+### Features
+
+* **chat:** 会话滚到顶自动续页（ui-chat 覆盖层 delta） ([a407ea1](https://github.com/Nyasers/DSHana/commit/a407ea1634d9c12f0a78e5519be94f75a2d8408a))
+
 ## [1.0.0-rc.10+dsh-0.1.5-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.9%2Bdsh-0.1.5-rc.2...v1.0.0-rc.10%2Bdsh-0.1.5-rc.2) (2026-09-19)
 
 ### Performance Improvements
@@ -461,6 +467,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
