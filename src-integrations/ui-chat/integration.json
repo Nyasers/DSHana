@@ -1,0 +1,21 @@
+{
+  "package": "@deepseek-ai/dsh-client-ui-chat",
+  "upstreamVersion": "0.1.5-rc.2",
+  "upstreamDir": "packages/client/ui-chat",
+  "files": [
+    {
+      "path": "src/client/chat/ChatView.tsx",
+      "upstreamSha256": "b297529556ba92087ddf8652709dd42d02195a5234b0b6e3076fd2dd11478cb5"
+    }
+  ],
+  "notes": [
+    "滚到顶自动续页：上游只给了「加载更早」按钮（chat.loadOlder），长会话回翻要一直去够那个按钮。",
+    "缝选在这里：ChatView 独占滚动处理——onScrollRef.current 是读者输入的唯一入口（每次渲染重写，",
+    "闭包里就有当前渲染的 loadOlderAnchored），并且已经用 movedByReader 把「读者输入」与「程序化写入」",
+    "分开了。delta 只是在它末尾加一句：读者自己滚到顶（scrollTop ≤ 32px）时调 loadOlderAnchored()。",
+    "三个边界写进代码注释：只认读者输入（续页后的锚定补偿不连轴触发）；贴顶才算（正常阅读不误触）；",
+    "loadOlder() 自身对「未打开 / 没有更多 / 正在加载」短路，重复触发无害。",
+    "为什么不在外层做运行时钩子：与「贴上游 + 构建期闸、不做运行时 shim」的路线相悖；而且按钮入口",
+    "自带锚定补偿，外部直接调 session.loadOlder() 会让续页后阅读位跳动。"
+  ]
+}
