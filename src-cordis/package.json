@@ -1,7 +1,7 @@
 {
   "name": "@dshana/dshana",
   "private": true,
-  "version": "1.0.0-rc.7+dsh-0.1.5-rc.2",
+  "version": "1.0.0-rc.8+dsh-0.1.5-rc.2",
   "type": "module",
   "imports": {
     "#/*": "./*"
