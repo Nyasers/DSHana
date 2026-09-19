@@ -222,9 +222,43 @@ export function installRequestTakeover(
 }
 
 // ---- 远程流载体（api/remote.mux WS 上的多路复用）----
+//
+// 失败语义（跨 bundle 契约，别改）：本载体的失败经 DSH 的 `normalizeConnectionStream`
+// 归一（packages/api/gateway/src/client/index.ts），那一层**只看结构标记不看 instanceof**——
+// 页半与内核半是两份独立 bundle，`RemoteStreamCarrierError` 的类身份跨不过去。标记挂在
+// 抛出的 Error 上：
+//   · `{ kind: 'carrier' }` = 物理载体丢失（socket 断/开不出/帧不合协议）。DSH 侧据此按
+//     **可重试**处理：连接代次仍在位时立刻重开一次，日志流保留已发布窗口、按游标续上。
+//     丢了它，同一个失败会被 `RemoteStream.read()` 判成终态故障折成 `gateway/internal`，
+//     会话历史流一次性死掉（界面停在「历史加载失败」，重连也救不回来）。
+//   · `{ kind: 'remote', code, details }` = 宿主交付的逻辑失败，带上域码与 details，
+//     让 DSH 侧重建出带码的 RemoteError（否则业务码全被折成 `gateway/internal`）。
+// 载体失败必须按 socket 身份收场：旧 socket 迟到的 close/error 不得误杀新载体上的在途流。
 const MAX_STREAMS = 128;
+/** 标记键名（DSH 侧固定读这个属性名，不是我们的私有约定）。 */
+const STREAM_FAILURE = "dshRemoteStreamFailure";
 
-/** 一条远端流的收件箱（push/finish/next）。 */
+/** 载体失败（物理链接丢失）：kind:'carrier'，DSH 侧按可重试的载体丢失处理。 */
+export function carrierFailure(message, cause?) {
+  const error: any = cause === undefined ? new Error(message) : new Error(message, { cause });
+  error.name = "DSHStreamCarrierError";
+  error[STREAM_FAILURE] = { kind: "carrier" };
+  return error;
+}
+
+/** 宿主交付的逻辑失败：kind:'remote' + 域码 + details，DSH 侧原样重建成带码的 RemoteError。 */
+export function remoteStreamFailure(message, code, details, cause?) {
+  const error: any = cause === undefined ? new Error(message) : new Error(message, { cause });
+  error.name = "DSHStreamRemoteError";
+  error[STREAM_FAILURE] = {
+    kind: "remote",
+    code: typeof code === "string" && code ? code : "gateway/internal",
+    details: details && typeof details === "object" ? details : {},
+  };
+  return error;
+}
+
+/** 一条远端流的收件箱（push/finish/next）。首个失败定音：后到的帧与失败不改写它。 */
 class Inbox {
   values: any[];
   done: boolean;
@@ -237,12 +271,15 @@ class Inbox {
     this.wake = null;
   }
   push(value) {
+    if (this.done) return;
     this.values.push(value);
     if (this.wake) { const w = this.wake; this.wake = null; w(); }
   }
   finish(error) {
+    if (this.done) return;
     this.done = true;
     this.failure = error || null;
+    this.values.length = 0;
     if (this.wake) { const w = this.wake; this.wake = null; w(); }
   }
   async next() {
@@ -263,39 +300,74 @@ export function createStreamMux(privateBase, WebSocketCtor = window.WebSocket) {
   const streams = new Map<string, any>();
   let nextId = 0;
 
+  /** 让当前全部在途流以同一失败收场（先摘表再逐个 finish：收场期间到达的帧无处投递）。 */
   const failAll = (error) => {
-    for (const inbox of streams.values()) inbox.finish(error);
+    if (!streams.size) return;
+    const pending = [...streams.values()];
     streams.clear();
+    for (const inbox of pending) inbox.finish(error);
   };
-  const receive = (raw) => {
+
+  /**
+   * 一条物理载体失联：先摘掉它（后续 open 会另起一条 socket），再让在途流以载体失败收场。
+   * 按身份判定——旧 socket 迟到的 error/close 不能误杀新载体上的流。
+   */
+  const lost = (s, error) => {
+    if (s !== socket) return;
+    socket = null;
+    failAll(error);
+  };
+
+  const receive = (raw, s) => {
     let frame;
-    try { frame = JSON.parse(String(raw)); } catch { return failAll(new Error("DSH stream carrier sent invalid JSON")); }
+    try { frame = JSON.parse(String(raw)); } catch {
+      // 帧不合协议：对端状态已不可信，连整条载体一起摘下（重开一条），
+      // 取向同内核客户端的「畸形帧 → 关 4002」。
+      lost(s, carrierFailure("DSH stream carrier sent invalid JSON"));
+      try { s.close(4002, "invalid Remote stream frame"); } catch { /* 忽略 */ }
+      return;
+    }
     const inbox = frame && typeof frame.streamId === "string" ? streams.get(frame.streamId) : undefined;
     if (!inbox) return;
     if (frame.type === "item") inbox.push(frame.value);
     else if (frame.type === "end") { inbox.finish(); streams.delete(frame.streamId); }
     else if (frame.type === "error") {
-      inbox.finish(new Error((frame.error && frame.error.message) || "DSH remote stream failed"));
+      const failure = frame.error && typeof frame.error === "object" ? frame.error : {};
+      inbox.finish(remoteStreamFailure(
+        typeof failure.message === "string" && failure.message ? failure.message : "DSH remote stream failed",
+        failure.code,
+        failure.details,
+      ));
       streams.delete(frame.streamId);
     }
   };
+
   const connect = () => {
     if (socket && (socket.readyState === WebSocketCtor.OPEN || socket.readyState === WebSocketCtor.CONNECTING)) return socket;
     const s = new WebSocketCtor(wsUrl.toString());
-    s.onmessage = (event) => receive(event.data);
-    s.onerror = () => failAll(new Error("DSH stream carrier failed"));
-    s.onclose = () => failAll(new Error("DSH stream carrier closed"));
-    socket = s;
+    socket = s; // 先登记：onerror/onclose 与 onmessage 都按身份判定
+    s.onmessage = (event) => { if (s === socket) receive(event.data, s); };
+    s.onerror = () => lost(s, carrierFailure("DSH stream carrier failed"));
+    s.onclose = () => lost(s, carrierFailure("DSH stream carrier closed"));
     return s;
   };
-  const send = (frame) => {
+
+  /** 发一帧。返回 false = 这条载体当场不可用（调用方按载体失败收场，不在死载体上空等）。 */
+  const send = (frame): boolean => {
     const s = connect();
     const data = JSON.stringify(frame);
-    if (s.readyState === WebSocketCtor.CONNECTING) {
-      s.addEventListener("open", () => { try { s.send(data); } catch { /* 忽略 */ } }, { once: true });
-      return;
+    if (s.readyState === WebSocketCtor.OPEN) {
+      try { s.send(data); } catch { lost(s, carrierFailure("DSH stream carrier failed")); return false; }
+      return true;
     }
-    s.send(data);
+    if (s.readyState === WebSocketCtor.CONNECTING) {
+      // 握手完成后补发；期间载体若已换代，这一帧属于旧代次，丢弃（对端进程已随载体消失）。
+      s.addEventListener("open", () => { try { if (s === socket) s.send(data); } catch { /* 忽略 */ } }, { once: true });
+      return true;
+    }
+    // 既非 OPEN 也非 CONNECTING：connect() 不该交出来；真出现就按已关闭收场。
+    lost(s, carrierFailure("DSH stream carrier closed"));
+    return false;
   };
 
   return {
@@ -313,7 +385,12 @@ export function createStreamMux(privateBase, WebSocketCtor = window.WebSocket) {
       };
       if (signal) signal.addEventListener("abort", abort, { once: true });
       try {
-        send({ type: "open", streamId, endpoint, payload });
+        // payload 必须成键出现：宿主按 exactKeys 校验 open 帧，缺键会关掉整条载体（1008），
+        // 不是在途的一条流。undefined 由 JSON 丢弃，这里补成 null（正常路径永远是参数信封对象）。
+        if (!send({ type: "open", streamId, endpoint, payload: payload === undefined ? null : payload })) {
+          streams.delete(streamId);
+          throw carrierFailure("DSH stream carrier closed before opening stream");
+        }
         for (;;) {
           const next = await inbox.next();
           if (next.done) return;
@@ -325,9 +402,11 @@ export function createStreamMux(privateBase, WebSocketCtor = window.WebSocket) {
       }
     },
     dispose() {
-      failAll(new Error("DSH stream carrier disposed"));
-      try { if (socket) socket.close(); } catch { /* 忽略 */ }
+      // 页面收尾（pagehide）：不属于载体丢失，按终态处理（与内核客户端 close() 同语义）。
+      const dying = socket as any;
       socket = null;
+      failAll(new Error("DSH stream carrier disposed"));
+      try { if (dying) dying.close(); } catch { /* 忽略 */ }
     },
   };
 }
