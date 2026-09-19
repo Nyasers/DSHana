@@ -194,7 +194,7 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
       body.setAttribute("data-view", "ready");
       if (spin) spin.hidden = true;
       if (panel) panel.innerHTML = "";
-      startInjection(s.proxyPrefix);
+      ensureInjection(s);
       schedulePoll(POLL_SLOW_MS);
       return;
     }
@@ -321,10 +321,33 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
   // 一次装配：标记视图参数（DSH 侧 view 插件读 ?dshana-view=）→ 装 transport → 取回 DSH
   // index 注入本页。私有前缀 = 中继前缀 + surface 路径票据（DSH 前端经原生 fetch 发出的
   // 请求带不了 header，票据必须在路径里）。
-  var injected = { started: false, dispose: null as (() => void) | null };
-  function startInjection(prefix) {
+  // 装配用的中继前缀里含 runtimeId，而宿主按 runtimeId 解析代理目标：运行时代换（宿主重启、
+  // 运行体重建）之后这份前缀就是死端点——宿主对它的 WS 升级当场断开（浏览器侧看到的是无
+  // 握手的 close），DSH 的流载体连续两次失败后被折成 gateway/internal，界面上就是
+  // 「历史加载失败：…（gateway/internal）」。
+  // 就地重注入救不回来：旧 DSH 前端实例在本文档里还活着（定时器、监听、它自己的载体都在），
+  // 两份实例挤在一个文档里。故本页只在**取到的新快照说 runtimeId 与装配时不同**时整页重载——
+  // 重载带走宿主新发的 surface 凭据，重新装配一次就干净了。判断放在取到快照之后，所以凭据
+  // 本已失效的页面不会去重载（那只会撞上宿主的 403），照旧停在「凭据缺失」的提示上。
+  var injected = { started: false, dispose: null as (() => void) | null, runtimeId: null as string | null, reloading: false };
+  /** 装配时代的 runtimeId 与本次快照不同：这份文档的装配面已经指向不存在的运行时。 */
+  function runtimeReplaced(s) {
+    return injected.started && injected.runtimeId !== null
+      && typeof s.runtimeId === "string" && s.runtimeId !== "" && s.runtimeId !== injected.runtimeId;
+  }
+  /** ready 快照下的装配入口：过期的重载，没装过的才装。 */
+  function ensureInjection(s) {
+    if (runtimeReplaced(s)) {
+      // 重载只发一次：文档被宿主摘着（未挂载）时 reload 可能不落地，别让它每轮轮询都来一遍。
+      if (!injected.reloading) { injected.reloading = true; location.reload(); }
+      return;
+    }
+    startInjection(s.proxyPrefix, s.runtimeId);
+  }
+  function startInjection(prefix, runtimeId) {
     if (injected.started) return;
     injected.started = true;
+    injected.runtimeId = typeof runtimeId === "string" && runtimeId ? runtimeId : null;
     var view = resolveView(shell);
     seedView = view;
     var privatePrefix = withSurfaceTicket(prefix, surfaceSession());
@@ -462,7 +485,7 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
       if (meta) meta.textContent = "runtime " + (s.runtimeId || "–") + (s.service && s.service.port ? " · port " + s.service.port : "");
       if (logEl) logEl.hidden = true;
       if (btnStop) btnStop.hidden = true;
-      startInjection(s.proxyPrefix);
+      ensureInjection(s);
       schedulePoll(POLL_SLOW_MS);
       return;
     }
