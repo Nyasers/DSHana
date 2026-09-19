@@ -11,6 +11,7 @@ import {
   ChunkAssembler,
   ChunkWindow,
   MUX_CHUNK_BYTES,
+  MUX_CHUNK_FRAME_OVERHEAD,
   MUX_CHUNK_MAGIC,
   MUX_CHUNK_WINDOW,
   decodeMuxControlFrame,
@@ -112,8 +113,13 @@ test("mux-chunks: 在途窗口只在额度内放行，回执唤醒等待者", as
   assert.equal(window.outstanding, 0, "回执超出在途时按 0 收，不出现负数");
 });
 
-test("mux-chunks: 默认上限明显小于宿主的 1 MiB 守卫", () => {
+test("mux-chunks: 默认上限离宿主的 1 MiB 守卫有余量（按线上字节核算）", () => {
   assert.equal(MUX_CHUNK_BYTES, 128 * 1024);
-  assert.ok(MUX_CHUNK_WINDOW < 1024 * 1024, "窗口必须小于宿主的 1 MiB 下游缓冲守卫");
   assert.ok(MUX_CHUNK_WINDOW >= MUX_CHUNK_BYTES, "窗口至少容得下一片");
+  assert.ok(MUX_CHUNK_WINDOW % MUX_CHUNK_BYTES === 0, "窗口应为单片整数倍（避免多压半片）");
+  // 宿主守卫：bufferedAmount > 1 MiB 就掐。一片的线上字节 = 载荷 + 帧头/信封开销。
+  const wirePerChunk = MUX_CHUNK_BYTES + MUX_CHUNK_FRAME_OVERHEAD;
+  const windowWire = (MUX_CHUNK_WINDOW / MUX_CHUNK_BYTES) * wirePerChunk;
+  assert.ok(windowWire < 1024 * 1024, `满窗口的线上字节 ${windowWire} 必须小于 1 MiB 守卫`);
+  assert.ok(1024 * 1024 - windowWire >= 128 * 1024, "至少要给 live 帧与 ping 留 128 KiB");
 });

@@ -21,14 +21,20 @@
 //
 // 本模块零依赖、只认 Uint8Array（浏览器与 Node 同构）：中继与载体共用同一份编解码。
 
-/** 单片的载荷上限。宿主的上限是 1 MiB，取 128 KiB 留足余量（也给下游缓冲守卫留余量）。 */
+/** 单片的载荷上限。宿主的上限是 1 MiB，取 128 KiB 留足余量。 */
 export const MUX_CHUNK_BYTES = 128 * 1024;
 
 /**
- * 在途未确认字节的上限。必须明显小于宿主的 1 MiB 下游缓冲守卫：
- * 同一时刻还可能挂着 live 事件帧与主题推送，窗口留到 512 KiB。
+ * 在途未确认字节的上限（载荷口径）。宿主的下游缓冲守卫判的是**线上字节**且门槛是
+ * `bufferedAmount > 1 MiB`，而一片 128 KiB 载荷在线上是 131,088 字节（10 字节帧头 +
+ * 6 字节信封 + 载荷）：窗口拉满 1 MiB 就是 8 片 = 1,048,704 字节，光分片就越线，
+ * 再叠一个 live 帧或一次 ping 当场 1011。故取 768 KiB（6 片 = 线上 786,528），
+ * 给 live 帧与 ping 留 256 KiB。
  */
-export const MUX_CHUNK_WINDOW = 512 * 1024;
+export const MUX_CHUNK_WINDOW = 768 * 1024;
+
+/** 一片分片帧的固定开销（帧头 + 信封）——窗口按线上字节核算时用得上。 */
+export const MUX_CHUNK_FRAME_OVERHEAD = 16;
 
 /** 分片/回执帧的魔数（"HNK1"）：只用来把自己造的二进制帧与别的二进制流量区分开。 */
 export const MUX_CHUNK_MAGIC = [0x48, 0x4e, 0x4b, 0x31] as const;
