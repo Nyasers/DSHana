@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.0-rc.10+dsh-0.1.5-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.9%2Bdsh-0.1.5-rc.2...v1.0.0-rc.10%2Bdsh-0.1.5-rc.2) (2026-09-19)
+
+### Performance Improvements
+
+* **mux:** 在途窗口 512 → 768 KiB（按线上字节给宿主 1 MiB 守卫留 256 KiB） ([d086152](https://github.com/Nyasers/DSHana/commit/d086152bc8898abace2574a29fed0ef80a5ed797))
+
 ## [1.0.0-rc.9+dsh-0.1.5-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.8%2Bdsh-0.1.5-rc.2...v1.0.0-rc.9%2Bdsh-0.1.5-rc.2) (2026-09-19)
 
 ### Features
@@ -455,6 +461,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
