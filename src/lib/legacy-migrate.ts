@@ -26,8 +26,8 @@
 //     只读拷贝（jsonl 追加竞态最坏 = 尾部半行，DSH 读取侧逐行容错），但会话正被写时
 //     拷贝数量/内容可能与最后实际不符；正式迁移前先停旧 DSH/会话写入再执行。
 //   · Windows：路径统一 path.join/原生分隔符；junction 不在复制范围（profiles 跳过）；
-//     node_modules/pnpm-dist（含 .node 原生文件）不复制（App 依赖走 dataDir/runtime 区，
-//     pnpm 重装，旧文件锁不构成迁移阻塞）。日志/会话文件拷贝遇 native 文件锁只在旧插件
+//     node_modules/pnpm-dist（含 .node 原生文件）不复制（App 依赖随包物化在安装目录，
+//     无需迁移，旧文件锁不构成迁移阻塞）。日志/会话文件拷贝遇 native 文件锁只在旧插件
 //     仍在跑时可能出现——同"停机指引"。
 //
 // 本模块 = 纯逻辑/只读验证（plan/verify/suggestion/marker），可单测；真实拷贝只发生在
@@ -205,7 +205,7 @@ export function planLegacyMigration({ legacyRoot, dataDir, force = false }) {
     steps,
     warnings,
     sourceInfo,
-    skip: { profiles: "v2 runtime seed 每次启动用 installDir cordis/ 自愈重建 profile（junction 指向过时 v1 安装目录，不迁移）", nodeModules: "App 依赖走 dataDir/runtime 安装区 pnpm 重装；.node 文件锁不迁移" },
+    skip: { profiles: "v2 runtime seed 每次启动用 installDir cordis/ 自愈重建 profile（junction 指向过时 v1 安装目录，不迁移）", nodeModules: "App 依赖随包物化在安装目录（不复制）；.node 文件锁不迁移" },
   };
 }
 

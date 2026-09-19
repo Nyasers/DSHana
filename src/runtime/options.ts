@@ -12,7 +12,7 @@
 //   { dataDir, dshHome?, dshPort, bridgePort, bridgeKey, controlKey, readyMarker, cordisSrc?, depsRoot? }
 //   或预检形态（数据源切换探针）：
 //   { dataDir, dshHome, preflight:true, resultPath }
-//   · dataDir       App ctx.dataDir 绝对路径（runtime / logs 均在其下）
+//   · dataDir       App ctx.dataDir 绝对路径（App 数据根；.dsh / integration 等均在其下）
 //   · dshHome       本源的 DSH_HOME 绝对路径（当前数据源决定；缺省回落 dataDir/.dsh）
 //   · preflight     true = 只做「依赖就位 + 定位 DSH + profile 种子化」可用性预检，不 boot DSH，
 //                   结果写 resultPath（{ok} 或 {ok:false,error}）后退出；此形态不要端口/凭据
