@@ -9,9 +9,10 @@
 //   ② ensureManagedRuntime（未起则启动到 ready；单例，一个 runtime 服务多会话）；
 //   ③ 经 loopback HTTP Unary RPC（同一信封协议，见 lib/rpc-envelope.js）把
 //      session.create / selectModel / prompt 提交给受管 runtime 内的 DSH web 服务；
-//   ④ 写 <dataDir>/dshana/taskmaps/<sessionId>.json 映射（见 lib/task-map.js）——受管
-//      runtime 的 task-bridge（src/runtime/task-bridge.ts）凭它把 DSH 事件回投
-//      ctx.tasks.update/complete/fail；
+//   ④ 把 DSH 坐标（metadata.dsh：action/cwd/sessionId/rpcId/timeoutSec/approvalTimeoutMs）
+//      回写宿主任务记录（ctx.tasks.update）——绑定事实源就是这份记录，受管 runtime 的
+//      task-bridge / approval-bridge（src/runtime/*）与 provider 身份判定直接读它
+//      （见 lib/task-binding.ts），没有私有映射文件；
 //   ⑤ 同 DSH session 串行化（lib/session-serialize.js）：锁持有到任务终态，不同 session
 //      互不干扰——否则同一 session 的两个任务会互相消费对方的终态事件。
 //
@@ -28,7 +29,7 @@ import { appCtx, appDataDir } from "#/lib/app-runtime.ts";
 import { currentDshHome } from "#/lib/data-source.ts";
 import { ensureManagedRuntime } from "#/lib/managed-runtime.ts";
 import { nextRpcId } from "#/lib/rpc-envelope.ts";
-import { writeTaskMap, markTaskMapEnded, isValidSessionId, pruneTaskMaps } from "#/lib/task-map.ts";
+import { isValidSessionId, dshMetadataFor } from "#/lib/task-binding.ts";
 import { withSessionTurn, enterSessionTurn } from "#/lib/session-serialize.ts";
 import { readDshDefaultModel } from "#/lib/config.ts";
 import { serviceBase } from "#/lib/service-base.ts";
@@ -102,7 +103,7 @@ export function resolveModelSelection(parsed, dshHome) {
 
 // ---- DSH 一元 RPC（经 runtime 控制面转发；App 侧不直连 DSH HTTP）----
 // 载体 = lib/controller.js rpcViaControl（controller.invoke → /_control → runtime 带 cookie 转发）。
-// 保留 DSHana 特色编排（ctx.tasks.create / 串行化 / task-map 回投）不变——只换 DSH 访问通道。
+// 保留 DSHana 特色编排（ctx.tasks.create / 串行化 / 宿主任务记录回投）不变——只换 DSH 访问通道。
 async function rpcCall(ctx, _base, opts) {
   return rpcViaControl(ctx, opts);
 }
@@ -309,8 +310,7 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
               action: parsed.action,
               cwd: parsed.cwd || undefined,
               sessionId: parsed.sessionId || undefined,
-              // 提示词摘要**不进**宿主记录：那是用户内容。诊断需要的摘要在我们自己的
-              // 映射文件（dataDir/dshana/taskmaps，私有）里，不上宿主库。
+              // 提示词摘要**不进**宿主记录：那是用户内容，宿主任务记录是共享面。
               timeoutSec: parsed.timeoutSec || undefined,
             },
           },
@@ -320,7 +320,6 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
       }
       taskId = task && task.taskId;
       if (!taskId) throw new Error("ctx.tasks.create 未返回 taskId（宿主契约异常）");
-      try { pruneTaskMaps(dataDir); } catch { /* 忽略 */ }
 
       // ② 受管 runtime 就绪（单例；首启含 profile 种子化与 boot）
       try {
@@ -364,41 +363,29 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
           }
         }
       }
-      // ⑤ 写映射（先于 prompt；rpcId = prompt requestId = jsonl data.source.rpcId 关联键）
-      //    映射快照下传执行超时与审批超时（受管 runtime approval-bridge 读不到
-      //    App settings，经映射文件取 approvalTimeoutMs；0 = 宿主不自动拒绝）
+      // ⑤ 绑定回写宿主任务记录（先于 prompt；rpcId = prompt requestId = jsonl
+      //    data.source.rpcId 关联键）。这份 metadata.dsh 就是全部下游的绑定事实源：
+      //      · 受管 runtime 的 task-bridge / approval-bridge 按 sessionId 找 taskId；
+      //      · provider 身份判定按 sessionId 决定带不带 taskId；
+      //      · 句柄路径（taskId/approvalId）按它解析会话。
+      //    执行超时与审批超时也随它下传（受管 runtime 读不到 App settings；0 = 宿主不自动拒绝）。
+      //    写全量 dsh 对象：tasks.update 的 metadata 是整体替换还是浅合并，宿主契约没写死，
+      //    给全量在两种语义下都正确。写失败抛错——绑定没落地 = 任务拿不到结果，不能当没事。
       const rpcId = nextRpcId();
       const timeoutSec = resolveTaskTimeoutSec(parsed.timeoutSec);
       const approvalTimeoutMs = resolveApprovalTimeoutMs();
-      writeTaskMap(dataDir, {
-        taskId,
-        dshSessionId: sessionId,
-        action: parsed.action,
-        rpcId,
-        ...(parsed.action === "create" || parsed.action === "send" ? { task: parsed.taskText.slice(0, 500) } : {}),
-        timeoutSec,
-        approvalTimeoutMs,
+      const back = await ctx.tasks.update(taskId, {
+        metadata: dshMetadataFor(task || {}, {
+          action: parsed.action,
+          cwd: parsed.cwd || undefined,
+          sessionId,
+          rpcId,
+          timeoutSec,
+          approvalTimeoutMs,
+        }),
       });
-      // ⑤b 宿主任务元数据回写（task → DSH 会话的**持久记录**；我们那份映射是热路径 + 私有副本）。
-      //     写完整 dsh 对象：update 的 metadata 是整体替换还是浅合并，文档没写，给全量在两种
-      //     语义下都正确。失败不改任务结局（映射文件仍是配对事实源）但必须出声——静默的记账
-      //     失败会让人以为宿主机里查得到（“失败不静默”）。
-      try {
-        const back = await ctx.tasks.update(taskId, {
-          metadata: {
-            dsh: {
-              action: parsed.action,
-              cwd: parsed.cwd || undefined,
-              sessionId,
-              timeoutSec: parsed.timeoutSec || undefined,
-            },
-          },
-        });
-        if (!back || !back.taskId) {
-          logLine(log, "[dsh-session][warn] 宿主任务元数据回写未确认（task=" + taskId + "）");
-        }
-      } catch (e) {
-        logLine(log, "[dsh-session][error] 宿主任务元数据回写失败（task=" + taskId + "）：" + errText(e));
+      if (!back || !back.taskId) {
+        logLine(log, "[dsh-session][warn] 宿主任务绑定回写未确认（task=" + taskId + "）");
       }
       // ⑥ prompt（fire：{ accepted:true } 立即返回）
       await rpcCall(ctx, base, {
@@ -424,11 +411,8 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
       logLine(log, "[dsh-session] task 终态 " + ((rec && rec.status) || "?") + "（session=" + sessionId + "）");
       return loc;
     } catch (e) {
-      // 提交阶段失败：标记终态（若有 sessionId；**不删文件**——删了就分不出“用户自建会话”
-      // 与“我们建的但状态丢了”）+ 任务 fail（已建时）+ ready reject
-      if (sessionId) {
-        try { markTaskMapEnded(dataDir, sessionId, "submit-failed"); } catch { /* 忽略 */ }
-      }
+      // 提交阶段失败：任务 fail（已建时）+ ready reject。绑定记录的终态由宿主状态承担
+      // （fail 之后宿主记录 status=failed，读侧即按“已终结”处理），不另写一份结束标记。
       if (taskId) {
         const msg = "DSH 任务提交失败（" + parsed.action + "）：" + errText(e);
         await failTask(ctx, taskId, msg);

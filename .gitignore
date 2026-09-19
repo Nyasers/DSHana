@@ -1,4 +1,5 @@
 # 依赖与构建产物
+.pnpm-store
 node_modules/
 dist/
 releases/

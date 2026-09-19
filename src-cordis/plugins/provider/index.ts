@@ -10,9 +10,9 @@
 //   · 目录：hana.models.list() → 显式 provider/model 选择（id 原样透传，不二次映射）；
 //   · 推理：hana.models.stream({ requestId, provider, model, messages, systemPrompt, tools,
 //     reasoningEffort?, maxTokens?, temperature?, taskId? })——requestId 由本 adapter 自管
-//     （cancel 按 requestId 定向）。**身份三态且不能同传**（见 lib/identity.js）：无标记 =
-//     用户自建会话 = App 身份；标记在 + 任务终结（用户接着在 WebUI 用）= App 身份；
-//     标记在 + 任务活动 = taskId（保留任务绑定与结果回投）；标记在但读不出 = **显式失败**，
+//     （cancel 按 requestId 定向）。**身份三态且不能同传**（见 lib/identity.ts）：无绑定 =
+//     用户自建会话 = App 身份；有绑定 + 任务终结（用户接着在 WebUI 用）= App 身份；
+//     有绑定 + 任务活动 = taskId（保留任务绑定与结果回投）；绑定读不出/索引缺席 = **显式失败**，
 //     不改走 App 身份（《DSHana 调用 Hana 模型接口指南》§3/§5）。不传 scope——那是
 //     models.utility 的参数，stream 不接受；
 //   · NDJSON 逐行解析（lib/ndjson.js），done.assistant 完整保存回放（含 text/reasoning/
@@ -32,7 +32,7 @@ import { readNdjsonEvents } from "./lib/ndjson.ts";
 import { providerRoutes, listModelsForProvider, resolveModelInfo, supportedEfforts, modelPublishedMaxTokens, HOST_MAX_OUTPUT_TOKENS } from "./lib/catalog.ts";
 import { toHanaMessages } from "./lib/messages.ts";
 import { buildDoneChunks, createHanaStreamState } from "./lib/stream.ts";
-import { resolveModelIdentity } from "./lib/identity.ts";
+import { resolveSessionIdentity, TASK_MAP_BROKEN, BINDING_UNAVAILABLE } from "./lib/identity.ts";
 import { errText } from "./lib/err-text.ts";
 
 export const name = "@dshana/provider";
@@ -62,20 +62,14 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// ---- 运行环境 ----
-function dataDirOf() {
-  const v = process.env.DSHANA_HOME;
-  return typeof v === "string" && v ? v : null;
-}
-
-// 独立会话（无任务映射 = DSH Web UI 自建）按 App 身份推理：每会话只提示一次——
+// 独立会话（无任务绑定 = DSH Web UI 自建）按 App 身份推理：每会话只提示一次——
 // 日志要能回答“这次请求为什么没有 task 绑定”，这是诊断信息而非错误。
 const APP_IDENTITY_LOGGED = new Set();
 function noteAppIdentity(logLine, sessionId) {
   const key = String(sessionId || "?");
   if (APP_IDENTITY_LOGGED.has(key) || APP_IDENTITY_LOGGED.size >= 64) return;
   APP_IDENTITY_LOGGED.add(key);
-  logLine("会话 " + key + " 无任务映射 → 按 App 身份推理（DSH Web UI 独立会话，不传 callToken/taskId）");
+  logLine("会话 " + key + " 无任务绑定 → 按 App 身份推理（DSH Web UI 独立会话，不传 callToken/taskId）");
 }
 
 // 参数收敛提示（按 provider/model 去重，不逐次刷屏）。宿主对模型请求的字段有硬校验，
@@ -235,25 +229,24 @@ export function buildHanaAdapter(LlmAdapter, LlmError, deps) {
     }
 
     async *stream(options) {
-      const dataDir = dataDirOf();
       const sessionId = options && options.sessionId;
       const item = models.find((m) => m && m.provider === options.provider && m.id === options.model) || null;
       const requestId = randomUUID();
-      // 身份判定（三态，见 lib/identity.js）：
-      //   无标记 ⇒ App 身份（用户在 WebUI 自建的会话）；
-      //   标记在 + 任务终结 ⇒ App 身份（用户接着用，事实而非降级）；
-      //   标记在 + 任务活动 ⇒ taskId（必须）；
-      //   标记在但读不出（损坏）⇒ **显式失败**，绝不改走 App 身份。
+      // 身份判定（三态，见 lib/identity.ts）：
+      //   无绑定 ⇒ App 身份（用户在 WebUI 自建的会话）；
+      //   有绑定 + 任务终结 ⇒ App 身份（用户接着用，事实而非降级）；
+      //   有绑定 + 任务活动 ⇒ taskId（必须）；
+      //   绑定读不出/索引缺席（损坏/能力缺席）⇒ **显式失败**，绝不改走 App 身份。
       // 失效/归属不正确的 taskId 仍由宿主报错并原样上抛——不做“删掉身份参数重试”的兜底。
       let identity;
       let source;
       try {
-        ({ identity, source } = resolveModelIdentity(dataDir, sessionId));
+        ({ identity, source } = await resolveSessionIdentity(sessionId));
       } catch (e) {
+        const code = (e as any)?.code;
         throw new LlmError(
           "模型身份判定失败（会话绑定不可读）：" + errText(e),
-          // catch 到的是 unknown：code 仅作展示，经显式断言读出（src 域同款边界写法）
-          (((e as any)?.code) || "TASK_IDENTITY_UNRESOLVED"),
+          code === TASK_MAP_BROKEN || code === BINDING_UNAVAILABLE ? code : "TASK_IDENTITY_UNRESOLVED",
           { requestId },
         );
       }

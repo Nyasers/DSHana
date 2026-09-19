@@ -11,9 +11,9 @@
 //     → 本桥以 ctx.on('approval/request', …, { global: true, prepend: true }) 认领
 //       （v1 实证：无 scope 的 ctx.on 因 context filter 收不到 agent-scope 瀑布事件，
 //       EventOptions.global = true 无视 context filter 收所有 agent——见 v1 acp-mount）
-//     → 按 task-map 定位宿主 task（details 含 dshSessionId/rpcId/toolName/args/reason）
+//     → 按宿主任务记录定位宿主 task（metadata.dsh.sessionId → taskId；绑定读取见
+//       lib/task-binding.ts）
 //     → hana.tasks.requestApproval({ taskId, label, details, timeoutMs })
-//     → 记 approval 到映射文件（App approve 凭它校验归属/去重）
 //     → 挂起 ApprovalOutcome 承诺，经 watch(approvalId) SSE（snapshot 首条 + app-task；
 //       断线 get() 对账；reset 重读快照——lib/watch-sse.js）等宿主终态：
 //          outcome=allowed-once → 'allowed-once'（仅本次放行）
@@ -28,13 +28,17 @@
 // 审批载荷写出**具体操作**：宿主那条通知的正文是 `Approval requested: <label>`，label 之外的部分
 // 不保证写进审批方的视线；而审批是 Agent 的活，拿不到"要动什么"就只能凭信任签字。所以 label 由
 // `buildApprovalLabel` 拼出工具名之外的实义（目标路径 / 命令 / 替换规模 + 申请的权限档），details
-// 同源带上 operation / escalationMode / escalationNote / task（提示片段，来自映射 500 字上限）/
+// 同源带上 operation / escalationMode / escalationNote /
 // approvalTimeoutMs（审批方还有多久）。
 //
 // 审批等待不计入执行超时：任务执行超时走 cancel 链（session-run 看门狗 → session.cancel
 // → 本桥 answerer 的 req.signal 中止 → 上面收尾路径），宿主审批由 approval 的 timeoutMs
 // 独立自动拒绝。
-import { readTaskMap, addApproval, settleApproval, isValidSessionId } from "#/lib/task-map.ts";
+import {
+  createTaskBindingIndex,
+  isValidSessionId,
+  type TaskBindingIndex,
+} from "#/lib/task-binding.ts";
 import { approvalOutcomeOf, runWatchReconcile } from "#/lib/watch-sse.ts";
 // 宿主审批契约类型只进类型层（swc / Node 剥类型后不留运行时 import）
 import type {
@@ -286,9 +290,11 @@ export function buildApprovalLabel(
 
 /** 挂载审批桥。@returns stop 函数（幂等）：退订 ctx 事件、中止全部等待中的审批 watcher。
  * 挂载失败抛错由 main.js 决定（不阻断 ready——审批不可用时 DSH 等待者 fail-closed）。
+ * bindings 缺省用 hana.tasks 建绑定索引（读宿主任务记录里的 metadata.dsh）。
  */
-export function startApprovalBridge({ ctx, hana, dataDir, log }: { ctx: any; hana: any; dataDir: string; log?: (msg: string) => void }): () => void {
+export function startApprovalBridge({ ctx, hana, bindings, log }: { ctx: any; hana: any; bindings?: TaskBindingIndex; log?: (msg: string) => void }): () => void {
   const offs: Array<() => void> = [];
+  const index = bindings || createTaskBindingIndex(hana && hana.tasks);
   const pendings = new Set<PendingApproval>(); // 未结算审批的取消器（stop 时统一中止）
   const cache = new ToolCallCache({ log });
   const note = (msg: string) => {
@@ -319,11 +325,19 @@ export function startApprovalBridge({ ctx, hana, dataDir, log }: { ctx: any; han
       // 未知/畸形会话：不认领（next 委托其他应答者；无应答者 DSH fail-closed）
       return next();
     }
-    const map = readTaskMap(dataDir, sessionId);
-    if (!map || !map.taskId) {
+    // 绑定读取失败（宿主不可达/记录畸形）与"没有绑定"必须分开：前者不能委托给别的应答者
+    // 假装无事发生（那会把"状态丢了"变成 DSH 的 fail-closed 拒绝，掩盖真因），显式拒绝并记日志。
+    let binding;
+    try {
+      binding = await index.bySession(sessionId, { fresh: true });
+    } catch (e) {
+      note("审批会话绑定读取失败（fail-closed 拒绝，不委托）：" + errText(e));
+      return "rejected";
+    }
+    if (!binding) {
       // 非 dshana 工具发起的会话（如 DSH Web UI 直开）：没有宿主 task scope，
       // 无法 requestApproval——委托（DSH 无应答者时 fail-closed，不隐式放行）
-      note("审批无 task-map（session=" + sessionId.slice(0, 12) + "）——委托，不认领");
+      note("审批无任务绑定（session=" + sessionId.slice(0, 12) + "）——委托，不认领");
       return next();
     }
     const callId = (req && req.callId) || null;
@@ -331,8 +345,13 @@ export function startApprovalBridge({ ctx, hana, dataDir, log }: { ctx: any; han
     const toolName = (req && req.toolName) || (cached && cached.name) || "tool";
     const args = previewArgs((cached && cached.args) || null);
     const reason = (req && req.reason) || null;
-    const rpcId = map.rpcId || "";
-    const timeoutMs = Number(map.approvalTimeoutMs) >= 0 ? Number(map.approvalTimeoutMs) : DEFAULT_APPROVAL_TIMEOUT_MS;
+    const rpcId = binding.rpcId || "";
+    // 缺省（null / 非有限数）落回 DEFAULT；显式 0 是“宿主不自动拒绝”的既定语义，原样保留。
+    const configuredTimeoutMs = binding.approvalTimeoutMs;
+    const timeoutMs =
+      typeof configuredTimeoutMs === "number" && Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs >= 0
+        ? configuredTimeoutMs
+        : DEFAULT_APPROVAL_TIMEOUT_MS;
     note("审批请求收到（session=" + sessionId.slice(0, 12) + " tool=" + toolName + (callId ? " call=" + callId.slice(0, 12) : "") + "）");
 
     const entry: PendingApproval = { sessionId, approvalId: "" }; // pendings 条目（审批创建后填 approvalId）
@@ -373,7 +392,7 @@ export function startApprovalBridge({ ctx, hana, dataDir, log }: { ctx: any; han
     let approval: AppTaskApprovalRecordV2 | null = null;
     try {
       const request: AppTaskApprovalRequestV2 = {
-        taskId: map.taskId,
+        taskId: binding.taskId,
         label: buildApprovalLabel(toolName, operation, escalation),
         details: {
           dshSessionId: sessionId,
@@ -381,7 +400,6 @@ export function startApprovalBridge({ ctx, hana, dataDir, log }: { ctx: any; han
           toolName,
           operation,
           ...(escalation ? { escalationMode: escalation.mode, escalationNote: escalation.note } : {}),
-          ...(typeof map.task === "string" && map.task ? { task: map.task } : {}),
           ...(callId ? { callId } : {}),
           ...(reason ? { reason } : {}),
           ...(args ? { args } : {}),
@@ -403,30 +421,17 @@ export function startApprovalBridge({ ctx, hana, dataDir, log }: { ctx: any; han
       return pending;
     }
     doRespond = (outcome) => hana.tasks.respondApproval({ approvalId, outcome });
-    // 宿主权威字段交叉校验：审批记录自带 parentTaskId。不一致或缺失说明我们的
-    // 映射与宿主记录已经漂移——这种情况把审批结算成 rejected（fail-closed，绝不放行），
-    // 不继续等一个可能属于别人的结果。放到 addApproval 之前：没通过校验的审批不进映射表。
-    if (!approvalOwnsTask(approval, map.taskId)) {
+    // 宿主权威字段交叉校验：审批记录自带 parentTaskId。不一致或缺失说明我们读到的绑定
+    // 与宿主审批记录已经漂移——这种情况把审批结算成 rejected（fail-closed，绝不放行），
+    // 不继续等一个可能属于别人的结果。
+    if (!approvalOwnsTask(approval, binding.taskId)) {
       note(
-        "审批 parentTaskId 与映射不一致（宿主 " + String((approval && approval.parentTaskId) || "缺失") +
-          " / 映射 " + String(map.taskId) + "）：fail-closed 拒绝",
+        "审批 parentTaskId 与绑定不一致（宿主 " + String((approval && approval.parentTaskId) || "缺失") +
+          " / 绑定 " + String(binding.taskId) + "）：fail-closed 拒绝",
       );
       try { await doRespond?.("rejected"); } catch { /* 尽力：宿主侧拒绝失败也仍投 rejected */ }
       settleOutcome("rejected");
       return pending;
-    }
-    // 记录到映射文件（App approve 校验/去重 + 应答上下文）；写失败不阻断（watch 为准）
-    try {
-      addApproval(dataDir, sessionId, {
-        approvalId,
-        toolName,
-        ...(callId ? { callId } : {}),
-        ...(reason ? { reason } : {}),
-        ...(args ? { args } : {}),
-        at: Date.now(),
-      });
-    } catch (e) {
-      note("审批记录写映射失败：" + errText(e));
     }
     // 立即按请求创建结果结算一次（宿主可能已即时终态——如父任务刚结束）
     const immediate = approvalOutcomeOf(approval);
@@ -449,7 +454,6 @@ export function startApprovalBridge({ ctx, hana, dataDir, log }: { ctx: any; han
             if (kind === "snapshot" || kind === "app-task") {
               const outcome = approvalOutcomeOf(rec);
               if (outcome) {
-                try { settleApproval(dataDir, sessionId, approvalId, outcome); } catch { /* 尽力 */ }
                 note("审批 " + approvalId.slice(0, 12) + " 终态 outcome=" + outcome + " → 投递 DSH 等待者");
                 settleOutcome(outcome);
                 return false; // 结算完成，结束 watch

@@ -10,13 +10,10 @@
 // temperature）、非 2xx 与空消息报错。
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { buildHanaAdapter } from "../src-cordis/plugins/provider/index.ts";
+import { TASK_BINDING_GLOBAL_KEY } from "../src/lib/task-binding.ts";
 
 const SID = "session-11111111-2222-3333-4444-555555555555";
-const ENV_KEY = "DSHANA_HOME";
 // big = 现实里那种“1M 上下文 / 384k 输出”的模型（published 上限远大于宿主的请求闸 65536）
 const MODELS = [
   { provider: "hana", id: "m1", name: "m1" }, // 未声明 maxTokens
@@ -34,24 +31,22 @@ class FakeLlmError extends Error {
 }
 class FakeLlmAdapter {}
 
-let dir;
-let savedEnv;
+// 身份判定读的是受管 runtime 挂在 globalThis 上的绑定索引（见 lib/task-binding.ts）；
+// 单测直接注入一个同形索引，不碰文件系统。
+let savedIndex;
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), "dshana-adapter-"));
-  savedEnv = process.env[ENV_KEY];
-  process.env[ENV_KEY] = dir;
+  savedIndex = globalThis[TASK_BINDING_GLOBAL_KEY];
 });
 afterEach(() => {
-  if (savedEnv === undefined) delete process.env[ENV_KEY];
-  else process.env[ENV_KEY] = savedEnv;
-  try { rmSync(dir, { recursive: true, force: true }); } catch { /* ignore */ }
+  if (savedIndex === undefined) delete globalThis[TASK_BINDING_GLOBAL_KEY];
+  else globalThis[TASK_BINDING_GLOBAL_KEY] = savedIndex;
 });
 
-function seedTaskMap(taskId) {
-  const d = join(dir, "dshana", "taskmaps");
-  mkdirSync(d, { recursive: true });
-  const body = { taskId, dshSessionId: SID, action: "create", rpcId: "r_1" };
-  writeFileSync(join(d, SID + ".json"), JSON.stringify(body), "utf8");
+/** 装一个假绑定索引：bySession 按 sessionId 回绑定（null = 无绑定）。 */
+function seedBinding(binding) {
+  globalThis[TASK_BINDING_GLOBAL_KEY] = {
+    bySession: async (sid) => (sid === SID ? binding : null),
+  };
 }
 
 function ndjsonResponse(events) {
@@ -101,7 +96,8 @@ const okEvents = [
   },
 ];
 
-test("App 身份（无任务映射）：两个身份参数都不传，且日志说明原因", async () => {
+test("App 身份（无任务绑定）：两个身份参数都不传，且日志说明原因", async () => {
+  seedBinding(null);
   const hana = makeHana(okEvents);
   const lines = [];
   const adapter = makeAdapter(hana, (m) => lines.push(m));
@@ -114,13 +110,13 @@ test("App 身份（无任务映射）：两个身份参数都不传，且日志�
   assert.equal(typeof req.requestId, "string");
   assert.equal(req.requestId.length > 0, true);
   assert.equal(lines.length, 1);
-  assert.match(lines[0], /无任务映射/);
+  assert.match(lines[0], /无任务绑定/);
   assert.equal(out.length > 0, true);
   assert.match(JSON.stringify(out), /你好/);
 });
 
-test("委派身份（有任务映射）：带 taskId、不带 callToken、不写身份日志", async () => {
-  seedTaskMap("task-1");
+test("委派身份（有任务绑定且活动）：带 taskId、不带 callToken、不写身份日志", async () => {
+  seedBinding({ taskId: "task-1", status: "running" });
   const hana = makeHana(okEvents);
   const lines = [];
   const adapter = makeAdapter(hana, (m) => lines.push(m));
@@ -132,7 +128,36 @@ test("委派身份（有任务映射）：带 taskId、不带 callToken、不写
   assert.deepEqual(lines, []);
 });
 
+test("任务已终结（有绑定但 status 终态）：同样按 App 身份，不遗留 taskId", async () => {
+  seedBinding({ taskId: "task-1", status: "completed" });
+  const hana = makeHana(okEvents);
+  await collect(makeAdapter(hana, () => {}), { provider: "hana", model: "m1", sessionId: SID, messages: userMessages });
+  assert.equal(hana.seen[0].taskId, undefined);
+});
+
+test("绑定索引缺席：显式失败（不降级成 App 身份）", async () => {
+  delete globalThis[TASK_BINDING_GLOBAL_KEY];
+  const hana = makeHana(okEvents);
+  await assert.rejects(
+    () => collect(makeAdapter(hana, () => {}), { provider: "hana", model: "m1", sessionId: SID, messages: userMessages }),
+    (e) => e && e.code === "BINDING_UNAVAILABLE",
+  );
+  assert.equal(hana.seen.length, 0, "身份判不出就不发模型请求");
+});
+
+test("绑定读取失败（宿主不可达）：显式失败并保留 TASK_MAP_BROKEN code", async () => {
+  globalThis[TASK_BINDING_GLOBAL_KEY] = {
+    bySession: async () => { throw Object.assign(new Error("host down"), { code: "TASK_MAP_BROKEN" }); },
+  };
+  const hana = makeHana(okEvents);
+  await assert.rejects(
+    () => collect(makeAdapter(hana, () => {}), { provider: "hana", model: "m1", sessionId: SID, messages: userMessages }),
+    (e) => e && e.code === "TASK_MAP_BROKEN",
+  );
+});
+
 test("HTTP 非 2xx：以 MODEL_HTTP_ERROR 上抛（带状态与响应体）", async () => {
+  seedBinding(null);
   const hana = {
     seen: [],
     models: {
@@ -149,6 +174,7 @@ test("HTTP 非 2xx：以 MODEL_HTTP_ERROR 上抛（带状态与响应体）", as
 });
 
 test("空消息：EMPTY_MESSAGES，且不发起模型请求", async () => {
+  seedBinding(null);
   const hana = makeHana(okEvents);
   const adapter = makeAdapter(hana, () => {});
   await assert.rejects(
@@ -159,6 +185,7 @@ test("空消息：EMPTY_MESSAGES，且不发起模型请求", async () => {
 });
 
 test("log 缺失也不崩（deps.log 缺省为空函数）", async () => {
+  seedBinding(null);
   const hana = makeHana(okEvents);
   const adapter = makeAdapter(hana, undefined);
   const out = await collect(adapter, { provider: "hana", model: "m1", sessionId: SID, messages: userMessages });
@@ -173,6 +200,7 @@ test("log 缺失也不崩（deps.log 缺省为空函数）", async () => {
 // 收敛到 65536 等于把输出悄悄砍到 64k。
 
 test("maxTokens：超过宿主请求闸 → 不传字段（而非压到 65536）", async () => {
+  seedBinding(null);
   const hana = makeHana(okEvents);
   const warns = [];
   const adapter = makeAdapter(hana, () => {}, (m) => warns.push(m));
@@ -183,6 +211,7 @@ test("maxTokens：超过宿主请求闸 → 不传字段（而非压到 65536）
 });
 
 test("maxTokens：未声明 published 上限时，超闸同样不传", async () => {
+  seedBinding(null);
   const hana = makeHana(okEvents);
   const req = await streamOnce(
     { provider: "hana", model: "m1", sessionId: SID, messages: userMessages, maxTokens: 100000 },
@@ -192,6 +221,7 @@ test("maxTokens：未声明 published 上限时，超闸同样不传", async () 
 });
 
 test("maxTokens：未超宿主闸 → 原样透传，不写提示", async () => {
+  seedBinding(null);
   const hana = makeHana(okEvents);
   const warns = [];
   const adapter = makeAdapter(hana, () => {}, (m) => warns.push(m));
@@ -201,6 +231,7 @@ test("maxTokens：未超宿主闸 → 原样透传，不写提示", async () => 
 });
 
 test("maxTokens：未超宿主闸但超过该模型 published 上限 → 按模型上限收敛", async () => {
+  seedBinding(null);
   const hana = makeHana(okEvents);
   const warns = [];
   const adapter = makeAdapter(hana, () => {}, (m) => warns.push(m));
@@ -210,6 +241,7 @@ test("maxTokens：未超宿主闸但超过该模型 published 上限 → 按模�
 });
 
 test("maxTokens：非正整数不发字段（交给宿主默认）", async () => {
+  seedBinding(null);
   const hana = makeHana(okEvents);
   const req = await streamOnce(
     { provider: "hana", model: "m1", sessionId: SID, messages: userMessages, maxTokens: 0 },
@@ -219,6 +251,7 @@ test("maxTokens：非正整数不发字段（交给宿主默认）", async () =>
 });
 
 test("temperature：越界收敛到 [0,2]", async () => {
+  seedBinding(null);
   const hana = makeHana(okEvents);
   const req = await streamOnce(
     { provider: "hana", model: "m1", sessionId: SID, messages: userMessages, temperature: 3 },
@@ -228,6 +261,7 @@ test("temperature：越界收敛到 [0,2]", async () => {
 });
 
 test("目录投影（resolveModel）：声明模型真实上限，不夹宿主请求闸", async () => {
+  seedBinding(null);
   const adapter = makeAdapter(makeHana(okEvents), () => {}, () => {});
   const big = await adapter.resolveModel("hana", "big");
   const m1 = await adapter.resolveModel("hana", "m1");
