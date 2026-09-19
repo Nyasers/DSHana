@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0-rc.7+dsh-0.1.5-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.6%2Bdsh-0.1.5-rc.2...v1.0.0-rc.7%2Bdsh-0.1.5-rc.2) (2026-09-19)
+
+### Bug Fixes
+
+* **ui:** 流 mux 失败按官方跨 bundle 契约定标（断链可重连，域码不丢） ([0adb940](https://github.com/Nyasers/DSHana/commit/0adb940f0227287277b1669b40bd9b7cc500c0b8))
+* **ui:** 评审两条 —— 换代前收场旧载体、正常收尾不清缓冲 ([e60a423](https://github.com/Nyasers/DSHana/commit/e60a423a071737730c9c74a77fca817fa8b3cd72))
+
 ## [1.0.0-rc.6+dsh-0.1.5-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.5%2Bdsh-0.1.5-rc.2...v1.0.0-rc.6%2Bdsh-0.1.5-rc.2) (2026-09-19)
 
 ### Bug Fixes
@@ -436,6 +443,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
