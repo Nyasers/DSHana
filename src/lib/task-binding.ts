@@ -175,13 +175,19 @@ function orderOf(record: any): number {
 export function createTaskBindingIndex(tasks: any, { ttlMs = TASK_BINDING_TTL_MS }: { ttlMs?: number } = {}): TaskBindingIndex {
   const ttl = Number(ttlMs) > 0 ? Number(ttlMs) : TASK_BINDING_TTL_MS; // 0/非法 = 用缺省 TTL
   let cached: TaskIndexSnapshot | null = null;
-  let inflight: Promise<TaskIndexSnapshot> | null = null;
+  // 缓存代次：invalidate() 递增。一次 build 只在“它的读回期间没被失效过”（gen 仍是最新）时才有
+  // 资格写 cached，且只接受比已发布更新的一次（两个 build 乱序完成时，旧的一个不得盖掉新的）。
+  let generation = 0;
+  let buildSerial = 0;
+  let publishedSerial = 0;
+  let inflight: { generation: number; promise: Promise<TaskIndexSnapshot> } | null = null;
 
   function invalidate() {
     cached = null;
+    generation += 1;
   }
 
-  async function build(): Promise<TaskIndexSnapshot> {
+  async function build(gen: number, serial: number): Promise<TaskIndexSnapshot> {
     if (typeof tasks?.list !== "function") {
       throw taskBindingBroken("宿主任务面不可用（tasks.list 缺失）");
     }
@@ -203,18 +209,28 @@ export function createTaskBindingIndex(tasks: any, { ttlMs = TASK_BINDING_TTL_MS
       if (!prev || orderOf(rec) >= orderOf(prev)) bySession.set(raw as string, rec);
     }
     const snap: TaskIndexSnapshot = { at: Date.now(), bySession };
-    cached = snap;
+    if (gen === generation && serial > publishedSerial) {
+      publishedSerial = serial;
+      cached = snap;
+    }
     return snap;
+  }
+
+  function startBuild(): Promise<TaskIndexSnapshot> {
+    const gen = generation;
+    const serial = ++buildSerial;
+    const promise = build(gen, serial).finally(() => {
+      if (inflight && inflight.promise === promise) inflight = null;
+    });
+    inflight = { generation: gen, promise };
+    return promise;
   }
 
   function ensure(fresh: boolean): Promise<TaskIndexSnapshot> {
     if (!fresh && cached && Date.now() - cached.at < ttl) return Promise.resolve(cached);
-    if (!inflight) {
-      inflight = build().finally(() => {
-        inflight = null;
-      });
-    }
-    return inflight;
+    // fresh 读必须发起于调用者的写点之后：不复用代次不符的在途 build（那可能是写前开始的读）。
+    if (!fresh && inflight && inflight.generation === generation) return inflight.promise;
+    return startBuild();
   }
 
   return {

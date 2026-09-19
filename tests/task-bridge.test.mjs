@@ -127,3 +127,29 @@ test("终态判定：无取消标记的正常失败 → fail，不误判成取�
   assert.equal(calls.canceled.length, 0);
   assert.equal(calls.failed.length, 1);
 });
+
+test("终态判定：取消标记读不出 → 按已请求取消结算（fail-closed，不得记成成功）", async () => {
+  const tasks = { list: async () => [], get: async () => { throw new Error("host down"); } };
+  const calls = { canceled: [], completed: [], failed: [] };
+  const hana = {
+    tasks: {
+      cancel: async (taskId, msg) => calls.canceled.push({ taskId, msg }),
+      complete: async (taskId, res) => calls.completed.push({ taskId, res }),
+      fail: async (taskId, msg) => calls.failed.push({ taskId, msg }),
+    },
+  };
+  const bridge = new SessionBridge({
+    hana,
+    bindings: createTaskBindingIndex(tasks),
+    log: () => {},
+    serviceBaseUrl: "http://127.0.0.1:9",
+    bridgeKey: "",
+    cancelModelRequests: async () => {},
+  });
+  bridge.taskId = "app:dshana:t1";
+  bridge.sessionId = SID;
+  bridge.binding = { taskId: "app:dshana:t1", dshSessionId: SID, action: "create", rpcId: "r_1", cancel: null };
+  await bridge.settle({ ok: true, message: "done" });
+  assert.equal(calls.canceled.length, 1, "取消状态未知 ⇒ fail-closed 结算成 canceled");
+  assert.equal(calls.completed.length, 0, "不得把不确定当成功");
+});

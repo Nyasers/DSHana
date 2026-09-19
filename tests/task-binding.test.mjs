@@ -141,6 +141,45 @@ test("bySession：短 TTL 内共用一次宿主往返；fresh 强制重建", asy
   assert.equal(tasks.calls.list, 3, "失效后重建");
 });
 
+test("缓存竞态：失效期间回填的旧 build 不得覆盖缓存（invalidate 之后必须重建）", async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  let listCalls = 0;
+  const tasks = {
+    list: async () => {
+      listCalls += 1;
+      await gate; // 把读挂在闸上：模拟“读到一半”
+      return [rec()];
+    },
+  };
+  const index = createTaskBindingIndex(tasks, { ttlMs: 60_000 });
+  const inFlight = index.bySession(SID); // 起一次读（在途）
+  index.invalidate();                    // 读回期间写点到达（失效）
+  release();
+  await inFlight;
+  listCalls = 0;
+  await index.bySession(SID);
+  assert.equal(listCalls, 1, "旧 build 回填的快照不得被当成有效缓存");
+});
+
+test("缓存竞态：fresh 读发起新 build，不复用代次不符的在途读", async () => {
+  const releases = [];
+  let listCalls = 0;
+  const tasks = {
+    list: () => {
+      listCalls += 1;
+      return new Promise((r) => releases.push(() => r([rec()])));
+    },
+  };
+  const index = createTaskBindingIndex(tasks, { ttlMs: 60_000 });
+  const first = index.bySession(SID);                   // build#1 在途
+  index.invalidate();                                   // 写点
+  const second = index.bySession(SID, { fresh: true }); // 必须另起 build
+  assert.equal(listCalls, 2, "fresh 不得复用写前开始的在途读");
+  for (const r of releases) r();
+  await Promise.all([first, second]);
+});
+
 test("bySession：同会话多条取 createdAt 最新的一条", async () => {
   const old = rec({ taskId: "old", createdAt: 10 });
   const fresh = rec({ taskId: "fresh", createdAt: 20 });

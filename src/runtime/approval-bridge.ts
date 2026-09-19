@@ -346,7 +346,12 @@ export function startApprovalBridge({ ctx, hana, bindings, log }: { ctx: any; ha
     const args = previewArgs((cached && cached.args) || null);
     const reason = (req && req.reason) || null;
     const rpcId = binding.rpcId || "";
-    const timeoutMs = Number(binding.approvalTimeoutMs) >= 0 ? Number(binding.approvalTimeoutMs) : DEFAULT_APPROVAL_TIMEOUT_MS;
+    // 缺省（null / 非有限数）落回 DEFAULT；显式 0 是“宿主不自动拒绝”的既定语义，原样保留。
+    const configuredTimeoutMs = binding.approvalTimeoutMs;
+    const timeoutMs =
+      typeof configuredTimeoutMs === "number" && Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs >= 0
+        ? configuredTimeoutMs
+        : DEFAULT_APPROVAL_TIMEOUT_MS;
     note("审批请求收到（session=" + sessionId.slice(0, 12) + " tool=" + toolName + (callId ? " call=" + callId.slice(0, 12) : "") + "）");
 
     const entry: PendingApproval = { sessionId, approvalId: "" }; // pendings 条目（审批创建后填 approvalId）

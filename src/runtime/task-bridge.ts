@@ -106,6 +106,10 @@ export function classifyDshEvent(event: string, args: unknown[]): DshEventFrame 
   return null;
 }
 
+/** 取消标记读取失败后的重试间隔与次数（宿主一跳的瞬时抖动）。 */
+const CANCEL_MARK_RETRY_MS = 200;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 /**
  * 每个会话的桥状态：同一会话在 v2 被 App 串行化（同刻唯一任务），故状态机按
  * sessionId 一个条目即可，不用 turn 级坐标（v1 的复杂终点源于跨任务共享会话）。
@@ -305,6 +309,28 @@ class SessionBridge {
    *   ok=false（aborted 未请求取消）→ fail（aborted 文案）；
    *   ok=false（error）→ fail(message)。
    */
+  /**
+   * 读宿主任务记录里的取消标记。读失败重试（宿主一跳的瞬时抖动）；仍读不出返回 true
+   *（fail-closed：把“不确定”当“已请求取消”，绝不把它当成功）。
+   */
+  async cancelMarkedRetry(): Promise<boolean> {
+    const taskId = this.taskId;
+    if (!taskId) return false;
+    let lastErr: unknown = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const fresh = await this.bindings.byTask(taskId);
+        if (fresh) this.binding = fresh;
+        return !!(fresh && fresh.cancel);
+      } catch (e) {
+        lastErr = e;
+        if (attempt < 2) await sleep(CANCEL_MARK_RETRY_MS);
+      }
+    }
+    this.note("终态判定读取任务记录失败（按已请求取消结算，fail-closed）：" + ((lastErr as any)?.message || lastErr));
+    return true;
+  }
+
   async settle(decision) {
     if (this.settled || !this.taskId) return;
     this.settled = true;
@@ -313,17 +339,9 @@ class SessionBridge {
     // 本进程亲手请求过取消（hostCancelDone）也算：那是我们发出的动作，不依赖记录回读是否及时。
     let cancel = this.hostCancelDone || (decision && decision.cancelOverride === true);
     // 取消标记的权威格是宿主任务记录：终态判定前 fresh 读一次（App 侧先写标记再发 RPC）。
-    if (!cancel) {
-      try {
-        const fresh = await this.bindings.byTask(this.taskId);
-        if (fresh) {
-          this.binding = fresh;
-          cancel = !!fresh.cancel;
-        }
-      } catch (e) {
-        this.note("终态判定读取任务记录失败（按无取消标记处理）：" + ((e as any)?.message || e));
-      }
-    }
+    // 读不出（宿主一跳抖动/畸形）时重试，仍读不出则按“已请求取消”结算——取消状态未知时
+    // 宁可结算成 canceled，也不把不确定当成成功（否则用户请求的取消会被记成 completed）。
+    if (!cancel) cancel = await this.cancelMarkedRetry();
     try {
       if (this.hana && this.hana.tasks) {
         if (cancel && typeof this.hana.tasks.cancel === "function") {

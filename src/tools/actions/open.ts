@@ -5,7 +5,7 @@
 //
 // 语义对齐 subagent 的「创建即带任务」：新建 DSH 会话 + 立即提交首条 prompt（task/cwd 必填），
 // 固定异步，结果作为后台结果回投来源会话。提交链见 lib/session-run.ts
-// （ctx.tasks.create → 受管 runtime 就绪 → session.create/selectModel/prompt → 绑定回写宿主任务记录）。
+// （ctx.tasks.create → 受管 runtime 就绪 → session.create/selectModel → 绑定回写宿主任务记录 → prompt）。
 //
 // 模块契约（六个 action 模块共用，见 tools/index.ts）：导出 command / summary / fields /
 // required / readOnly / run；run(input, ctx, deps) 中 deps 仅单测注入提交链。
