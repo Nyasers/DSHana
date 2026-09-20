@@ -20,7 +20,8 @@ import {
   loadIntegrations,
   stageIntegrations,
 } from "../scripts/integrations/mirror.mts";
-import { extractRequires } from "../scripts/integrations/build.mts";
+import { extractRequires, duplicateCssClasses } from "../scripts/integrations/build.mts";
+import { cssScopeOf, scopedClassName } from "../src-cordis/build/client-config.mts";
 
 const upstreamFile = "packages/client/ui-layout/src/client/index.ts";
 
@@ -188,4 +189,75 @@ test("stage：overlay 文件缺失时明确报错", () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("cssScopeOf：包身份进命名空间，且现有集成两两不同", () => {
+  assert.equal(cssScopeOf("@deepseek-ai/dsh-client-ui-chat"), "chat");
+  assert.equal(cssScopeOf("@deepseek-ai/dsh-client-ui-settings-general"), "settings_general");
+  assert.equal(cssScopeOf("@deepseek-ai/dsh-client-hmr"), "hmr");
+  assert.equal(cssScopeOf("@dshana/view"), "view");
+  assert.equal(cssScopeOf("@dshana/"), "pkg");
+  // 命名空间本身撞车就等于类名前缀失效（同名前缀下 local 重名会重新变成同一个 class）
+  const scopes = loadIntegrations().map((it) => cssScopeOf(it.package));
+  assert.equal(new Set(scopes).size, scopes.length, `命名空间重复：${scopes.join(", ")}`);
+});
+
+test("scopedClassName：同包内两个模块的同一个 local 名不撞，且与构建机路径无关", () => {
+  const id = "@deepseek-ai/dsh-client-ui-chat";
+  const a = scopedClassName(id, "/m1/repo/_tmp/integrations-src/ui-chat/src/client/chat/ChatView.module.css", "root");
+  const b = scopedClassName(id, "/m1/repo/_tmp/integrations-src/ui-chat/src/client/chat/StatsPills.module.css", "root");
+  assert.notEqual(a, b);
+  // 同一个模块在另一台机器（前缀不同）上仍得到同一个名字
+  const aElsewhere = scopedClassName(id, "D:/build/_tmp/integrations-src/ui-chat/src/client/chat/ChatView.module.css", "root");
+  assert.equal(a, aElsewhere);
+  assert.match(a, /^dv_chat_[0-9a-f]{6}_root$/);
+  // 跨包同一模块相对路径也不撞
+  assert.notEqual(a, scopedClassName("@deepseek-ai/dsh-client-ui-layout", "/m1/repo/_tmp/integrations-src/ui-layout/src/client/chat/ChatView.module.css", "root"));
+});
+
+test("scopedClassName：无 /src/ 时按 pkgDir 取相对路径，不同子树的同名模块不共享身份", () => {
+  const id = "@dshana/view";
+  const pkgDir = "E:/repo/src-cordis/packages/view";
+  const a = scopedClassName(id, "E:/repo/src-cordis/packages/view/views/a/shared.module.css", "root", pkgDir);
+  const b = scopedClassName(id, "E:/repo/src-cordis/packages/view/widgets/a/shared.module.css", "root", pkgDir);
+  assert.notEqual(a, b);
+  // 同一 pkgDir 相对路径在不同机器上（盘符与 pkgDir 前缀都变）仍是同一个名字
+  assert.equal(
+    a,
+    scopedClassName(id, "D:/elsewhere/src-cordis/packages/view/views/a/shared.module.css", "root", "D:/elsewhere/src-cordis/packages/view"),
+  );
+});
+
+test("duplicateCssClasses：跨包重名报错、唯一时静默", () => {
+  const one = (short, file, ...names) => ({ short, cssClasses: names.map((className) => ({ className, file })) });
+  assert.deepEqual(
+    duplicateCssClasses([
+      one("ui-chat", "ChatView.module.css", "dv_chat_frame"),
+      one("ui-layout", "AppFrame.module.css", "dv_layout_frame"),
+    ]),
+    [],
+  );
+  const clash = duplicateCssClasses([
+    one("ui-chat", "ChatView.module.css", "dv_frame"),
+    one("ui-layout", "AppFrame.module.css", "dv_frame"),
+  ]);
+  assert.equal(clash.length, 1);
+  assert.match(clash[0], /dv_frame/);
+  assert.match(clash[0], /ui-chat/);
+  assert.match(clash[0], /ui-layout/);
+});
+
+test("duplicateCssClasses：同包内两个模块重名同样报错", () => {
+  const clash = duplicateCssClasses([
+    {
+      short: "ui-chat",
+      cssClasses: [
+        { className: "dv_chat_root", file: "ChatView.module.css" },
+        { className: "dv_chat_root", file: "TurnNavigator.module.css" },
+      ],
+    },
+  ]);
+  assert.equal(clash.length, 1);
+  assert.match(clash[0], /ChatView\.module\.css/);
+  assert.match(clash[0], /TurnNavigator\.module\.css/);
 });

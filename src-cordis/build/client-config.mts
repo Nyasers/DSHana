@@ -20,8 +20,8 @@
 // 资源内联："./x.css?inline" / "./x.svg?inline" 文本内联虚拟模块（通用文本 loader，
 //   规避 tsdown css-guard：虚拟 id 不以 .css 结尾——官方同款加 .mjs 后缀）；
 //   "./x.module.css"（官方 TSX 组件 CSS Modules 语义，@dshana/view vendor 官方
-//   ui-layout AppFrame 等源码需要）→ css-modules 虚拟模块（默认导出 local→带前缀 class
-//   映射 + 模块执行时注入 <style data-plugin-css>，纯运行时无 React 路径）。
+//   ui-layout AppFrame 等源码需要）→ css-modules 虚拟模块（默认导出 local→带包命名空间
+//   前缀的 class 映射 + 模块执行时注入 <style data-plugin-css>，纯运行时无 React 路径）。
 // 环境常量：浏览器产物无 process 全局——define 把 process.env 整体替换为空对象、
 // NODE_ENV=production（store 引擎 devFreeze 等按 production 走），官方
 // tsdown.client.ts 同款 define 姿势；产物无源码内嵌内容字符串（全部走正常构建）。
@@ -31,6 +31,7 @@
 import { build } from "tsdown";
 import { dirname, join, resolve } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 
 /** client 半入口解析：调用方给了具体文件就用它；否则 client.ts 优先，退到 client.js。
  * 产物名始终是 client.js（__ModuleLoader__ 按包名注册的那个文件）。 */
@@ -62,11 +63,49 @@ const textInlinePlugin = {
   },
 };
 
+/** 包 id → 类名命名空间：去 scope 与 dsh-client-* 公共前缀，非字母数字归一成下划线。
+ * 负责类名里可读的那一段（dv_<包名>_…，排查时一眼看出归属）；唯一性由模块短哈希与
+ * 构建期的类名唯一性闸（scripts/integrations/build.mts 的 duplicateCssClasses）共同保证。 */
+export function cssScopeOf(id) {
+  const scope = String(id)
+    .replace(/^@[^/]+\//, "")
+    .replace(/^(dsh-client-ui-|dsh-client-|dsh-)/, "")
+    .replace(/[^A-Za-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return scope || "pkg";
+}
+
+/** 包 id + 包内相对路径 → 模块身份短哈希。相对路径分三档取，越靠前越稳定：
+ *   ① /src/ 之后那一段（集成 stage 树里该段之前是构建机相关的临时目录）；
+ *   ② 相对 pkgDir 的路径（自有 cordis 包的源码树）；
+ *   ③ 归一化后的完整路径（兜底：牺牲跨机器稳定，换取不同子树下的同名模块不共享身份）。
+ * 三档都不做“只取末几段”的截断：views/a/x.module.css 与 widgets/a/x.module.css 同 local 时，
+ * 截断会让两者得到同一个 class 名，闸会把它当重名报错。 */
+function moduleHash(id, file, pkgDir) {
+  const rel = String(file).replace(/\\/g, "/");
+  const marker = rel.lastIndexOf("/src/");
+  const root = pkgDir ? String(pkgDir).replace(/\\/g, "/").replace(/\/+$/, "") + "/" : "";
+  const key = marker >= 0 ? rel.slice(marker + 5) : root && rel.startsWith(root) ? rel.slice(root.length) : rel;
+  return createHash("sha256").update(id + "|" + key).digest("hex").slice(0, 6);
+}
+
+/** 一个 local 名的最终 class 名：dv_ + 包命名空间 + 模块短哈希 + local。
+ * 三段都要：local 名在同一包的多个模块之间本来就不唯一（官方 chat 包里有十个模块各自写
+ * root），只带包身份仍会撞；带模块身份才和官方 [hash]_[local] 的语义对齐。
+ * pkgDir 供 moduleHash 取包内相对路径（可省略，省略时退到 /src/ 或完整路径）。 */
+export function scopedClassName(id, file, local, pkgDir) {
+  return "dv_" + cssScopeOf(id) + "_" + moduleHash(id, file, pkgDir) + "_" + local;
+}
+
 // css-modules 虚拟模块源码：class 名映射（默认导出）+ 样式文本注入 style 标签（幂等）。
-// class 名加 "dv_" 前缀（dshana view；官方产物为 lightningcss [hash]_[local] 哈希名，
-// 本链无哈希——前缀同样规避与全局/dsw 类名撞名）。注入点 = 模块 materialization
-// （factory 执行）——官方 css-modules 同款时机（claimStyles 记账 style[data-plugin]）。
-function cssModuleSource(id, fileId, css) {
+// 类名与官方产物等价：官方是 lightningcss 的 [hash]_[local]，本链没有哈希，就用包身份 +
+// 模块身份自己造一段唯一的键（见 scopedClassName）。关键是唯一性：多个被重建的包共用一条
+// 编译链，一个平坦前缀会让两个包的 local 落到同一个 class 上（ui-chat 的 frame/column 与
+// ui-layout 的 frame/centerCol 曾经就是同一个名字），样式互相顶掉。残余情况由构建期的
+// 类名唯一性闸兜底。
+// 注入点 = 模块 materialization（factory 执行）——官方 css-modules 同款时机
+// （claimStyles 记账 style[data-plugin]）。
+function cssModuleSource(id, fileId, css, emitted = [], pkgDir) {
   const locals = new Set<string>();
   const prefixed: Record<string, string> = {};
   const tokenRe = /\.([A-Za-z_][A-Za-z0-9_-]*)/g;
@@ -74,9 +113,11 @@ function cssModuleSource(id, fileId, css) {
   while ((m = tokenRe.exec(css)) !== null) locals.add(m[1]);
   const classMap: Record<string, string> = {};
   for (const local of locals) {
-    const pname = "dv_" + local;
+    const pname = scopedClassName(id, fileId, local, pkgDir);
     classMap[local] = pname;
     prefixed[local] = pname;
+    // 记账（class 名 → 生成它的源文件）：闸据此判重名，不去扫产物文本，免掉压缩后的假阳性。
+    emitted.push({ className: pname, local, scope: cssScopeOf(id), file: fileId });
   }
   // 仅改写已知 local class 选择器（保留 data 属性/伪类等非 class 语法；本包 css 无
   // url()/带点字符串内容，tokenRe 替换安全）
@@ -106,7 +147,7 @@ function styleTagId(id, file) {
 // css-modules 虚拟 loader："./x.module.css" → 样式注入 + class 映射（见 cssModuleSource）。
 // 插件按包实例化（closure 带包 id）——style 注入的 data-plugin/data-plugin-css 标记需要
 // 归属当前 client bundle 的包名（claimStyles/HMR 记账按 data-plugin 认领）。
-function createCssModulePlugin(id) {
+function createCssModulePlugin(id, emitted = [], pkgDir) {
   return {
     name: "hanako-css-modules",
     resolveId(source, importer) {
@@ -119,7 +160,7 @@ function createCssModulePlugin(id) {
       if (!virtualId.startsWith(CSS_PREFIX)) return null;
       const file = virtualId.slice(CSS_PREFIX.length, -VIRTUAL_SUFFIX.length);
       const css = readFileSync(file, "utf8");
-      return cssModuleSource(id, file, css);
+      return cssModuleSource(id, file, css, emitted, pkgDir);
     },
   };
 }
@@ -140,6 +181,8 @@ export async function buildClientBundle({ id, pkgDir, outDir, externals = ["reac
     "process.env": "{}",
     "process.env.NODE_ENV": JSON.stringify("production"),
   };
+  // 本次构建生成的全部 class 名（→ 源文件）：构建期的类名唯一性闸读它。
+  const cssClasses: Array<{ className: string; local: string; scope: string; file: string }> = [];
   await build({
     name: id + "/client",
     entry: { client: clientEntry(pkgDir, entry) },
@@ -159,7 +202,7 @@ export async function buildClientBundle({ id, pkgDir, outDir, externals = ["reac
     deps: {
       neverBundle: (spec) => externals.includes(spec), // requested 保持外部，其余内联
     },
-    plugins: [textInlinePlugin, createCssModulePlugin(id)],
+    plugins: [textInlinePlugin, createCssModulePlugin(id, cssClasses, pkgDir)],
     outputOptions: {
       entryFileNames: "client.js",
       banner: "window.__ModuleLoader__.load({ id: " + JSON.stringify(id) + ", factory: (require) => {",
@@ -167,5 +210,5 @@ export async function buildClientBundle({ id, pkgDir, outDir, externals = ["reac
       intro: "var module = { exports: {} }; var exports = module.exports;",
     },
   });
-  return { id, out: join(outDir, "client.js") };
+  return { id, out: join(outDir, "client.js"), cssClasses };
 }
