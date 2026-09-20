@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0-rc.12+dsh-0.1.5-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.11%2Bdsh-0.1.5-rc.2...v1.0.0-rc.12%2Bdsh-0.1.5-rc.2) (2026-09-20)
+
+### Bug Fixes
+
+* **integrations:** 被重建的包按模块给 CSS 类名，恢复唯一性 ([cdef955](https://github.com/Nyasers/DSHana/commit/cdef955a861b3523e3246070894e24a98128bc4c))
+* **integrations:** 模块身份按 pkgDir 取相对路径，去掉末两段截断 ([511f4ef](https://github.com/Nyasers/DSHana/commit/511f4efbd2fcd6d2cf5291eb841f0e691ebf038e))
+
 ## [1.0.0-rc.11+dsh-0.1.5-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.10%2Bdsh-0.1.5-rc.2...v1.0.0-rc.11%2Bdsh-0.1.5-rc.2) (2026-09-19)
 
 ### Features
@@ -467,6 +474,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
