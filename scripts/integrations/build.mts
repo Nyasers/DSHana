@@ -6,6 +6,9 @@
 // 每个集成的产物落在 _tmp/integrations-built/<短名>/：以**原版包为模板**（lib/index.js、
 // lib/types、package.json 原样），只把 lib/client.js 换成我们编译的那份，版本戳为
 // <上游版本>+dshana-<我们的干净版本>。
+//
+// 两道闸都在编译末尾：悬空外部引用（loader 模块表答不上）与类名唯一性（多个源文件生成
+// 同一个 class，样式互相顶掉）。两者都是运行时才炸、且现场难归因的问题，只能在构建期拦。
 import { createRequire } from "node:module";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -61,6 +64,34 @@ export function extractRequires(bundleText) {
   const literal = /require\(\s*["']([^"']+)["']\s*\)/g;
   for (const m of text.matchAll(literal)) push(m[1]);
   return out;
+}
+
+/**
+ * 类名唯一性闸：同一次集成构建里，一个 class 名只能由一个源文件生成。
+ *
+ * 为什么值得一道闸：被重建的包走同一条编译链，类名是「我们的前缀 + local」，没有上游的
+ * 哈希；两个包各自把 frame/root 取成同一个全局名时，样式会互相顶掉（整页布局被另一个包
+ * 的规则接管）。命名空间已按包身份分段，这里守的是残余情况：同包内两个模块重名，或将来
+ * 两个包落进同一命名空间。数据源是编译时记的账（class 名 → 源文件），不扫产物文本，
+ * 免掉压缩后的假阳性。
+ * @param {Array<{short:string,cssClasses?:Array<{className:string,file:string}>}>} built 各集成的编译结果
+ * @returns {string[]} 问题描述（空 = 通过）
+ */
+export function duplicateCssClasses(built) {
+  const byClass = new Map();
+  for (const b of Array.isArray(built) ? built : []) {
+    for (const c of (b && b.cssClasses) || []) {
+      if (!c || !c.className) continue;
+      if (!byClass.has(c.className)) byClass.set(c.className, []);
+      byClass.get(c.className).push(`${b.short}:${c.file}`);
+    }
+  }
+  const problems = [];
+  for (const [className, sources] of byClass) {
+    const distinct = [...new Set(sources)];
+    if (distinct.length > 1) problems.push(`类名 ${className} 由多个源文件生成：${distinct.join(" / ")}`);
+  }
+  return problems.sort();
 }
 
 /** 包名 → 本机依赖树里的原版包目录（模板与 externals 来源）。 */
@@ -184,7 +215,7 @@ export async function buildIntegrations(integrations, { tag, mirrorDir = MIRROR,
     if (Object.keys(alias).length) {
       console.log(`[integrations] ${short}: 内联别名 ${Object.keys(alias).join(", ")}`);
     }
-    await buildClientBundle({ id: pkg, pkgDir: stage, outDir, externals, entry: entryRel, alias });
+    const bundle = await buildClientBundle({ id: pkg, pkgDir: stage, outDir, externals, entry: entryRel, alias });
 
     // 4b) 悬空外部引用闸：产物里出现 externals 之外的引用 = loader 模块表答不上 → 运行时必炸。
     // 典型成因：上游 bundle 内联的第三方库（如 clsx）在本仓库 node_modules 里缺失，
@@ -219,7 +250,18 @@ export async function buildIntegrations(integrations, { tag, mirrorDir = MIRROR,
 
     const size = readFileSync(join(out, "lib", "client.js")).length;
     log(`[integrations] ${short}: ${pkg}@${manifest.version} 编译完成（client.js ${size}B，externals ${externals.length} 个）`);
-    built.push({ short, pkg, version: manifest.version, out, externals, bytes: size });
+    built.push({ short, pkg, version: manifest.version, out, externals, bytes: size, cssClasses: bundle.cssClasses });
+  }
+
+  // 类名唯一性闸：产物都已落地，重名此刻就能判死。跨包撞名的代价是样式互相顶掉（表现是
+  // 整页布局被另一个包的规则接管），而产物里看不出类名归属，只能在构建期拦。
+  const clashes = duplicateCssClasses(built);
+  if (clashes.length) {
+    throw new Error(
+      "集成构建的类名唯一性闸未通过（同一个 class 名被多个源文件生成，样式会互相顶掉）：\n" +
+        clashes.map((c) => "  - " + c).join("\n") +
+        "\n先查 cssScopeOf 的命名空间分段是否让两个包落到了一起，再查同包内是否有两个模块用了同一个 local 名。",
+    );
   }
   return built;
 }
