@@ -75,21 +75,26 @@ export function cssScopeOf(id) {
   return scope || "pkg";
 }
 
-/** 包 id + 包内相对路径 → 模块身份短哈希。相对路径优先从 /src/ 之后取（集成 stage 树里那一段
- * 之前是构建机相关的临时目录），没有 /src/ 时退到末两段（自有 cordis 包的源码树）。两种取法都
- * 不含机器相关前缀，同一模块在任何构建机上都得到同一个名字。 */
-function moduleHash(id, file) {
+/** 包 id + 包内相对路径 → 模块身份短哈希。相对路径分三档取，越靠前越稳定：
+ *   ① /src/ 之后那一段（集成 stage 树里该段之前是构建机相关的临时目录）；
+ *   ② 相对 pkgDir 的路径（自有 cordis 包的源码树）；
+ *   ③ 归一化后的完整路径（兜底：牺牲跨机器稳定，换取不同子树下的同名模块不共享身份）。
+ * 三档都不做“只取末几段”的截断：views/a/x.module.css 与 widgets/a/x.module.css 同 local 时，
+ * 截断会让两者得到同一个 class 名，闸会把它当重名报错。 */
+function moduleHash(id, file, pkgDir) {
   const rel = String(file).replace(/\\/g, "/");
   const marker = rel.lastIndexOf("/src/");
-  const key = marker >= 0 ? rel.slice(marker + 5) : rel.split("/").slice(-2).join("/");
+  const root = pkgDir ? String(pkgDir).replace(/\\/g, "/").replace(/\/+$/, "") + "/" : "";
+  const key = marker >= 0 ? rel.slice(marker + 5) : root && rel.startsWith(root) ? rel.slice(root.length) : rel;
   return createHash("sha256").update(id + "|" + key).digest("hex").slice(0, 6);
 }
 
 /** 一个 local 名的最终 class 名：dv_ + 包命名空间 + 模块短哈希 + local。
  * 三段都要：local 名在同一包的多个模块之间本来就不唯一（官方 chat 包里有十个模块各自写
- * root），只带包身份仍会撞；带模块身份才和官方 [hash]_[local] 的语义对齐。 */
-export function scopedClassName(id, file, local) {
-  return "dv_" + cssScopeOf(id) + "_" + moduleHash(id, file) + "_" + local;
+ * root），只带包身份仍会撞；带模块身份才和官方 [hash]_[local] 的语义对齐。
+ * pkgDir 供 moduleHash 取包内相对路径（可省略，省略时退到 /src/ 或完整路径）。 */
+export function scopedClassName(id, file, local, pkgDir) {
+  return "dv_" + cssScopeOf(id) + "_" + moduleHash(id, file, pkgDir) + "_" + local;
 }
 
 // css-modules 虚拟模块源码：class 名映射（默认导出）+ 样式文本注入 style 标签（幂等）。
@@ -100,7 +105,7 @@ export function scopedClassName(id, file, local) {
 // 类名唯一性闸兜底。
 // 注入点 = 模块 materialization（factory 执行）——官方 css-modules 同款时机
 // （claimStyles 记账 style[data-plugin]）。
-function cssModuleSource(id, fileId, css, emitted = []) {
+function cssModuleSource(id, fileId, css, emitted = [], pkgDir) {
   const locals = new Set<string>();
   const prefixed: Record<string, string> = {};
   const tokenRe = /\.([A-Za-z_][A-Za-z0-9_-]*)/g;
@@ -108,7 +113,7 @@ function cssModuleSource(id, fileId, css, emitted = []) {
   while ((m = tokenRe.exec(css)) !== null) locals.add(m[1]);
   const classMap: Record<string, string> = {};
   for (const local of locals) {
-    const pname = scopedClassName(id, fileId, local);
+    const pname = scopedClassName(id, fileId, local, pkgDir);
     classMap[local] = pname;
     prefixed[local] = pname;
     // 记账（class 名 → 生成它的源文件）：闸据此判重名，不去扫产物文本，免掉压缩后的假阳性。
@@ -142,7 +147,7 @@ function styleTagId(id, file) {
 // css-modules 虚拟 loader："./x.module.css" → 样式注入 + class 映射（见 cssModuleSource）。
 // 插件按包实例化（closure 带包 id）——style 注入的 data-plugin/data-plugin-css 标记需要
 // 归属当前 client bundle 的包名（claimStyles/HMR 记账按 data-plugin 认领）。
-function createCssModulePlugin(id, emitted = []) {
+function createCssModulePlugin(id, emitted = [], pkgDir) {
   return {
     name: "hanako-css-modules",
     resolveId(source, importer) {
@@ -155,7 +160,7 @@ function createCssModulePlugin(id, emitted = []) {
       if (!virtualId.startsWith(CSS_PREFIX)) return null;
       const file = virtualId.slice(CSS_PREFIX.length, -VIRTUAL_SUFFIX.length);
       const css = readFileSync(file, "utf8");
-      return cssModuleSource(id, file, css, emitted);
+      return cssModuleSource(id, file, css, emitted, pkgDir);
     },
   };
 }
@@ -197,7 +202,7 @@ export async function buildClientBundle({ id, pkgDir, outDir, externals = ["reac
     deps: {
       neverBundle: (spec) => externals.includes(spec), // requested 保持外部，其余内联
     },
-    plugins: [textInlinePlugin, createCssModulePlugin(id, cssClasses)],
+    plugins: [textInlinePlugin, createCssModulePlugin(id, cssClasses, pkgDir)],
     outputOptions: {
       entryFileNames: "client.js",
       banner: "window.__ModuleLoader__.load({ id: " + JSON.stringify(id) + ", factory: (require) => {",

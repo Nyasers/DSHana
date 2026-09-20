@@ -215,6 +215,19 @@ test("scopedClassName：同包内两个模块的同一个 local 名不撞，且�
   assert.notEqual(a, scopedClassName("@deepseek-ai/dsh-client-ui-layout", "/m1/repo/_tmp/integrations-src/ui-layout/src/client/chat/ChatView.module.css", "root"));
 });
 
+test("scopedClassName：无 /src/ 时按 pkgDir 取相对路径，不同子树的同名模块不共享身份", () => {
+  const id = "@dshana/view";
+  const pkgDir = "E:/repo/src-cordis/packages/view";
+  const a = scopedClassName(id, "E:/repo/src-cordis/packages/view/views/a/shared.module.css", "root", pkgDir);
+  const b = scopedClassName(id, "E:/repo/src-cordis/packages/view/widgets/a/shared.module.css", "root", pkgDir);
+  assert.notEqual(a, b);
+  // 同一 pkgDir 相对路径在不同机器上（盘符与 pkgDir 前缀都变）仍是同一个名字
+  assert.equal(
+    a,
+    scopedClassName(id, "D:/elsewhere/src-cordis/packages/view/views/a/shared.module.css", "root", "D:/elsewhere/src-cordis/packages/view"),
+  );
+});
+
 test("duplicateCssClasses：跨包重名报错、唯一时静默", () => {
   const one = (short, file, ...names) => ({ short, cssClasses: names.map((className) => ({ className, file })) });
   assert.deepEqual(
