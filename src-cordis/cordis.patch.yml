@@ -15,7 +15,25 @@
 # 机制：一切经本 bundle 的 dsh.bundle.patch 声明（见 src-cordis/package.json），不使用 profile
 # 用户层 cordis.patch.yml，也不使用命令行 --patch 叠加。
 
-# ── 1) 对官方行的覆盖 ───────────────────────────────────────────────────────
+# ── 1) 对官方行的覆盖 / disable ───────────────────────────────────────────────
+
+# 官方自带的两个 LLM adapter 行停掉。本形态的推理一律走宿主：@dshana/provider 在受管 runtime 内
+# 经 hana.models 发起，路由集合 = 宿主目录（models.list）。这两行各要自己的凭据
+# （llm-deepseek 的 `llm-deepseek:` 段 + 凭据库，llm-pi-ai 的 `llm-pi-ai:` 段里的 provider
+# profiles），而凭据在宿主手里，它们永远拿不到 key。官方那条 deepseek-official 路由却照样出现在
+# 模型选择器里（base 层的缺省模型也正指向它），于是选中它、或干脆用缺省，就在提交时报 no API key。
+# 停掉之后 llm 注册表里只剩宿主目录那几条路由，模型面单一事实源。
+- id: llm-deepseek
+  disabled: true
+
+- id: llm-pi-ai
+  disabled: true
+
+# 缺省模型不在这里写死：base 层给的是官方路由 deepseek-official/deepseek-flash，上面那行停掉
+# 之后这条路由没人服务（新建会话与没有历史选择的会话都用它）。写死一个宿主 provider/model 不行
+# ——宿主配了哪些提供商、它们叫什么名字，是每台 Hana 各自的配置。改由 App 按运行时事实对账：
+# src/lib/model-default-guard.ts 在 runtime 就绪那一次与宿主 models-changed 之后读宿主目录，
+# 现值不在目录里就换成目录里第一条可服务的（DSH 设置里另存的选择优先，只在不可服务时改写）。
 
 # web-runtime（官方 @deepseek-ai/dsh-web-app 行）：App 内嵌场景不开系统浏览器、不打印 URL
 # （由宿主卡片 / iframe 承载），surfaceContext 保留（模型可见 Web 面说明）。trustedHosts 沿用
