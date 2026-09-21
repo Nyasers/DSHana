@@ -70,6 +70,8 @@ function trimCatalog(catalog) {
 /**
  * 读当前默认模型 + 候选目录。候选取不到不算读失败：当前值照常返回，catalogError 带上原因
  * （设置页可以把这一节画成"候选暂不可用"，而不是整页报错）。
+ * `current` 是解析后的值（默认值 → 组合 base 层 → 用户层），`stored` 只取用户层——「这格被谁
+ * 设过」只能看 stored：用户层为空时 current 仍会回落到 base 层的默认。
  */
 export async function readDefaultModel(fetchFn) {
   const base = serviceBase();
@@ -86,6 +88,7 @@ export async function readDefaultModel(fetchFn) {
   }
   return {
     current: view.value && typeof view.value === "object" ? { ...view.value } : null,
+    stored: view.user && typeof view.user === "object" ? { ...view.user } : null,
     revision: typeof view.revision === "number" ? view.revision : null,
     applies: typeof view.applies === "string" ? view.applies : null,
     writable: described?.writable !== false,
@@ -137,3 +140,26 @@ export async function writeDefaultModel(fetchFn, patch) {
 }
 
 export { AGENT_DEFAULT_MODEL_NS, isSettingsConflict };
+
+/**
+ * 清掉 settings 里的用户默认模型（整段替换成空对象）：用户层清空后值回落到 base 层，
+ * 也就是「这一格没被谁设过」。
+ *
+ * 用处是「按调用方角色卡补完会话模型」之后收尾：DSH 的 session/selectModel 顺带 saveSelection
+ * （那是它给「页面上选模型」的语义），那份写入会把我们按角色卡补的值变成全局默认，下次换个
+ * agent 调用时就被当成用户设的。用户层本来就空时不动它。
+ * @param fetchFn - 宿主代发 fetch
+ * @returns true = 清了一次；false = 用户层本来就空（没动）
+ */
+export async function clearStoredDefaultModel(fetchFn) {
+  const base = serviceBase();
+  const doFetch = serviceFetch(fetchFn);
+  const described = await rpcSettingsDescribe(doFetch, base);
+  const view = settingsViewOf(described, AGENT_DEFAULT_MODEL_NS);
+  if (!view) return false;
+  const user = view.user;
+  if (!user || typeof user !== "object" || Object.keys(user).length === 0) return false;
+  const expectedRevision = typeof view.revision === "number" ? view.revision : undefined;
+  await rpcSettingsReplace(doFetch, base, { ns: AGENT_DEFAULT_MODEL_NS, section: {}, expectedRevision });
+  return true;
+}

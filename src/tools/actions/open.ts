@@ -47,7 +47,10 @@ export const fields = {
   agentPreset: { type: "string", description: "agent 预设（standard/ptc/cordis/minimal）" },
   reasoningEffort: { type: "string", description: "推理强度（off/high/max）" },
   provider: { type: "string", description: "显式 provider（显式即成为 dsh 新默认）" },
-  model: { type: "string", description: "显式 model id（与 provider 一起传时覆盖 dsh 默认）" },
+  model: {
+    type: "string",
+    description: "显式 model id（与 provider 一起传时覆盖缺省；不传则：已显式传 effort 时从 dsh 默认补齐，都没传时按调用方角色卡配的模型开）",
+  },
 };
 export const required = ["task", "cwd"];
 

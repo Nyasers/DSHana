@@ -32,14 +32,28 @@ export const PRIVATE_HOME_NAME = ".dsh";
 /** 内置独立目录固定 profile：runtime 只启动官方随附的这一个（首次加载时由 DSH 自建，我们不种子化）。
  * settings 里那个同名的 profile 键只为兼容旧存档保留，实际不再影响启动。 */
 export const PRIVATE_PROFILE = "web";
-export const SETTINGS_KEYS = Object.freeze(["mode", "path", "profile", "approvalTimeoutSec", "defaultTimeoutSec"]);
+export const SETTINGS_KEYS = Object.freeze([
+  "mode",
+  "path",
+  "profile",
+  "approvalTimeoutSec",
+  "defaultTimeoutSec",
+  "sessionModelMode",
+  "sessionModelProvider",
+  "sessionModelModel",
+]);
 export const DEFAULT_SETTINGS = Object.freeze({
   mode: "private",
   path: null,
   profile: PRIVATE_PROFILE,
   approvalTimeoutSec: APP_SETTING_DEFAULTS.approvalTimeoutSec,
   defaultTimeoutSec: APP_SETTING_DEFAULTS.defaultTimeoutSec,
+  sessionModelMode: APP_SETTING_DEFAULTS.sessionModelMode,
+  sessionModelProvider: APP_SETTING_DEFAULTS.sessionModelProvider,
+  sessionModelModel: APP_SETTING_DEFAULTS.sessionModelModel,
 });
+/** 会话模型模式：caller = 按调用方角色卡（缺省），custom = 用固定的一条。 */
+export const SESSION_MODEL_MODES = Object.freeze(["caller", "custom"]);
 
 /** DSH 自己的默认数据目录（shared 的「DSH 默认目录」候选）。 */
 export const defaultDshHome = () => join(homedir(), ".dsh");
@@ -81,8 +95,36 @@ function normalizeTimeouts(input): { approvalTimeoutSec: number; defaultTimeoutS
 }
 
 /**
+ * 会话模型设置（工具建的会话用哪个模型）：模式限定两种；custom 时 provider/model 都要有。
+ * caller 模式下那两个值原样保留（来回切不丢用户选过的那条）。
+ */
+function normalizeSessionModel(input) {
+  const mode = input.sessionModelMode === undefined || input.sessionModelMode === null
+    ? APP_SETTING_DEFAULTS.sessionModelMode
+    : input.sessionModelMode;
+  if (!SESSION_MODEL_MODES.includes(mode)) {
+    throw new Error("会话模型模式只能是 caller 或 custom（收到 " + JSON.stringify(mode) + "）");
+  }
+  const out: { sessionModelMode: string; sessionModelProvider: string; sessionModelModel: string } = {
+    sessionModelMode: mode,
+    sessionModelProvider: "",
+    sessionModelModel: "",
+  };
+  for (const key of ["sessionModelProvider", "sessionModelModel"] as const) {
+    const raw = input[key];
+    if (raw === undefined || raw === null || raw === "") continue;
+    if (typeof raw !== "string") throw new Error(key + " 必须是字符串（收到 " + JSON.stringify(raw) + "）");
+    out[key] = raw.trim();
+  }
+  if (mode === "custom" && (!out.sessionModelProvider || !out.sessionModelModel)) {
+    throw new Error("会话模型选「自定义模型」时需要 provider 与 model 都填");
+  }
+  return out;
+}
+
+/**
  * 设置校验（纯函数）：未知键拒绝、mode 限定、shared 必须是绝对路径、profile 简单名、
- * 两个超时必须是非负整数秒。
+ * 两个超时必须是非负整数秒、会话模型模式与自定义选择。
  * private 的 profile 被强制为 PRIVATE_PROFILE（内置目录只跑这一个 profile）。
  */
 export function validateSettings(input) {
@@ -103,9 +145,9 @@ export function validateSettings(input) {
       throw new Error("shared 模式必须给出 DSH 数据目录（非空字符串，不含 NUL）");
     }
     if (!isAbsolute(input.path)) throw new Error("shared 目录必须是绝对路径（收到 " + input.path + "）");
-    return { mode: "shared", path: normalize(input.path), profile, ...normalizeTimeouts(input) };
+    return { mode: "shared", path: normalize(input.path), profile, ...normalizeTimeouts(input), ...normalizeSessionModel(input) };
   }
-  return { mode: "private", path: null, profile, ...normalizeTimeouts(input) };
+  return { mode: "private", path: null, profile, ...normalizeTimeouts(input), ...normalizeSessionModel(input) };
 }
 
 /**

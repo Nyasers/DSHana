@@ -151,6 +151,22 @@ function stringifySettings(settings: any): Record<string, string> {
   return out;
 }
 
+/** 会话模型模式（App 级）：与后端 global.sessionModelMode 同词汇。 */
+const SESSION_MODES: SelectOption[] = [
+  { value: "caller", label: "复用调用方" },
+  { value: "custom", label: "自定义模型" },
+];
+
+/** 会话模型设置读回：模式 + 自定义那条（合成 provider\0model，与默认模型那一节同写法）。 */
+function sessionOf(settings: any): { mode: string; picked: string } {
+  const provider = typeof settings?.sessionModelProvider === "string" ? settings.sessionModelProvider : "";
+  const model = typeof settings?.sessionModelModel === "string" ? settings.sessionModelModel : "";
+  return {
+    mode: settings?.sessionModelMode === "custom" ? "custom" : "caller",
+    picked: provider && model ? provider + MODEL_KEY_SEP + model : "",
+  };
+}
+
 function App() {
   const [draft, setDraft] = useState<Record<string, string>>(() => stringifySettings(null));
   const [cfgHint, setCfgHint] = useState("");
@@ -159,6 +175,12 @@ function App() {
   const [cfgSaved, setCfgSaved] = useState(false);
   // 自持设置的 revision（乐观并发：写回带上，落后就 409）
   const [cfgRevision, setCfgRevision] = useState<number | null>(null);
+  const [sessionMode, setSessionMode] = useState<string>("caller");
+  const [customPicked, setCustomPicked] = useState("");
+  const [sessionSaving, setSessionSaving] = useState(false);
+  const [sessionSaved, setSessionSaved] = useState(false);
+  const [sessionHint, setSessionHint] = useState("");
+  const [sessionWarn, setSessionWarn] = useState(false);
   const [model, setModel] = useState<any>(null); // 最近一次读回的整份状态（ready/current/revision/catalog）
   const [modelHint, setModelHint] = useState("");
   const [modelWarn, setModelWarn] = useState(false);
@@ -181,6 +203,9 @@ function App() {
       const { res, data } = await readJson("dshana/settings");
       if (!res.ok) throw new Error("HTTP " + res.status);
       setDraft(stringifySettings(data && data.settings));
+      const sess = sessionOf(data && data.settings);
+      setSessionMode(sess.mode);
+      setCustomPicked(sess.picked);
       setCfgRevision(data && typeof data.revision === "number" ? data.revision : null);
       setCfgHint("");
       setCfgWarn(false);
@@ -322,6 +347,47 @@ function App() {
     }
   };
 
+  const saveSession = async () => {
+    const pick = splitPicked(customPicked);
+    const patch: Record<string, unknown> = { sessionModelMode: sessionMode };
+    if (sessionMode === "custom") {
+      if (!pick.provider || !pick.model) {
+        setSessionWarn(true);
+        setSessionHint("请先选一个模型。");
+        return;
+      }
+      patch.sessionModelProvider = pick.provider;
+      patch.sessionModelModel = pick.model;
+    }
+    setSessionSaving(true);
+    setSessionHint("");
+    setSessionWarn(false);
+    try {
+      const { res, data } = await readJson("dshana/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ settings: patch, expectedRevision: cfgRevision ?? undefined }),
+      });
+      if (res.status === 409) {
+        setSessionWarn(true);
+        setSessionHint("设置已被别处改过，已刷新。");
+        await loadConfig();
+        return;
+      }
+      if (!res.ok || !data || data.ok !== true) throw new Error((data && data.error) || "HTTP " + res.status);
+      const sess = sessionOf(data.settings);
+      setSessionMode(sess.mode);
+      setCustomPicked(sess.picked);
+      if (typeof data.revision === "number") setCfgRevision(data.revision);
+      setSessionSaved(true);
+    } catch (e) {
+      setSessionHint("保存失败：" + errText(e));
+      setSessionWarn(true);
+    } finally {
+      setSessionSaving(false);
+    }
+  };
+
   const startDsh = async () => {
     setStarting(true);
     setModelWarn(false);
@@ -419,8 +485,50 @@ function App() {
       </SettingsSection>
 
       <SettingsSection
+        title="会话模型"
+        description="工具建的新会话（open）用哪个模型。只影响之后新建的会话，改完立即生效。"
+      >
+        <SettingRow
+          label="模式"
+          hint="复用调用方 = 用发起这次调用的那张角色卡配的模型（缺省）；自定义模型 = 固定用下面这一条。"
+          layout="stacked"
+          control={<Select ariaLabel="会话模型模式" value={sessionMode} options={SESSION_MODES} onChange={setSessionMode} />}
+        />
+        {sessionMode === "custom" && (
+          <SettingRow
+            label="模型"
+            hint={sessionHint || catalogHint || undefined}
+            hintVariant={sessionWarn ? "warn" : "default"}
+            layout="stacked"
+            control={
+              <Select
+                ariaLabel="自定义会话模型"
+                value={customPicked}
+                options={modelOpts}
+                disabled={modelOpts.length === 0}
+                onChange={setCustomPicked}
+              />
+            }
+          />
+        )}
+        <SettingRow
+          label="保存"
+          hint={sessionMode === "custom" ? undefined : sessionHint || undefined}
+          hintVariant={sessionWarn ? "warn" : "default"}
+          control={
+            <SaveButton
+              status={sessionSaving ? "saving" : sessionSaved ? "saved" : "idle"}
+              labels={{ idle: "保存", saving: "保存中", saved: "已保存" }}
+              onSavedFeedbackEnd={() => setSessionSaved(false)}
+              onClick={() => void saveSession()}
+            />
+          }
+        />
+      </SettingsSection>
+
+      <SettingsSection
         title="默认模型"
-        description="新建会话用的模型。改完立即生效（DSH 的 settings 段，applies=live）。"
+        description="DSH 自己的默认模型：界面里直接开的会话用它，也对没有单独选过模型的会话生效。工具建的新会话按上面的「会话模型」走。改完立即生效（DSH 的 settings 段，applies=live）。"
       >
         {!dshReady ? (
           <SettingRow

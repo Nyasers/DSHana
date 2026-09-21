@@ -32,6 +32,8 @@ import { nextRpcId } from "#/lib/rpc-envelope.ts";
 import { isValidSessionId, dshMetadataFor } from "#/lib/task-binding.ts";
 import { withSessionTurn, enterSessionTurn } from "#/lib/session-serialize.ts";
 import { readDshDefaultModel } from "#/lib/config.ts";
+import { callerPlanDeps, resolveCallerPlan } from "#/lib/caller-model.ts";
+import { clearStoredDefaultModel } from "#/lib/model-settings.ts";
 import { serviceBase } from "#/lib/service-base.ts";
 import { rpcViaControl } from "#/lib/controller.ts";
 import { resolveTaskTimeoutSec, resolveApprovalTimeoutMs, cancelSessionWork } from "#/lib/cancel-chain.ts";
@@ -218,6 +220,15 @@ function logLine(log, msg) {
   }
 }
 
+function logWarn(log, msg) {
+  try {
+    if (log && typeof log.warn === "function") log.warn(msg);
+    else logLine(log, msg);
+  } catch {
+    /* 日志失败不阻断 */
+  }
+}
+
 /**
  * create/send 提交入口（tools/actions/open.ts / tools/actions/reply.ts 调用）。返回 { promise, ready }：
  *   ready  —— prompt 被 DSH 接受后 resolve loc { action, sessionId, rpcId, taskId, cwd }；
@@ -258,7 +269,7 @@ export interface DshSubmitInput {
   action: "create" | "send";
   input: any;
   callToken?: string;
-  log?: { info?: (msg: string) => void; error?: (msg: string) => void };
+  log?: { info?: (msg: string) => void; warn?: (msg: string) => void; error?: (msg: string) => void };
 }
 export function submitDshTask({ action, input, callToken, log }: DshSubmitInput): DshSubmitHandle {
   const parsed = normalizeCreateSend({ action, input });
@@ -343,9 +354,24 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
       // create：会话已知后立即占住队列槽位（到任务终态释放；防 create 后立即 send 重叠）
       if (parsed.action === "create") releaseNewSessionTurn = enterSessionTurn(sessionId);
 
-      // ④ 显式 provider/model/effort → selectModel（model-unavailable 降级不带 effort 重试）
+      // ④ 会话模型：显式入参 > 用户设的默认（DSH 自己生效，不用我们动手）> 调用方角色卡（create 才补）
       // dshHome = 当前数据源：默认模型/预设从当前源的 settings.yaml 解析
-      const selection = resolveModelSelection(parsed, await currentDshHome(dataDir));
+      const dshHome = await currentDshHome(dataDir);
+      let selection = resolveModelSelection(parsed, dshHome);
+      // 按调用方角色卡补的那次要收尾：selectModel 顺带把选择写进全局默认，那不是我们的本意
+      let clearStoredDefault = false;
+      if (!selection && parsed.action === "create") {
+        const plan = await resolveCallerPlan(parsed, callerPlanDeps(ctx, dshHome, dataDir), (m) =>
+          logLine(log, "[dsh-session] 会话模型：" + m),
+        );
+        if (plan.kind === "select") {
+          selection = { provider: plan.provider, model: plan.model };
+          clearStoredDefault = true;
+          logLine(log, "[dsh-session] 会话模型按调用方角色卡补：" + plan.provider + "/" + plan.model);
+        } else {
+          logLine(log, "[dsh-session] 会话模型不补（" + plan.reason + "）：交给 DSH 的默认处理");
+        }
+      }
       if (selection) {
         try {
           await rpcCall(ctx, base, { method: "session/selectModel", payload: { sessionId, ...selection } });
@@ -360,6 +386,15 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
             });
           } else {
             throw e;
+          }
+        }
+        if (clearStoredDefault) {
+          try {
+            const cleared = await clearStoredDefaultModel(ctx.network && ctx.network.fetch);
+            if (cleared) logLine(log, "[dsh-session] 已把 selectModel 顺带写下的全局默认清回空（缺省保持缺省）");
+          } catch (e) {
+            // 清不干净不影响本会话（它的选择已落在会话自己的 durable 选择里），只是全局默认会多一份
+            logWarn(log, "[dsh-session] 清全局默认失败（本会话不受影响）：" + errText(e));
           }
         }
       }

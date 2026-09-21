@@ -83,7 +83,15 @@ export function resolveReasoningEffort(explicit) {
 // 背景：设置页改成 App 自己的页（contributes.settings.ui.route），manifest 不再声明 schema，
 // 于是运行时缺省的来源从“配置快照”变成这里——值沿用原 schema 里的 default（30 / 1800），
 // 行为不变；设置页读写经 App 后端路由直接落 dataDir/config.json 的 global.*。
-export const APP_SETTING_DEFAULTS = { approvalTimeoutSec: 30, defaultTimeoutSec: 1800 };
+export const APP_SETTING_DEFAULTS = {
+  approvalTimeoutSec: 30,
+  defaultTimeoutSec: 1800,
+  // 会话模型（工具建的会话用哪个模型）：caller = 复用调用方角色卡配的（缺省），
+  // custom = 用下面固定的 provider/model。见 lib/caller-model.ts。
+  sessionModelMode: "caller",
+  sessionModelProvider: "",
+  sessionModelModel: "",
+};
 
 function msToSec(ms) {
   if (!Number.isFinite(ms)) return null;

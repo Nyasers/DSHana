@@ -1,38 +1,30 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/model-default-guard.ts — 默认模型必须落在宿主目录里（对账 + 就地修）
+// src/lib/model-default-guard.ts — 用户设的默认模型不能指向没人服务的路由（对账 + 就地修）
 //
-// DSH 的 `agent-default-model` 有它自己的缺省（base 层配置给的是官方 adapter 那条路由
-// `deepseek-official/deepseek-flash`），而本形态里 llm 路由只有一个来源：宿主目录
-// （官方那两行 adapter 被 roster patch 停掉）。缺省值是新会话、以及没有历史选择的会话唯一的
-// 模型来源，指向一条没人服务的路由等于开箱即失败。
+// DSH 的 `agent-default-model` 分两层：base 层由 DSH 自己的配置给（官方 adapter 那条路由
+// `deepseek-official/deepseek-flash`），用户层来自「在 models 页选过模型」。本形态里 llm 路由
+// 只有一个来源（宿主目录，官方那两行 adapter 被 roster patch 停掉了），所以用户选定的那条路由
+// 有可能哪天从宿主目录里消失（换提供商/删凭据），留下一个跑不通的默认。
 //
-// 为什么不在 roster patch 里把缺省写死成某个宿主模型：宿主配了哪些提供商、它们叫什么名字，
-// 是每台 Hana 各自的配置，写死一个 provider/model 只在写它的那一台上成立。所以这里按运行时
-// 事实对账——读宿主目录（`ctx.models.list()`），现值不在目录里就换一条可服务的。换哪一条，
-// 按这个优先序（见 planDefaultRepair）：现值还在就什么都不动 → 同 provider 里换（保住原选择
-// 的方向）→ 宿主角色卡（主角色优先）配的 `models.chat` → 目录第一条。
+// 本模块只管这一件事：**用户层有值**且它不在宿主目录里时换一条可服务的。用户层为空一律不动手
+// ——工具建的会话由 caller-model 按调用方角色卡补，界面里开的会话用不用默认是用户的事。
 //
-// 角色卡那一格是「跟着宿主走」的正解：宿主的每张角色卡都配着自己的模型（agents/<id>/
-// config.yaml 的 models.chat），主角色就是用户在用的那个。读它要 `app/agents.read`
-// （`agent:list` scope=all + `agent:config`，manifest 里已声明）；没授权/读不到就退到目录第一条。
+// 换哪一条按这个优先序（见 planDefaultRepair）：同 provider 里换（保住原选择的方向）→ 宿主角色卡
+// （主角色优先）配的 `models.chat` → 目录第一条。角色卡那一格是「跟着宿主走」的正解：每张卡
+// 自己配着模型（agents/<id>/config.yaml），读它要 `app/agents.read`（manifest 已声明），
+// 没授权就退到目录第一条。
 //
-// 这份值的正主仍是 DSH 的 settings 段，写回走 lib/model-settings.ts 的既有路径（带 revision
-// 闸，冲突由 DSH 拒），本模块只在它指向不可服务的路由时改写，并把改写给日志。
-//
+// 写回走 lib/model-settings.ts 的既有路径（带 revision 闸，冲突由 DSH 拒），每次都记日志。
 // 时机：受管 runtime 就绪那一次（apply 自动链完成时），以及宿主 `models-changed` 之后。
 // runtime 未就绪、宿主目录取不到、段只读时一律只记日志——不重试、不阻塞 App 加载。
+import { readAgentCardModel, type CardModel } from "#/lib/agent-models.ts";
 import { bridgeAccess } from "#/lib/managed-runtime.ts";
 import { readDefaultModel, writeDefaultModel } from "#/lib/model-settings.ts";
 import { isModelsChangedEvent } from "#/lib/model-sync.ts";
 import { errText } from "#/lib/err-text.ts";
-
-/** 宿主目录里一条可服务的路由坐标（只取路由与选择要用的两格）。 */
-export interface ServedModel {
-  provider: string;
-  id: string;
-}
+import { servedModels, type ServedModel } from "#/lib/host-models.ts";
 
 /** 对账结论：换成哪一条，以及为什么换。 */
 export interface DefaultRepair {
@@ -45,23 +37,6 @@ export interface DefaultRepair {
   reason: "provider-kept" | "agent-model" | "catalog-first";
 }
 
-/** 一条模型选择（provider + model）。 */
-export interface ModelSelection {
-  provider: string;
-  model: string;
-}
-
-/** 宿主目录归一化：provider/id 都非空的条目（其余形状不参与选择）。 */
-export function servedModels(models: unknown): ServedModel[] {
-  const out: ServedModel[] = [];
-  for (const item of Array.isArray(models) ? models : []) {
-    const provider = item && typeof item.provider === "string" ? item.provider.trim() : "";
-    const id = item && typeof item.id === "string" ? item.id.trim() : "";
-    if (provider && id) out.push({ provider, id });
-  }
-  return out;
-}
-
 /**
  * 默认模型该不该改、改成什么（纯函数）。
  * @param served - 宿主目录（servedModels 的产物）
@@ -72,7 +47,7 @@ export function servedModels(models: unknown): ServedModel[] {
 export function planDefaultRepair(
   served: readonly ServedModel[],
   current: unknown,
-  preferred?: ModelSelection | null,
+  preferred?: CardModel | null,
 ): DefaultRepair | null {
   if (!Array.isArray(served) || served.length === 0) return null;
   const provider = current && typeof (current as any).provider === "string" ? (current as any).provider.trim() : "";
@@ -91,37 +66,6 @@ export function planDefaultRepair(
   return { provider: served[0].provider, model: served[0].id, reason: "catalog-first" };
 }
 
-/**
- * 从宿主角色卡的配置里取聊天模型（`models.chat.{provider,id}`，容忍 `model` 拼法）。
- * @param agentConfig - `agent:config` 返回的 config（宿主已抹掉凭据形状的字段）
- * @returns provider/model 都在时给选择，否则 null
- */
-export function chatModelOf(agentConfig: unknown): ModelSelection | null {
-  const models = agentConfig && typeof agentConfig === "object" ? (agentConfig as any).models : null;
-  const chat = models && typeof models === "object" ? (models as any).chat : null;
-  if (!chat || typeof chat !== "object") return null;
-  const provider = typeof chat.provider === "string" ? chat.provider.trim() : "";
-  const id = typeof chat.id === "string" ? chat.id.trim() : typeof chat.model === "string" ? chat.model.trim() : "";
-  return provider && id ? { provider, model: id } : null;
-}
-
-/**
- * 选哪张角色卡当参考：主角色优先，其次当前角色，再次第一张在场的。
- * @param agents - `agent:list` 的 agents
- * @returns agentId（没有可用条目时是空串）
- */
-export function pickRoleCardAgent(agents: unknown): string {
-  const list = (Array.isArray(agents) ? agents : []).filter((a) => {
-    const id = a && typeof (a as any).id === "string" ? (a as any).id : "";
-    const state = a && typeof (a as any).state === "string" ? (a as any).state : "active";
-    return !!id && state === "active";
-  });
-  const pick = list.find((a) => (a as any).isPrimary === true)
-    ?? list.find((a) => (a as any).isCurrent === true)
-    ?? list[0];
-  return pick ? String((pick as any).id) : "";
-}
-
 /** 现值的一句话描述（日志用）。 */
 function describeSelection(current: unknown): string {
   const provider = current && typeof (current as any).provider === "string" ? (current as any).provider : "";
@@ -135,21 +79,9 @@ export interface DefaultGuardDeps {
   /** 宿主目录读取（ctx.models.list）。 */
   listModels?: () => Promise<{ models?: unknown } | null | undefined>;
   /** 宿主角色卡配的模型读取（bus 的 agent:list + agent:config）。 */
-  readAgentModel?: () => Promise<ModelSelection | null>;
+  readAgentModel?: () => Promise<CardModel | null>;
   /** 宿主代发 fetch（ctx.network.fetch）——读 DSH settings 段要用它。 */
   fetchFn?: unknown;
-}
-
-/** 读宿主角色卡（主角色优先）配的聊天模型；没授权/读不到/形状不符一律 null。 */
-async function readRoleCardModel(ctx): Promise<ModelSelection | null> {
-  const bus = ctx && ctx.bus;
-  if (!bus || typeof bus.request !== "function") return null;
-  const listed: any = await bus.request("agent:list", { scope: "all", lifecycle: "active" });
-  const agentId = pickRoleCardAgent(listed && listed.agents);
-  if (!agentId) return null;
-  const res: any = await bus.request("agent:config", { agentId, scope: "all" });
-  if (!res || typeof res !== "object" || typeof res.error === "string") return null;
-  return chatModelOf(res.config);
 }
 
 /** 对账结果（诊断面/单测用）。 */
@@ -168,7 +100,7 @@ export interface DefaultGuardResult {
 }
 
 /**
- * 对一次账：默认模型不在宿主目录里就换一条可服务的（换哪一条见 planDefaultRepair 的优先序）。
+ * 对一次账：用户设的默认模型不在宿主目录里就换一条可服务的（换哪一条见 planDefaultRepair 的优先序）。
  * @param deps - { listModels, readAgentModel, fetchFn }
  * @param log - (level, message) 日志出口
  * @returns 结论（不抛：失败都落成 status）
@@ -194,9 +126,12 @@ export async function reconcileDefaultModel(deps: DefaultGuardDeps, log = (_leve
     log("warn", "默认模型对账：DSH 的 agent-default-model 段读不到（保留现值）：" + errText(e));
     return { status: "settings-unreadable" };
   }
-  const current = view && (view as any).current;
+  // 只看用户层：base 层那份缺省不是我们的（工具建的会话由 caller-model 按调用方角色卡补），
+  // 用户层为空就不动手——这格没被设过，没有「不可服务」可言。
+  const current = view && (view as any).stored;
+  if (!current || typeof current !== "object") return { status: "no-change", current: null };
   // 角色卡只是「换哪一条」的参考：读不到（未授权/宿主无此面）不影响对账本身。
-  let preferred: ModelSelection | null = null;
+  let preferred: CardModel | null = null;
   if (typeof deps.readAgentModel === "function") {
     try {
       preferred = await deps.readAgentModel();
@@ -229,7 +164,7 @@ export async function reconcileDefaultModel(deps: DefaultGuardDeps, log = (_leve
 export function runModelDefaultGuard(ctx, log = (_level: string, _msg: string) => {}): Promise<DefaultGuardResult> {
   const deps: DefaultGuardDeps = {
     listModels: ctx && ctx.models && typeof ctx.models.list === "function" ? ctx.models.list.bind(ctx.models) : undefined,
-    readAgentModel: () => readRoleCardModel(ctx),
+    readAgentModel: () => readAgentCardModel(ctx),
     fetchFn: ctx && ctx.network && typeof ctx.network.fetch === "function" ? ctx.network.fetch.bind(ctx.network) : undefined,
   };
   return reconcileDefaultModel(deps, log).catch((e) => {

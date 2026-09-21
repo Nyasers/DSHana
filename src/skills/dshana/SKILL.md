@@ -14,8 +14,8 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 ## 首次安装（无需配置）
 
 - **无需装依赖、无需配 Node**：DSH 及其依赖树随包分发在安装目录 `node_modules`，我们的子插件也落在那里（`node_modules/@dshana`）；启动只做 DSH boot + 服务监听，不写数据目录里的任何东西。
-- **无需配 API Key / 模型**：推理经受管 runtime 内 `hana.models` 发起，provider 凭据留在宿主。DSH 自带的两个 LLM adapter 行（`llm-deepseek` / `llm-pi-ai`）在我们的 roster patch 里停掉，llm 路由只剩宿主目录那几条（单一事实源：官方那两行要凭据库里的 key，而凭据在宿主手里，它们只会摆出选到就报 `no API key` 的路由）。base 层 `agent-default-model` 的缺省指向的正是那条官方路由，而缺省不能写死在 patch 里（宿主配了哪些提供商、叫什么名字每台 Hana 不同），所以 App 按运行时事实对账：runtime 就绪那一次与宿主 `models-changed` 之后读一遍宿主目录，现值不在目录里就换一条可服务的——优先留在原提供商里换，提供商整个没了就用宿主角色卡配的模型（`agent:list` 的 `isPrimary` 优先，见 `app/agents.read`），再退到目录第一条（`src/lib/model-default-guard.ts`；DSH 设置里另存的选择优先，只在不可服务时改写）。
-- **默认模型**：读 DSH 自身配置（`DSH_HOME/settings.yaml` 的 `agent-default-model`）。
+- **无需配 API Key / 模型**：推理经受管 runtime 内 `hana.models` 发起，provider 凭据留在宿主。DSH 自带的两个 LLM adapter 行（`llm-deepseek` / `llm-pi-ai`）在我们的 roster patch 里停掉，llm 路由只剩宿主目录那几条（官方那两行要凭据库里的 key，而凭据在宿主手里，它们只会摆出选到就报 `no API key` 的路由）。会话的模型跟着「谁开的」走：工具建的会话按**调用方那张角色卡配的模型**开（`agents/<id>/config.yaml` 的 `models.chat`，经 `agent:list` / `agent:config` 读，见 `app/agents.read`）；App 设置页的「会话模型」可以改成「自定义模型」固定一条（缺省是「复用调用方」）；你在 DSH models 页手设过默认则听你的，它对所有会话生效。那格默认不主动写（缺省保持缺省），只有它已经指向宿主目录里没有的路由时才就地换一条（优先留在原 provider 里换，再退角色卡模型、目录第一条；日志有「默认模型对账」，见 `src/lib/model-default-guard.ts`）。
+- **默认模型**：读 DSH 自身配置（`DSH_HOME/settings.yaml` 的 `agent-default-model`）——用户层为空时它回落到 base 层那份官方路由，所以界面里直接开的会话请先在 models 页选一个。
 - **数据目录**：固定用 App 内置独立目录（App 数据目录下的 `.dsh`），开箱即用；共享已有目录 / 切换数据源暂不提供。
 - `dshana(action="open")` 每次调用**必须显式传 `cwd`**。
 
@@ -135,7 +135,8 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 | `dshana` 报 runtime 未就绪 | DSH 还没起来 | 等就绪或点「启动 DSH」；持续失败看 boot 状态 |
 | 默认模型改了不生效 | DSH 内存态与文件不一致 | 重启 DSH（停止后重新启动）再确认 |
 | 模型报 `no API key for provider route "deepseek-official"` | 官方自带的 LLM adapter 还在服务那条路由（本形态里它拿不到 key），说明 roster patch 没随包落地或被人改过 | 确认装好的树 `cordis.patch.yml` 里 `llm-deepseek` / `llm-pi-ai` 是 `disabled: true`，然后重启 DSH |
-| 默认模型指向宿主没配的提供商/模型（例如新数据目录下那条官方缺省） | 宿主换过提供商，或数据目录是新建的（缺省仍是官方路由） | 不用手改：App 在 runtime 就绪与宿主模型变更后会对账，换成宿主目录里第一条可服务的（日志有「默认模型对账」）；也可在 App 设置页的「默认模型」里自己选 |
+| 默认模型指向宿主没配的提供商/模型（你手设过的那个消失了） | 宿主换过提供商或删了凭据 | 不用手改：App 在 runtime 就绪与宿主模型变更后会对账，换成宿主目录里一条可服务的（日志有「默认模型对账」）；也可在 App 设置页的「默认模型」里自己选 |
+| 界面里直接开的会话报 `no API key for provider route "deepseek-official"` | `agent-default-model` 的 user 层为空，值落回 base 层那条官方路由（工具建的会话不受影响：它们按调用方角色卡开） | 在 DSH models 页选一个模型（写进 user 层，对所有会话生效） |
 | 主题没跟随宿主 | DSH 主题偏好是 light/dark 而非 system | 在 DSH 外观里选「跟随宿主」（偏好值 system） |
 | bash 报 `E_ACCESSDENIED` | DSH bash 沙箱 Windows 限制 | 改用文件系统工具（write/read/edit） |
 | `reply` 连续 30 秒超时（`RPC callback.tools.execute`）/ 该会话后续提交全失败 | 上一轮的审批没能在回合边界被应答，宿主工具回调超时，会话卡住 | 不要原地重试：换新会话（`open`）；旧会话用 `close` 收敛（可能只得到宿主升级标记的 canceled） |
