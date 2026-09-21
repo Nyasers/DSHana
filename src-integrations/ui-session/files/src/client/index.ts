@@ -11,6 +11,8 @@ import type {
 } from '@deepseek-ai/dsh-api-session-controller/client'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
+// ui-workspace 的导航面（declare merge 的 ctx.uiWorkspace）：切会话请本面所属文档的视图所有者代劳。
+import type { UiWorkspace } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import { notifySubscribers } from '@deepseek-ai/dsh-client-store'
 import { WeakMapWithValues } from '@deepseek-ai/dsh-util-values'
 import { standardHookPropName } from '@deepseek-ai/dsh-client-ui-slots'
@@ -681,18 +683,26 @@ export function apply(ctx: Context): void {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// 动因：FP 与主卡是两个文档 = 两个 DSH 实例，各自恢复、各自维护选中，天然不同步。
+// 动因：FP 与主卡是两个文档 = 两个 DSH 客户端实例，选中状态是实例本地的，天然不同步。
 //   两个面都参与，而且是对称的：本地选中变化 → 写壳页共享状态；共享状态变化 → 跟随。
 //   于是 FP 点会话主卡跟着切，主卡切工作区/新建会话后 FP 也跟着走。
 //   不打架靠两条：
 //     · 意见带写入时刻 at：只采纳比自己动手更新的。旧的是对方上次留下的陈述，不是指令；
-//     · 自己应用对方值时打 applying 标记：那一刻的列表变化既不记时刻也不回宣告——
+//     · 自己请求的那次导航落地时打 pendingApply 标记：那一刻的列表变化既不记时刻也不回宣告——
 //       这是防广播风暴的那一刀（没它两面会互相回声）。
 //   settings / standalone 不参与。
 // 恢复落地的第一跳不算用户动作（只记 seen，随后与共享状态对一次），否则重载任一面都会
 // 把它自己恢复出来的选中当成新指令宣告出去，把对方拉回去。
 // 启动握手：不靠“广播宣告”，靠**读快照**——载体（App 全局存储）始终有当前值，
 // 没有“接收端晚于发射端启动就错过宣告”的时序窗口。
+//
+// 会话选中在服务层没有状态：ISessions 既不持有「当前选中」，也不提供选中入口。
+//   选中表达为主视图（ui-workspace）对某一段会话的 mainView 保留，导航归视图所有者：
+//   ctx.uiWorkspace.openSession(target) 同步替换那份保留。因此本插件读写的都是同一份事实：
+//   读 = 本地列表里 retainedBy.mainView > 0 的那一段；写 = 请本面所属文档的视图所有者导航。
+//   只读会话流面钉住的 sid 走同一条入口。
+//   导航面不是 apply 时取一次就完了：本插件在装配次序上先于 ui-workspace（装配清单里 ui-session
+//   排在 ui-workspace 之前，两者之间没有依赖边），apply 那一刻它还不存在，所以用动态注入等它到场。
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** 壳页桥面里本插件用到的部分（仅有用的字段，缺失即不参与）。 */
@@ -711,6 +721,17 @@ function selectionBridge(): SurfaceSelectionBridge | undefined {
   return host as SurfaceSelectionBridge
 }
 
+/**
+ * 本地「当前选中」：被主视图保留的那一段会话。
+ * @param list - Session 列表源。
+ * @returns 会话身份；没有任何一段被主视图保留时为 null。
+ */
+function mainSessionId(list: { getSnapshot(): SessionListState }): SessionId | null {
+  const found = Object.values(list.getSnapshot().byId)
+    .find((row) => (row.retainedBy.mainView ?? 0) > 0)
+  return found?.id ?? null
+}
+
 /** 安装跨面会话选中同步（角色不符 / 桥缺失时静默不参与）。 */
 function installCrossSurfaceSelection(ctx: Context): void {
   const bridge = selectionBridge()
@@ -727,9 +748,12 @@ function installCrossSurfaceSelection(ctx: Context): void {
   const list = ctx.sessions.list
   const snap0 = list.getSnapshot()
   let generation = 0
-  let applying = false
+  let pendingApply: SessionId | null | undefined
   let localAt = 0
-  let seen = snap0.current ?? null
+  let seen = mainSessionId(list)
+  // 本面所属文档的视图所有者导航面；ui-workspace 到场前缺席（见文件头那一段）。
+  let navigate: UiWorkspace | undefined
+  let warnedAbsentNavigator = false
   // 面上线时列表已就绪 ⇒ 恢复早已落地，往后的选中变化都算用户动作。
   let settled = snap0.phase === 'ready'
 
@@ -757,32 +781,63 @@ function installCrossSurfaceSelection(ctx: Context): void {
       const id = next.id
       const at = next.at
       if (at <= localAt) return
-      if (id === (list.getSnapshot().current ?? null)) return
-      applying = true
-      const applied = id === null ? ctx.sessions.clear() : ctx.sessions.open(SessionId(id))
-      void Promise.resolve(applied)
-        .catch(() => { /* 会话可能已不存在，忽略 */ })
-        .then(() => { applying = false })
+      if (id === mainSessionId(list)) return
+      // 对方此刻没有意见（无选中）不动本地：视图所有者没有「清空」入口，
+      // 而空值只表示对方那一面此刻没有可宣告的选中。
+      if (id === null) return
+      if (navigate === undefined) {
+        // 导航面还没到场：动态注入的回调会在它到位时重走本函数，这里留一句可查的痕。
+        if (!warnedAbsentNavigator) {
+          warnedAbsentNavigator = true
+          console.warn('[dshana/ui-session] 本面还没有导航面（uiWorkspace），跨面选中暂不跟随。')
+        }
+        return
+      }
+      const target = SessionId(id)
+      pendingApply = target
+      try {
+        navigate.openSession(target)
+      } catch (error: unknown) {
+        // 目标会话可能已不存在：保持本地选中。
+        pendingApply = undefined
+        console.warn('[dshana/ui-session] 跨面导航没能发起。', error)
+      }
     }, () => { /* 读失败保持本地 */ })
   }
+
+  // 导航面在装配次序上晚于本插件：动态注入等它到场，进场即补一次（启动握手那次导航可能早于它）。
+  ctx.inject(['uiWorkspace'], (scope) => {
+    const service = (scope as unknown as { uiWorkspace?: UiWorkspace }).uiWorkspace
+    navigate = service !== undefined && typeof service.openSession === 'function' ? service : undefined
+    if (navigate !== undefined) applyRemote()
+    return () => { navigate = undefined }
+  })
 
   ctx.effect(() => {
     const off = onChanged(applyRemote)
     const offList = list.subscribe(() => {
       const snap = list.getSnapshot()
-      const current = snap.current ?? null
+      const current = mainSessionId(list)
       if (current === seen) return
       seen = current
       if (snap.phase !== 'ready') return
+      if (pendingApply !== undefined) {
+        // 自己刚请求的那次导航落地：不记时刻、不回宣告。
+        if (current === pendingApply) { pendingApply = undefined; return }
+        // 落地成了别的（请求被更晚的导航取代、目标已不在）：这枚标记作废，按本地变化照常走。
+        // 标记不能留在场上：它会把本地之后的每一次变化都吞掉，本面从此不再宣告。
+        pendingApply = undefined
+      }
       if (!settled) {
         // 恢复落地的第一跳：只记录，随后与共享状态对一次（谁更新谁说了算）。
         settled = true
         applyRemote()
         return
       }
-      if (applying) return
       // 只读面不宣告本地变化：它只是在看，不该把另一个面的选中拉过来。
       if (readOnly) return
+      // 本地无选中不宣告：空值在对面上表示「没有意见」，没有要传达的动作。
+      if (current === null) return
       localAt = Date.now()
       void Promise.resolve(write(current)).catch(() => { /* 写失败不回滚本地 */ })
       applyRemote()
