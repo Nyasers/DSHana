@@ -29,11 +29,19 @@
 - id: llm-pi-ai
   disabled: true
 
+# 设置里的「模型」页（ui-settings-models）跟着一起停。它编辑的正是上面那两行的 settings 段
+# （llm-deepseek 的模型列表、llm-pi-ai 的 provider profiles），两行停掉之后这一页没有可编辑对象，
+# 只剩一个空壳；它顺带提供的 onboarding 弹窗与欢迎提示也只是把用户引到这一页。设置导航按已注册
+# 分节构建（ui-settings-general 的 navList），停掉这个插件后那一格随之消失。
+# 模型配置的入口留在宿主侧：App 设置页的「会话模型」与「默认模型」两节。
+- id: ui-settings-models
+  disabled: true
+
 # 缺省模型不在这里写死：base 层给的是官方路由 deepseek-official/deepseek-flash，上面那行停掉
-# 之后这条路由没人服务（新建会话与没有历史选择的会话都用它）。写死一个宿主 provider/model 不行
-# ——宿主配了哪些提供商、它们叫什么名字，是每台 Hana 各自的配置。改由 App 按运行时事实对账：
-# src/lib/model-default-guard.ts 在 runtime 就绪那一次与宿主 models-changed 之后读宿主目录，
-# 现值不在目录里就换成目录里第一条可服务的（DSH 设置里另存的选择优先，只在不可服务时改写）。
+# 之后这条路由没人服务。写死一个宿主 provider/model 也不行——宿主配了哪些提供商、它们叫什么
+# 名字，是每台 Hana 各自的配置。模型从哪来由 App 定：工具建的会话按**调用方那张角色卡**配的
+# models.chat 开（src/lib/caller-model.ts；App 设置里可改成固定一条），用户手设的默认则对所有
+# 会话生效、它若指向宿主目录里没有的路由，由 src/lib/model-default-guard.ts 就地换一条可服务的。
 
 # web-runtime（官方 @deepseek-ai/dsh-web-app 行）：App 内嵌场景不开系统浏览器、不打印 URL
 # （由宿主卡片 / iframe 承载），surfaceContext 保留（模型可见 Web 面说明）。trustedHosts 沿用
