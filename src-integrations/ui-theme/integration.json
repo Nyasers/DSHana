@@ -1,0 +1,24 @@
+{
+  "package": "@deepseek-ai/dsh-client-ui-theme",
+  "upstreamVersion": "0.1.6-alpha.2",
+  "upstreamDir": "packages/client/ui-theme",
+  "files": [
+    {
+      "path": "src/client/locales.ts",
+      "upstreamSha256": "351c074ed67b98e4085883fadbec61cf542d3ec13291afbd4d03a209866b7426"
+    }
+  ],
+  "notes": [
+    "只改文案：外观里的第三个选项在本形态下跟的不是操作系统而是宿主（Hana 主题），",
+    "上游文案「跟随系统」名不副实。zh 跟随系统 → 跟随宿主；en System → Host。",
+    "偏好值本身仍是 system（落盘、theme/change 契约、壳页与桥的门判断都按 system），",
+    "所以这是纯显示层的一处措辞，不影响任何跟随逻辑。",
+    "",
+    "为什么走 overlay 而不是运行时改写：locale 服务的 register 对同一 (ns, locale) 只允许一个",
+    "持有者（重复注册直接抛），settings.theme 这个 NS 已经归 ui-theme，我们的 @dshana/theme",
+    "客户端半边注册不进去。所以文案的事实源只能是上游那个文件，改它就得贴一份。",
+    "",
+    "en 字典对 zh 键集有完整性检查（satisfies Record<ThemeKey, string>），两个字典的键集保持不动，",
+    "只换值。"
+  ]
+}
