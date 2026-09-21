@@ -22,6 +22,7 @@
     "derive:check": "node scripts/derive/index.mts --check",
     "derive:manifest": "node scripts/derive/index.mts manifest",
     "derive:cordis": "node scripts/derive/index.mts cordis",
+    "derive:product-package": "node scripts/derive/index.mts product-package",
     "derive:paths": "node scripts/derive/index.mts paths",
     "derive:vendor": "node scripts/derive/index.mts vendor",
     "sync:vendor": "pnpm run sync:vendor:sdk && pnpm run sync:vendor:dsh",

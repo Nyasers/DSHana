@@ -29,7 +29,7 @@ import fs from "fs-extra";
 
 import { errText } from "../../shared/err-text.mts";
 import { ROOT } from "../../shared/root.mts";
-import { assertCordisDistVersions, assertUiTree } from "./assert.mts";
+import { assertCordisDistVersions, assertProductPackage, assertUiTree } from "./assert.mts";
 import { declareInstallationPlugins } from "./bundle-deps.mts";
 import { STAGING_ROOT, materializeProdDeps } from "./materialize.mts";
 import { minifyDistStatics } from "./minify.mts";
@@ -38,9 +38,9 @@ import { failUsage, targetSpec } from "./targets.mts";
 
 // 版本单一事实源：package.json（唯一来源，不支持命令行传版本——显式传版本容易与
 // manifest 不同步（历史教训）；版本同步走 pnpm version 发版流程，scripts/release/version.mts 收口）
-const version = fs.readJsonSync(join(ROOT, "package.json")).version;
+const repoPkg = fs.readJsonSync(join(ROOT, "package.json"));
+const version = repoPkg.version;
 if (!version) throw new Error("package.json version 缺失");
-
 // 防回归：版本一致性强制校验（历史曾手改只 bump package.json，manifest.json version 停在
 // 旧值，发布包内版本与 tag 不一致）。打包版本必须同时等于 manifest.json 的 version。
 const manifestVersion = fs.readJsonSync(join(ROOT, "src", "manifest.json")).version;
@@ -55,9 +55,10 @@ if (version !== manifestVersion)
 const staticItems = [
   "NOTICE",
   "THIRD_PARTY_NOTICES.md",
-  "package.json",
   // manifest.json 与 skills 已随 src 域（src/manifest.json、src/skills/，build:src 产出
   // dist 副本），不再经根级静态复制
+  // 注：package.json 也不在清单里：仓库那份带 scripts/devDependencies/packageManager/imports
+  // （构建入口），交付树只要 name/version/type 三件——见 product-package.mts。
   // 注：pnpm-workspace.yaml / pnpm-lock.yaml 不随包——安装侧不执行任何 pnpm install
   // （依赖已物化进包），两份文件在本流程里没有消费方
 ];
@@ -80,8 +81,14 @@ for (const item of staticItems) {
   });
 }
 
-// 1.5 / 1.6) 产物断言：cordis 包版本与完整性、App ui/ 静态树（缺失即拒包）
+// 1.2) 交付树的 package.json：复制 packaging/package.json（手写实体，只有 version 由 derive 的
+//      product-package 任务同步；不复制仓库根那份——它是构建入口，见 packaging/README.md）。
+//      字段白名单与版本一致由下面的 assertProductPackage 把关。
+fs.copySync(join(ROOT, "packaging", "package.json"), join(distDir, "package.json"));
+
+// 1.5 / 1.6) 产物断言：cordis 包版本与完整性、交付树 package.json、App ui/ 静态树（缺失即拒包）
 assertCordisDistVersions(distDir, version);
+assertProductPackage(distDir, version);
 assertUiTree(distDir);
 
 // 目标选择：`--target <名字>`（必须显式给，无默认）。

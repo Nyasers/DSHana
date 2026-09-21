@@ -1,11 +1,45 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// scripts/release/pack/assert.mts — 出包前的三处断言（产物不完整就拒包）。
+// scripts/release/pack/assert.mts — 出包前的四处断言（产物不完整就拒包）。
 //
 // 都在 fail-closed 一侧：宁可不出包，也不出一个装了起不来的包。
 import fs from "fs-extra";
 import { join } from "node:path";
+
+/** 交付树 package.json 允许出现的键（构建输入一律不进安装包）。 */
+export const PRODUCT_PACKAGE_KEYS = ["name", "type", "version"];
+
+/**
+ * 交付树 package.json 校验：字段白名单 + 版本一致 + type: module。
+ * 那份文件是 packaging/package.json（手写实体，version 由 derive 的 product-package 任务同步），
+ * pack 复制成包根的 package.json。它被改坏/抄了旧版就直接拒包。
+ * @param outDir - 交付目录（dist 或组装树）
+ * @param version - 本次出包的版本
+ */
+export function assertProductPackage(outDir, version) {
+  const p = join(outDir, "package.json");
+  if (!fs.pathExistsSync(p)) {
+    throw new Error("交付树的 package.json 缺失（packaging/package.json 没复制进来）：拒绝出包");
+  }
+  const j = fs.readJsonSync(p);
+  const keys = Object.keys(j).sort();
+  const allowed = [...PRODUCT_PACKAGE_KEYS].sort();
+  const extra = keys.filter((k) => !allowed.includes(k));
+  if (extra.length || keys.length !== allowed.length) {
+    throw new Error(
+      "交付树 package.json 字段不对：只允许 " + allowed.join("/") + "（多出 " + extra.join("/") + "）——构建入口字段不进安装包",
+    );
+  }
+  if (j.version !== version) {
+    throw new Error(
+      `交付树 package.json version ${j.version} ≠ 本次出包版本 ${version}（跑 node scripts/derive/index.mts 同步后再打包）`,
+    );
+  }
+  if (j.type !== "module") {
+    throw new Error('交付树 package.json 必须 type: "module"（包根 index.js 是 ESM，缺了它宿主按 CommonJS 解析）');
+  }
+}
 
 /**
  * cordis 子插件包 version 一致性校验（防回归，与 manifest 校验对称）：子插件（provider /

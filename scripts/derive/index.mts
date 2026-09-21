@@ -12,6 +12,7 @@
 // 一个任务 = 一类读者（再细就成"一个文件一个任务"，derive: 后面排长队反而难用）：
 //   manifest     主 package.json#version + SDK 快照 packedVersion → src/manifest.json（宿主读的 App 契约）
 //   cordis       主 package.json#version         → src-cordis/**/package.json（profile loader 读的 bundle 层）
+//   product-package 主 package.json#version    → packaging/package.json（交付树的包根那份）
 //   thirdparty   vendor/hana-app-sdk 的 manifest → THIRD_PARTY_NOTICES.md（分发合规）
 //   paths        镜像包清单                       → src-integrations/tsconfig.paths.json（编辑器）
 //   vendor       主 package.json 的 dsh 依赖       → vendor/deepseek-harness 的 checkout（状态型）
@@ -114,6 +115,17 @@ const cordisTask: FileTask = {
   plan: () => versionFiles(cordisPkgPaths()),
 };
 
+/**
+ * 任务：product-package —— 主版本 → packaging/package.json（装出来的包根那份）。
+ * 只有 version 是派生的：name / type 是手写的实体（交付树只要这三件，白名单与理由见该文件旁的 README）。
+ */
+const productPackageTask: FileTask = {
+  kind: "file",
+  name: "product-package",
+  about: "package.json#version → packaging/package.json",
+  plan: () => versionFiles(["packaging/package.json"]),
+};
+
 /** 任务：paths —— 镜像包清单 → 编辑器用的 tsconfig.paths.json。 */
 const pathsTask: FileTask = {
   kind: "file",
@@ -153,7 +165,7 @@ const pathsTask: FileTask = {
 const vendorTask: StateTask = dshTask;
 
 /** 全部任务（main 按名筛选用）。 */
-export const TASKS: DeriveTask[] = [manifestTask, cordisTask, pathsTask, vendorTask, thirdpartyTask];
+export const TASKS: DeriveTask[] = [manifestTask, cordisTask, productPackageTask, pathsTask, vendorTask, thirdpartyTask];
 
 /** 跑一个任务：比较期望内容与磁盘，写回或报漂。返回漂移文件数。 */
 export function runTask(task: DeriveTask, { checkOnly, log = console.log } = { checkOnly: false, log: console.log as (m: string) => void }): number {
