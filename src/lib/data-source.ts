@@ -29,8 +29,9 @@ export const SETTINGS_VERSION = 1;
 export const SOURCE_MODES = Object.freeze(["private", "shared"]);
 /** 内置独立目录名：与 DSH 自身默认目录 ~/.dsh 命名统一（早期 v2 的 dsh-home 不再读取）。 */
 export const PRIVATE_HOME_NAME = ".dsh";
-/** 内置独立目录固定 profile：runtime 只 seed/启动这一个 profile。 */
-export const PRIVATE_PROFILE = "dshana";
+/** 内置独立目录固定 profile：runtime 只启动官方随附的这一个（首次加载时由 DSH 自建，我们不种子化）。
+ * settings 里那个同名的 profile 键只为兼容旧存档保留，实际不再影响启动。 */
+export const PRIVATE_PROFILE = "web";
 export const SETTINGS_KEYS = Object.freeze(["mode", "path", "profile", "approvalTimeoutSec", "defaultTimeoutSec"]);
 export const DEFAULT_SETTINGS = Object.freeze({
   mode: "private",

@@ -7,14 +7,17 @@
 // 目的：没有真实 Hana 宿主时尽量验证受管 runtime 子进程的两条路径：
 //   boot 模式（默认）：定位 DSH → profile 种子化 → runProfile → webserver 真实监听 → 起中继
 //   preflight 模式（--preflight）：只验证目标 DSH_HOME 可用性（数据源切换探针），不 boot
-// 用本仓库 node_modules 作 depsRoot（替代随包物化）、dist/cordis 作 cordisSrc，dataDir 指向
-// 临时目录；经 child_process.fork 建立 IPC 通道（满足 connectAppRuntime 的 process.send 前置）。
+// 用本仓库 node_modules 作 depsRoot（替代随包物化），dataDir 指向临时目录；@dshana 子插件由
+// build:cordis 落进仓库的 node_modules/@dshana（仓库树扮演安装树，与出包后同形）；profile 用官方
+// 随附的 web（DSH 首次加载时自建），我们的 roster patch 由 runtime 经 patchFiles 传入
+// （仓库形态下 installRoot = <repo>/dist，即 dist/cordis.patch.yml）。
+// 经 child_process.fork 建立 IPC 通道（满足 connectAppRuntime 的 process.send 前置）。
 // 就绪判据（boot）= 中继端口对 http://127.0.0.1:<bridgePort>/ 有 HTTP 应答（无 key 得 403 也算
 // 「有服务在听」；中继只在 DSH 就绪后才起，故等价于就绪门）。真机验收仍须装包后由主上下文做。
 //
 // 用法（仓库根，先 node src/build.ts && node src-cordis/build.ts）：
 //   node tests/e2e/runtime-boot.smoke.mjs [--keep] [--preflight] [--packed]
-// 环境（缺省已指向本仓库）：DSH_REPO_ROOT、DSH_DATA_DIR、DSH_DEPS_ROOT、DSH_CORDIS_SRC、
+// 环境（缺省已指向本仓库）：DSH_REPO_ROOT、DSH_DATA_DIR、DSH_DEPS_ROOT、
 //   DSH_SMOKE_TIMEOUT_MS、DSH_PACKED_APP_DIR、HANA_HOME
 //
 // --packed：把来源换成**装好的 App 树**（安装目录的 node_modules / cordis / runtime 入口），
@@ -23,7 +26,7 @@
 import { fork } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { randomBytes, randomInt } from "node:crypto";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -33,9 +36,15 @@ const KEEP = process.argv.includes("--keep");
 const PREFLIGHT = process.argv.includes("--preflight");
 const PACKED = process.argv.includes("--packed");
 const appDir = PACKED ? resolvePackedAppDir() : null;
-const dataDir = resolve(process.env.DSH_DATA_DIR || join(REPO, "_tmp", "smoke-data"));
+// 缺省数据目录：--packed 放到本仓库之外。真机上 profile 住在 <DSH_HOME>/profiles/<名>，向上 node
+// 解析走不到安装树的 node_modules，子插件只能靠被选中 bundle 的依赖图进解析代；数据目录留在仓库里
+// 会向上撞见 <repo>/node_modules/@dshana，把这条路径整个盖住（历史误报的来源）。仓库形态（非 packed）
+// 没有那份 bundle 依赖声明，只能留在仓库内、靠仓库树自己扮演安装树。
+const dataDir = resolve(
+  process.env.DSH_DATA_DIR ||
+    (appDir ? join(tmpdir(), `dshana-smoke-${process.pid}`) : join(REPO, "_tmp", "smoke-data")),
+);
 const depsRoot = resolve(process.env.DSH_DEPS_ROOT || join(appDir || REPO, "node_modules"));
-const cordisSrc = resolve(process.env.DSH_CORDIS_SRC || join(appDir ? appDir : REPO, appDir ? "cordis" : join("dist", "cordis")));
 const entry = appDir ? join(appDir, "runtime", "dsh-host.mjs") : join(REPO, "dist", "runtime", "dsh-host.mjs");
 const READY_TIMEOUT_MS = Number(process.env.DSH_SMOKE_TIMEOUT_MS || 180000);
 
@@ -77,7 +86,7 @@ function writeConfig(payload) {
 function forkEntry(configPath) {
   console.log("[smoke] mode=" + (PREFLIGHT ? "preflight" : "boot") + (PACKED ? " source=packed" : " source=repo"));
   console.log("[smoke] entry=" + entry);
-  console.log("[smoke]   dataDir=" + dataDir + "\n  depsRoot=" + depsRoot + "\n  cordisSrc=" + cordisSrc);
+  console.log("[smoke]   dataDir=" + dataDir + "\n  depsRoot=" + depsRoot);
   const child = fork(entry, [configPath], {
     stdio: ["ignore", "inherit", "inherit", "ipc"], // 子进程日志直接进本进程 stdout/stderr
     env: { ...process.env },
@@ -115,7 +124,6 @@ async function runBoot() {
     bridgeKey: opaque(),
     controlKey: opaque(),
     readyMarker: "SMOKE_READY:" + opaque(12),
-    cordisSrc,
     depsRoot,
   });
   const { child, exit } = forkEntry(configPath);
@@ -140,7 +148,6 @@ async function runPreflight() {
     dshHome: join(dataDir, ".dsh"),
     preflight: true,
     resultPath,
-    cordisSrc,
     depsRoot,
   });
   const { child, exit } = forkEntry(configPath);

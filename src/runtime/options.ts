@@ -9,13 +9,13 @@
 // argv（进程列表可见）、环境变量或日志里。
 //
 // 配置文件 schema（JSON）：
-//   { dataDir, dshHome?, dshPort, bridgePort, bridgeKey, controlKey, readyMarker, cordisSrc?, depsRoot? }
+//   { dataDir, dshHome?, dshPort, bridgePort, bridgeKey, controlKey, readyMarker, depsRoot? }
 //   或预检形态（数据源切换探针）：
 //   { dataDir, dshHome, preflight:true, resultPath }
 //   · dataDir       App ctx.dataDir 绝对路径（App 数据根；.dsh / integration 等均在其下）
 //   · dshHome       本源的 DSH_HOME 绝对路径（当前数据源决定；缺省回落 dataDir/.dsh）
-//   · preflight     true = 只做「依赖就位 + 定位 DSH + profile 种子化」可用性预检，不 boot DSH，
-//                   结果写 resultPath（{ok} 或 {ok:false,error}）后退出；此形态不要端口/凭据
+//   · preflight     true = 只做「依赖就位 + 定位 DSH + 产物在位」可用性预检，不 boot DSH，
+//                   也不往目标 home 写任何东西；结果写 resultPath（{ok} 或 {ok:false,error}）后退出
 //   · resultPath    预检结果文件绝对路径（仅 preflight 形态）
 //   · dshPort       DSH webserver 内部监听端口（1..65535，runtime 自用，不由宿主暴露）
 //   · bridgePort    中继端口 = 注册给宿主的 service.port（宿主代理目标；1..65535）
@@ -75,7 +75,6 @@ export function normalizeRuntimeConfig(input) {
       dshHome,
       preflight: true,
       resultPath,
-      cordisSrc: typeof input.cordisSrc === "string" && input.cordisSrc ? input.cordisSrc : null,
       depsRoot: typeof input.depsRoot === "string" && input.depsRoot ? input.depsRoot : null,
     };
   }
@@ -99,7 +98,6 @@ export function normalizeRuntimeConfig(input) {
     bridgeKey,
     controlKey,
     readyMarker,
-    cordisSrc: typeof input.cordisSrc === "string" && input.cordisSrc ? input.cordisSrc : null,
     depsRoot: typeof input.depsRoot === "string" && input.depsRoot ? input.depsRoot : null,
   };
 }

@@ -8,22 +8,23 @@ import fs from "fs-extra";
 import { join } from "node:path";
 
 /**
- * cordis 包 version 一致性校验（防回归，与 manifest 校验对称）：cordis 包（roster bundle
- * dshana + 子插件）version 与主 package.json 同批由 derive/version（pnpm version 发版流程）
- * 同步，pack 时读 dist 产物校验一致——手改/漏同步即出包版本漂移。
+ * cordis 子插件包 version 一致性校验（防回归，与 manifest 校验对称）：子插件（provider /
+theme / clipboard）version 与主 package.json 同批由 derive/version（pnpm version 发版流程）
+同步，pack 时读 dist 产物校验一致——手改/漏同步即出包版本漂移。
+ * roster patch（dist/cordis.patch.yml）不是包，只校验在位。
  */
 export function assertCordisDistVersions(outDir, version) {
   const cordisRoot = join(outDir, "cordis");
-  // cordis 未组装 = 构建未跑/被清：fail-closed（校验放行空产物会让缺 bundle 的包过包）
+  // cordis 未组装 = 构建未跑/被清：fail-closed（校验放行空产物会让缺插件的包过包）
   if (!fs.pathExistsSync(cordisRoot)) {
     throw new Error("cordis 产物缺失（dist/cordis 不存在）：先跑 pnpm run build 再打包");
   }
-  // 完整性：必需包（roster bundle dshana + 子插件）全部存在且 package.json 版本一致——
-  // 缺失/部分产物（含 count=0）一律拒包，防 build 失败后残留部分 dist 被误打包。
-  // （roster 就是 bundle dshana + 子插件：connection 由官方 dsh-web-app bundle 提供，
-  // index 处理归官方 frontend-static，设置页由宿主面承担。）
+  if (!fs.pathExistsSync(join(outDir, "cordis.patch.yml"))) {
+    throw new Error("roster patch 缺失（dist/cordis.patch.yml 不存在）：先跑 pnpm run build 再打包");
+  }
+  // 完整性：子插件全部存在且 package.json 版本一致——缺失/部分产物（含 count=0）
+  // 一律拒包，防 build 失败后残留部分 dist 被误打包。
   const required = [
-    "dshana",
     "clipboard", "provider", "theme",
   ];
   let count = 0;
@@ -42,7 +43,7 @@ export function assertCordisDistVersions(outDir, version) {
     }
     count += 1;
   }
-  console.log(`[pack] cordis 包版本一致（${count} 个 = ${version}）`);
+  console.log(`[pack] cordis 子插件版本一致（${count} 个 = ${version}）+ roster patch 在位`);
 }
 
 /** App ui/ 静态树断言（cards route 资源面；相对资源契约）：缺失 = 卡片 404，拒包。 */

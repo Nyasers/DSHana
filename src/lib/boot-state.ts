@@ -17,7 +17,7 @@
 //     壳页在同源下拼 `origin + proxyPrefix` 使用。
 //
 // 阶段（phase，来自 src/lib/managed-runtime.ts 单例）：
-//   idle（未启动）/ starting（启动中：runtime 拉起 + profile 种子化 + 服务监听）/ ready（就绪）/
+//   idle（未启动）/ starting（启动中：runtime 拉起 + 插件就位 + 服务监听）/ ready（就绪）/
 //   error（上次启动失败，含 code+userText 供重试指引）/ stopped（已停止）
 export const APP_ID = "dshana";
 
@@ -55,7 +55,7 @@ export function phaseCopy(phase: string, { ready = false, errText = null }: { re
         ? "DSH 已就绪：Web 服务可访问（可通过本页 iframe 或直接在会话中使用 dshana 工具）。"
         : "DSH runtime 进程已存在，但服务尚未报告就绪，正在确认监听状态……";
     case "starting":
-      return "DSH 正在启动（受管 runtime 拉起、profile 种子化、服务监听）……";
+      return "DSH 正在启动（受管 runtime 拉起、插件与依赖就位、服务监听）……";
     case "idle":
       return "DSH 尚未启动。App 加载后会自动拉起受管 runtime；也可点下方「启动 DSH」手动触发。";
     case "error":

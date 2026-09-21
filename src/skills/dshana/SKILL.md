@@ -13,7 +13,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 
 ## 首次安装（无需配置）
 
-- **无需装依赖、无需配 Node**：DSH 及其依赖树随包分发在安装目录 `node_modules`，启动只做 profile 种子化 + 服务监听。
+- **无需装依赖、无需配 Node**：DSH 及其依赖树随包分发在安装目录 `node_modules`，我们的子插件也落在那里（`node_modules/@dshana`）；启动只做 DSH boot + 服务监听，不写数据目录里的任何东西。
 - **无需配 API Key / 模型**：推理经受管 runtime 内 `hana.models` 发起，provider 凭据留在宿主。
 - **默认模型**：读 DSH 自身配置（`DSH_HOME/settings.yaml` 的 `agent-default-model`）。
 - **数据目录**：固定用 App 内置独立目录（App 数据目录下的 `.dsh`），开箱即用；共享已有目录 / 切换数据源暂不提供。
@@ -26,7 +26,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 | 状态 | 表现 | 怎么办 |
 |---|---|---|
 | 未启动（idle） | 说明 + 「启动 DSH」按钮 | App 加载后会自动拉起；也可手动点 |
-| 启动中（starting） | 阶段时间线 + 日志尾滚动 | 等即可（首次含 profile 种子化） |
+| 启动中（starting） | 阶段时间线 + 日志尾滚动 | 等即可（首次含 DSH boot） |
 | 就绪（ready） | 页面装载 DSH Web UI | 直接用 |
 | 需要处理（error / stopped） | 失败原因 + 原始错误折叠 | 看指引重试；端口占用会自动换端口 |
 
@@ -113,7 +113,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 | 要干什么 | 命令 |
 |---|---|
 | 把本地包装进宿主（卸载 → 提交 staging → 确认 → 等就绪，跨平台） | `pnpm run install:local -- --zip releases/<包>.zip` |
-| 体检**装好的**那棵树（预检：依赖就位 + 定位 DSH + profile 种子化） | `pnpm run smoke:packed -- --preflight` |
+| 体检**装好的**那棵树（预检：依赖就位 + 定位 DSH + 产物在位） | `pnpm run smoke:packed -- --preflight` |
 | 同上但不加 `--preflight`：完整 boot 到中继有应答 | `pnpm run smoke:packed` |
 | 查宿主能力面：应用能调哪些 bus 动词、不能用哪些事件名（SDK 已发布契约）；某个字面在宿主 bundle 里出现在哪 | `pnpm run probe:host [-- --look models-changed]` |
 
@@ -128,7 +128,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
-| 卡在「启动中」很久 | profile 种子化 / 首次 boot 较慢 | 看日志尾；`boot-state` 的 `logTail` 会滚动显示进度 |
+| 卡在「启动中」很久 | 首次 boot 较慢 | 看日志尾；`boot-state` 的 `logTail` 会滚动显示进度 |
 | 状态转「需要处理」 | runtime 启动失败 | 看 `error.userText` 与原始错误；日志定位 |
 | 提示端口被占用 | 端口竞争 | 会自动换随机端口重试；持续失败看日志 |
 | DSH Web UI 打不开但状态就绪 | 注入失败 / surface 票据缺失 | 重开卡；反复出现查中继前缀与 surface 授权 |

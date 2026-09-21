@@ -28,19 +28,17 @@ test("parseRuntimeConfig: 合法配置（注入读取）", () => {
   assert.equal(o.bridgeKey, GOOD.bridgeKey);
   assert.equal(o.controlKey, GOOD.controlKey);
   assert.equal(o.readyMarker, "DSH_READY");
-  assert.equal(o.cordisSrc, null);
   assert.equal(o.depsRoot, null);
 });
 
-test("parseRuntimeConfig: 可选 cordisSrc/depsRoot", () => {
-  const o = parseRuntimeConfig(["/tmp/runtime.json"], read({ ...GOOD, cordisSrc: "/app/cordis", depsRoot: "/app/node_modules" }));
-  assert.equal(o.cordisSrc, "/app/cordis");
+test("parseRuntimeConfig: 可选 depsRoot", () => {
+  const o = parseRuntimeConfig(["/tmp/runtime.json"], read({ ...GOOD, depsRoot: "/app/node_modules" }));
   assert.equal(o.depsRoot, "/app/node_modules");
 });
 
 test("normalizeRuntimeConfig: preflight 形态——只要 dataDir + dshHome + resultPath，不要端口/凭据", () => {
   const o = normalizeRuntimeConfig({ dataDir: "/d", dshHome: "/d/dsh-home", preflight: true, resultPath: "/d/integration/pf.json" });
-  assert.deepEqual(o, { dataDir: "/d", dshHome: "/d/dsh-home", preflight: true, resultPath: "/d/integration/pf.json", cordisSrc: null, depsRoot: null });
+  assert.deepEqual(o, { dataDir: "/d", dshHome: "/d/dsh-home", preflight: true, resultPath: "/d/integration/pf.json", depsRoot: null });
   assert.equal(o.dshPort, undefined, "不要求端口");
   assert.equal(o.bridgeKey, undefined, "不要求凭据");
 });

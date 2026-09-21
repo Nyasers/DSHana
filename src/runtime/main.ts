@@ -14,15 +14,16 @@
 //      操作报错 + 退出码 3，绝不假装能跑；
 //   3. 设本进程自有 env（DSH_HOME / DSHANA_*，不污染宿主进程环境）；
 //   4. 依赖就位（随包物化在 <installRoot>/node_modules，无运行时安装）；
-//   5. profile 种子化（profiles/dshana → 安装目录 cordis scope 链接，seed.js）；
-//   6. 子进程内 boot DSH（locateDsh → appBoot.loadLayeredEnv → profileBoot.runProfile），
-//      webserver 监听配置中的 dshPort；
+//   5. 产物在位（@dshana 子插件在 <installRoot>/node_modules/@dshana，roster patch 在
+//      <installRoot>/cordis.patch.yml——profile 不归我们：官方 web 模板由 DSH 首次加载时自建）；
+//   6. 子进程内 boot DSH（locateDsh → appBoot.loadLayeredEnv → profileBoot.runProfile，
+//      profile = 官方 web + patchFiles = roster patch），webserver 监听配置中的 dshPort；
 //   7. 真实监听成功（webServer 服务端口 === 期望端口 + HTTP 探测）才向 stdout 打印约定
 //      readyMarker（独占一行、无前缀）——任何失败路径绝不打印 READY；
 //   8. SIGTERM/SIGINT/父进程 disconnect → 优雅释放：先关 DSH fiber（含 webserver），再
 //      hana.close()。顺序纪律：拿到流式 Response 后不能立刻 close()——hana.close() 只在退出前
 //      调用；接活动流后需先结束/取消流再关闭。
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
@@ -40,8 +41,6 @@ import { startApprovalBridge } from "#/runtime/approval-bridge.ts"; // DSH 审�
 import { createTaskBindingIndex, publishTaskBindingIndex } from "#/lib/task-binding.ts"; // 绑定事实源 = 宿主任务记录
 import { PROVIDER_RELOAD_GLOBAL_KEY } from "#/lib/provider-hooks.ts"; // 目录重载钩子键（provider 插件装）
 import { resolveInstallRoot, locateDsh } from "#/runtime/locate.ts";
-// 依赖随包物化在安装目录 node_modules（无运行时 ensure）。
-import { seedDshanaProfile } from "#/runtime/seed.ts";
 
 /** 退出码约定（App 主进程 managed-runtime.js classify 读 exitCode 归类；勿随意改）。 */
 export const EXIT = {
@@ -60,7 +59,7 @@ export const EXIT = {
 export const READY_TIMEOUT_MS = 60000;
 /** 优雅释放时 ctx.fiber.dispose 的最长等待（超时强退；dsh 自身 shutdown 5s 兜底）。 */
 const DISPOSE_TIMEOUT_MS = 4000;
-const PROFILE_NAME = "dshana";
+const PROFILE_NAME = "web";
 
 /** 取错误的可读文本。catch 到的值类型未知，字段访问一律经这里。 */
 const errText = (e: unknown): string => ((e as any)?.message as string) || String(e);
@@ -195,31 +194,40 @@ function makeShutdown(state, exitCodeLog) {
 }
 
 /**
- * 预检模式（数据源切换探针）：只验证「依赖就位 → 定位 DSH → profile 种子化」能否在
- * 目标 DSH_HOME 上成立，不连宿主 IPC、不 boot DSH、不起中继。
- * 结果写 resultPath（{ok:true} 或 {ok:false,error}，0600）后立即退出——父侧等终态读结果。
- * 退出码对齐 classify：0 = 预检通过；4 = deps/locate；5 = profile 种子化未完成。
+ * 产物在位检查（fail-closed）：@dshana 子插件与我们的 roster patch 都得在。
+ * 缺了就在这里报清楚，而不是等 DSH 自己把「bundle/插件找不到」抛上来。
+ * @returns 缺失项（空数组 = 齐备）。
  */
-async function runPreflight({ opts, dataDir, dshHome, depsRoot, cordisSrc }): Promise<never> {
+function missingArtifacts(depsRoot: string, rosterPatch: string): string[] {
+  const missing: string[] = [];
+  for (const name of ["provider", "theme", "clipboard"]) {
+    const dir = join(depsRoot, "@dshana", name);
+    if (!existsSync(join(dir, "index.js"))) missing.push(dir);
+  }
+  if (!existsSync(rosterPatch)) missing.push(rosterPatch);
+  return missing;
+}
+
+/**
+ * 预检模式（数据源切换探针）：只验证「依赖就位 → 定位 DSH → 产物在位」能否在目标 DSH_HOME 上
+ * 成立，不连宿主 IPC、不 boot DSH、不起中继，也不往目标 home 写任何东西（profile 由 DSH 自己在
+ * 首次加载时按随附模板建）。结果写 resultPath（{ok:true} 或 {ok:false,error}，0600）后立即退出。
+ * 退出码对齐 classify：0 = 预检通过；4 = deps/locate；5 = 产物缺失。
+ */
+async function runPreflight({ opts, dataDir, dshHome, depsRoot, rosterPatch }): Promise<never> {
   const write = (payload) => writeFileSync(opts.resultPath, JSON.stringify(payload), { mode: 0o600 });
   try {
     process.env.DSH_HOME = dshHome;
     process.env.DSHANA_HOME = dataDir;
-    mkdirSync(dshHome, { recursive: true });
     info(`预检开始：dshHome=${dshHome} depsRoot=${depsRoot}`);
-    const located = await locateDsh({ depsRoot, log: (s) => info("locate", s) });
-    const outcome = await seedDshanaProfile({
-      dshHome,
-      cordisSrc,
-      appBoot: located.appBoot,
-      log: (s) => info("seed", s),
-    });
-    if (outcome === "missing-source" || outcome === "refused" || outcome === "failed" || outcome === "init-failed") {
-      err("preflight", `profile 种子化未完成（outcome=${outcome}）：cordisSrc=${cordisSrc}`);
-      write({ ok: false, error: `目标数据目录不可用：profile 种子化 ${outcome}（详情见 runtime 日志）` });
+    await locateDsh({ depsRoot, log: (s) => info("locate", s) });
+    const missing = missingArtifacts(depsRoot, rosterPatch);
+    if (missing.length > 0) {
+      err("preflight", "产物不在位：" + missing.join("、"));
+      write({ ok: false, error: `目标环境缺产物（先跑 pnpm run build 再打包）：${missing.join("、")}` });
       process.exit(EXIT.SEED);
     }
-    info(`预检通过（seed=${outcome}）`);
+    info("预检通过（deps + locate + 产物在位；未写目标 home）");
     write({ ok: true, dshHome });
     process.exit(EXIT.OK);
   } catch (e) {
@@ -267,12 +275,14 @@ export async function main(argv: string[]): Promise<number> {
   }
   const dataDir = resolve(opts.dataDir);
   // 依赖根默认指向 App 安装目录（随包物化的 node_modules）；--deps-root 可覆盖（调试）。
+  // @dshana 插件与 @deepseek-ai/* 同锚点住在这里（运行时解析模式从安装树算解析代，不建链接），
+  // 我们的 roster patch 随包放在安装根（与 manifest.json 并排，经 patchFiles 作启动期 overlay）。
   const depsRoot = resolve(opts.depsRoot || join(installRoot, "node_modules"));
-  const cordisSrc = resolve(opts.cordisSrc || join(installRoot, "cordis"));
+  const rosterPatch = join(installRoot, "cordis.patch.yml");
   const dshHome = opts.dshHome ? resolve(opts.dshHome) : join(dataDir, ".dsh");
-  // ---- 0) 预检模式（数据源切换探针）：不连宿主 IPC、不起服务，只验证目标 home 可用性 ----
+  // ---- 0) 预检模式（数据源切换探针）：不连宿主 IPC、不起服务，只验证目标环境可用性 ----
   if (opts.preflight) {
-    return await runPreflight({ opts, dataDir, dshHome, depsRoot, cordisSrc });
+    return await runPreflight({ opts, dataDir, dshHome, depsRoot, rosterPatch });
   }
   const state: {
     hana: any;
@@ -326,7 +336,9 @@ export async function main(argv: string[]): Promise<number> {
   // ---- 3) 依赖就位（自包含打包：依赖随包在 <installRoot>/node_modules，无运行时安装）----
   info(`依赖区：${depsRoot}（随包物化，无 ensure）`);
 
-  // ---- 4) 定位 DSH + 种子化 profile（runProfile 前必须就位，否则 loadProfile 抛）----
+  // ---- 4) 定位 DSH + 产物在位检查 ----
+  // profile 不归我们：官方随附模板 `web` 由 DSH 首次加载时自建自维护（loadProfile 的
+  // template 分支），我们不写 DSH_HOME 里的任何东西——包括以前那套种子化/链接/清单归一。
   let located;
   try {
     located = await locateDsh({ depsRoot, log: (s) => info("locate", s) });
@@ -335,35 +347,22 @@ export async function main(argv: string[]): Promise<number> {
     err("exit", "exit=" + EXIT.DEPS + " kind=locate");
     return EXIT.DEPS;
   }
-  let seedOutcome;
-  try {
-    seedOutcome = await seedDshanaProfile({
-      dshHome,
-      cordisSrc,
-      appBoot: located.appBoot,
-      log: (s) => info("seed", s),
-    });
-    info(`profile 种子化结果：${seedOutcome}（${cordisSrc}）`);
-  } catch (e) {
-    err("seed", "profile 种子化异常：" + errText(e));
-    err("exit", "exit=" + EXIT.SEED + " kind=seed-error");
-    return EXIT.SEED;
-  }
-  if (seedOutcome === "missing-source" || seedOutcome === "refused" || seedOutcome === "failed" || seedOutcome === "init-failed") {
-    err("seed", `profile 种子化未完成（outcome=${seedOutcome}）：cordisSrc=${cordisSrc} 缺失或迁移被拒（见日志）`);
-    err("exit", "exit=" + EXIT.SEED + " kind=seed-" + seedOutcome);
+  const missing = missingArtifacts(depsRoot, rosterPatch);
+  if (missing.length > 0) {
+    err("artifacts", "产物不在位（先跑 pnpm run build 再打包/运行）：" + missing.join("、"));
+    err("exit", "exit=" + EXIT.SEED + " kind=artifacts-missing");
     return EXIT.SEED;
   }
 
-  // ---- 5) 子进程内 boot DSH（profile dshana；显式端口；--no-open）----
+  // ---- 5) 子进程内 boot DSH（官方 web profile + 我们的 roster 作启动期 overlay；显式端口）----
   const environment = located.appBoot.loadLayeredEnv("dsh");
-  info(`runProfile({ profile: ${PROFILE_NAME}, port: ${opts.dshPort} }) …`);
+  info(`runProfile({ profile: ${PROFILE_NAME}, patchFiles: [${rosterPatch}], port: ${opts.dshPort} }) …`);
   let boot;
   try {
     boot = await located.profileBoot.runProfile({
       environment,
       profile: PROFILE_NAME,
-      patchFiles: [],
+      patchFiles: [rosterPatch],
       args: ["--port", String(opts.dshPort), "--no-open"],
     });
   } catch (e) {

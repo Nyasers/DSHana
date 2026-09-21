@@ -41,13 +41,13 @@ export const MAX_START_ATTEMPTS = 3; // 端口占用（随机撞车）自动换�
 /** runtime 终态集合（宿主 runtime state 契约）。 */
 export const TERMINAL_STATES = new Set(["failed", "exited", "stopped"]);
 export const READY_POLL_MS = 300;
-export const READY_TIMEOUT_MS = 240000; // 首次启动含 profile 种子化与 DSH boot，需更宽容限
+export const READY_TIMEOUT_MS = 240000; // 首次启动含 DSH boot，需更宽容限
 export const START_ERROR_HINTS = {
   "port-busy": "端口被占用或 DSH 无法监听（服务代理未就绪）。已自动换随机端口重试，仍失败请查看 runtime 日志并确认本机回环端口可用。",
   "port-unreachable": "DSH 未在期望端口完成监听（webServer 服务端口与期望不符或探测失败）。查看 runtime 日志定位。",
   "boot-failed": "DSH runProfile 启动失败（见 runtime 日志）。",
   deps: "DSH 依赖缺失：包内 node_modules 不完整（依赖应随包物化）。请重新安装本 App。",
-  seed: "dshana profile 初始化失败（见 runtime 日志；profile 迁移拒绝/scope 链接失败由种子化引导）。",
+  seed: "产物不在位：包内 node_modules/@dshana 子插件或 roster patch 缺失（请重装本 App）。",
   "not-authorized": "宿主未授权本 App 启动受管 runtime（local-machine 能力未授予或已撤销）。检查 App 能力与授权状态。",
   unknown: "受管 runtime 启动失败（见 runtime 日志与状态）。",
 };
@@ -169,18 +169,17 @@ interface RuntimeConfig {
   controlKey: string;
   readyMarker: string;
   dshHome?: string;
-  cordisSrc?: string;
   depsRoot?: string;
 }
 
 /**
  * 私有运行时配置构造（与 src/runtime/options.js normalizeRuntimeConfig 对偶）。opts:
- * { dataDir, dshHome?, dshPort, bridgePort, bridgeKey, controlKey, cordisSrc?, depsRoot?, readyMarker? }
+ * { dataDir, dshHome?, dshPort, bridgePort, bridgeKey, controlKey, depsRoot?, readyMarker? }
  * dshHome = 当前数据源的 DSH_HOME；缺省时子进程回落 dataDir/.dsh。
  * 敏感项（bridgeKey）只进本对象→写 0600 文件→argv 只传路径，不出现在 argv/日志。
  */
 export function buildRuntimeConfig(opts) {
-  const { dataDir, dshHome, dshPort, bridgePort, bridgeKey, controlKey, cordisSrc, depsRoot, readyMarker = READY_MARKER } = opts || {};
+  const { dataDir, dshHome, dshPort, bridgePort, bridgeKey, controlKey, depsRoot, readyMarker = READY_MARKER } = opts || {};
   if (typeof dataDir !== "string" || !dataDir) throw new Error("buildRuntimeConfig: dataDir 必填（App ctx.dataDir）");
   if (!Number.isInteger(dshPort) || dshPort < 1 || dshPort > 65535) throw new Error("buildRuntimeConfig: dshPort 必填（1..65535）");
   if (!Number.isInteger(bridgePort) || bridgePort < 1 || bridgePort > 65535) throw new Error("buildRuntimeConfig: bridgePort 必填（1..65535）");
@@ -188,7 +187,6 @@ export function buildRuntimeConfig(opts) {
   if (typeof controlKey !== "string" || controlKey.length < 16) throw new Error("buildRuntimeConfig: controlKey 必填（≥16 字符）");
   const config: RuntimeConfig = { dataDir, dshPort, bridgePort, bridgeKey, controlKey, readyMarker };
   if (typeof dshHome === "string" && dshHome) config.dshHome = dshHome;
-  if (typeof cordisSrc === "string" && cordisSrc) config.cordisSrc = cordisSrc;
   if (typeof depsRoot === "string" && depsRoot) config.depsRoot = depsRoot;
   return config;
 }
@@ -246,9 +244,9 @@ function logApp(level, ...args) {
 }
 
 /**
- * 启动 + 等到就绪（single-flight 单例）。opts: { taskId?, cordisSrc?, depsRoot? }。
+ * 启动 + 等到就绪（single-flight 单例）。opts: { taskId?, depsRoot? }。
  * 成功返回 { runtimeId, info }（state=ready）；失败抛 Error（message 含归类与用户指引），
- * 单例清空以便下次调用重试。首次调用 = profile 种子化 + DSH boot（日志可见）。
+ * 单例清空以便下次调用重试。首次调用 = DSH boot（profile 由 DSH 自建，日志可见）。
  */
 /** 等 runtime 到终态（停业确认）；超时或查询失败返回 null。 */
 async function waitTerminal(ctx, runtimeId, timeoutMs = 15000) {
@@ -305,9 +303,9 @@ async function reapFailedRuntime(ctx) {
 }
 
 /**
- * 启动 + 等到就绪（single-flight 单例）。opts: { taskId?, cordisSrc?, depsRoot? }。
+ * 启动 + 等到就绪（single-flight 单例）。opts: { taskId?, depsRoot? }。
  * 成功返回 { runtimeId, info }（state=ready）；失败抛 Error（message 含归类与用户指引），
- * 单例清空以便下次调用重试。首次调用 = profile 种子化 + DSH boot（日志可见）。
+ * 单例清空以便下次调用重试。首次调用 = DSH boot（profile 由 DSH 自建，日志可见）。
  */
 
 // ---- 失败后的自动重试 ----
@@ -352,7 +350,7 @@ function scheduleRuntimeAutoRetry(reason) {
   );
 }
 
-/** 预检超时：只做依赖就位 + 定位 DSH + profile 种子化，不 boot DSH，给 60s 足够。 */
+/** 预检超时：只做依赖就位 + 定位 DSH + 产物在位，不 boot DSH，给 60s 足够。 */
 export const PREFLIGHT_TIMEOUT_MS = 60000;
 const PREFLIGHT_POLL_MS = 200;
 
@@ -360,7 +358,7 @@ const PREFLIGHT_POLL_MS = 200;
  * 新数据源可用性预检（切换链第 2 步，D-m）。
  *
  * 用同一个 runtime entry 另起一个子进程，配置带 preflight:true + resultPath：子进程只跑到
- * 「依赖就位 + 定位 DSH + profile 种子化」就写结果并退出，**不 boot DSH、不动现有 runtime**。
+ * 「依赖就位 + 定位 DSH + 产物在位」就写结果并退出，**不 boot DSH、不动现有 runtime**。
  * 父侧等结果文件或子进程终态；失败与超时都归 preflight 类错误（有界，不无限等）。
  *
  * 返回 { ok, error?, dshHome? }；不抛（除调用契约错误），失败是链上的一步可预期结果。
@@ -576,7 +574,7 @@ async function doStartManaged(opts, attempt = 1) {
     if (Date.now() >= deadline) {
       throw codedError(
         "DSH 受管 runtime 启动超时（" + Math.round(READY_TIMEOUT_MS / 1000) + "s 内未就绪）。" +
-          "首次启动含 profile 种子化与 DSH boot，若仍在进行请稍候；查看 App 日志/runtime 日志。",
+          "首次启动含 DSH boot，若仍在进行请稍候；查看 App 日志/runtime 日志。",
         "timeout",
       );
     }

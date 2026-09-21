@@ -22,6 +22,8 @@ import { createHash } from "node:crypto";
 import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+// 仅为加载 Node 版本断言（本入口以 TypeScript 直跑，依赖原生类型剥离；仓库纪律：每个 CLI 入口都得触达它）
+import "../shared/root.mts";
 
 const argv = process.argv.slice(2);
 const flag = (name) => argv.includes(name);

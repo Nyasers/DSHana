@@ -20,14 +20,14 @@
 //   node tests/e2e/session-read.probe.mjs [--keep] [--prompt "说一句你好"]
 //   --prompt 会真的跑一轮模型（耗时/耗 token；需要该 DSH_HOME 已配好 provider），随后核对
 //   "page 到尾 + lastRoundOutput 取最后一轮输出"。
-// 环境：DSH_REPO_ROOT、DSH_DATA_DIR、DSH_DEPS_ROOT、DSH_CORDIS_SRC、DSH_PROBE_TIMEOUT_MS
+// 环境：DSH_REPO_ROOT、DSH_DATA_DIR、DSH_DEPS_ROOT、DSH_PROBE_TIMEOUT_MS
 import { fork } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { randomBytes, randomInt } from "node:crypto";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildClientRequest, parseServerResponse } from "../../src/lib/rpc-envelope.js";
-import { lastRoundOutput } from "../../src/tools/actions/get.js";
+import { buildClientRequest, parseServerResponse } from "../../src/lib/rpc-envelope.ts";
+import { lastRoundOutput } from "../../src/tools/actions/get.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(process.env.DSH_REPO_ROOT || join(here, "..", ".."));
@@ -38,7 +38,6 @@ const promptArg = (() => {
 })();
 const dataDir = resolve(process.env.DSH_DATA_DIR || join(REPO, "_tmp", "probe-data"));
 const depsRoot = resolve(process.env.DSH_DEPS_ROOT || join(REPO, "node_modules"));
-const cordisSrc = resolve(process.env.DSH_CORDIS_SRC || join(REPO, "dist", "cordis"));
 const entry = join(REPO, "dist", "runtime", "dsh-host.mjs");
 const READY_TIMEOUT_MS = Number(process.env.DSH_PROBE_TIMEOUT_MS || 240000);
 const RUN_TIMEOUT_MS = Number(process.env.DSH_PROBE_RUN_TIMEOUT_MS || 300000);
@@ -126,7 +125,7 @@ async function runProbe() {
   const controlKey = opaque();
   const configPath = writeConfig({
     dataDir, dshHome: join(dataDir, ".dsh"), dshPort, bridgePort,
-    bridgeKey: opaque(), controlKey, readyMarker: "PROBE_READY:" + opaque(12), cordisSrc, depsRoot,
+    bridgeKey: opaque(), controlKey, readyMarker: "PROBE_READY:" + opaque(12), depsRoot,
   });
   say("dataDir=" + dataDir);
   const { child, exit } = forkEntry(configPath);

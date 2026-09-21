@@ -30,6 +30,7 @@ import fs from "fs-extra";
 import { errText } from "../../shared/err-text.mts";
 import { ROOT } from "../../shared/root.mts";
 import { assertCordisDistVersions, assertUiTree } from "./assert.mts";
+import { declareInstallationPlugins } from "./bundle-deps.mts";
 import { STAGING_ROOT, materializeProdDeps } from "./materialize.mts";
 import { minifyDistStatics } from "./minify.mts";
 import { applyIntegrations } from "./overlays.mts";
@@ -139,6 +140,21 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
     filter: (srcPath) => !/[\/\\]node_modules[\/\\]\.(bin|pnpm)([\/\\]|$)/.test(srcPath),
   });
   applyIntegrations(join(pkgDir, "node_modules"));
+  // @dshana 子插件落进安装树的 node_modules（与 @deepseek-ai/* 同锚点）：DSH 的 runtime 解析模式
+  // 从安装树 + bundle 依赖图算解析代、不建链接，所以插件不能住在 cordis/ 那种安装树外的位置。
+  // dist/ 那份原样拷贝已在包根留下 cordis/，这里把它换成 node_modules/@dshana/。
+  // roster patch（dist/cordis.patch.yml）已随 dist 复制到包根，runtime 经 patchFiles 传它。
+  const cordisDist = join(distDir, "cordis");
+  if (!fs.pathExistsSync(cordisDist)) throw new Error("dist/cordis 缺失：先跑 pnpm run build 再打包");
+  fs.removeSync(join(pkgDir, "cordis"));
+  fs.copySync(cordisDist, join(pkgDir, "node_modules", "@dshana"));
+  for (const rel of ["cordis.patch.yml", join("node_modules", "@dshana", "provider", "index.js")]) {
+    if (!fs.pathExistsSync(join(pkgDir, rel))) throw new Error(`包内产物缺失：${rel}（拒绝出包）`);
+  }
+  console.log("[pack] @dshana 子插件落进 node_modules/@dshana，包根不再有 cordis/")
+  // 只躺在 node_modules 里不够：DSH 按「安装树 + 被选中 bundle 的依赖图」算解析代，真机上
+  // profile 在数据目录里向上解析走不到安装树，得由被选中 bundle 认领才进解析代（见 bundle-deps.mts）。
+  declareInstallationPlugins(join(pkgDir, "node_modules"));
   // 暂存树用完即删
   fs.removeSync(join(STAGING_ROOT, spec.name));
   console.log(`[pack] ${spec.name}：代码 + 依赖树已就位（${base}），暂存树已清理`);

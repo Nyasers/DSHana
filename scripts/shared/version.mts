@@ -12,9 +12,10 @@ import { ROOT } from "./root.mts";
 
 export { ROOT };
 
-// cordis 包 package.json 清单（相对 ROOT；随插件整体发版不独立发布，历史独立号废弃）
+// cordis 子插件 package.json 清单（相对 ROOT；随插件整体发版不独立发布，历史独立号废弃）。
+// roster patch 不再是包（只是一份 cordis.patch.yml 文件），所以不在这里。
 export function cordisPkgPaths() {
-  const out = ["src-cordis/package.json"];
+  const out: string[] = [];
   const plugins = path.join(ROOT, "src-cordis", "plugins");
   for (const name of fs.readdirSync(plugins)) {
     const p = path.join(plugins, name);

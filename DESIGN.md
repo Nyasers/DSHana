@@ -65,8 +65,8 @@ Hana 宿主进程（App 隔离进程内加载 dist/index.js）
   ├─ runtime/dsh-host.mjs（dist/runtime，rspack 产物）
   │    └─ 原生 import 安装目录 node_modules/@deepseek-ai/dsh/lib/profile-boot-*.js
   │         → runProfile() → cordis Context
-  │              → 加载 $DSH_HOME/profiles/dshana（junction → 安装目录 cordis/）
-  │                   → dsh-* 官方插件 + @dshana/* 子插件
+  │              → 加载 $DSH_HOME/profiles/web（官方随附模板，DSH 首次加载时自建）
+  │                   → dsh-* 官方插件 + @dshana/* 子插件（后者在安装目录 node_modules/@dshana）
   │         → HTTP 服务监听本地端口（宿主按 readyMarker 判定就绪）
   └─ 浏览器面：/api/apps/dshana/routes/_runtime/<runtimeId>/ 由宿主自动代理
 ```
@@ -155,7 +155,7 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 - 为什么随包而不在运行时安装：① App 安装目录在运行时只读（App 进程 fs-write 白名单只有 dataDir），`pnpm install` 无处落盘；② native 产物（node-pty/koffi/sharp 等）按平台/ABI 区分，逐平台出包才能各带各的 addon；③ 只物化生产闭包（不含 devDeps），体量可控。
 - 版本单一事实源 = 包内依赖树（`package.json` 的 `@deepseek-ai/dsh`）；无独立 DSH 升级通道，升级 dsh = 装新 App 包 + 重启宿主。
 - 定位：`dsh-host.mjs` 在 depsRoot 下经显式路径解析 DSH（`src/runtime/locate.ts`，`createRequire` + `.pnpm` 枚举 + `webpackIgnore` 原生 import）；profile boot 的模块回退 farm（dsh-app-boot `healProfilesModuleFallback`，把 dsh 安装闭包镜像成 `$DSH_HOME/profiles/node_modules` 链接）覆盖官方插件树解析。
-- `@dshana/*`（cordis 产物，随包 installDir `cordis/` 只读）经 profile `node_modules/@dshana` scope 链接（junction 指向只读目录可读；App 更新换目录后漂移由种子化自愈重建，失败回退整体拷贝）。
+- `@dshana/*` 子插件随包落在安装目录 `node_modules/@dshana`（与 `@deepseek-ai/*` 同锚点）——DSH 的 runtime 解析模式从安装树 + bundle 依赖图算解析代、**不建任何链接**；我们的 roster patch 随包一份 `cordis.patch.yml`，由 runtime 经 `runProfile` 的 `patchFiles` 作启动期 overlay 传入（层序在所有层之上），我们因此不写 DSH_HOME 里的任何东西。
 - Windows native 文件锁（指南 §4）：依赖变更即整包替换，替换前必须先停占用 `.node` 的 DSH 进程/worker/终端——受管形态下 DSH 只跑在单例 runtime，App 卸载/更新/停止统一先 `ctx.runtime.stop`。
 
 
@@ -354,10 +354,9 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
   settings.yaml,.anonymous-user-id} 与 logs、config.json（参考拷贝
   legacy-config.json + 设置建议输出；不代写宿主 preferences）→ 校验（会话数/workspace.json
   可解析/marker 落位，verifyMigration）→ 幂等标记 `dataDir/dshana/migrated.json`
-  {source,at,stats,backupDir}。**profiles/ 不迁移**（其 node_modules/@dshana 是 junction
-  指向 v1 安装目录，v2 runtime seed.ts 每次启动用 installDir cordis/ 自愈重建——「profile 引用
-  修复」= 由种子化重建承接）；node_modules/.node 不迁移（App 依赖随包物化在安装目录，
-  无需迁移）。源只读不删（回退材料 = 旧插件数据原地保留）；--apply 打印停机指引
+  {source,at,stats,backupDir}。**profiles/ 不迁移**（那是 DSH 自己的目录：v2 用官方随附的 web
+  profile，由 DSH 首次加载时自建自维护，我们不写它也不重命名它）；node_modules/.node 不迁移
+  （App 依赖随包物化在安装目录，无需迁移）。源只读不删（回退材料 = 旧插件数据原地保留）；--apply 打印停机指引
   （先停旧插件写入，主上下文与姐姐协调）。Windows：path.join 原生分隔符、junction 在跳过
   列表、reparse 不入复制。
 

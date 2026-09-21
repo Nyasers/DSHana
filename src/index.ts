@@ -18,8 +18,8 @@
 //
 // 依赖部署：DSH 依赖（@deepseek-ai/dsh + cordis + 官方插件树 + 多平台原生产物）由
 // scripts/release/pack/index.mts 在构建时物化进安装目录 node_modules（hoisted 布局，安装即用、无运行时
-// 安装，版本随 App 声明）；cordis 产物（@dshana/*）在安装目录 cordis/，profile 经 junction
-// 暴露（src/runtime/seed.ts）；受管子进程入口 = runtime/dsh-host.mjs（dist 构建产物）。
+// 安装，版本随 App 声明）；@dshana 子插件随包落在安装树 node_modules/@dshana（与 @deepseek-ai/*
+// 同锚点：DSH 的 runtime 解析模式从安装树算解析代，不建链接）；受管子进程入口 = runtime/dsh-host.mjs。
 //
 // 日志：只走宿主 ctx.logger；ctx.logger 缺失或抛错时回落 stderr（宁可吵，不静默丢日志）。
 import { initAppRuntime, toolCtxFrom } from "#/lib/app-runtime.ts";

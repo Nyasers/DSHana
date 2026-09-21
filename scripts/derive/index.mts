@@ -106,7 +106,7 @@ const manifestTask: FileTask = {
   },
 };
 
-/** 任务：cordis —— 主版本 → cordis 包（roster bundle + plugins/*，无独立版本线）。 */
+/** 任务：cordis —— 主版本 → cordis 子插件包（src-cordis/plugins/*，无独立版本线）。 */
 const cordisTask: FileTask = {
   kind: "file",
   name: "cordis",

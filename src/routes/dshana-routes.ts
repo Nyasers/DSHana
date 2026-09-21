@@ -322,7 +322,7 @@ export function registerDshanaRoutes(app, deps) {
         if (before.ready || before.phase === "ready" || before.phase === "starting") {
           return json(c, 200, { ok: true, accepted: false, reason: before.phase === "starting" ? "starting" : "already-ready", state: before });
         }
-        // fire-and-forget：start 含 runtime 拉起与 profile 种子化，不让 HTTP 请求挂起；
+        // fire-and-forget：start 含 runtime 拉起与 DSH boot，不让 HTTP 请求挂起；
         // 壳页以轮询 boot-state 跟进。错误只在单例 phase=error 与日志中反映。
         const p = Promise.resolve().then(() => start());
         p.then(

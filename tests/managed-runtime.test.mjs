@@ -64,17 +64,15 @@ test("buildRuntimeConfig: 基础形态（与 options.js normalizeRuntimeConfig �
   });
 });
 
-test("buildRuntimeConfig: 覆盖项（cordisSrc/depsRoot）只在显式传时出现", () => {
+test("buildRuntimeConfig: 覆盖项 depsRoot 只在显式传时出现", () => {
   const base = buildRuntimeConfig({ dataDir: "/x", dshPort: 1, bridgePort: 2, bridgeKey: "k".repeat(32), controlKey: "c".repeat(32) });
   assert.ok(!("depsRoot" in base));
-  assert.ok(!("cordisSrc" in base));
   const full = buildRuntimeConfig({
     dataDir: "/x",
     dshPort: 8080,
     bridgePort: 8081,
     bridgeKey: "k".repeat(32),
     controlKey: "c".repeat(32),
-    cordisSrc: "/install/cordis",
     depsRoot: "/deps/node_modules",
     readyMarker: "MY_READY",
   });
@@ -84,7 +82,6 @@ test("buildRuntimeConfig: 覆盖项（cordisSrc/depsRoot）只在显式传时出
     bridgePort: 8081,
     bridgeKey: "k".repeat(32),
     controlKey: "c".repeat(32),
-    cordisSrc: "/install/cordis",
     depsRoot: "/deps/node_modules",
     readyMarker: "MY_READY",
   });

@@ -12,13 +12,13 @@
 //
 // 用法（仓库根，先 pnpm run build && node src-cordis/build.ts）：
 //   node tests/e2e/settings-model.probe.mjs [--keep]
-// 环境：DSH_REPO_ROOT、DSH_DATA_DIR、DSH_DEPS_ROOT、DSH_CORDIS_SRC、DSH_PROBE_TIMEOUT_MS
+// 环境：DSH_REPO_ROOT、DSH_DATA_DIR、DSH_DEPS_ROOT、DSH_PROBE_TIMEOUT_MS
 import { fork } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { randomBytes, randomInt } from "node:crypto";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildClientRequest, parseServerResponse } from "../../src/lib/rpc-envelope.js";
+import { buildClientRequest, parseServerResponse } from "../../src/lib/rpc-envelope.ts";
 import {
   AGENT_DEFAULT_MODEL_NS,
   isSettingsConflict,
@@ -26,14 +26,13 @@ import {
   rpcSettingsDescribe,
   rpcSettingsReplace,
   settingsViewOf,
-} from "../../src/lib/dsh-rpc.js";
+} from "../../src/lib/dsh-rpc.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(process.env.DSH_REPO_ROOT || join(here, "..", ".."));
 const KEEP = process.argv.includes("--keep");
 const dataDir = resolve(process.env.DSH_DATA_DIR || join(REPO, "_tmp", "probe-model-data"));
 const depsRoot = resolve(process.env.DSH_DEPS_ROOT || join(REPO, "node_modules"));
-const cordisSrc = resolve(process.env.DSH_CORDIS_SRC || join(REPO, "dist", "cordis"));
 const entry = join(REPO, "dist", "runtime", "dsh-host.mjs");
 const READY_TIMEOUT_MS = Number(process.env.DSH_PROBE_TIMEOUT_MS || 240000);
 
@@ -125,7 +124,7 @@ async function runProbe() {
   const controlKey = opaque();
   const configPath = writeConfig({
     dataDir, dshHome: join(dataDir, ".dsh"), dshPort, bridgePort,
-    bridgeKey: opaque(), controlKey, readyMarker: "PROBE_READY:" + opaque(12), cordisSrc, depsRoot,
+    bridgeKey: opaque(), controlKey, readyMarker: "PROBE_READY:" + opaque(12), depsRoot,
   });
   say("dataDir=" + dataDir);
   const { child, exit } = forkEntry(configPath);
