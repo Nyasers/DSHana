@@ -148,7 +148,7 @@ export function apply(ctx) {
   }
 
   // ---- 应用态存储收尾：UI 共享通道的键就是一次 App 生命周期的事（本次加载写的，上次加载留的，
-  //      被杀掉的进程删不掉自己那份），加载时直接清空整个 `dshana.` 前缀，不按时间猜。
+  //      被杀掉的进程删不掉自己那份），加载时清空整个 `dshana.` 前缀。
   //      维护动作：fire-and-forget，失败不影响 apply（见 lib/shared-state.ts）。
   {
     try {
