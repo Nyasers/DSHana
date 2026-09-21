@@ -33,7 +33,7 @@ import type { ToolInputBase } from "#/tools/shared/types.ts";
 // 查任务不经本工具：会话靠句柄（宿主 taskId）定位，任务清单由宿主提供给 Agent 的内置任务查询
 // 工具承担（模型侧，本环境是 check_pending_tasks）——dshana 的 open/reply 建的后台任务本来
 // 就在那份清单里，本工具面不开“先列清单再操作”的门。
-// 官方 session/list 仍被 get 用来定位读位点（见 tools/shared/query.ts）。
+// 官方 session/list 仍被 get 用来定位读位点（见 tools/actions/get.ts）。
 
 /** subcommand 注册表（顺序即 description 的列举顺序）。 */
 const ACTIONS = [openAction, replyAction, closeAction, getAction, approveAction];
