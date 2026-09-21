@@ -230,6 +230,16 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
   function sharedKey(kind) {
     return "dshana.card." + (cardInstanceIdOf() || "unknown") + "." + kind;
   }
+  // 本实例可能写过的四种共享键（与下面各 readShared/writeShared 的 kind 同名）。
+  var SHARED_KINDS = ["boot-state", "settings-view", "selection", "panel-view"];
+  /** 删掉本实例写过的共享键（下线时调用；键按实例配对，过期留着没有消费方）。 */
+  function dropShared() {
+    var st = sharedStore();
+    if (!st || typeof st.delete !== "function") return Promise.resolve();
+    return Promise.all(SHARED_KINDS.map(function (kind) {
+      try { return Promise.resolve(st.delete(sharedKey(kind))); } catch (e) { return Promise.resolve(); }
+    }));
+  }
   // storage.global 在 SDK 里即可调用对象、也可能是工厂（两边兼容地取）。
   function sharedStore() {
     try {
@@ -577,7 +587,6 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
   // 代价如实记：owner 非正常消失（没跑到 pagehide）时，FP 最多陈旧 STALE_MS。
   var BOOT_STATE_STALE_MS = 5 * 60 * 1000;
   var lastPublishedSig: string | null = null;
-  var lastSnapshot: any = null;
   function bootSig(s) {
     if (!s) return "";
     var e = s.error || {};
@@ -596,7 +605,7 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
   }
   function fetchOwnState() {
     fetchState().then(function (s) {
-      if (!isSidebar) { lastSnapshot = s; publishBootState(s); }
+      if (!isSidebar) publishBootState(s);
       applySnapshot(s);
     }).catch(function (err) {
       setStateView("error", (err && err.message) || String(err));
@@ -931,10 +940,10 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
       // 卸载释放注入的 transport（WS 载体等）
       window.addEventListener("pagehide", function () {
         if (injected.dispose) { try { injected.dispose(); } catch (e) { /* 忽略 */ } }
-        // owner 下线：把快照标成过期（at: 0），FP 不必等 5 分钟安全网就能接上
-        if (!isSidebar && lastSnapshot) {
-          try { writeShared("boot-state", { at: 0, state: lastSnapshot }); } catch (e) { /* 忽略 */ }
-        }
+        // owner 下线：删掉本实例的共享键。原先写 at:0 标过期——过期标记本身也是存储里的一条键，
+        // 从不回收，随每次挂载累积（真机 10 天 139 个键、逼近 1MB/应用 配额）。下一个实例本来
+        // 就自己取一次快照（poll 的过期兜底），删掉更干净。FP 不写键，不必删。
+        if (!isSidebar) { try { dropShared(); } catch (e) { /* 忽略 */ } }
       }, { once: true });
       // 主题不再定时推送（原有一个 1.5s 轮询，只为等“壳页就绪后再推”）：首屏由
       // getSnapshot()+URL 参数落地，注入完成后在 startInjection 的完成回调里推一次，

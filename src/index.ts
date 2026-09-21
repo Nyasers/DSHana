@@ -32,6 +32,8 @@ import * as dshanaTool from "#/tools/index.ts";
 import { registerDshanaRoutes, defaultDshanaRouteDeps } from "#/routes/dshana-routes.ts";
 // 宿主模型/提供商变更 → 受管 runtime 重拉目录（见 lib/model-sync.ts 的动因）
 import { installHostModelSync } from "#/lib/model-sync.ts";
+// 应用态存储回收：清掉 UI 跨面共享通道遗留的陈旧键（见 lib/shared-state-gc.ts）
+import { pruneSharedState } from "#/lib/shared-state-gc.ts";
 
 // ---- 统一日志：只走宿主 ctx.logger ----
 // App 侧不写自己的文件日志；ctx.logger 缺失（旧 host）或宿主抛错时回落 stderr。
@@ -134,6 +136,26 @@ export function apply(ctx) {
       log("info", "apply 自动链：Promise 微任务触发 ensureManagedRuntime（不占 apply 同步栈，single-flight）");
     } catch (e) {
       log("warn", "apply 自动链触发异常（忽略，继续返回 disposer）：" + ((e as any)?.message || e));
+    }
+  }
+
+  // ---- 应用态存储回收：UI 共享通道按卡片实例配对写键，被杀掉的实例删不掉自己那份，
+  //      旧键会一直留着（真机 10 天 139 个键、逼近 1MB/应用 配额）。加载时扫一次、清陈旧键。
+  //      维护动作：fire-and-forget，失败不影响 apply（见 lib/shared-state-gc.ts）。
+  {
+    try {
+      Promise.resolve()
+        .then(() => pruneSharedState(ctx && ctx.storage ? ctx.storage.global : null))
+        .then((r) => {
+          if (r.removed > 0 || r.failed > 0) {
+            log("info", `应用态存储回收：删陈旧共享键 ${r.removed} 个（扫描 ${r.scanned} 键，失败 ${r.failed}）`);
+          }
+        })
+        .catch((e) => {
+          log("warn", "应用态存储回收异常（忽略）：" + ((e as any)?.message || e));
+        });
+    } catch (e) {
+      log("warn", "应用态存储回收触发异常（忽略）：" + ((e as any)?.message || e));
     }
   }
 
