@@ -21,6 +21,7 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-slots'
 import { computeColumns, RIGHTBAR_DEFAULT_RATIO, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAULT } from './columns.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
+import type { MainPanelId } from './service.ts'
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
 
@@ -142,6 +143,43 @@ export function AppFrame({
     stream: 'stream',
   }
   const surface = ROLE_SURFACES[role ?? ''] ?? 'standalone'
+
+  // 跨面主面板：本面（workspace）接收 FP 侧栏选中的而行（FP 整面只有侧栏、没有中列，
+  // 面板页只能由本面打开）。读快照一次 + 订阅变化；FP 不在场时本面不动。
+  useEffect(() => {
+    if (surface !== 'workspace') return
+    const bridge = (window as {
+      __DSHANA__?: {
+        readPanelView?: () => Promise<{ panelId: string | null }>
+        onPanelViewChanged?: (listener: () => void) => () => void
+      }
+    }).__DSHANA__
+    const read = bridge?.readPanelView
+    const onChanged = bridge?.onPanelViewChanged
+    if (read === undefined || onChanged === undefined) return
+    let active = true
+    let applied: string | null | undefined
+    const apply = (): void => {
+      void read().then((next) => {
+        if (!active) return
+        const panelId = next?.panelId ?? null
+        if (panelId === applied) return
+        applied = panelId
+        try {
+          actions.selectPanel(panelId as MainPanelId | null)
+        } catch (error: unknown) {
+          // 面板条目还没挂上（本面刚起）或已被摘掉：保持当前选中。
+          console.warn('[dshana/ui-layout] 跨面面板没能落地。', error)
+        }
+      }, () => { /* 读失败保持当前 */ })
+    }
+    const off = onChanged(apply)
+    apply()
+    return () => {
+      active = false
+      off()
+    }
+  }, [surface, actions])
 
   // Track the frame's own box (not the window): rAF-throttled ResizeObserver.
   useLayoutEffect(() => {

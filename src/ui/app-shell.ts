@@ -216,7 +216,8 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
   }
 
   // ---- 跨面共享状态（样例 src/ui/settings/view-state.ts 的同一语义，载体换成 App 全局存储）----
-  // 两个消费方：设置视图（FP 齿轮点开 → 主卡开面板）与会话选中（FP 点会话 → 主卡跟随）。
+  // 三个消费方：设置视图（FP 齿轮点开 → 主卡开面板）、会话选中（FP 点会话 → 主卡跟随）、
+  // 主面板选中（FP 侧栏点「插件」这类面板行 → 主卡开那一页：FP 整面只有侧栏，没有中列）。
   // 作用域：我们单 DSH 源，只按**卡片实例**配对（宿主文档：主卡与其 FP 具有同一 cardInstanceId）；
   // 样例额外按 sourceId 分域，单源下不需要，日后多源时再补。
   // 键在调用时才算：context 可能后到，算早了会拼出错误作用域。
@@ -294,6 +295,19 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
     });
   }
 
+  // 主面板选中：{ panelId }。DSH 侧栏的面板行（0.1.6 起多了「插件」那一行）在 FP 上没有中列可放，
+  // 那一页归主卡：FP 只发射选中的面板 id，主卡把它交给自己的 layout（空值 = 回到会话）。
+  function readPanelView() {
+    return readShared("panel-view").then(function (v) {
+      return { panelId: v && typeof v.panelId === "string" && v.panelId ? v.panelId : null };
+    });
+  }
+  function writePanelView(panelId) {
+    return writeShared("panel-view", {
+      panelId: typeof panelId === "string" && panelId ? panelId : null,
+    });
+  }
+
   // 钉住的会话（只读会话流面用）：?sid=<DSH session id> 打开时钉住那一段，不跟随跨面切换；
   // 没有这个参数时返回 null，表示「跟随跨面共用的当前会话」。
   function readPinnedSession() {
@@ -305,6 +319,7 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
 
   // 挂到宿主桥（__DSHANA__）上的跨面接口：
   //   设置视图 → src-integrations/ui-settings-general；会话选中 → src-integrations/ui-session；
+  //   主面板选中 → ui-sidebar（FP 发射）与 ui-layout（主卡落地）。
   //   剪贴板 → @dshana/clipboard 的 client 半（同文档，直接调，无消息协议）。
   var SURFACE_API = {
     readSettingsView: readSettingsView,
@@ -313,6 +328,9 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
     readSelection: readSelection,
     writeSelection: writeSelection,
     onSelectionChanged: function (listener) { return onSharedChanged("selection", listener); },
+    readPanelView: readPanelView,
+    writePanelView: writePanelView,
+    onPanelViewChanged: function (listener) { return onSharedChanged("panel-view", listener); },
     readPinnedSession: readPinnedSession,
     clipboardWrite: writeClipboard,
   };

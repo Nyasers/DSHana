@@ -80,6 +80,32 @@ function PanelRow({ id, label, wide, usePanelInfo, selectPanel, renderSlot }: Pa
   )
 }
 
+/** 跨面桥面里本插件用到的那一格（只有面板选中；缺失即不参与）。 */
+type PanelSelectionBridge = {
+  writePanelView?: (panelId: string | null) => Promise<void>
+}
+
+/**
+ * 把本面（FP）选中的主面板宣告给主卡。
+ *
+ * FP 整面只有一个侧栏、没有中列，而面板页落在中列：0.1.6 起侧栏多了「插件」这一行，
+ * 那一页只能由主卡打开。所以 FP 只发射选中的面板 id，主卡把它交给自己的 layout。
+ * 首个观察值也发射：FP 起手就是「面板未打开」，把这个事实说出去两面才一致。
+ * @param usePanelInfo - 布局的选中面读取钩子。
+ * @param enabled - 只在 navigation 面发射（其它面自己就有中列）。
+ */
+function usePanelPublisher(usePanelInfo: PropsRuntime<'sidebar'>['usePanelInfo'], enabled: boolean): void {
+  const activePanelId = usePanelInfo(info => info.activePanelId)
+  const last = useRef<string | null | undefined>(undefined)
+  useEffect(() => {
+    if (!enabled) return
+    if (last.current === activePanelId) return
+    last.current = activePanelId
+    const bridge = (window as { __DSHANA__?: PanelSelectionBridge }).__DSHANA__
+    void bridge?.writePanelView?.(activePanelId ?? null)
+  }, [activePanelId, enabled])
+}
+
 /**
  * Render the sidebar column shell.
  * @param props - composed slot props (runtime share + injected callbacks, contract/slots.ts).
@@ -171,6 +197,7 @@ export function SidebarRoot({
   // 认面必须在所有 hook 之后（React 规则），正好落在 buildVersion 处。
   const surfaceRole = (window as { __DSHANA__?: { role?: string } }).__DSHANA__?.role
   const showChrome = surfaceRole !== 'navigation'
+  usePanelPublisher(usePanelInfo, surfaceRole === 'navigation')
   if (surfaceRole === 'settings' || surfaceRole === 'workspace') {
     return <div className={css.surfaceSettings}>{renderSlot('sidebar.settings', { wide: true })}</div>
   }
