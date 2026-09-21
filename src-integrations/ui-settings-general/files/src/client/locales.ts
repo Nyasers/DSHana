@@ -14,7 +14,7 @@ export const zh = {
   'connection.connected': '连接成功',
   'connection.reconnect': '连接异常，点击立即重连',
   'connection.restart': '连接中断，正在自动重试，点击立即重连',
-    'view.readError': '设置状态同步失败',
+  'view.readError': '设置状态同步失败',
   'view.writeError': '设置状态同步失败',
   'view.retry': '重试',
 } satisfies Record<string, string>
