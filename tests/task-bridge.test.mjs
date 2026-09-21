@@ -4,7 +4,7 @@
 // tests/task-bridge.test.mjs — src/runtime/task-bridge.ts 单测：事件归类纯函数 +
 // 宿主取消反向触发的两个回归点（真机踩过：取消标记没落、结算成 failed）。
 //
-// 绑定事实源已换成宿主任务记录（metadata.dsh）——取消标记写回任务 metadata，不再是私有映射文件。
+// 绑定事实源是宿主任务记录（metadata.dsh）：取消标记写回任务 metadata，不用私有映射文件。
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { classifyDshEvent, BRIDGE_EVENTS, SessionBridge } from "../src/runtime/task-bridge.ts";

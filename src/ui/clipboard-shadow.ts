@@ -16,9 +16,9 @@
 //     （dsh-client-modules 把每条声明成 { id, inject, immediately }，只有 immediately 才在启动
 //     时就激活），装得晚且不保证被激活；壳页在注入 DSH 之前装，才是真正的「全局 + 最早」。
 //
-// 顺序：**桥优先**（__DSHANA__.clipboardWrite → 宿主能力 app/ui/clipboard-write）。旧实现是
-// 「先试原生、失败再走桥」——原生必然先失败，于是每次复制都先撞一次已经关死的门（控制台刷
-// violation）再回落。现在原生只作为「桥缺席 / 桥拒绝」时的回落。
+// 顺序：**桥优先**（__DSHANA__.clipboardWrite → 宿主能力 app/ui/clipboard-write）。理由：嵌入
+// 场景里原生必然先失败，若「先试原生」每次复制都要先撞一次已经关死的门（控制台刷 violation）
+// 再回落。原生只作为「桥缺席 / 桥拒绝」时的回落。
 //
 // 覆盖范围：
 //   · writeText(text)  —— 主路径，走宿主桥（DSH 的复制按钮都是它）。

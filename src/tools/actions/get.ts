@@ -19,8 +19,8 @@
 // 已知窄窗口：session/list 取到 asOfSeq 与 session/page 取数之间若有新写入，读到的是 asOfSeq 那一刻的尾部——
 // 单写者锁下这个窗口只有毫秒级，且 get 的语义本就是"回看最近一轮"，接受。
 //
-// 代价（已接受）：查询从此要求受管 runtime 就绪（未就绪先 ensureManagedRuntime），
-// 不再有"离线直读文件"这条路。换来的是格式演进由官方承担。
+// 代价：查询要求受管 runtime 就绪（未就绪先 ensureManagedRuntime），没有"离线直读文件"
+// 这条路；换来的是格式演进由官方承担。
 //
 // 权限模型：sessionId 即访问凭证——拿得到 id 就能读，拿不到天然无所有权，无需注册表。
 import { ensureManagedRuntime } from "#/lib/managed-runtime.ts";
@@ -259,7 +259,7 @@ async function findSummary(ctx, sessionId): Promise<SessionSummaryItem | null> {
 async function readConclusion(sessionId: string, ctx: ToolCtx): Promise<ToolResult> {
   if (!sessionId) throw new Error("get 必须能解析出 sessionId");
   // sessionId 格式锁死（session-<UUID>，与 dsh 生成格式一致）：畸形值直接拒，
-  // 不把垃圾 id 送到 DSH（旧实现还靠它防路径穿越，本实现已不拼文件路径，格式闸保留）。
+  // 不把垃圾 id 送到 DSH（本实现不拼文件路径，格式闸仍保留）。
   if (!/^session-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId)) {
     throw new Error(`sessionId 格式非法（应为 session-<UUID>）：${sessionId}`);
   }

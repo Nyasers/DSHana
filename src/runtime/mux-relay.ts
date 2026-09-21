@@ -3,10 +3,10 @@
 //
 // src/runtime/mux-relay.ts — 中继的 WS 帧搬运（分片模式）
 //
-// 只在页面声明支持分片时启用（见 lib/mux-chunks.ts 的 MUX_CHUNK_QUERY）；未声明仍走
-// bridge.ts 原有的原始 socket 双向透传——旧文档与新中继不会互相看不懂。
+// 只在页面声明支持分片时启用（见 lib/mux-chunks.ts 的 MUX_CHUNK_QUERY）；未声明的连接走
+// bridge.ts 的原始 socket 双向透传，两侧各自成立。
 //
-// 为什么要替换「透传」：宿主对 App 受管服务的 WS 中继有 1 MiB 上游帧上限，超限即
+// 为什么要搬运帧：宿主对 App 受管服务的 WS 中继有 1 MiB 上游帧上限，超限即
 // close(1011, "Managed service stopped")。DSH 的 mux 帧是原子 JSON，长会话的首帧就是
 // 整段历史 snapshot，一帧就能超。分片点必须在宿主**之前**，本中继正是那个位置。
 //

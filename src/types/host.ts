@@ -3,9 +3,9 @@
 //
 // src/types/host.ts — 宿主契约类型面（App 侧唯一入口）
 //
-// 为什么单独一份：src 域此前没有 TS 语法能力（rspack 未配 swc），宿主给的形状只能写进注释、
-// 参数形状只能靠 JSDoc 手抄，抄漏一处就是静默降级。swc 就位后（见 src/rspack.config.mts），
-// 把「宿主给什么」收成一处具名类型，供 lib / tools / routes / runtime 引用。
+// 为什么单独一份：宿主给的形状要收成一处具名类型，供 lib / tools / routes / runtime 引用
+// （src 域有 TS 语法能力，见 src/rspack.config.mts 的 swc 规则）。形状散在各处靠注释与 JSDoc
+// 手抄，抄漏一处就是静默降级。
 //
 // 只进类型层：本文件被 `import type` 引用，swc 剥掉后 bundle 里不留 @hana/app-sdk 的运行时
 // 依赖（该包是 devDependency，运行时由宿主提供；运行时真需要的那处值导入见

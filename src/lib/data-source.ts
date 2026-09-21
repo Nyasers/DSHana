@@ -27,7 +27,7 @@ import { APP_SETTING_DEFAULTS, resolveApprovalTimeoutSec, resolveDefaultTimeoutS
 
 export const SETTINGS_VERSION = 1;
 export const SOURCE_MODES = Object.freeze(["private", "shared"]);
-/** 内置独立目录名：与 DSH 自身默认目录 ~/.dsh 命名统一（早期 v2 的 dsh-home 不再读取）。 */
+/** 内置独立目录名：与 DSH 自身默认目录 ~/.dsh 命名统一。 */
 export const PRIVATE_HOME_NAME = ".dsh";
 /** 内置独立目录固定 profile：runtime 只启动官方随附的这一个（首次加载时由 DSH 自建，我们不种子化）。
  * settings 里那个同名的 profile 键只为兼容旧存档保留，实际不再影响启动。 */
@@ -167,16 +167,16 @@ export function sourceOf(settings, dataDir) {
 }
 
 /**
- * 存量兼容：两个超时原先写在 <dataDir>/config.json 的 global.*（自持存储之前的栈）。
- * settings.json 里没有这两个键时，从旧位置读一次当初始值（只在读路径生效，不当场落盘）；
- * 下次经 POST /settings 写设置时，它们就自然迁进自持存储，旧位置不再被写入。
+ * 超时两键的读侧兼容：settings.json 缺这两个键时，从 <dataDir>/config.json 的 global.*
+ * 读一次当初始值（只在读路径生效，不当场落盘）；写设置时它们落进 settings.json，这条路
+ * 只在缺键时用到。
  */
 function withLegacyTimeouts(raw, dataDir) {
   const out = raw && typeof raw === "object" && !Array.isArray(raw) ? { ...raw } : {};
   if (!("approvalTimeoutSec" in out)) out.approvalTimeoutSec = resolveApprovalTimeoutSec({ dataDir });
   if (!("defaultTimeoutSec" in out)) out.defaultTimeoutSec = resolveDefaultTimeoutSec({ dataDir });
-  // 其余键（mode/path/profile）缺省落位；顺序要紧：先补旧位置的超时，缺哪个补哪个，
-  // 然后才铺默认，否则默认会先把键占住、旧位置的值就永远读不到了。
+  // 其余键（mode/path/profile）缺省落位；顺序要紧：先补完那两个旧位置的超时，缺哪个补哪个，
+  // 然后才铺默认，否则默认会先把键占住、那份兼容值就永远读不到了。
   return { ...DEFAULT_SETTINGS, ...out };
 }
 

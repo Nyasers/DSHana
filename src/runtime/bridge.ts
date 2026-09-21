@@ -345,7 +345,7 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
   // WS 升级：默认原始 socket 双向透传（握手请求改写 Host/Origin/Cookie 后转上游，响应原样回写）。
   // 页面声明支持分片（URL 带 MUX_CHUNK_QUERY）时改走帧搬运：宿主对受管服务的上游帧有
   // 1 MiB 上限，超限即 close(1011) —— DSH 打开长会话的首帧就是整段 snapshot，必须在中继
-  // 这一侧按尺寸切分。开关显式：未声明的旧文档仍走原路，新旧不会互相看不懂。
+  // 这一侧按尺寸切分。开关显式：未声明的连接走原样透传。
   server.on("upgrade", (req, clientSocket, head) => {
     const requested = new URL(req.url || "/", "http://bridge.invalid");
     const queryKey = requested.searchParams.get("dshBridge");
@@ -369,7 +369,7 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
     });
     upstreamSockets.add(upstreamSocket);
     if (chunked) {
-      // 帧搬运接管两个 socket 的读写（含握手响应头原样回写），不再 pipe。
+      // 帧搬运接管两个 socket 的读写（含握手响应头原样回写）。
       startFrameRelay({ clientSocket, upstreamSocket, log });
       const drop = () => {
         upstreamSockets.delete(upstreamSocket);

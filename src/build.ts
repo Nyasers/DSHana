@@ -13,8 +13,8 @@
 //                         cordis/ 产物由 build:cordis 另产出 dist/cordis，随包分发）
 //   ui/                   App ui/ 静态树（migration step 4b/5；cards route 指向壳页，
 //                         见 src/ui/——相对资源路径，宿主以 /api/apps/<id>/ui<route> 服务）
-// v1 遗留变化：不再生成 dist/routes/index.js 壳（v1 宿主按 routes/ 目录扫描具名导出
-// pluginRoutes；v2 路由走 ctx.routes.register 单 route app，宿主不扫 dist 目录）。
+// 路由：v2 走 ctx.routes.register（单个 route app），不生成 dist/routes/ 目录——宿主只认注册
+// 的 route app，不扫 dist。
 // 用法：node src/build.ts [RSPACK_ENV=<构建环境目录>]
 // 注意：本文件是构建入口，不在 bundle 里（主入口由 rspack.config.mts 指定为 src/index.ts）；
 // 但 collectSource 会把 src/ 下的 .js/.ts 一并收作 URL 回写与静态 URL 断言的扫描面。
@@ -90,7 +90,7 @@ fs.copySync(join(ROOT, "src", "manifest.json"), join(DIST_DIR, "manifest.json"))
 fs.copySync(join(ROOT, "src", "skills"), join(DIST_DIR, "skills"));
 // App 图标：src/assets/icon.png 为唯一规范源（manifest.icon "assets/icon.png"）；
 // 依赖部署（自包含打包）：DSH 依赖由 pack.mts 物化进安装目录 node_modules，
-// dist = App 安装目录形态（含 cordis 产物）；运行时不再安装，dist 保持轻量壳。
+// dist = App 安装目录形态（含 cordis 产物）；依赖随包物化，dist 保持轻量壳。
 const iconSrc = join(ROOT, "src", "assets", "icon.png");
 if (!fs.pathExistsSync(iconSrc))
   throw new Error("App 图标缺失（src/assets/icon.png）：manifest.icon 指向 assets/icon.png，需真实可解码图片");

@@ -100,8 +100,8 @@ export function scopedClassName(id, file, local, pkgDir) {
 // css-modules 虚拟模块源码：class 名映射（默认导出）+ 样式文本注入 style 标签（幂等）。
 // 类名与官方产物等价：官方是 lightningcss 的 [hash]_[local]，本链没有哈希，就用包身份 +
 // 模块身份自己造一段唯一的键（见 scopedClassName）。关键是唯一性：多个被重建的包共用一条
-// 编译链，一个平坦前缀会让两个包的 local 落到同一个 class 上（ui-chat 的 frame/column 与
-// ui-layout 的 frame/centerCol 曾经就是同一个名字），样式互相顶掉。残余情况由构建期的
+// 编译链，一个平坦前缀会让两个包的 local 落到同一个 class 上（ui-chat 有 frame/column、
+// ui-layout 有 frame/centerCol，这类同名 local 会互相顶掉样式）。残余情况由构建期的
 // 类名唯一性闸兜底。
 // 注入点 = 模块 materialization（factory 执行）——官方 css-modules 同款时机
 // （claimStyles 记账 style[data-plugin]）。

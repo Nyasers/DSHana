@@ -308,7 +308,7 @@ export function createStreamMux(privateBase, WebSocketCtor = window.WebSocket) {
   const wsUrl = new URL("api/remote.mux", privateBase);
   wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
   // 声明本页支持承载面分片：中继据此把超限帧按尺寸切开（宿主的 1 MiB 上游帧上限）。
-  // 不声明就走原来的原样透传——旧文档与新中继不会互相看不懂（约定见 lib/mux-chunks.ts）。
+  // 不声明就走原样透传（约定见 lib/mux-chunks.ts）。
   wsUrl.searchParams.set(MUX_CHUNK_QUERY, MUX_CHUNK_QUERY_VALUE);
   let socket: WebSocket | null = null;
   const streams = new Map<string, any>();
@@ -496,8 +496,8 @@ export async function injectDshIndex(
   base.href = privateBase.toString();
   document.head.prepend(base);
   // head 忠实搬运，**保持原顺序**（样式与脚本的相对次序决定优先级；只搬不重排）。
-  // 对比旧实现的两处差异：① 多搬 <style>（旧实现漏搬，主题插件的静态 fallback
-  // 就是这样丢的）；② 内联/外部脚本与样式混在同一趟有序遍历里，不再分块。
+  // 两条要点：① <style> 必须一起搬——主题插件的静态 fallback 就挂在它上面，漏搬即丢；
+  // ② 内联/外部脚本与样式在同一趟有序遍历里处理，不按类型分块。
   // module entry 最后加载（它依赖前面的东西）。
   let moduleEntry: string | null = null;
   for (const node of parsed.head.children) {
@@ -536,7 +536,7 @@ export async function injectDshIndex(
   if (!moduleEntry) throw new Error("DSH index did not declare a module entry");
   // body 内联脚本（**必须早于 module entry**）：dsh 自己的 boot-theme 行就在 <body> 开头——
   // 它设 documentElement.style.colorScheme、body[data-ds-dark-theme]、--dsh-content-font-size。
-  // 旧实现只搬 head，这行就丢了：dsh 的明暗标记与内容字号就不会初始化。
+  // 漏了它 dsh 的明暗标记与内容字号就不会初始化。
   for (const source of parsed.body.querySelectorAll("script:not([src])")) {
     const script = document.createElement("script");
     script.textContent = source.textContent;

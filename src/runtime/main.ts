@@ -338,7 +338,7 @@ export async function main(argv: string[]): Promise<number> {
 
   // ---- 4) 定位 DSH + 产物在位检查 ----
   // profile 不归我们：官方随附模板 `web` 由 DSH 首次加载时自建自维护（loadProfile 的
-  // template 分支），我们不写 DSH_HOME 里的任何东西——包括以前那套种子化/链接/清单归一。
+  // template 分支），我们不写 DSH_HOME 里的任何东西（不种子化、不链接、不归一清单）。
   let located;
   try {
     located = await locateDsh({ depsRoot, log: (s) => info("locate", s) });
@@ -489,7 +489,7 @@ export async function main(argv: string[]): Promise<number> {
     await shutdown("bridge-failed", EXIT.PORT);
     return EXIT.PORT;
   }
-  // 反向 session.cancel 经中继（带 bridgeKey）；不再直连免鉴权 DSH 端口。
+  // 反向 session.cancel 经中继（带 bridgeKey），不走免鉴权的 DSH 端口。
   const serviceBaseUrl = "http://127.0.0.1:" + opts.bridgePort;
   // 绑定事实源 = 宿主任务记录的 metadata.dsh：两桥共用同一个索引（各自进程内短 TTL 缓存，
   // 模型请求热路径不至于每请求往返宿主）。读取失败在各自读点显式处理（fail-closed）。

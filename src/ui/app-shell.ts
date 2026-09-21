@@ -643,7 +643,7 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
   // 同文档注入形态（当前主路径）：主题桥就在本页里，向本窗口广播即可被它收到。
   // 为什么必须由壳页主动推：桥发的 dshHanaThemeRequest 走的是 parent.postMessage，而
   // 同文档注入后本页的 parent 是**宿主**而不是壳页，那个请求到不了这里，壳也就没机会回
-  // ——这就是主卡 / FP 主题不跟随的原因（旧 iframe 形态下 parent 恰好是壳页，才一直正常）。
+  // ——parent 指向宿主，主卡 / FP 的主题就不会跟随。
   // 主题载荷：宿主变量 + 启动偏好（boot-theme 行字面量；桥在插件树之前靠它开门）。
   function themeMessage() {
     return { dshHanaTheme: { vars: readThemeVars(), preference: dshPreference } };
@@ -665,7 +665,7 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
   // **{ written: boolean }**。旧代码判的是 `payload.ok === false`——字段名不对，于是
   // 宿主明确回 written:false 时这里照样返回 true，表现为「界面显示复制成功、系统剪贴板里
   // 什么都没有」（DSH 那个 helper 只要不抛就报成功）。现在：显式 written:false 与异常都
-  // **reject 并打印原因**，让失败可见（调用方据此报失败，不再静默假装成功）。
+  // **reject 并打印原因**，让失败可见（调用方据此报失败，不假装成功）。
   //
   // 现场结论（方向已按决定暂停）：**两条路都在宿主手里**——
   //   宿主：Plugin UI capability "clipboard.writeText" is not allowed in card slots
@@ -706,10 +706,9 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
   //   变更再经 hana.theme.changed 推同一组值（SDK hana.theme.subscribe 已有快照）。
   //   契约：**App 自己把宿主主题贴进自己的文档**（官方样例 SDK 的 followHostTheme：
   //   fetch cssUrl → <style data-hana-theme-style>），宿主不代劳。
-  //   此前我们只读 getComputedStyle(documentElement) 却从没加载过主题样式表——读到的永远是
-  //   空值，页面一路吃 HTML 里的纸张 fallback（var(--bg, #F5EFE4)），所以连 loading 壳页也
-  //   不跟随。修完这条，壳页、注入的 DSH UI、以及主题桥读到的变量
-  //   才会是真实的 Hana 配色。
+  //   所以本 App 必须先把宿主主题样式表贴进自己的文档，再读 getComputedStyle(documentElement)：
+  //   不贴就永远读到空值，页面一路吃 HTML 里的纸张 fallback（var(--bg, #F5EFE4)），连 loading
+  //   壳页也不跟随。贴好之后，壳页、注入的 DSH UI、以及主题桥读到的变量才是真实的 Hana 配色。
   var THEME_STYLE_ATTR = "data-hana-theme-style";
   var themeCssUrl: string | null = null;
   // 注：dsh 自己的主题偏好（system/light/dark）**不由壳页判断**——它是 DSH 侧的事实
@@ -935,12 +934,11 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
       // 卸载释放注入的 transport（WS 载体等）
       window.addEventListener("pagehide", function () {
         if (injected.dispose) { try { injected.dispose(); } catch (e) { /* 忽略 */ } }
-        // owner 下线：删掉本实例的共享键。原先写 at:0 标过期——过期标记本身也是存储里的一条键，
-        // 从不回收，随每次挂载累积（真机 10 天 139 个键、逼近 1MB/应用 配额）。下一个实例本来
-        // 就自己取一次快照（poll 的过期兜底），删掉更干净。FP 不写键，不必删。
+        // owner 下线：删掉本页的共享键。键的消费方是「此刻挂着的面」，页面一走就没人读；
+        // 下一个实例自己取一次快照（poll 的过期兜底）。FP 不写键，不必删。
         if (!isSidebar) { try { dropShared(); } catch (e) { /* 忽略 */ } }
       }, { once: true });
-      // 主题不再定时推送（原有一个 1.5s 轮询，只为等“壳页就绪后再推”）：首屏由
+      // 主题按事件推送，没有定时轮询：首屏由
       // getSnapshot()+URL 参数落地，注入完成后在 startInjection 的完成回调里推一次，
       // 此后完全由 hana.theme.subscribe（hana.theme.changed）事件驱动。
       poll();

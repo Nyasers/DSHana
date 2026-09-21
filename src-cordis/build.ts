@@ -72,8 +72,8 @@ function buildCordisStatic(outRoot) {
     const clientSrc = join(pkgSrc, "client.js");
     if (fs.pathExistsSync(clientSrc)) fs.copySync(clientSrc, join(pkgOut, "client.js"));
   }
-  // roster patch：不再是一个 bundle 包（profile 的 dsh.profile.bundles 里也不再有我们的
-  // 名字），而是随包一份普通文件，runtime 经 patchFiles 作启动期 overlay 传进去。
+  // roster patch：随包一份普通文件（profile 的 dsh.profile.bundles 里没有我们的条目），
+  // runtime 经 patchFiles 作启动期 overlay 传进去。
   const patchSrc = join(SRC_ROOT, "cordis.patch.yml");
   if (!fs.pathExistsSync(patchSrc)) throw new Error(`roster patch 缺失：${patchSrc}`);
   fs.copySync(patchSrc, join(dirname(outRoot), "cordis.patch.yml"));

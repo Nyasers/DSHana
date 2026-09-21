@@ -10,7 +10,7 @@
 //     readyMarker:带随机 opaque }, ... }) → 状态轮询等到 ready / failed / exited。
 //     绝不把 runtimeId 当就绪：starting 只是宿主已拉起进程，DSH 真就绪 = 子
 //     进程真实监听后打印的 readyMarker → host 侧 service.state=ready。
-//     端口不再暴露给用户：区间随机 + 占用自动换端口重试；就绪缓存每次经
+//     端口不暴露给用户：区间随机 + 占用自动换端口重试；就绪缓存每次经
 //     runtime.get 探活，子进程崩溃可被父侧识别并重起（对齐样例 controller 边界）。
 //   单例语义：一个 App runtime 服务多个 DSH 会话（每会话的 taskId 经任务桥各自携带，
 //     不把单次启动任务绑成全局焦点）；首次 create 时启动（tools/actions/open.ts 接线点），
@@ -22,7 +22,7 @@
 //
 // 参数契约（与 src/runtime/options.ts 对偶；增删需两处同步 + tests/）：
 //   唯一的子进程入参是私有运行时配置文件路径（argv[1]），由 writeRuntimeConfigFile 落盘、
-//   buildRuntimeConfig 生产 schema；不再有命令行明文参数（凭据/端口不进 argv）。
+//   buildRuntimeConfig 生产 schema；命令行不带明文参数（凭据/端口不进 argv）。
 import { join } from "node:path";
 import { mkdirSync, writeFileSync, chmodSync, rmSync, readFileSync } from "node:fs";
 import { randomInt, randomBytes } from "node:crypto";
@@ -262,7 +262,7 @@ async function waitTerminal(ctx, runtimeId, timeoutMs = 15000) {
 
 /**
  * 就绪探活：宿主 runtime.get 到 ready 才算仍活着。子进程崩溃/被回收后 state 变终态 →
- * 返回 null（调用方转重起），不再拿陈旧缓存冒充 ready。查询本身失败时保守视为仍就绪
+ * 返回 null（调用方转重起），不拿陈旧缓存冒充 ready。查询本身失败时保守视为仍就绪
  * （避免宿主查询抖动引起不必要的重起/双 runtime）。
  */
 async function probeLiveRuntime() {
@@ -309,7 +309,7 @@ async function reapFailedRuntime(ctx) {
  */
 
 // ---- 失败后的自动重试 ----
-// 首次安装时“能力/权限尚未授予”是常态：apply 自动链的第一次 ensure 必然失败。既然页面不再提供
+// 首次安装时“能力/权限尚未授予”是常态：apply 自动链的第一次 ensure 必然失败。页面没有
 // 手动「启动 / 重启」按钮（无交互设计），这条链就得自己回来——失败即按退避重试，直到成功、
 // 被手动停止（stopManagedRuntime 冻结）或 App 卸载（dispose 走 stop）。任何显式启动请求
 // （apply 自动链 / dshana 首调 / /dshana/start）都会重新武装。

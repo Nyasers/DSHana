@@ -405,7 +405,7 @@ test("POST /dshana/settings/restart: 入口暂撤 → 一律 503 SWITCH_DISABLED
   assert.equal(called, 0, "撤下的入口不得触发切换链（它会停掉正在跑的 runtime）");
 });
 
-test("GET /dshana/settings: 不再带切换面字段（operation / defaults 已撤）", async () => {
+test("GET /dshana/settings: 只回设置与 revision（不带切换面字段）", async () => {
   const { app, routes } = makeFakeApp();
   registerDshanaRoutes(app, makeFakeDeps({
     readSettings: async () => ({
@@ -529,7 +529,7 @@ test("GET /dshana/card-state: 宿主任务面读取失败 → unknown 并如实�
 });
 
 // ---- 真机 ctx 形状契约 ----
-// 曾经踩到：deps 按 ctx.config.dataDir 取数据目录，而宿主（@hana/app-sdk）只在 ctx 顶层给
+// 坑：deps 按 ctx.config.dataDir 取数据目录会取空，而宿主（@hana/app-sdk）只在 ctx 顶层给
 // dataDir，ctx.config 是设置读写面。后果 = 读路径静默降级（卡状态恒 unknown），写设置恒 500。
 
 /** 真机形状的宿主 ctx：dataDir 在顶层；config 只有方法，没有 dataDir。 */
