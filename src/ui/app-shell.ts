@@ -216,23 +216,18 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
   }
 
   // ---- 跨面共享状态（样例 src/ui/settings/view-state.ts 的同一语义，载体换成 App 全局存储）----
-  // 三个消费方：设置视图（FP 齿轮点开 → 主卡开面板）、会话选中（FP 点会话 → 主卡跟随）、
-  // 主面板选中（FP 侧栏点「插件」这类面板行 → 主卡开那一页：FP 整面只有侧栏，没有中列）。
-  // 作用域：我们单 DSH 源，只按**卡片实例**配对（宿主文档：主卡与其 FP 具有同一 cardInstanceId）；
-  // 样例额外按 sourceId 分域，单源下不需要，日后多源时再补。
-  // 键在调用时才算：context 可能后到，算早了会拼出错误作用域。
-  function cardInstanceIdOf() {
-    try {
-      var c = hana && hana.surface && typeof hana.surface.getContext === "function" ? hana.surface.getContext() : null;
-      return c && typeof c.cardInstanceId === "string" && c.cardInstanceId ? c.cardInstanceId : null;
-    } catch (e) { return null; }
-  }
+  // 四个消费方：boot 快照（FP 与主卡共用一份就绪态）、设置视图（FP 齿轮点开 → 主卡开面板）、
+  // 会话选中（FP 点会话 → 主卡跟随）、主面板选中（FP 侧栏点「插件」这类面板行 → 主卡开那一页：
+  // FP 整面只有侧栏，没有中列）。
+  // 作用域：本 App 单 DSH 源、单主卡，宿主给主卡与其 FP 同一个 cardInstanceId，按实例分段没有
+  // 区分度，键就是 `dshana.<kind>`（前缀与 lib/shared-state.ts 同源）。这批键的寿命是一次 App
+  // 生命周期：加载时由 renewSharedState 清空，页面下线时由 dropShared 删。
   function sharedKey(kind) {
-    return "dshana.card." + (cardInstanceIdOf() || "unknown") + "." + kind;
+    return "dshana." + kind;
   }
-  // 本实例可能写过的四种共享键（与下面各 readShared/writeShared 的 kind 同名）。
+  // 本页可能写过的四种共享键（与下面各 readShared/writeShared 的 kind 同名）。
   var SHARED_KINDS = ["boot-state", "settings-view", "selection", "panel-view"];
-  /** 删掉本实例写过的共享键（下线时调用；键按实例配对，过期留着没有消费方）。 */
+  /** 删掉本页写过的共享键（下线时调用；过期留着没有消费方）。 */
   function dropShared() {
     var st = sharedStore();
     if (!st || typeof st.delete !== "function") return Promise.resolve();

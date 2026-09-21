@@ -196,7 +196,7 @@ function readLastShared(raw) {
 }
 
 /**
- * 自持设置存储（ctx.dataDir/integration/settings.json，0600，原子写）。
+ * 自持设置存储（ctx.dataDir/settings.json，0600，原子写）。
  * 读失败（文件损坏/版本不符）抛错——设置是切换数据源的依据，静默回退会切错源；
  * 文件不存在 = 未设置过，回落 private 默认。
  */
@@ -204,8 +204,7 @@ export function createDataSourceStore(ctx) {
   if (!ctx || typeof ctx.dataDir !== "string" || !ctx.dataDir) {
     throw new Error("data-source: 需要 App ctx（ctx.dataDir）");
   }
-  const directory = join(ctx.dataDir, "integration");
-  const filename = join(directory, "settings.json");
+  const filename = join(ctx.dataDir, "settings.json");
   let cached: SettingsSnapshot | null = null;
 
   const store = {
@@ -274,7 +273,7 @@ export function createDataSourceStore(ctx) {
           ? { lastShared: { path: settings.path, profile: settings.profile } }
           : (previous.lastShared ? { lastShared: previous.lastShared } : {})),
       };
-      await mkdir(directory, { recursive: true, mode: 0o700 });
+      await mkdir(ctx.dataDir, { recursive: true }); // 目录归宿主建，这里只保证写原子文件时它在
       const pending = filename + ".pending";
       await writeFile(pending, JSON.stringify(next, null, 2) + "\n", { mode: 0o600 });
       await rename(pending, filename);
@@ -323,7 +322,7 @@ export function resetDataSourceStore() {
  * 读失败（损坏/版本不符）抛错，与 store 同口径；文件不存在则回落 private 默认。
  */
 export function readSettingsSync(dataDir) {
-  const filename = join(dataDir, "integration", "settings.json");
+  const filename = join(dataDir, "settings.json");
   let stored;
   try {
     stored = JSON.parse(readFileSync(filename, "utf8"));

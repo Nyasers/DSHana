@@ -5,7 +5,7 @@
 // 执行器依赖宿主 ctx（app-runtime 注入），仅在无宿主时验证纯面与设置注入路径。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initAppRuntime } from "../src/lib/app-runtime.ts";
@@ -42,13 +42,12 @@ test("resolveTaskTimeoutSec / resolveApprovalTimeoutMs：无宿主回落与自�
   assert.equal(resolveTaskTimeoutSec(120), 120);
   assert.equal(resolveApprovalTimeoutMs(), 30000); // 缺省 30s
 
-  // 超时值住在自持设置里（dataDir/integration/settings.json，与数据模式同栈）
+  // 超时值住在自持设置里（dataDir/settings.json，与数据模式同栈）
   const dir = mkdtempSync(join(tmpdir(), "dshana-timeout-"));
   try {
-    mkdirSync(join(dir, "integration"), { recursive: true });
     const write = (settings) =>
       writeFileSync(
-        join(dir, "integration", "settings.json"),
+        join(dir, "settings.json"),
         JSON.stringify({ version: 1, revision: 1, settings }),
         "utf8",
       );

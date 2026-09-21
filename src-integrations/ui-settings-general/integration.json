@@ -29,7 +29,7 @@
     "所以 FP 点齿轮 → 写共享状态 → 主卡读到就开面板；两边都开着时是主卡出面、FP 只留入口。",
     "配套改动（同一批）：integrations/ui-layout 恢复 workspace 的 settingsShell（落点）；",
     "src/ui/app-shell.js 发布 VIEW_STATE_API（read/write/onChanged，落在 hana.storage.global，",
-    "键 dshana.card.<cardInstanceId>.settings-view——主卡与其 FP 同 cardInstanceId，宿主文档明载）；",
+    "键 dshana.settings-view（单 DSH 源、单主卡，不长卡片实例段）；",
     "src/ui/dsh-inject.js 的 installTransport 把 bridge 面合并进 __DSHANA__。",
     "样例额外按 sourceId 分域；我们单源，注释里留了位。locales.ts 加 view.readError/writeError/retry 三键。"
   ]

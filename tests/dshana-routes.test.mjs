@@ -555,7 +555,7 @@ test("defaultDshanaRouteDeps: 数据目录取宿主顶层 ctx.dataDir（ctx.conf
     const view = await deps.writeSettings({ approvalTimeoutSec: 45 }, 0);
     assert.equal(view.settings.approvalTimeoutSec, 45);
     assert.equal(view.revision, 1);
-    const onDisk = JSON.parse(fs.readFileSync(path.join(dataDir, "integration", "settings.json"), "utf8"));
+    const onDisk = JSON.parse(fs.readFileSync(path.join(dataDir, "settings.json"), "utf8"));
     assert.equal(onDisk.settings.approvalTimeoutSec, 45, "写设置必须真的落在 ctx.dataDir 下");
   } finally {
     initAppRuntime(null);

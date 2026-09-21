@@ -45,7 +45,7 @@ import {
 export const DASHANA_ROUTE_PREFIX = "/dshana";
 
 // ---- 应用设置（GET/POST /dshana/settings）----
-// 两个超时与数据模式同栈：一份设置（dataDir/integration/settings.json）、一个 revision，
+// 两个超时与数据模式同栈：一份设置（dataDir/settings.json）、一个 revision，
 // 缺省值由 lib/config.ts 的 APP_SETTING_DEFAULTS 单点持有（30 / 1800）。
 // 为什么不用 schema 门：设置标签页直接渲染本 App 自己的页
 // （contributes.settings.ui.route），配置经 App 自己的后端读写，宿主不再代画表单。

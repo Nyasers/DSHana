@@ -7,7 +7,7 @@
 // 注：期望值一律经 path.normalize 生成，测试在 win32/darwin/linux 下同义。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, normalize } from "node:path";
 import {
@@ -160,10 +160,10 @@ test("store.write: 原子落盘 + revision 递增 + lastShared 记录（不留 .
     assert.equal(first.revision, 1);
     assert.deepEqual(first.lastShared, { path: P(dir), profile: "web" });
 
-    const onDisk = JSON.parse(readFileSync(join(dir, "integration", "settings.json"), "utf8"));
+    const onDisk = JSON.parse(readFileSync(join(dir, "settings.json"), "utf8"));
     assert.equal(onDisk.revision, 1);
     assert.equal(onDisk.version, SETTINGS_VERSION);
-    assert.deepEqual(readdirSync(join(dir, "integration")), ["settings.json"], "原子写不留 .pending 残片");
+    assert.deepEqual(readdirSync(dir), ["settings.json"], "原子写不留 .pending 残片");
 
     const second = await store.write({ mode: "private" });
     assert.equal(second.revision, 2);
@@ -184,8 +184,7 @@ test("store.write: 原子落盘 + revision 递增 + lastShared 记录（不留 .
 
 test("store.read: 损坏 JSON / 版本不符 / revision 非法都明确抛错（不静默回落）", async () => {
   await withTempDir(async (dir) => {
-    const file = join(dir, "integration", "settings.json");
-    mkdirSync(join(dir, "integration"), { recursive: true });
+    const file = join(dir, "settings.json");
     writeFileSync(file, "{not json");
     await assert.rejects(() => createDataSourceStore({ dataDir: dir }).read(), /不是合法 JSON/);
     writeFileSync(file, JSON.stringify({ version: 99, revision: 0, settings: DEFAULT_SETTINGS }));
