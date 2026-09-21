@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.0-rc.17+dsh-0.1.6-alpha.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.16%2Bdsh-0.1.5-rc.2...v1.0.0-rc.17%2Bdsh-0.1.6-alpha.2) (2026-09-21)
+
+### Features
+
+* **dsh:** pin 0.1.5-rc.2 → 0.1.6-alpha.2，11 个 overlay 按新上游 rebase ([ec11115](https://github.com/Nyasers/DSHana/commit/ec11115f5d3884965f4f84cedcdcea16d37da97b))
+
 ## [1.0.0-rc.16+dsh-0.1.5-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.15%2Bdsh-0.1.5-rc.2...v1.0.0-rc.16%2Bdsh-0.1.5-rc.2) (2026-09-21)
 
 ## [1.0.0-rc.15+dsh-0.1.5-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.14%2Bdsh-0.1.5-rc.2...v1.0.0-rc.15%2Bdsh-0.1.5-rc.2) (2026-09-21)
@@ -486,6 +492,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
