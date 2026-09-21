@@ -576,15 +576,13 @@ function installCrossSurfaceSelection(ctx: Context): void {
     }))
 
   /** 本次该显示哪一段：钉住的 sid 优先，否则共用的当前选中。 */
-  const desired = (): Promise<{ id: string | null; at: number }> => {
+  const desired = async (): Promise<{ id: string | null; at: number }> => {
     if (readPinned === undefined) return sharedSelection()
-    return readPinned().then((sid) => {
-      // 没钉住（直接开页、不带 sid）= 跟随共用选中。这里若给 MAX_SAFE_INTEGER，
-      // 这一面就被钉死在「没有会话」上：applyRemote 随后调用 clear()。
-      if (sid === null) return sharedSelection()
-      // 钉住即定论：不受共用选中写入时刻的影响。
-      return { id: sid, at: Number.MAX_SAFE_INTEGER }
-    })
+    const sid = await readPinned()
+    // 没钉住（直接开页、不带 sid）= 跟随共用选中。这里若给 MAX_SAFE_INTEGER，
+    // 这一面就被钉死在「没有会话」上：applyRemote 随后调用 clear()。
+    if (sid === null) return sharedSelection()
+    return { id: sid, at: Number.MAX_SAFE_INTEGER }
   }
 
   const applyRemote = (): void => {
