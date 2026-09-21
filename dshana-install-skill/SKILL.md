@@ -53,7 +53,7 @@ target 名即产物名里 `-v<版本>` 之后那段（通用包没有后缀，�
 
 要点：
 
-- 宿主官方格式的条目只有 `archive` 一格地址（格式版本见索引顶部的 `schemaVersion`），`versions[]` 的键是**版本**；消费侧只按版本文本匹配，**没有平台维度**。这块字段是我们自留的，宿主不读它、也不拒它，所以拿平台件要自己按 target 取。
+- 宿主官方格式的条目只有 `archive` 一格地址（格式版本见索引顶部的 `schemaVersion`），版本这一维默认平铺在条目的 `version` 字段上；只有同一 `kind:id` 存在更旧的版本时，旧的才落进 `versions[]`（数组，每项带 `version`、可选的 `minAppVersion` 和 `archive`）。DSHana 每次发布只出一个版本，`versions[]` 通常不出现——取版本看条目的 `version`，不要指望它。消费侧只按版本文本匹配，**没有平台维度**。`x-dshana-targets` 这块字段是我们自留的，宿主不读它、也不拒它，所以拿平台件要自己按 target 取。
 - 五个 target 的包体积各不相同（通用包最大），选件时按本机平台取，取到的 size 与索引记录对得上再往下走。
 - 条目里的 `archive`（主地址）按约定始终指向 **universal**；平台件只在 `x-dshana-targets` 里。
 
@@ -111,7 +111,7 @@ target 名即产物名里 `-v<版本>` 之后那段（通用包没有后缀，�
    POST <host>/api/extensions/staged/<stagedId>/confirm
    ```
 
-   返回 `{"status":"installed", ...}`；`record.approval` 里是本次授予的能力清单。
+   返回 `{"status":"installed", ...}`；`record.approval` 里是本次授予的能力清单。这一步经 token 通道完成，宿主把批准记为**用户决定**（`approval.decidedBy.kind` 为 `user`），中途没有交互确认——确认之前先自己核一遍包与来源。
 
 7. **验证**。`GET <host>/api/extensions` 看该扩展的 `record.version`；再轮询 App 自己的启动状态路由（DSHana 是 `/api/apps/dshana/routes/dshana/boot-state`）。刚装完首次启动要等一会儿，不要要求立即就绪：轮询到 `state.phase === "ready"` 且 `state.ready === true` 才算成功；`error` / `stopped` 视为失败，按 `state.error` 与 runtime 日志排查。
 
