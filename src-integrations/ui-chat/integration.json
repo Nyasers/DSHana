@@ -1,11 +1,11 @@
 {
   "package": "@deepseek-ai/dsh-client-ui-chat",
-  "upstreamVersion": "0.1.5-rc.2",
+  "upstreamVersion": "0.1.6-alpha.2",
   "upstreamDir": "packages/client/ui-chat",
   "files": [
     {
       "path": "src/client/chat/ChatView.tsx",
-      "upstreamSha256": "b297529556ba92087ddf8652709dd42d02195a5234b0b6e3076fd2dd11478cb5"
+      "upstreamSha256": "b4b825c086cd84a76917822018984bae9a788498db246e798f24cdae92773cc0"
     }
   ],
   "notes": [

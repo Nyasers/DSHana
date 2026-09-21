@@ -16,6 +16,38 @@
   transition: none;
 }
 
+/* The Windows caption row remains outside every conversation and file panel. */
+:global([data-windows-titlebar]) .frame {
+  --dsh-windows-content-radius: 16px;
+  box-sizing: border-box;
+  padding-top: var(--dsh-windows-titlebar-height);
+  grid-template-rows: minmax(0, 1fr);
+  background: var(--dsw-specific-sidebar-fill);
+}
+
+:global([data-windows-titlebar]) .centerCol {
+  background: var(--dsw-alias-bg-base);
+  border-radius: var(--dsh-windows-content-radius) 0 0 0;
+  corner-shape: round;
+}
+
+:global([data-windows-titlebar]) .frame::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: var(--dsh-windows-titlebar-height);
+  background: var(--dsw-specific-sidebar-fill);
+  -webkit-app-region: drag;
+}
+
+:global([data-windows-titlebar]) .sidebarCol {
+  border-right: none;
+}
+
+:global([data-windows-titlebar]) .handle {
+  top: var(--dsh-windows-titlebar-height);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .frame {
     transition: none;
@@ -63,6 +95,31 @@
    这一面不渲染右栏槽位，按下去没有可展开的栏：面板状态翻了，钮自己消失，看着像按坏了。 */
 .frame[data-dshana-surface="stream"] [data-conversation-header-corner] {
   display: none;
+}
+
+/* macOS desktop: the frame goes transparent so window vibrancy reaches the
+   sidebar column, which keeps only a translucent tint; the centre paints the
+   base background itself to stay opaque. The sidebar/centre separator moves
+   to the opaque centre: on the translucent sidebar the alpha border mixes
+   with the wallpaper and reads as a dark seam. */
+:global([data-platform='darwin']) .frame {
+  background: transparent;
+}
+
+:global([data-platform='darwin']) .sidebarCol {
+  background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 60%, transparent);
+  border-right: none;
+}
+
+:global([data-platform='darwin']) .centerCol {
+  background: var(--dsw-alias-bg-base);
+  border-left: 0.5px solid var(--dsw-alias-border-l3);
+}
+
+/* The darwin closed sidebar has no rail: the centre reaches the window edge,
+   where a separator would draw a seam against nothing. */
+:global([data-platform='darwin']) [data-sidebar-collapsed] .centerCol {
+  border-left: none;
 }
 
 /* Drag handles are frame children (columns clip overflow): an 8px hit strip
