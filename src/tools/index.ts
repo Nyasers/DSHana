@@ -30,10 +30,10 @@ import * as getAction from "#/tools/actions/get.ts";
 import * as approveAction from "#/tools/actions/approve.ts";
 import type { ToolCtx } from "#/types/host.ts";
 import type { ToolInputBase } from "#/tools/shared/types.ts";
-// actions/list.ts（会话清单）：**冻结禁用**（2026-09-13）——不注册到工具面；任务绑定语义下
-// 会话靠句柄定位，“查任务”由宿主提供给 Agent 的内置任务查询工具（模型侧，本环境是
-// check_pending_tasks）承担。理由见该文件头注释与 specs/current/sample-align 裁决 2c。
-// 要重新启用：把 list 的 import、ACTIONS 里的条目、description 的列举一并加回。
+// 查任务不经本工具：会话靠句柄（宿主 taskId）定位，任务清单由宿主提供给 Agent 的内置任务查询
+// 工具承担（模型侧，本环境是 check_pending_tasks）——dshana 的 open/reply 建的后台任务本来
+// 就在那份清单里，本工具面不开“先列清单再操作”的门。
+// 官方 session/list 仍被 get 用来定位读位点（见 tools/actions/get.ts）。
 
 /** subcommand 注册表（顺序即 description 的列举顺序）。 */
 const ACTIONS = [openAction, replyAction, closeAction, getAction, approveAction];

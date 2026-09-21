@@ -3,7 +3,7 @@
 //
 // src/types/tool.ts — 工具返回契约（宿主透传前的形态）
 //
-// 放公共类型区而不是 tools/：lib 层的动作实现（approve-respond、tools/shared/query）也直接
+// 放公共类型区而不是 tools/：lib 层的动作实现（approve-respond、tools/actions/get）也直接
 // 构造它，靠 types/ 收口可免掉 lib → tools 的反向依赖。
 // 工具**入参**的公共形状见 tools/shared/types.ts（那是「模型给什么」）。
 
