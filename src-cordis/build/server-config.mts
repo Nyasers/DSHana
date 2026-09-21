@@ -16,7 +16,9 @@
 // 与上游产物对齐的三处：format esm（不是 closure-factory 的 cjs）、platform node、不压缩。
 // dts 不从源码生成：上游的 lib/types/** 与 lib/*.d.ts 原样沿用模板（覆盖层只加可选字段，
 // 方法签名没变，声明面不用重打）。
-import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { basename, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import fs from "node:fs";
 
@@ -44,6 +46,32 @@ async function loadRspack() {
   }
   const mod = await import("@rspack/core");
   return mod.rspack ?? mod.default?.rspack;
+}
+
+/**
+ * 产物闸：让 node 自己 parse 一遍这份 ESM，parse 不过即拒。
+ *
+ * 为什么非得在构建期查：标准装饰器是转译器上的静默陷阱——配置差一格，装饰器会被原样放
+ * 出去，构建照旧「成功」，产物直到 import 那一刻才 SyntaxError（DSH 插件树加载失败、宿主
+ * runtime 永远停在「启动中」）。上游产物是同一姿势打出来的，所以判据只能是「node 读不读
+ * 得进去」，而不是「我们配对了没有」。
+ *
+ * 复制成 .mjs 再查：产物同目录的 package.json 未必声明 type:module，而这里的判据是
+ * 「这份 ESM 能不能被 node 解析」，不吃目录里的声明。
+ * @param file - 产物路径
+ * @param label - 报错里指代它的名字
+ */
+export function assertParseableModule(file, label = basename(file)) {
+  const tmp = join(dirname(file), `.syntax-check-${randomBytes(6).toString("hex")}.mjs`);
+  fs.writeFileSync(tmp, fs.readFileSync(file));
+  try {
+    const res = spawnSync(process.execPath, ["--check", tmp], { encoding: "utf8" });
+    if (res.status !== 0) {
+      throw new Error(`产物语法不合法（${label}）：` + String(res.stderr || res.stdout || "").trim());
+    }
+  } finally {
+    fs.rmSync(tmp, { force: true });
+  }
 }
 
 /**
@@ -107,5 +135,6 @@ export async function buildServerBundle({ id, pkgDir, outDir, entry = "src/index
       resolve();
     });
   });
+  assertParseableModule(out, `${id} 的 server 半（${outFile}）`);
   return { id, out };
 }
