@@ -109,6 +109,10 @@ DSHana 以**单卡 + 自带功能面板**注册（manifest `contributes.cards[0]
 - **会话模型从哪来**：App 设置项 `sessionModelMode` 决定——`caller`（缺省，复用调用方那份）或 `custom`（`sessionModelProvider` / `sessionModelModel` / `sessionModelReasoningEffort` 固定一条，推理强度空串 = 不指定、由 DSH 决定）。优先级：工具入参显式 > App 自定义那条 > 用户手设的 DSH 默认（`caller` 模式下 user 层非空就不补） > **调用方那张角色卡**配的 `models.chat`（`agent:list` 的 `isCurrent` 优先，能力面 `app/agents.read`）。选出的那条**随会话请求带上**（集成层给 `session/create` 与 `session/prompt` 加了可选 `model` 字段，见 `src-integrations/api-session-controller`）：只在会话内生效，不写 `settings.yaml` 的全局默认；只在 create 上补，send 沿用会话已有的选择。user 层有值但已不可服务时才由 `src/lib/model-default-guard.ts` 就地对账。见 `src/lib/caller-model.ts`（决策）、`agent-models.ts`（读角色卡）、`host-models.ts`（宿主目录）。
 - **App 级设置**（数据源、两个超时）：迁到 App 自绘设置页，由宿主设置区渲染（`contributes.settings.ui.route`），不依赖 DSH 运行。见 `specs/current/sample-align`。
 
+### 目录选择器
+
+DSH 的 workspace 选择对话框来自 `directory-picker` seam：宿主半列目录、客户端半渲染。官方在 web-app 层挂的是 `dsh-host-directory-picker-auto`，它按启动时采样的一把宿主事实（bindHost / ssh / platform / DISPLAY）挑 native 或 browse——win32 + loopback 必落 native，而那是在宿主进程里 spawn 子进程开系统文件夹弹窗（koffi 走 COM，还先合成一次 Alt 抢前台）。上游对它的适用面写得很直：只有操作者坐在宿主屏幕前才成立，远程形态组 browse。本形态两条都不成立（DSH 是沙箱里的后台子进程，用户面对的是宿主窗口），弹窗开不出来，客户端 native flow 就把异常交给 owner 的 `onError`，表现成每次选目录弹一个错误。roster patch 因此停掉 auto 行、直接组 `dsh-host-directory-picker-browse` + `dsh-client-ui-directory-picker-browse` 这一对（应用内浏览器：整盘只读列举、可新建目录、可手输路径，失败留在对话框内部）。这是上游点名过的钉法：钉一个交互就是在 patch 里直接组那一对，而不是留 auto 行。
+
 ## 主题跟随
 
 `@dshana/theme` 经 `tapIndex` 注入 index 响应：静态 fallback + 动态桥脚本，向壳页索取宿主主题 vars → 写 body 层 `!important` 覆盖 `--dsw-alias-*` / `--dsw-specific-*`。

@@ -12,8 +12,9 @@
 #   1) 对官方行的覆盖 / disable（我们自己的值）
 #   2) @dshana/* 定制插件 insert
 #
-# 机制：一切经本 bundle 的 dsh.bundle.patch 声明（见 src-cordis/package.json），不使用 profile
-# 用户层 cordis.patch.yml，也不使用命令行 --patch 叠加。
+# 机制：一切经本 patch 文件声明，runtime 启动时经 runProfile 的 patchFiles 作启动期 overlay 传进去
+# （见 src-cordis/build.ts）；不使用 profile 用户层 cordis.patch.yml，也不使用命令行 --patch 叠加。
+# profile 用官方随附的 `web`，我们不往数据目录里的 cordis.yml / cordis.patch.yml 写任何东西。
 
 # ── 1) 对官方行的覆盖 / disable ───────────────────────────────────────────────
 
@@ -37,6 +38,18 @@
 - id: ui-settings-models
   disabled: true
 
+# 目录选择器钉死 browse（应用内浏览器），不留给官方的 directory-picker-auto 行自己去挑。
+# auto 的判据是启动时采样的一把宿主事实（bindHost / ssh / platform / DISPLAY），win32 + loopback
+# 必然落 native：在宿主进程里 spawn 一个子进程跑 IFileOpenDialog（koffi 走 COM），还先合成一次 Alt
+# 按键把弹窗抢到前台。上游对这个 backend 的适用面写得很直：只有操作者坐在宿主屏幕前才成立，
+# 远程形态应该组 browse。本形态两头都不成立：DSH 是沙箱里的后台子进程，用户面对的是宿主的窗口而
+# 不是它的桌面，弹窗开不出来（或落在沙箱自己的 profile 上）——客户端 native flow 拿到异常后就走
+# owner 的 onError，表现成每次选目录都弹一个错误。browse 是同一 seam 的另一半：整盘只读列举 +
+# 新建目录，失败留在对话框内部提示，不依赖任何桌面。上游也点名了这种钉法（auto 的文档：钉一个
+# 交互就是在 patch 里直接组这一对，而不是留 auto 那行）。
+- id: directory-picker
+  disabled: true
+
 # 缺省模型不在这里写死：base 层给的是官方路由 deepseek-official/deepseek-flash，上面那行停掉
 # 之后这条路由没人服务。写死一个宿主 provider/model 也不行——宿主配了哪些提供商、它们叫什么
 # 名字，是每台 Hana 各自的配置。模型从哪来由 App 定：工具建的会话按**调用方那张角色卡**配的
@@ -58,6 +71,13 @@
 - insert:
     - id: '@dshana/clipboard'
       name: '@dshana/clipboard'
+
+    # 目录选择器那一对：宿主半在前（客户端半驱动它注册的能力），客户端半随后。
+    - id: ui-directory-picker-browse-api
+      name: '@deepseek-ai/dsh-host-directory-picker-browse'
+
+    - id: ui-directory-picker-browse
+      name: '@deepseek-ai/dsh-client-ui-directory-picker-browse'
 
     - id: '@dshana/theme'
       name: '@dshana/theme'
