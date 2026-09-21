@@ -1,19 +1,15 @@
 {
   "package": "@deepseek-ai/dsh-client-ui-layout",
-  "upstreamVersion": "0.1.5-rc.2",
+  "upstreamVersion": "0.1.6-alpha.2",
   "upstreamDir": "packages/client/ui-layout",
   "files": [
     {
       "path": "src/client/AppFrame.tsx",
-      "upstreamSha256": "69f66f2c725120000014c7fc25b66f79632b3b4bb6899b1b81b0678819158841"
-    },
-    {
-      "path": "src/client/columns.ts",
-      "upstreamSha256": "c08a7a77874b4a8d1d963da05362886dd7e9d756c24d5d0c4b7919d8472cc1c9"
+      "upstreamSha256": "98abc310aaf2a764fae01235278c4e363ae042102806d752f15a9f68b840675e"
     },
     {
       "path": "src/client/AppFrame.module.css",
-      "upstreamSha256": "3ea2d3c3035a26484ee5e7760f5f6d53719b5a665cac1e09dca96bf88e8e44ec"
+      "upstreamSha256": "d3ecfc590ff09208e9f939c2a43faaa0de1bb41ba329d79725cbe6f98790d9f8"
     }
   ],
   "notes": [
@@ -27,10 +23,11 @@
     "  拆窗 standalone  ：侧栏 + 中列 + 右列，带拖柄",
     "轨道模板固定三条、列各自认领 grid-column（CSS overlay），不看渲染集拼模板——按渲染集拼轨曾把",
     "centerCol 落进 56px 侧栏轨（真机 56px 挤压）。",
-    "columns.ts 第四参 sidebarPresent：false → 侧栏宽 0（区分「本面没有侧栏」与「侧栏被折叠」；上游三参版",
-    "把 0 当折叠 → 回落 56px）。",
+    "columns.ts 不再进 overlay：0.1.6 给 computeColumns 加了第四参 collapsedWidth（0 = 把列整条藏掉，",
+    "否则是收起宽度），与当初我们那份 sidebarPresent 同槽位、语义更宽；上游吸收后本地 delta 归零，",
+    "改由 AppFrame 传「本面有轨就上游值、无轨就 0」。",
     "收起状态按上游语义算，只在有轨的 standalone 面上生效：宽幅看 sidebar === 0，窄幅看 narrowExpanded；",
-    "收起后轨道是 56px 图标轨（不是 0），所以「本面无侧栏」与「用户收起」两件事互不污染。",
+    "收起后的轨道宽走上游的 collapsedWidth（桌面平台 0，其余 56px 图标轨），所以「本面无侧栏」与「用户收起」两件事互不污染。",
     "frameSidebarPreference 取 0 只表示「本面无侧栏轨道」。",
     "全局名用我们自己的 __DSHANA__（样例叫 __HANA_DSH__）。",
     "productTitle 仍走上游 process.env.DSH_CLIENT_TITLE ?? t('brand.localBuild')（样例硬编码成产品名），属最小 delta。",

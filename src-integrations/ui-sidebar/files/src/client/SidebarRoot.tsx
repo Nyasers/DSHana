@@ -19,7 +19,7 @@
 import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
-  FishLogo, IconNewChatOutline16, IconPanelLeftOutline16, Tooltip,
+  FishLogo, IconNewChatOutline16, IconPanelLeftOutline16, isDarwinDesktop, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
@@ -105,7 +105,8 @@ export function SidebarRoot({
     const timer = window.setTimeout(() => { setSettled(true) }, COLLAPSE_SETTLE_MS)
     return () => { window.clearTimeout(timer) }
   }, [collapsed])
-  const wide = !collapsed || !settled
+  const windowsTitlebar = document.documentElement.hasAttribute('data-windows-titlebar')
+  const wide = windowsTitlebar ? !collapsed : !collapsed || !settled
 
   // Freeze the content at its expanded width while it fades out (collapsed
   // && wide): the sliding column then clips it instead of reflowing it. The
@@ -163,14 +164,39 @@ export function SidebarRoot({
 
   const buildVersion = localBuildVersion()
 
-    //   settings / workspace → 只渲染 sidebar.settings 宽版（主卡内设置；外层 settingsShell 是
+  //   settings / workspace → 只渲染 sidebar.settings 宽版（主卡内设置；外层 settingsShell 是
   //     绝对定位浮层、不吃指针事件）；面板未打开时槽位为空，所以主卡上不会多出一条 DSH 侧栏。
-  //   navigation（FP） → 正常 DSH 侧栏，且**不渲染折叠钮**（FP 里的侧栏不可折叠，见下）。
+  //   navigation（FP） → 正常 DSH 侧栏，但不渲染品牌行与折叠钮（FP 整页就是侧栏，没有可收起的轨；
+  //     宿主 FP 自己写着 DSHana，再叠一行品牌+字标是重复）。
   // 认面必须在所有 hook 之后（React 规则），正好落在 buildVersion 处。
   const surfaceRole = (window as { __DSHANA__?: { role?: string } }).__DSHANA__?.role
+  const showChrome = surfaceRole !== 'navigation'
   if (surfaceRole === 'settings' || surfaceRole === 'workspace') {
     return <div className={css.surfaceSettings}>{renderSlot('sidebar.settings', { wide: true })}</div>
   }
+  const darwinDesktop = isDarwinDesktop()
+  // Rail resting state is the whale mark; hovering swaps in the panel icon
+  // (the expand affordance, figma sidebar-hover flow). Expanded it is a plain
+  // panel icon.
+  const toggle = (
+    <Tooltip label={collapsed ? t('toggle.open') : t('toggle.collapse')} delayMs={500}>
+      <button
+        type="button"
+        className={clsx(css.iconButton, css.toggle)}
+        aria-label={collapsed ? t('toggle.open') : t('toggle.collapse')}
+        onClick={() => { toggleSidebar() }}
+      >
+        {!wide && !windowsTitlebar && (
+          <span className={css.railMark} aria-hidden="true">
+            {renderSlot('sidebar.brand.mark', { size: 24 }, { fallback: <FishLogo size={24} /> })}
+          </span>
+        )}
+        {/* Rail icons render at 18 (figma rail spec); expanded keeps the glyph-native sizes. */}
+        <IconPanelLeftOutline16 className={css.panelIcon} size={wide || windowsTitlebar ? 16 : 18} />
+        {!wide && renderSlot('sidebar.toggle.badge', {})}
+      </button>
+    </Tooltip>
+  )
 
   return (
     <div
@@ -186,7 +212,10 @@ export function SidebarRoot({
       }}
       onPointerLeave={() => { armLinger() }}
     >
-      {surfaceRole !== 'navigation' && (
+      {/* macOS hiddenInset titlebar: the strip shares the row with the
+          traffic lights and keeps the toggle at the sidebar's top-right. */}
+      {showChrome && darwinDesktop && <div className={css.topStrip}>{toggle}</div>}
+      {showChrome && (
       <div className={css.logoRow}>
         {/* Expanded, the brand doubles as a New Session shortcut; the
             collapsed rail's logo is the expand toggle below instead. */}
@@ -216,30 +245,8 @@ export function SidebarRoot({
             </span>
           </button>
         )}
-        {/* Rail resting state is the whale mark; hovering swaps in the panel
-            icon (the expand affordance, figma sidebar-hover flow). */}
-        {/* 只有 navigation（FP）不渲染折叠钮：那一面本页就是侧栏，没有可供收起的轨。
-            standalone（default 面）照旧渲染：那里的收起是真的（sidebar=0 → 56px 轨），
-            AppFrame 按同一语义算轨道宽。 */}
-        {surfaceRole !== 'navigation' && (
-          <Tooltip label={collapsed ? t('toggle.open') : t('toggle.collapse')} delayMs={500}>
-            <button
-              type="button"
-              className={clsx(css.iconButton, css.toggle)}
-              aria-label={collapsed ? t('toggle.open') : t('toggle.collapse')}
-              onClick={() => { toggleSidebar() }}
-            >
-              {!wide && (
-                <span className={css.railMark} aria-hidden="true">
-                  {renderSlot('sidebar.brand.mark', { size: 24 }, { fallback: <FishLogo size={24} /> })}
-                </span>
-              )}
-              {/* Rail icons render at 18 (figma rail spec); expanded keeps the glyph-native sizes. */}
-              <IconPanelLeftOutline16 className={css.panelIcon} size={wide ? 16 : 18} />
-            </button>
-          </Tooltip>
-        )}
-        </div>
+        {!darwinDesktop && toggle}
+      </div>
       )}
 
       {/* Expanded, the button carries its own label — tooltip only on the rail. */}
@@ -250,7 +257,7 @@ export function SidebarRoot({
           aria-label={t('session.new.label')}
           onClick={() => { startSession() }}
         >
-          <IconNewChatOutline16 size={wide ? 14 : 18} />
+          <IconNewChatOutline16 size={wide ? 14 : windowsTitlebar ? 16 : 18} />
           {wide && <span className={clsx(css.newSessionLabel, css.wide)}>{t('session.new')}</span>}
         </button>
       </Tooltip>

@@ -1,15 +1,15 @@
 {
   "package": "@deepseek-ai/dsh-client-ui-sidebar",
-  "upstreamVersion": "0.1.5-rc.2",
+  "upstreamVersion": "0.1.6-alpha.2",
   "upstreamDir": "packages/client/ui-sidebar",
   "files": [
     {
       "path": "src/client/SidebarRoot.tsx",
-      "upstreamSha256": "9b9df86191667670fcbe81d9d8d23f654e01e83cec8571b36edcd55842a96f2b"
+      "upstreamSha256": "7ffff715e71603e04412d574dd6b67d2d450609d62fe2d187cb7580233396243"
     },
     {
       "path": "src/client/SidebarRoot.module.css",
-      "upstreamSha256": "aa6b29bceab34a49e00c7c10c0448eaab288acedc1adedf27b96235db4e6265e"
+      "upstreamSha256": "59783ec45c5813e01b70daee1630e595d21239611aeb8f0305e045c1c2a38dbc"
     }
   ],
   "notes": [

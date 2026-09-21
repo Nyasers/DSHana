@@ -1,6 +1,6 @@
 {
   "package": "@deepseek-ai/dsh-client-ui-open-in-app",
-  "upstreamVersion": "0.1.5-rc.2",
+  "upstreamVersion": "0.1.6-alpha.2",
   "upstreamDir": "packages/client/ui-open-in-app",
   "files": [
     {

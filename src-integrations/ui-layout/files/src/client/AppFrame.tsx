@@ -19,7 +19,7 @@ import type { ReactNode } from 'react'
 import type {
   PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore,
 } from '@deepseek-ai/dsh-client-ui-slots'
-import { computeColumns, RIGHTBAR_DEFAULT_RATIO, SIDEBAR_AUTO_COLLAPSE } from './columns.ts'
+import { computeColumns, RIGHTBAR_DEFAULT_RATIO, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAULT } from './columns.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
@@ -177,13 +177,21 @@ export function AppFrame({
   const sidebarPresent = surface === 'standalone'
   const narrow = sidebarPresent && viewport < SIDEBAR_AUTO_COLLAPSE
   const sidebarCollapsed = sidebarPresent && (narrow ? !layoutInfo.narrowExpanded : layoutInfo.sidebar === 0)
-  const sidebarPreference = sidebarCollapsed ? 0 : layoutInfo.sidebar
+  const sidebarPreference = sidebarCollapsed
+    ? 0
+    : layoutInfo.sidebar === 0 ? SIDEBAR_DEFAULT : layoutInfo.sidebar
   const frameSidebarPreference = sidebarPresent ? sidebarPreference : 0
   const rightbarPreference = layoutInfo.rightbar ?? viewport * RIGHTBAR_DEFAULT_RATIO
+  // Desktop reopen controls occupy the macOS session header or Windows caption row.
+  const collapsedWidth = document.documentElement.dataset.platform === 'darwin'
+    || document.documentElement.hasAttribute('data-windows-titlebar') ? 0 : SIDEBAR_COLLAPSED
   // Opening on a narrow frame collapses the left sidebar. Eligibility must
   // include that space before the occupant's first shown report arrives.
-  const normal = computeColumns(viewport, !layoutInfo.rightbarShown && narrow ? 0 : frameSidebarPreference, rightbarPreference, sidebarPresent)
-  const cols = computeColumns(viewport, frameSidebarPreference, layoutInfo.rightbarTrack ? rightbarPreference : 0, sidebarPresent)
+  // 第四参是「收起时的轨道宽」：本面无侧栏轨（非 standalone）时取 0，该面的侧栏轨道整条
+  // 消失；standalone 用上游的 collapsedWidth（桌面平台为 0，其余是 56px 图标轨）。
+  const closedWidth = sidebarPresent ? collapsedWidth : 0
+  const normal = computeColumns(viewport, !layoutInfo.rightbarShown && narrow ? 0 : frameSidebarPreference, rightbarPreference, closedWidth)
+  const cols = computeColumns(viewport, frameSidebarPreference, layoutInfo.rightbarTrack ? rightbarPreference : 0, closedWidth)
   const colsRef = useRef(cols)
   colsRef.current = cols
   const rightbarWidth = useRef(normal.rightbar)
@@ -222,6 +230,8 @@ export function AppFrame({
       ref={frameRef}
       className={css.frame}
       style={{
+        ...(document.documentElement.hasAttribute('data-windows-titlebar')
+          ? { '--dsh-windows-sidebar-width': `${cols.sidebar}px` } : {}),
         gridTemplateColumns: surface === 'navigation' || surface === 'stream'
           ? 'minmax(0, 1fr)'
           : `${cols.sidebar}px minmax(0, 1fr) ${cols.rightbar}px`,

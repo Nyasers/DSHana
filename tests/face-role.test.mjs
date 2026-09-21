@@ -92,17 +92,18 @@ test("ui-layout 覆盖层：每个角色词都有对应 surface 分支", () => {
   }
 });
 
-test("侧栏收起：只在有轨的 default（standalone）面上生效，收起是 56px 图标轨不是 0 宽", () => {
+test("侧栏收起：只在有轨的 default（standalone）面上生效，无轨面的折叠宽是 0", () => {
   const frame = readFileSync(APP_FRAME, "utf8");
   // 「本面有没有轨」（sidebarPresent）与「是不是收起」（sidebar===0 / narrowExpanded）分开算：
-  // 混用会让 default 面的收起消失，或让没有侧栏的面被 56px 轨挤压。
+  // 混用会让 default 面的收起消失，或让没有侧栏的面被图标轨挤压。
   assert.match(frame, /const sidebarPresent = surface === 'standalone'/);
   assert.match(frame, /layoutInfo\.sidebar === 0/, "收起状态要认 sidebar===0");
   assert.match(frame, /layoutInfo\.narrowExpanded/, "窄幅收起要认 narrowExpanded");
   assert.ok(!/const sidebarCollapsed = false/.test(frame), "收起被钉成 false 了（default 面会丢掉收起）");
+  // 收起宽度走上游的 collapsedWidth（桌面平台 0，其余 56px 图标轨）；本面无侧栏轨时传 0 把列整条藏掉。
+  assert.match(frame, /const closedWidth = sidebarPresent \? collapsedWidth : 0/);
+  assert.match(frame, /computeColumns\([^)]*closedWidth\)/, "computeColumns 应拿到本面的收起宽度");
   assert.match(frame, /const renderedSidebarWidth = sidebarPresent \? cols\.sidebar/);
-  const cols = readFileSync(join(here, "..", "src-integrations", "ui-layout", "files", "src", "client", "columns.ts"), "utf8");
-  assert.match(cols, /sidebar === 0 \? SIDEBAR_COLLAPSED/, "收起要落到 56px 图标轨");
   const sidebarRoot = readFileSync(join(here, "..", "src-integrations", "ui-sidebar", "files", "src", "client", "SidebarRoot.tsx"), "utf8");
   assert.ok(!/surfaceRole !== 'standalone'/.test(sidebarRoot), "折叠钮不该排除 standalone（那一面的收起是真的）");
   assert.match(sidebarRoot, /toggleSidebar\(\)/, "折叠钮要真的能切换");
