@@ -79,12 +79,12 @@ Hana 宿主进程（App 隔离进程内加载 dist/index.js）
 
 ## 工具
 
-宿主 Agent 工具面为**单工具 `dshana`**（一个插件一个同名工具 + CLI subcommand：装配 `tools/index.ts`，各动作 `tools/actions/<action>.ts`，只读查询 `tools/shared/query.ts`，提交链 `lib/session-run.ts`，取消/审批编排 `lib/cancel-chain.ts` / `lib/approve-respond.ts`）。语义对齐 subagent（open/reply/close），另有 get/approve 两个特色动作。**完整调用手册见 [dshana skill](src/skills/dshana/SKILL.md)**：
+宿主 Agent 工具面为**单工具 `dshana`**（一个插件一个同名工具 + CLI subcommand：装配 `tools/index.ts`，各动作 `tools/actions/<action>.ts`，提交链 `lib/session-run.ts`，取消/审批编排 `lib/cancel-chain.ts` / `lib/approve-respond.ts`）。语义对齐 subagent（open/reply/close），另有 get/approve 两个特色动作。**完整调用手册见 [dshana skill](src/skills/dshana/SKILL.md)**：
 
 | action | 用途 | 实现 |
 | --- | --- | --- |
 | `open` / `reply` | 开子代理+交首件活 / 续已有子代理（task 必填；open 另需 cwd） | `tools/actions/open.ts` / `tools/actions/reply.ts` → `lib/session-run.ts` |
-| `get` | 回看某一轮最终结论（官方 `session/list` + `session/page`） | `tools/actions/get.ts` → `tools/shared/query.ts` |
+| `get` | 回看某一轮最终结论（官方 `session/list` + `session/page`） | `tools/actions/get.ts` |
 | `close` | 取消正在跑的任务（taskId 句柄或 sessionId 凭证） | `tools/actions/close.ts` → `lib/cancel-chain.ts` |
 | `approve` | 应答挂起审批（allowed-once/rejected，决策看 args） | `tools/actions/approve.ts` → `lib/approve-respond.ts` |
 
