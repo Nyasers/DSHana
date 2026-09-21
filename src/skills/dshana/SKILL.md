@@ -52,7 +52,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 | `get` | 无 | taskId 或 sessionId（至少一个） | 回看该会话最近一轮的最终结论 |
 | `approve` | approvalId | outcome, taskId 或 sessionId | 应答挂起审批 |
 
-> `list`（会话清单）的实现保留在 `actions/list.ts`，但**暂未注册到工具面**（2026-09-13）。
+> 查任务走宿主提供给 Agent 的内置任务查询工具（模型侧，本环境是 `check_pending_tasks`）：dshana 的 open/reply 建的就是本会话的后台任务，本来就出现在那份清单里，不需要本工具另开一扇只读门。
 
 **句柄与凭证**：`taskId`（open/reply 返回）与 `approvalId` 是**句柄路径**，工具自己解析会话并按宿主记录的来源会话校验归属；`sessionId`（形如 `session-<uuid>`）是**凭证路径**，显式传入即视为"我要跨对话操作"，跳过归属校验。
 
@@ -97,12 +97,6 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 - **决策看 args（具体要执行什么），不听 reason（模型自述不可尽信）**：合理放行，危险拒绝。审批请求的 `label` 写作“工具名 + 具体操作 + 申请的权限档”，`details` 同源带 `operation` / `escalationMode` / `escalationNote` / `approvalTimeoutMs`
 - **回合边界**：审批通知只在**回合边界**送达。`open`/`reply` 提交后要**结束本回合**，下一回合才会收到 `app-task-approval-requested`（含 `approvalId`）。在同一个回合里空等或连续重发，会撞上宿主工具回调的 30 秒上限（`RPC callback.tools.execute timed out after 30000ms`），而且该会话可能就此卡住（后续 `reply` 一律超时，`close` 也难得到 DSH 确认）；遇到这种会话换新的，不要原地重试
 - 审批超时未应答按 `approvalTimeoutSec` 自动拒绝（本 App 缺省 30 秒；显式设 0 则禁用自动拒绝）。注意宿主自身的 `timeoutMs` 默认是 0（不禁用即不超时）——30 秒是 App 侧策略
-
-### list（会话清单，冻结禁用）
-
-`actions/list.ts` 是官方 `session/list` 的只读封装（带 `title`/`cwd`/`updatedAt`/`lastPromptAt`/turns/usage 等字段），**冻结禁用**（2026-09-13）：任务绑定语义下会话靠句柄定位，不做 cursor / sourceId 那套"先 list 发现再操作"的配套（sourceId 还另有一层理由：它本来只为"防源漂移"，而数据源切换入口已暂撤回 503）。需要"列会话"时改走宿主提供给 Agent 的内置任务查询工具（模型侧，本环境是 `check_pending_tasks`）——dshana 的 open/reply 建的就是本会话的后台任务，本来就出现在那份清单里，不需要本工具再开一扇只读门。
-
-要重新启用本模块：在 `src/tools/index.ts` 的 import、ACTIONS 与 description 里加回即可。
 
 ### 典型用法
 

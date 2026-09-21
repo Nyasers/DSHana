@@ -42,7 +42,7 @@ export const fields = {
     description:
       "沙箱工作目录（bash 与文件系统工具的活动范围，绝对路径；无 defaultCwd 回退，每次调用显式指定）",
   },
-  label: { type: "string", description: "可选显示名（便于在清单与结果通知里辨认这个子代理）" },
+  label: { type: "string", description: "可选显示名（便于在宿主任务清单与结果通知里辨认这个子代理）" },
   timeout: { type: "number", description: "任务超时（秒），缺省用 App 设置 defaultTimeoutSec" },
   agentPreset: { type: "string", description: "agent 预设（standard/ptc/cordis/minimal）" },
   reasoningEffort: { type: "string", description: "推理强度（off/high/max）" },

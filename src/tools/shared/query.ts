@@ -1,17 +1,15 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/tools/shared/query.ts — dshana 的 list/get 只读查询实现（官方会话查询面）
+// src/tools/shared/query.ts — dshana 的 get 只读查询实现（官方会话查询面）
 //
 // 注意：这是共享**实现**，不是操作模块（actions/ 里每个文件 = 一个同名 subcommand）。
-// 消费方：actions/get.ts（已注册）、actions/list.ts（暂未注册）。
+// 消费方：actions/get.ts。
 //
 // 取数走官方查询面：不读 <DSH_HOME>/storages/session_projcache.json，也不解
 // <DSH_HOME>/sessions/**/session.jsonl.zstd（日志已到 V3，projcache 行结构与 zstd 多帧容器
 // 都是自家猜测的实现细节，读取交回官方）：
-//   · list → session/list（一元）。items[].projections.values 带 title / sessionStats /
-//            tokenUsage（投影缓存折叠的结果），items[].projections.asOfSeq 是折叠到的 seq。
-//   · get  → session/list 取该会话的 asOfSeq（= 当前日志 tip；真机实测：写一条事件后
+//   · get  → session/list（一元）取该会话的 asOfSeq（= 当前日志 tip；真机实测：写一条事件后
 //            asOfSeq 与事件 seq 精确一致，且 page(asOfSeq+1) 被拒 "past cursor N"），
 //            再用 session/page 在该 cut 上取尾部一窗按消息对齐的 records。
 //   · session/follow（开场快照也带 records）是**流方法**，一元 POST 会被网关拒：
@@ -21,10 +19,10 @@
 // get 取数规则：一次 create/send = 一次 prompt = 一轮。以**最后一次 user/message**
 // 为轮次边界，取该轮**最后一次 assistant/message 输出**即最终结论；本轮还没产出输出就明确报状态，
 // 不悄悄把上一轮的旧结论当本轮结果（真取了更早的也会在正文里标出来，见 lastRoundOutput 的 scope）。
-// 已知窄窗口：list 拿到 asOfSeq 与 page 取数之间若有新写入，读到的是 asOfSeq 那一刻的尾部——
+// 已知窄窗口：session/list 取到 asOfSeq 与 session/page 取数之间若有新写入，读到的是 asOfSeq 那一刻的尾部——
 // 单写者锁下这个窗口只有毫秒级，且 get 的语义本就是"回看最近一轮"，接受。
 //
-// 代价（已接受）：list/get 从此要求受管 runtime 就绪（未就绪先 ensureManagedRuntime），
+// 代价（已接受）：查询从此要求受管 runtime 就绪（未就绪先 ensureManagedRuntime），
 // 不再有"离线直读文件"这条路。换来的是格式演进由官方承担。
 //
 // 权限模型：sessionId 即访问凭证——拿得到 id 就能读，拿不到天然无所有权，无需注册表。
@@ -32,17 +30,9 @@ import { ensureManagedRuntime } from "#/lib/managed-runtime.ts";
 import { rpcViaControl } from "#/lib/controller.ts";
 import type { ToolResult } from "#/types/tool.ts";
 
-const DEFAULT_LIMIT = 10;
-const MAX_LIMIT = 100;
 const SUMMARY_MAX = 4000; // summary 截断上限（超出加 …）
 // 尾部窗口消息数：够装下"最后一轮"（prompt + 若干工具往返 + 收尾汇报）
 const GET_MAX_MESSAGES = 40;
-
-function clampLimit(raw) {
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return DEFAULT_LIMIT;
-  return Math.min(MAX_LIMIT, Math.max(1, Math.trunc(n)));
-}
 
 /** 受管 runtime 就绪（单例；未起则启动到 ready）。失败时给可读原因。 */
 async function ensureReady() {
@@ -163,7 +153,7 @@ export function titleFromProjections(summary) {
   return typeof values.title === "string" ? values.title : "";
 }
 
-/** 会话清单条目（mapSummary 产物；字段存在才带，缺省即未知）。 */
+/** 会话摘要条目（mapSummary 产物；字段存在才带，缺省即未知）。 */
 export interface SessionSummaryItem {
   sessionId: string;
   title: string;
@@ -187,7 +177,7 @@ interface SessionPage {
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
-/** 官方列表摘要 → 我们的清单条目（字段存在才带）。 */
+/** 官方列表摘要 → 我们的会话摘要条目（字段存在才带）。 */
 export function mapSummary(s: Record<string, any>): SessionSummaryItem {
   const src = s && typeof s === "object" ? s : {};
   const proj = src.projections && typeof src.projections === "object" ? src.projections : null;
@@ -229,14 +219,14 @@ function truncateSummary(text) {
 
 // ---------- 官方读面 ----------
 
-/** session/list → 全部清单条目。 */
+/** session/list → 该实例全部会话的摘要。 */
 async function listSummaries(ctx): Promise<SessionSummaryItem[]> {
   const value = await rpcViaControl(ctx, { method: "session/list", payload: {}, timeoutMs: 30000 });
   const raw = value && Array.isArray(value.items) ? value.items : [];
   return raw.map(mapSummary).filter((s) => s.sessionId);
 }
 
-/** 目标会话的清单条目（含 asOfSeq 与投影元数据）。找不到返回 null。 */
+/** 目标会话的摘要（含 asOfSeq 与投影元数据）。找不到返回 null。 */
 async function findSummary(ctx, sessionId): Promise<SessionSummaryItem | null> {
   for (let attempt = 0; attempt < 2; attempt++) {
     const found = (await listSummaries(ctx)).find((s) => s.sessionId === sessionId) || null;
@@ -246,36 +236,6 @@ async function findSummary(ctx, sessionId): Promise<SessionSummaryItem | null> {
 }
 
 // ---------- 操作实现 ----------
-
-async function doList(input, ctx): Promise<ToolResult> {
-  const limit = clampLimit(input.limit);
-  await ensureReady();
-  const items = await listSummaries(ctx);
-  // 官方 list 无"条数"入参（SessionListRequest 只有 cursor），返回的 items 视为一次全量；
-  // 展示条数由我们这侧按 limit 截断（最新在前）。
-  items.sort(
-    (a, b) => (b.lastPromptAt ?? b.updatedAt ?? -Infinity) - (a.lastPromptAt ?? a.updatedAt ?? -Infinity),
-  );
-  const top = items.slice(0, limit);
-  if (top.length === 0) {
-    return {
-      content: [{ type: "text", text: "暂无 DSH 会话记录" }],
-      details: { dsh: { action: "list", count: 0, limit } },
-    };
-  }
-  const lines = top.map(
-    (s) => `${s.sessionId} · ${String(s.title).slice(0, 40)} · ${String(s.cwd ?? "")}`,
-  );
-  return {
-    content: [
-      {
-        type: "text",
-        text: `DSH 会话清单（共 ${items.length} 条，最新 ${top.length} 条）：\n${lines.join("\n")}`,
-      },
-    ],
-    details: { dsh: { action: "list", count: items.length, limit, sessions: top } },
-  };
-}
 
 async function doGet(input, ctx): Promise<ToolResult> {
   const sessionId = String(input.sessionId ?? "").trim();
@@ -294,7 +254,7 @@ async function doGet(input, ctx): Promise<ToolResult> {
     content: [
       {
         type: "text",
-        text: "找不到会话 " + sessionId + " 的内容（" + extra + "）。可用 dshana action=list 查会话清单。",
+        text: "找不到会话 " + sessionId + " 的内容（" + extra + "）。",
       },
     ],
     details: { dsh: { action: "get", sessionId, ok: false } },
@@ -321,7 +281,7 @@ async function doGet(input, ctx): Promise<ToolResult> {
       content: [
         {
           type: "text",
-          text: "会话 " + sessionId + " 查询失败（" + msg + "）。可用 dshana action=list 确认会话仍在，或稍后重试。",
+          text: "会话 " + sessionId + " 查询失败（" + msg + "）。稍后重试，或确认该会话仍在当前 DSH 实例里。",
         },
       ],
       details: { dsh: { action: "get", sessionId, ok: false } },
@@ -380,10 +340,9 @@ async function doGet(input, ctx): Promise<ToolResult> {
   };
 }
 
-// query 操作入口（session.js 按 action=list/get 路由到本模块）：只读查询，经控制面走官方面
+// 查询入口（get 动作调用）：只读查询，经控制面走官方查询面
 export async function execute(input, ctx): Promise<ToolResult> {
   const action = String(input.action ?? "").trim();
-  if (action === "list") return doList(input, ctx);
   if (action === "get") return doGet(input, ctx);
-  throw new Error(`query 操作只处理 list / get（收到 "${action}"）`);
+  throw new Error(`query 只处理 get（收到 "${action}"）`);
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/query.test.mjs — dshana 的 list/get 取数纯函数单测
+// tests/query.test.mjs — dshana 的 get 取数纯函数单测
 // 重点：轮次边界（最后一次 user/message）→ 本轮最后一次 assistant 输出的挑选规则，
 // 以及"本轮未产出 → 退更早并标出 / 不静默冒充"的行为；另覆盖官方摘要映射与标题形状识别。
 import { test } from "node:test";
@@ -121,7 +121,7 @@ test("列表标题走投影 values.title（真机实测该键存在，空白会�
   assert.equal(titleFromProjections({}), "");
 });
 
-test("mapSummary: 官方摘要 → 清单条目（投影带 title/stats/usage，asOfSeq 一并带出）", () => {
+test("mapSummary: 官方摘要 → 会话摘要条目（投影带 title/stats/usage，asOfSeq 一并带出）", () => {
   const usage = { uncachedInputTokens: 1, outputTokens: 2, cacheReadTokens: 0, cacheWriteTokens: 0 };
   const item = mapSummary({
     sessionId: SID,
@@ -170,6 +170,7 @@ test("mapSummary: 畸形输入不炸（null / 非对象 / 投影非对象）", (
   assert.equal(mapSummary({ sessionId: SID, projections: { asOfSeq: NaN } }).asOfSeq, undefined);
 });
 
-test("action 分派：未知 action 报错，list/get 之外不静默", async () => {
-  await assert.rejects(() => execute({ action: "bogus" }, {}), /只处理 list \/ get/);
+test("action 分派：只认 get，list / 未知 action 都报错", async () => {
+  await assert.rejects(() => execute({ action: "list" }, {}), /只处理 get/);
+  await assert.rejects(() => execute({ action: "bogus" }, {}), /只处理 get/);
 });

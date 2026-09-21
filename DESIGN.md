@@ -84,11 +84,11 @@ Hana 宿主进程（App 隔离进程内加载 dist/index.js）
 | action | 用途 | 实现 |
 | --- | --- | --- |
 | `open` / `reply` | 开子代理+交首件活 / 续已有子代理（task 必填；open 另需 cwd） | `tools/actions/open.ts` / `tools/actions/reply.ts` → `lib/session-run.ts` |
-| `get` | 回看某一轮最终结论（官方 `session/list` + `session/page`） | `tools/actions/get.ts` → `tools/actions/query.ts` |
+| `get` | 回看某一轮最终结论（官方 `session/list` + `session/page`） | `tools/actions/get.ts` → `tools/shared/query.ts` |
 | `close` | 取消正在跑的任务（taskId 句柄或 sessionId 凭证） | `tools/actions/close.ts` → `lib/cancel-chain.ts` |
 | `approve` | 应答挂起审批（allowed-once/rejected，决策看 args） | `tools/actions/approve.ts` → `lib/approve-respond.ts` |
 
-> `list`（会话清单）的实现保留在 `tools/actions/list.ts`，但**冻结禁用**（2026-09-13）：任务绑定语义下会话靠句柄定位；“查任务”由宿主提供给 Agent 的内置任务查询工具（模型侧，本环境是 `check_pending_tasks`）承担——dshana 的 open/reply 建的就是本会话的后台任务，本来就在那份清单里；`sourceId` / `cursor` 这类为其配套的字段一并搁置。
+> 会话靠句柄（宿主 taskId）定位，工具面不设“先列清单再操作”的入口：“查任务”由宿主提供给 Agent 的内置任务查询工具（模型侧，本环境是 `check_pending_tasks`）承担——dshana 的 open/reply 建的就是本会话的后台任务，本来就在那份清单里；`sourceId` / `cursor` 这类为其配套的字段一并不要。
 
 调用模型：句柄默认（taskId/approvalId，按宿主记录的来源会话校验归属）、凭证显式（sessionId = 我要跨对话）。每个子命令的参数在 `parameters.oneOf` 里单独成支（`additionalProperties:false`）。
 
@@ -135,7 +135,7 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 
 - `src/manifest.json` 是 App v2 契约：`version` 由 derive 取主 `package.json`，`minAppVersion` 取随包 SDK 快照（现 `0.1011.8`）；capabilities 十项（tools / tasks / session / models / resources / runtime 三项 / ui 两项，清单见文件）。v1 专属字段（`author`、`trust`、`activationEvents`、`ui.hostCapabilities`、`network` 白名单）不在清单里。
 - `src/index.ts` 导出 `apply(ctx)`（兼导出 `default { apply }`）；apply 注册完即返回。统一日志只走宿主 `ctx.logger`；globalThis 宿主单例退役 → `src/lib/app-runtime.ts` module-scope 运行包。
-- 工具注册：`ctx.tools.register`，工具名 `dshana`（一个插件一个同名工具 + subcommand；v2 不自动加 `pluginId_` 前缀、重名被宿主当场拒）。动作六个：`open`/`reply`/`get`/`list`/`close`/`approve`（`list` 冻结禁用），装配见 `src/tools/index.ts`、手册见 `src/skills/dshana/SKILL.md`。
+- 工具注册：`ctx.tools.register`，工具名 `dshana`（一个插件一个同名工具 + subcommand；v2 不自动加 `pluginId_` 前缀、重名被宿主当场拒）。动作五个：`open`/`reply`/`get`/`close`/`approve`，装配见 `src/tools/index.ts`、手册见 `src/skills/dshana/SKILL.md`。
 - 设置：`contributes.settings` 的 UI 由 App 自绘设置页承担（`ui.route: /settings.html`，宿主设置区渲染）；键与缺省以 `src/lib/config.ts` 为准，读写落 `dataDir/config.json`。
 - 数据读路径迁到 `ctx.dataDir`（宿主 `app-data/<id>/`）：list/get 读当前源的 `<DSH_HOME>/...`（projcache + jsonl zstd）；旧插件数据迁移见 `src/lib/legacy-migrate.ts` 与 `scripts/migrate/legacy.mts`。
 - 构建：`node src/build.ts` 产物 `dist/` = App 安装目录形态（根 `manifest.json` + `index.js` + `assets/` + `skills/` + `ui/` + `runtime/`）。
