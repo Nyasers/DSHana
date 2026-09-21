@@ -564,18 +564,21 @@ export function pickedPathOf(result) {
  * 还先合成一次 Alt 把弹窗抢到前台——上游写明它只适合「操作者坐在宿主屏幕前」，而本形态里受管
  * runtime 是沙箱里的后台子进程，那条路开不出来（客户端就把异常当错误弹出来）。这里注入桥：弹窗改由
  * 宿主出（`hana.resources.pick`，`mode=directory`），用户面对的是自己的机器，不经沙箱。
- * @param sdk - 宿主 UI SDK（缺省取当前全局的 `hana`）。
+ * @param sdk - 壳页的宿主 UI SDK。它在本包里是**模块作用域的导入**（app-shell 的
+ *   `import { hana } from "@hana/plugin-sdk"`），不在 `globalThis` 上，所以调用方必须传进来；
+ *   全局只当兼底，供别的宿主形态。
  * @returns disposer：删掉桥（并恢复先前的值）。
  */
-export function installDirectoryPickerBridge(sdk = (globalThis as any).hana) {
+export function installDirectoryPickerBridge(sdk) {
   const host = globalThis as any;
   const previous = host.__DSH_DIRECTORY_PICKER__;
   host.__DSH_DIRECTORY_PICKER__ = {
     async pick() {
-      if (!sdk || !sdk.resources || typeof sdk.resources.pick !== "function") {
-        throw new Error("宿主 SDK 无 hana.resources.pick（能力未授予？）");
+      const api = sdk || host.hana;
+      if (!api || !api.resources || typeof api.resources.pick !== "function") {
+        throw new Error(api ? "宿主 SDK 里没有 resources.pick" : "壳页没拿到宿主 SDK（它不在 globalThis 上，得由壳页传）");
       }
-      return pickedPathOf(await sdk.resources.pick({ mode: "directory" }));
+      return pickedPathOf(await api.resources.pick({ mode: "directory" }));
     },
   };
   return () => {
@@ -606,7 +609,7 @@ export function installDirectoryPickerBridge(sdk = (globalThis as any).hana) {
  */
 export function installTransport(
   privateBase: URL,
-  { role, bridge }: { role?: string; bridge?: Record<string, unknown> } = {},
+  { role, bridge, sdk }: { role?: string; bridge?: Record<string, unknown>; sdk?: any } = {},
 ) {
   // 请求接管先装：它必须早于任何 DSH 侧代码执行（注入 index 前调用本函数）。
   const restoreTakeover = installRequestTakeover(privateBase);
@@ -636,8 +639,9 @@ export function installTransport(
   // writeText **不存在**时才走——嵌入场景里原生被 Permissions-Policy 关死，于是复制永远失败，
   // 还每次先留一条 [Violation]。影子必须在属性被读到之前就位；桥面已就绪，故放在 __DSHANA__ 之后。
   const restoreClipboard = installClipboardShadow({ bridge: window.__DSHANA__ });
-  // 目录选择器桥：同样必须在 DSH 注入之前（客户端在流程激活时读一次）。
-  const restoreDirectoryPicker = installDirectoryPickerBridge();
+  // 目录选择器桥：同样必须在 DSH 注入之前（客户端在流程激活时读一次）。SDK 由壳页传入——
+  // 它是模块作用域的导入，不在 globalThis 上。
+  const restoreDirectoryPicker = installDirectoryPickerBridge(sdk);
   return () => {
     try { restoreDirectoryPicker(); } catch { /* 忽略 */ }
     try { restoreClipboard(); } catch { /* 忽略 */ }

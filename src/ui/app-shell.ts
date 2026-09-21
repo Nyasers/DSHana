@@ -381,6 +381,8 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
       // （中列 + 右列，无 DSH 侧栏）。
       role: roleForView(view),
       bridge: SURFACE_API,
+      // 目录桥要的宿主 SDK：它是本文件头顶那个 import（不在 globalThis 上，DSH 侧自己也拿不到）。
+      sdk: hana,
     });
     // 取 index：privatePrefix 已是完整代理路径（含 _surface 票据，宿主路由直认），用原生同源
     // fetch——hana.api.fetch 的入参是「App 路由相对路径」（会再拼 /api/apps/<id>/routes/），

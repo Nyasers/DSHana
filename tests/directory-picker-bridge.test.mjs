@@ -57,7 +57,19 @@ test("桥：pick 调宿主 resources.pick(mode=directory)，取消回 null；拆
 
 test("桥：宿主 SDK 没有 resources.pick 时报错，不假装取消", async () => {
   const restore = installDirectoryPickerBridge({});
-  await assert.rejects(() => globalThis[KEY].pick(), /hana\.resources\.pick/);
+  await assert.rejects(() => globalThis[KEY].pick(), /resources\.pick/);
   restore();
   assert.equal(globalThis[KEY], undefined);
+});
+
+test("桥：壳页没传入且全局也没有 SDK 时报错，错因与上一个分得开", async () => {
+  const restore = installDirectoryPickerBridge(undefined);
+  await assert.rejects(() => globalThis[KEY].pick(), /没拿到宿主 SDK/);
+  restore();
+  // 全局上有 SDK 时仍能兼底（别的宿主形态）：
+  globalThis.hana = { resources: { async pick() { return { resources: [{ path: "E:\\tmp" }] }; } } };
+  const restore2 = installDirectoryPickerBridge(undefined);
+  assert.equal(await globalThis[KEY].pick(), "E:\\tmp");
+  restore2();
+  delete globalThis.hana;
 });
