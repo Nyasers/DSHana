@@ -5,7 +5,7 @@
 //
 // 只读查询（官方 session/list，需受管 runtime 就绪）。
 //
-// 状态：**冻结禁用（2026-09-13）**。源码保留，但不注册到工具面，也不做 cursor / sourceId
+// 状态：**冻结禁用**。源码保留，但不注册到工具面，也不做 cursor / sourceId
 // 那套“先 list 发现再操作”的配套语义（见 specs/current/sample-align 裁决 2c）。
 //
 // 理由：任务绑定语义下会话靠句柄（宿主 taskId）定位；“查任务”这件事由**宿主提供给 Agent 的

@@ -52,7 +52,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 | `get` | 无 | taskId 或 sessionId（至少一个） | 回看该会话最近一轮的最终结论 |
 | `approve` | approvalId | outcome, taskId 或 sessionId | 应答挂起审批 |
 
-> `list`（会话清单）的实现保留在 `actions/list.ts`，但**暂未注册到工具面**（2026-09-13）。
+> `list`（会话清单）的实现保留在 `actions/list.ts`，但**暂未注册到工具面**。
 
 **句柄与凭证**：`taskId`（open/reply 返回）与 `approvalId` 是**句柄路径**，工具自己解析会话并按宿主记录的来源会话校验归属；`sessionId`（形如 `session-<uuid>`）是**凭证路径**，显式传入即视为"我要跨对话操作"，跳过归属校验。
 
@@ -100,7 +100,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 
 ### list（会话清单，冻结禁用）
 
-`actions/list.ts` 是官方 `session/list` 的只读封装（带 `title`/`cwd`/`updatedAt`/`lastPromptAt`/turns/usage 等字段），**冻结禁用**（2026-09-13）：任务绑定语义下会话靠句柄定位，不做 cursor / sourceId 那套"先 list 发现再操作"的配套（sourceId 还另有一层理由：它本来只为"防源漂移"，而数据源切换入口已暂撤回 503）。需要"列会话"时改走宿主提供给 Agent 的内置任务查询工具（模型侧，本环境是 `check_pending_tasks`）——dshana 的 open/reply 建的就是本会话的后台任务，本来就出现在那份清单里，不需要本工具再开一扇只读门。
+`actions/list.ts` 是官方 `session/list` 的只读封装（带 `title`/`cwd`/`updatedAt`/`lastPromptAt`/turns/usage 等字段），**冻结禁用**：任务绑定语义下会话靠句柄定位，不做 cursor / sourceId 那套"先 list 发现再操作"的配套（sourceId 还另有一层理由：它本来只为"防源漂移"，而数据源切换入口已暂撤回 503）。需要"列会话"时改走宿主提供给 Agent 的内置任务查询工具（模型侧，本环境是 `check_pending_tasks`）——dshana 的 open/reply 建的就是本会话的后台任务，本来就出现在那份清单里，不需要本工具再开一扇只读门。
 
 要重新启用本模块：在 `src/tools/index.ts` 的 import、ACTIONS 与 description 里加回即可。
 
