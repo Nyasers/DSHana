@@ -16,7 +16,13 @@ import {
   RUNTIME_ENTRY,
   PORT_MIN,
   PORT_MAX,
+  RUNTIME_HANDOFF_DIR,
+  writeRuntimeConfigFile,
 } from "../src/lib/managed-runtime.ts";
+
+import { mkdtempSync, readFileSync, existsSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, dirname } from "node:path";
 
 test("choosePort: 落在 [PORT_MIN, PORT_MAX) 的确定整数（宿主 service 端口契约 1024..65535）", () => {
   assert.equal(choosePort(() => PORT_MIN), PORT_MIN);
@@ -123,4 +129,17 @@ test("常量契约：entry 相对安装根 / marker 前缀 / 端口区间", () =
   assert.equal(READY_MARKER, "DSH_READY");
   assert.equal(PORT_MIN, 38000);
   assert.equal(PORT_MAX, 52000);
+});
+
+test("私有运行时配置落在宿主临时目录 .runtime-tmp，不另开目录", () => {
+  const dataDir = mkdtempSync(join(tmpdir(), "dshana-handoff-"));
+  try {
+    const path = writeRuntimeConfigFile(dataDir, { dataDir, dshPort: 1, bridgePort: 2, bridgeKey: "k".repeat(16), controlKey: "c".repeat(16), readyMarker: "m" });
+    assert.equal(dirname(path), join(dataDir, RUNTIME_HANDOFF_DIR));
+    assert.ok(existsSync(path));
+    assert.equal(JSON.parse(readFileSync(path, "utf8")).dataDir, dataDir);
+    assert.equal(existsSync(join(dataDir, "integration")), false);
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
 });

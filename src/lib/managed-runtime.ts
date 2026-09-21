@@ -191,9 +191,16 @@ export function buildRuntimeConfig(opts) {
   return config;
 }
 
-/** 写私有运行时配置文件（dataDir/integration/，0600），返回绝对路径。 */
+/**
+ * 一次性交付文件（私有运行时配置、预检结果）的落点：宿主给本 App 的临时目录
+ * `dataDir/.runtime-tmp`。它由宿主建好、在沙箱写白名单内，受管 runtime 子进程直接读得到，
+ * 活几毫秒就被删；不另开目录，系统临时目录也不在沙箱白名单里。
+ */
+export const RUNTIME_HANDOFF_DIR = ".runtime-tmp";
+
+/** 写私有运行时配置文件（`dataDir/.runtime-tmp/`，0600），返回绝对路径。 */
 export function writeRuntimeConfigFile(dataDir, config) {
-  const dir = join(dataDir, "integration");
+  const dir = join(dataDir, RUNTIME_HANDOFF_DIR);
   mkdirSync(dir, { recursive: true });
   const filename = join(dir, `runtime-${randomBytes(9).toString("hex")}.json`);
   writeFileSync(filename, JSON.stringify(config), { mode: 0o600 });
@@ -369,7 +376,7 @@ export async function preflightSource({ dataDir, dshHome, profile }) {
   if (!ctx || !ctx.runtime || typeof ctx.runtime.start !== "function") {
     return { ok: false, error: "宿主 runtime 不可用，无法预检新数据源" };
   }
-  const resultPath = join(dataDir, "integration", "preflight-" + randomBytes(9).toString("hex") + ".json");
+  const resultPath = join(dataDir, RUNTIME_HANDOFF_DIR, "preflight-" + randomBytes(9).toString("hex") + ".json");
   // 预检形态不需要端口/凭据：只给目标 home 与结果路径（见 src/runtime/options.ts 的 preflight 支）
   const configPath = writeRuntimeConfigFile(dataDir, { dataDir, dshHome, profile, preflight: true, resultPath });
   const cleanup = () => {

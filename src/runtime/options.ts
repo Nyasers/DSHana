@@ -4,7 +4,7 @@
 // src/runtime/options.ts — 受管 runtime 子进程的私有配置读取（dsh-host 专用）
 //
 // 形态（对齐官方样例 hana-dsh）：**入参只有一份私有配置文件的路径**（argv[1]），命令行不带
-// 明文参数——配置由 App 主进程（lib/managed-runtime.js）以 0600 写入 dataDir/integration/，
+// 明文参数——配置由 App 主进程（lib/managed-runtime.js）以 0600 写入 dataDir/.runtime-tmp/，
 // 子进程读后立即 unlink。bridgeKey 这类「不能让回环端口变成第二个无鉴权面」的凭据绝不出现在
 // argv（进程列表可见）、环境变量或日志里。
 //
@@ -12,7 +12,7 @@
 //   { dataDir, dshHome?, dshPort, bridgePort, bridgeKey, controlKey, readyMarker, depsRoot? }
 //   或预检形态（数据源切换探针）：
 //   { dataDir, dshHome, preflight:true, resultPath }
-//   · dataDir       App ctx.dataDir 绝对路径（App 数据根；.dsh / integration 等均在其下）
+//   · dataDir       App ctx.dataDir 绝对路径（App 数据根；.dsh / .runtime-tmp 等均在其下）
 //   · dshHome       本源的 DSH_HOME 绝对路径（当前数据源决定；缺省回落 dataDir/.dsh）
 //   · preflight     true = 只做「依赖就位 + 定位 DSH + 产物在位」可用性预检，不 boot DSH，
 //                   也不往目标 home 写任何东西；结果写 resultPath（{ok} 或 {ok:false,error}）后退出
