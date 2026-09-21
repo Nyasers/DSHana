@@ -1,0 +1,35 @@
+{
+  "package": "@deepseek-ai/dsh-api-session-controller",
+  "upstreamVersion": "0.1.6-alpha.2",
+  "upstreamDir": "packages/api/session-controller",
+  "halves": {
+    "client": false,
+    "server": {
+      "entry": "src/index.ts",
+      "out": "lib/index.js"
+    }
+  },
+  "files": [
+    {
+      "path": "src/types.ts",
+      "upstreamSha256": "b5c13ff15429ebc737ef1a11b15b2f0d2d9d00b4f3f0778dfbc45ced6a854514"
+    },
+    {
+      "path": "src/commands.ts",
+      "upstreamSha256": "a28710b2368df8747cdb88f08c97358eab0dc64f2c2c653868a8fe7129f30944"
+    }
+  ],
+  "notes": [
+    "批次：调用方自带的模型选择（「模型随请求走」，不落 settings.yaml）。",
+    "缝选在这里：session/create 与 session/prompt 的请求多一个可选 model，服务端按会话就地装上；",
+    "这是唯一一条「模型配置跟着请求走」的入口（唯一收模型的选择 API session/selectModel 会顺带",
+    "saveSelection 落全局默认，那是给「在页面上选模型」的语义，不是给调用方的）。",
+    "语义三条：只装会话选择（selectForNextRequest），不碰全局默认；走既有的 resolveCallConfig 校验，",
+    "路由不可服务时报 session/model-unavailable（与 selectModel 同一套错误码/文案）；",
+    "prompt 上带 model 时同一回合生效并留给该会话后续请求（会话自己的 durable 选择，不是全局配置）。",
+    "为什么不用合成路由/单条 provider：Web UI 里的模型选择器要照旧列全宿主目录，用户可能直接在那儿选",
+    "（那条路仍走 selectModel，会落默认，是用户自己的选择）。",
+    "我们这边谁在用：受管 runtime 里 open 建的会话把调用方角色卡（或 App 设置里那条自定义）带上，",
+    "于是 DSH 侧不需要任何用户模型状态，settings.yaml 那格只在用户手设过时才有值。"
+  ]
+}

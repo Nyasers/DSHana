@@ -37,7 +37,12 @@ const P = (p) => normalize(p);
 // 两个超时的默认值（钉住数字：与 config.ts 的 APP_SETTING_DEFAULTS 一致，也是存储的缺省）
 const TIMEOUT_DEFAULTS = { approvalTimeoutSec: 30, defaultTimeoutSec: 1800 };
 // 会话模型缺省：复用调用方（caller），自定义那条留空
-const SESSION_DEFAULTS = { sessionModelMode: "caller", sessionModelProvider: "", sessionModelModel: "" };
+const SESSION_DEFAULTS = {
+  sessionModelMode: "caller",
+  sessionModelProvider: "",
+  sessionModelModel: "",
+  sessionModelReasoningEffort: "",
+};
 
 test("validateSettings: private 默认落位，profile 被强制为内置名", () => {
   assert.deepEqual(validateSettings({ mode: "private", path: null, profile: "whatever" }), {
@@ -94,10 +99,27 @@ test("validateSettings: 会话模型模式限定两种，custom 要求 provider/
   const kept = validateSettings({ mode: "private", sessionModelMode: "caller", sessionModelProvider: "deepseek", sessionModelModel: "deepseek-flash" });
   assert.equal(kept.sessionModelMode, "caller");
   assert.equal(kept.sessionModelProvider, "deepseek");
-  const custom = validateSettings({ mode: "private", sessionModelMode: "custom", sessionModelProvider: " agnes ", sessionModelModel: " agnes-3.0-flash " });
+  const custom = validateSettings({
+    mode: "private",
+    sessionModelMode: "custom",
+    sessionModelProvider: " agnes ",
+    sessionModelModel: " agnes-3.0-flash ",
+    sessionModelReasoningEffort: " high ",
+  });
   assert.deepEqual(
-    { mode: custom.sessionModelMode, provider: custom.sessionModelProvider, model: custom.sessionModelModel },
-    { mode: "custom", provider: "agnes", model: "agnes-3.0-flash" },
+    {
+      mode: custom.sessionModelMode,
+      provider: custom.sessionModelProvider,
+      model: custom.sessionModelModel,
+      effort: custom.sessionModelReasoningEffort,
+    },
+    { mode: "custom", provider: "agnes", model: "agnes-3.0-flash", effort: "high" },
+  );
+  // 推理强度是可选一侧：不填不报错，落空串（= 不指定，由 DSH 决定）
+  assert.equal(
+    validateSettings({ mode: "private", sessionModelMode: "custom", sessionModelProvider: "a", sessionModelModel: "b" })
+      .sessionModelReasoningEffort,
+    "",
   );
   assert.throws(() => validateSettings({ mode: "private", sessionModelMode: "fixed" }), /caller 或 custom/);
   assert.throws(() => validateSettings({ mode: "private", sessionModelMode: "custom" }), /provider 与 model/);

@@ -71,11 +71,21 @@ test("角色卡读不到 / 它配的模型不在目录里 → 不补（让报错
 });
 
 test("sessionModelSettingOf: 模式只认 caller/custom，custom 填不全就当 caller", () => {
-  assert.deepEqual(sessionModelSettingOf({ sessionModelMode: "caller" }), { mode: "caller", provider: "", model: "" });
-  assert.deepEqual(sessionModelSettingOf(undefined), { mode: "caller", provider: "", model: "" });
+  assert.deepEqual(sessionModelSettingOf({ sessionModelMode: "caller" }), { mode: "caller", provider: "", model: "", reasoningEffort: "" });
+  assert.deepEqual(sessionModelSettingOf(undefined), { mode: "caller", provider: "", model: "", reasoningEffort: "" });
   assert.deepEqual(
-    sessionModelSettingOf({ sessionModelMode: "custom", sessionModelProvider: " deepseek ", sessionModelModel: " deepseek-flash " }),
-    { mode: "custom", provider: "deepseek", model: "deepseek-flash" },
+    sessionModelSettingOf({
+      sessionModelMode: "custom",
+      sessionModelProvider: " deepseek ",
+      sessionModelModel: " deepseek-flash ",
+      sessionModelReasoningEffort: " high ",
+    }),
+    { mode: "custom", provider: "deepseek", model: "deepseek-flash", reasoningEffort: "high" },
+  );
+  // 推理强度是可选一侧：不填不影响 custom 成立
+  assert.equal(
+    sessionModelSettingOf({ sessionModelMode: "custom", sessionModelProvider: "a", sessionModelModel: "b" }).reasoningEffort,
+    "",
   );
   // 脏值（模式 custom 但缺一侧）不拓：当 caller，不给一个跑不动的选择
   assert.equal(sessionModelSettingOf({ sessionModelMode: "custom", sessionModelProvider: "deepseek" }).mode, "caller");
@@ -111,7 +121,25 @@ test("App 设置选「自定义模型」时：它优先于角色卡与用户默�
   );
 });
 
-test("resolveCallerPlan: 自定义模式不再去读角色卡与用户默认", async () => {
+test("自定义那条带推理强度时：随选择一起交出；不填就不带", () => {
+  assert.deepEqual(
+    planCallerSelection({
+      appSetting: { mode: "custom", provider: "agnes", model: "agnes-3.0-flash", reasoningEffort: "high" },
+      card: CARD,
+      served: SERVED,
+    }),
+    { kind: "select", provider: "agnes", model: "agnes-3.0-flash", reasoningEffort: "high" },
+  );
+  assert.deepEqual(
+    planCallerSelection({
+      appSetting: { mode: "custom", provider: "agnes", model: "agnes-3.0-flash", reasoningEffort: "" },
+      served: SERVED,
+    }),
+    { kind: "select", provider: "agnes", model: "agnes-3.0-flash" },
+  );
+});
+
+test("resolveCallerPlan: 自定义模式不读角色卡与用户默认", async () => {
   const { lines, note } = notes();
   let cardReads = 0;
   let storedReads = 0;

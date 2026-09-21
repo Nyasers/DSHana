@@ -192,65 +192,102 @@ export async function buildIntegrations(integrations, { tag, mirrorDir = MIRROR,
       typecheckOverlay({ short, stage, files: it.files, repoRoot, mirrorDir, log: (m) => log(m) });
     }
 
-    // 3) externals = 原版 bundle 自己的 require 集合。
-    //    例外：client 半只有类型导入的包（如 dsh-client-hmr）——原版产物里**零 require**。
-    //    这不能当「抽取失败」（fail-closed 会误杀整个集成）：改为从缓存的源码取非相对
-    //    specifier 作 externals——真正的外部依赖仍保持外部化（不被内联成重复副本），
-    //    类型导入列出来无害（会被构建抹掉）。
-    const pristineClient = join(template, "lib", "client.js");
-    if (!existsSync(pristineClient)) throw new Error(`integration ${short}: 原版缺 lib/client.js（${pristineClient}）`);
-    let externals = extractRequires(readFileSync(pristineClient, "utf8"));
-    if (externals.length === 0) {
-      externals = [...sourceSpecifiers(join(stage, "src"))];
-      console.log(`[integrations] ${short}: 原版 bundle 零 require（client 半仅类型导入），externals 取自有源码（${externals.join(", ") || "空"}）`);
-    }
-    // 源码里的非相对导入（后面判悬空与算别名都用它，只算一次）
-    const imported = sourceSpecifiers(join(stage, "src"));
-
-    // 4) 编译 client 半
-    const outDir = join(stage, "lib");
-    const entryRel = files.includes(`${upstreamDir}/src/client/index.ts`) ? "src/client/index.ts" : "src/client/index.tsx";
-    // 待内联的库得先能解到（见 resolveInlineAliases 注释：pnpm 长路径下根级链接是悬空的）。
-    const alias = resolveInlineAliases([...imported].filter((s) => !externals.includes(s)), repoRoot);
-    if (Object.keys(alias).length) {
-      console.log(`[integrations] ${short}: 内联别名 ${Object.keys(alias).join(", ")}`);
-    }
-    const bundle = await buildClientBundle({ id: pkg, pkgDir: stage, outDir, externals, entry: entryRel, alias });
-
-    // 4b) 悬空外部引用闸：产物里出现 externals 之外的引用 = loader 模块表答不上 → 运行时必炸。
-    // 典型成因：上游 bundle 内联的第三方库（如 clsx）在本仓库 node_modules 里缺失，
-    // 解析不到就被当成 external。处理：把该库加进 devDependencies（devDep 会被内联，不进运行时）。
-    const produced = extractRequires(readFileSync(join(outDir, "client.js"), "utf8"));
-    // 产物侧抽取在**压缩后**会出假阳性（minifier 把工厂参数改成单字符，`e("data-plugin")`
-    // 这类同名调用的字符串字面会被误认成 require）。判据收紧为「确实是源码里的非相对导入」：
-    // 只有这类 specifier 悬空才是真问题（clsx 就属于此类：源码 import 了它、产物 require 了它、
-    // 而 externals 里没有它）。
-    const dangling = produced.filter((s) => !externals.includes(s) && imported.has(s));
-    const noise = produced.filter((s) => !externals.includes(s) && !imported.has(s));
-    if (noise.length) console.log(`[integrations] ${short}: 产物抽取忽略 ${noise.length} 个非导入字面（假阳性）：${noise.join(", ")}`);
-    if (dangling.length) {
-      throw new Error(
-        `integration ${short}: 产物含悬空外部引用 ${dangling.join(", ")} —— ` +
-          `loader 模块表答不上这些 specifier（上游 bundle 里它们是内联的）。` +
-          `请把对应库装进 devDependencies（devDep 会被内联）后重跑，或确认它确实应是外部。`,
-      );
+    // 3) 分派两半：integrations/<短名>/integration.json 的 halves。没写 halves = 只有 client 半
+    //    （既有八个集成都是这样）；server 半是上游 api 包那一类（发布单文件 ESM bundle）。
+    const halves = it.halves && typeof it.halves === "object" ? it.halves : {};
+    const serverDecl = halves.server && typeof halves.server === "object" ? halves.server : null;
+    const wantClient = halves.client !== false;
+    if (!wantClient && !serverDecl) {
+      throw new Error(`integration ${short}: halves 既没 client 也没 server（没东西可编译）`);
     }
 
-    // 5) 以原版包为模板组装（lib/index.js、lib/types、package.json 等原样；client.js 换我们的）
+    let clientArtifact = null;
+    if (wantClient) {
+      // 3a) externals = 原版 bundle 自己的 require 集合。
+      //    例外：client 半只有类型导入的包（如 dsh-client-hmr）——原版产物里**零 require**。
+      //    这不能当「抽取失败」（fail-closed 会误杀整个集成）：改为从缓存的源码取非相对
+      //    specifier 作 externals——真正的外部依赖仍保持外部化（不被内联成重复副本），
+      //    类型导入列出来无害（会被构建抹掉）。
+      const pristineClient = join(template, "lib", "client.js");
+      if (!existsSync(pristineClient)) throw new Error(`integration ${short}: 原版缺 lib/client.js（${pristineClient}）`);
+      let externals = extractRequires(readFileSync(pristineClient, "utf8"));
+      if (externals.length === 0) {
+        externals = [...sourceSpecifiers(join(stage, "src"))];
+        console.log(`[integrations] ${short}: 原版 bundle 零 require（client 半仅类型导入），externals 取自有源码（${externals.join(", ") || "空"}）`);
+      }
+      // 源码里的非相对导入（后面判悬空与算别名都用它，只算一次）
+      const imported = sourceSpecifiers(join(stage, "src"));
+
+      // 4) 编译 client 半
+      const outDir = join(stage, "lib");
+      const entryRel = files.includes(`${upstreamDir}/src/client/index.ts`) ? "src/client/index.ts" : "src/client/index.tsx";
+      // 待内联的库得先能解到（见 resolveInlineAliases 注释：pnpm 长路径下根级链接是悬空的）。
+      const alias = resolveInlineAliases([...imported].filter((s) => !externals.includes(s)), repoRoot);
+      if (Object.keys(alias).length) {
+        console.log(`[integrations] ${short}: 内联别名 ${Object.keys(alias).join(", ")}`);
+      }
+      const bundle = await buildClientBundle({ id: pkg, pkgDir: stage, outDir, externals, entry: entryRel, alias });
+
+      // 4b) 悬空外部引用闸：产物里出现 externals 之外的引用 = loader 模块表答不上 → 运行时必炸。
+      // 典型成因：上游 bundle 内联的第三方库（如 clsx）在本仓库 node_modules 里缺失，
+      // 解析不到就被当成 external。处理：把该库加进 devDependencies（devDep 会被内联，不进运行时）。
+      const produced = extractRequires(readFileSync(join(outDir, "client.js"), "utf8"));
+      // 产物侧抽取在**压缩后**会出假阳性（minifier 把工厂参数改成单字符，`e("data-plugin")`
+      // 这类同名调用的字符串字面会被误认成 require）。判据收紧为「确实是源码里的非相对导入」：
+      // 只有这类 specifier 悬空才是真问题（clsx 就属于此类：源码 import 了它、产物 require 了它、
+      // 而 externals 里没有它）。
+      const dangling = produced.filter((s) => !externals.includes(s) && imported.has(s));
+      const noise = produced.filter((s) => !externals.includes(s) && !imported.has(s));
+      if (noise.length) console.log(`[integrations] ${short}: 产物抽取忽略 ${noise.length} 个非导入字面（假阳性）：${noise.join(", ")}`);
+      if (dangling.length) {
+        throw new Error(
+          `integration ${short}: 产物含悬空外部引用 ${dangling.join(", ")} —— ` +
+            `loader 模块表答不上这些 specifier（上游 bundle 里它们是内联的）。` +
+            `请把对应库装进 devDependencies（devDep 会被内联）后重跑，或确认它确实应是外部。`,
+        );
+      }
+      clientArtifact = { bytes: readFileSync(join(outDir, "client.js")).length, externals, cssClasses: bundle.cssClasses };
+    }
+
+    // 4c) 编译 server 半（可选）：上游 api 包发布的是单文件 ESM bundle，重打姿势见 server-config.mts。
+    let serverArtifact = null;
+    if (serverDecl) {
+      const entry = String(serverDecl.entry || "src/index.ts");
+      if (!existsSync(join(stage, entry))) throw new Error(`integration ${short}: server 入口不存在（${entry}）`);
+      const outFile = String(serverDecl.out || "lib/index.js").replace(/^lib[\\/]/, "");
+      const { buildServerBundle } = await import("../../src-cordis/build/server-config.mts");
+      const res = await buildServerBundle({ id: pkg, pkgDir: stage, outDir: join(stage, "lib"), entry, outFile });
+      serverArtifact = { file: outFile, bytes: readFileSync(res.out).length };
+      log(`[integrations] ${short}: ${pkg} server 半编译完成（${outFile} ${serverArtifact.bytes}B，非相对导入全部外部）`);
+    }
+
+    // 5) 以原版包为模板组装（lib/index.js、lib/types、package.json 等原样；被我们重打的那半替换）
     const out = join(repoRoot, "_tmp", "integrations-built", short);
     rmSync(out, { recursive: true, force: true });
     mkdirSync(out, { recursive: true });
     cpSync(join(template, "lib"), join(out, "lib"), { recursive: true });
-    cpSync(join(stage, "lib", "client.js"), join(out, "lib", "client.js"));
+    if (clientArtifact) cpSync(join(stage, "lib", "client.js"), join(out, "lib", "client.js"));
+    if (serverArtifact) {
+      mkdirSync(dirname(join(out, "lib", serverArtifact.file)), { recursive: true });
+      cpSync(join(stage, "lib", serverArtifact.file), join(out, "lib", serverArtifact.file));
+    }
     const manifest = JSON.parse(readFileSync(join(template, "package.json"), "utf8"));
     // 版本戳：<上游版本>+dshana-<我们的干净版本>（合成在 scripts/shared/version.mts，与 derive 同一份）。
     // 上游段原样保留：一眼看出改的是哪个上游包。
     manifest.version = patchVersion(manifest.version);
     writeFileSync(join(out, "package.json"), JSON.stringify(manifest, null, 2));
 
-    const size = readFileSync(join(out, "lib", "client.js")).length;
-    log(`[integrations] ${short}: ${pkg}@${manifest.version} 编译完成（client.js ${size}B，externals ${externals.length} 个）`);
-    built.push({ short, pkg, version: manifest.version, out, externals, bytes: size, cssClasses: bundle.cssClasses });
+    const parts = [];
+    if (clientArtifact) parts.push(`client.js ${clientArtifact.bytes}B，externals ${clientArtifact.externals.length} 个`);
+    if (serverArtifact) parts.push(`${serverArtifact.file} ${serverArtifact.bytes}B`);
+    log(`[integrations] ${short}: ${pkg}@${manifest.version} 编译完成（${parts.join("；")}）`);
+    built.push({
+      short, pkg, version: manifest.version, out,
+      externals: clientArtifact ? clientArtifact.externals : [],
+      bytes: clientArtifact ? clientArtifact.bytes : 0,
+      cssClasses: clientArtifact ? clientArtifact.cssClasses : [],
+      server: serverArtifact ? serverArtifact.file : null,
+    });
   }
 
   // 类名唯一性闸：产物都已落地，重名此刻就能判死。跨包撞名的代价是样式互相顶掉（表现是

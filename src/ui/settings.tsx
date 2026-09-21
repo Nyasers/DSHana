@@ -158,12 +158,13 @@ const SESSION_MODES: SelectOption[] = [
 ];
 
 /** 会话模型设置读回：模式 + 自定义那条（合成 provider\0model，与默认模型那一节同写法）。 */
-function sessionOf(settings: any): { mode: string; picked: string } {
+function sessionOf(settings: any): { mode: string; picked: string; effort: string } {
   const provider = typeof settings?.sessionModelProvider === "string" ? settings.sessionModelProvider : "";
   const model = typeof settings?.sessionModelModel === "string" ? settings.sessionModelModel : "";
   return {
     mode: settings?.sessionModelMode === "custom" ? "custom" : "caller",
     picked: provider && model ? provider + MODEL_KEY_SEP + model : "",
+    effort: typeof settings?.sessionModelReasoningEffort === "string" ? settings.sessionModelReasoningEffort : "",
   };
 }
 
@@ -177,6 +178,7 @@ function App() {
   const [cfgRevision, setCfgRevision] = useState<number | null>(null);
   const [sessionMode, setSessionMode] = useState<string>("caller");
   const [customPicked, setCustomPicked] = useState("");
+  const [sessionEffort, setSessionEffort] = useState("");
   const [sessionSaving, setSessionSaving] = useState(false);
   const [sessionSaved, setSessionSaved] = useState(false);
   const [sessionHint, setSessionHint] = useState("");
@@ -206,6 +208,7 @@ function App() {
       const sess = sessionOf(data && data.settings);
       setSessionMode(sess.mode);
       setCustomPicked(sess.picked);
+      setSessionEffort(sess.effort);
       setCfgRevision(data && typeof data.revision === "number" ? data.revision : null);
       setCfgHint("");
       setCfgWarn(false);
@@ -358,6 +361,7 @@ function App() {
       }
       patch.sessionModelProvider = pick.provider;
       patch.sessionModelModel = pick.model;
+      patch.sessionModelReasoningEffort = sessionEffort;
     }
     setSessionSaving(true);
     setSessionHint("");
@@ -378,6 +382,7 @@ function App() {
       const sess = sessionOf(data.settings);
       setSessionMode(sess.mode);
       setCustomPicked(sess.picked);
+      setSessionEffort(sess.effort);
       if (typeof data.revision === "number") setCfgRevision(data.revision);
       setSessionSaved(true);
     } catch (e) {
@@ -433,6 +438,11 @@ function App() {
   const modelOpts = modelOptions(model);
   const sel = splitPicked(picked);
   const effortOptions: SelectOption[] = effortsOf(model, sel.provider, sel.model).map((e) => ({
+    value: String(e.id || ""),
+    label: String(e.name || e.id || ""),
+  }));
+  const sessionSel = splitPicked(customPicked);
+  const sessionEffortOptions: SelectOption[] = effortsOf(model, sessionSel.provider, sessionSel.model).map((e) => ({
     value: String(e.id || ""),
     label: String(e.name || e.id || ""),
   }));
@@ -495,21 +505,39 @@ function App() {
           control={<Select ariaLabel="会话模型模式" value={sessionMode} options={SESSION_MODES} onChange={setSessionMode} />}
         />
         {sessionMode === "custom" && (
-          <SettingRow
-            label="模型"
-            hint={sessionHint || catalogHint || undefined}
-            hintVariant={sessionWarn ? "warn" : "default"}
-            layout="stacked"
-            control={
-              <Select
-                ariaLabel="自定义会话模型"
-                value={customPicked}
-                options={modelOpts}
-                disabled={modelOpts.length === 0}
-                onChange={setCustomPicked}
+          <>
+            <SettingRow
+              label="模型"
+              hint={sessionHint || catalogHint || undefined}
+              hintVariant={sessionWarn ? "warn" : "default"}
+              layout="stacked"
+              control={
+                <Select
+                  ariaLabel="自定义会话模型"
+                  value={customPicked}
+                  options={modelOpts}
+                  disabled={modelOpts.length === 0}
+                  onChange={(v) => { setCustomPicked(v); setSessionEffort(""); }}
+                />
+              }
+            />
+            {sessionEffortOptions.length > 0 && (
+              <SettingRow
+                label="推理强度"
+                hint="该模型支持的档位；留空则沿用 DSH 当前的设置。"
+                layout="stacked"
+                control={
+                  <Select
+                    ariaLabel="自定义会话模型推理强度"
+                    placeholder="保持当前设置"
+                    value={sessionEffort}
+                    options={sessionEffortOptions}
+                    onChange={setSessionEffort}
+                  />
+                }
               />
-            }
-          />
+            )}
+          </>
         )}
         <SettingRow
           label="保存"

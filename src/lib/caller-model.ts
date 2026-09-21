@@ -6,17 +6,13 @@
 // 会话的模型跟着「谁开的」走：open 建的会话，缺省模型取调用方那张角色卡配的 models.chat，
 // 与宿主 subagent 拿上一级的模型是同一个意思。App 设置里可以改成「自定义模型」（固定一条），
 // 那时它优先——它是针对本 App 会话的更具体的选择。四种情况不补：
-//   · 工具入参已经显式给了 provider/model（显式照旧，它同时成为 DSH 新默认）；
+//   · 工具入参已经显式给了 provider/model（显式照旧）；
 //   · App 设置是「自定义模型」且那条填好了（用它）；
 //   · DSH settings 里已经有用户手设的默认模型（那是用户的话，对所有会话生效）；
 //   · 调用方角色卡读不到，或它配的模型不在宿主目录里（补了也跑不动，让报错点到那个名字）。
 //
 // 只在 create 上补：send 的会话已经带着自己的选择（会话内的 durable 选择），不该因为换个
 // agent 来续话就把模型换掉。
-//
-// 补完要把 settings 那格清回空：DSH 的 session/selectModel 顺带 saveSelection（那是给
-// 「在页面上选模型」设计的语义），不清就等于我们按角色卡补的值变成了全局默认，下一次换个
-// agent 调用时它会被当成「用户设的」。清空后 user 层为空，值回落到 base 层。
 
 import { readCallerCardModel, type CardModel } from "#/lib/agent-models.ts";
 import { readDshDefaultModel } from "#/lib/config.ts";
@@ -39,7 +35,7 @@ export function pickOf(input: { provider?: unknown; model?: unknown } | null | u
 
 /** 会话模型的一次决策：补哪一条，或者为什么不补。 */
 export type CallerPlan =
-  | { kind: "select"; provider: string; model: string }
+  | { kind: "select"; provider: string; model: string; reasoningEffort?: string }
   | { kind: "skip"; reason: "explicit" | "user-default" | "no-card" | "card-not-served" | "custom-not-served" };
 
 /** 一条会话模型设置（App 设置页的 global.sessionModel*）。 */
@@ -47,6 +43,8 @@ export interface SessionModelSetting {
   mode: "caller" | "custom";
   provider: string;
   model: string;
+  /** 推理强度档位；空串 = 不指定，由 DSH 决定。 */
+  reasoningEffort: string;
 }
 
 /**
@@ -59,15 +57,17 @@ export function sessionModelSettingOf(settings: unknown): SessionModelSetting {
   const s = settings && typeof settings === "object" ? (settings as any) : {};
   const provider = typeof s.sessionModelProvider === "string" ? s.sessionModelProvider.trim() : "";
   const model = typeof s.sessionModelModel === "string" ? s.sessionModelModel.trim() : "";
+  const reasoningEffort =
+    typeof s.sessionModelReasoningEffort === "string" ? s.sessionModelReasoningEffort.trim() : "";
   const mode = s.sessionModelMode === "custom" && provider && model ? "custom" : "caller";
-  return { mode, provider, model };
+  return { mode, provider, model, reasoningEffort };
 }
 
 /**
  * 工具建的会话该不该按调用方角色卡补模型（纯函数）。
  * @param args - explicit：工具入参显式给的；appSetting：App 设置里的会话模型；
  *   stored：DSH settings 里用户手设的；card：调用方角色卡配的；served：宿主目录
- * @returns 决策（`select` 才需要 selectModel）
+ * @returns 决策（`select` 才随请求带上）
  */
 export function planCallerSelection(args: {
   explicit?: { provider?: unknown; model?: unknown } | null;
@@ -79,7 +79,14 @@ export function planCallerSelection(args: {
   if (pickOf(args.explicit)) return { kind: "skip", reason: "explicit" };
   const setting = args.appSetting;
   if (setting && setting.mode === "custom") {
-    if (servedHas(args.served, setting)) return { kind: "select", provider: setting.provider, model: setting.model };
+    if (servedHas(args.served, setting)) {
+      return {
+        kind: "select",
+        provider: setting.provider,
+        model: setting.model,
+        ...(setting.reasoningEffort ? { reasoningEffort: setting.reasoningEffort } : {}),
+      };
+    }
     return { kind: "skip", reason: "custom-not-served" };
   }
   if (pickOf(args.stored)) return { kind: "skip", reason: "user-default" };

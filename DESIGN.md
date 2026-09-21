@@ -106,7 +106,7 @@ DSHana 以**单卡 + 自带功能面板**注册（manifest `contributes.cards[0]
 ### 设置面
 
 - **DSH 内设置**：`agent-default-model`（默认模型，Provider/模型/推理强度三级联动）与 DSH 版本显示，由 `@dshana/settings` 子插件在 DSH 设置页的分页承载。
-- **会话模型从哪来**：App 设置项 `sessionModelMode` 决定——`caller`（缺省，复用调用方那份）或 `custom`（`sessionModelProvider` / `sessionModelModel` 固定一条）。caller 模式按**调用方那张角色卡**配的 `models.chat` 补（`agent:list` 的 `isCurrent` 优先，能力面 `app/agents.read`）；自定义模式那条优先于角色卡与 DSH 默认；用户手设的 DSH 默认在 caller 模式下优先（它的 user 层非空就不补）。补完把 `session/selectModel` 顺带写下的全局默认清回空（缺省保持缺省）。user 层有值但已不可服务时才由 `src/lib/model-default-guard.ts` 就地对账。见 `src/lib/caller-model.ts`（决策）、`agent-models.ts`（读角色卡）、`host-models.ts`（宿主目录）。
+- **会话模型从哪来**：App 设置项 `sessionModelMode` 决定——`caller`（缺省，复用调用方那份）或 `custom`（`sessionModelProvider` / `sessionModelModel` / `sessionModelReasoningEffort` 固定一条，推理强度空串 = 不指定、由 DSH 决定）。优先级：工具入参显式 > App 自定义那条 > 用户手设的 DSH 默认（`caller` 模式下 user 层非空就不补） > **调用方那张角色卡**配的 `models.chat`（`agent:list` 的 `isCurrent` 优先，能力面 `app/agents.read`）。选出的那条**随会话请求带上**（集成层给 `session/create` 与 `session/prompt` 加了可选 `model` 字段，见 `src-integrations/api-session-controller`）：只在会话内生效，不写 `settings.yaml` 的全局默认；只在 create 上补，send 沿用会话已有的选择。user 层有值但已不可服务时才由 `src/lib/model-default-guard.ts` 就地对账。见 `src/lib/caller-model.ts`（决策）、`agent-models.ts`（读角色卡）、`host-models.ts`（宿主目录）。
 - **App 级设置**（数据源、两个超时）：迁到 App 自绘设置页，由宿主设置区渲染（`contributes.settings.ui.route`），不依赖 DSH 运行。见 `specs/current/sample-align`。
 
 ## 主题跟随

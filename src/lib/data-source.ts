@@ -41,6 +41,7 @@ export const SETTINGS_KEYS = Object.freeze([
   "sessionModelMode",
   "sessionModelProvider",
   "sessionModelModel",
+  "sessionModelReasoningEffort",
 ]);
 export const DEFAULT_SETTINGS = Object.freeze({
   mode: "private",
@@ -51,6 +52,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   sessionModelMode: APP_SETTING_DEFAULTS.sessionModelMode,
   sessionModelProvider: APP_SETTING_DEFAULTS.sessionModelProvider,
   sessionModelModel: APP_SETTING_DEFAULTS.sessionModelModel,
+  sessionModelReasoningEffort: APP_SETTING_DEFAULTS.sessionModelReasoningEffort,
 });
 /** 会话模型模式：caller = 按调用方角色卡（缺省），custom = 用固定的一条。 */
 export const SESSION_MODEL_MODES = Object.freeze(["caller", "custom"]);
@@ -105,12 +107,18 @@ function normalizeSessionModel(input) {
   if (!SESSION_MODEL_MODES.includes(mode)) {
     throw new Error("会话模型模式只能是 caller 或 custom（收到 " + JSON.stringify(mode) + "）");
   }
-  const out: { sessionModelMode: string; sessionModelProvider: string; sessionModelModel: string } = {
+  const out: {
+    sessionModelMode: string;
+    sessionModelProvider: string;
+    sessionModelModel: string;
+    sessionModelReasoningEffort: string;
+  } = {
     sessionModelMode: mode,
     sessionModelProvider: "",
     sessionModelModel: "",
+    sessionModelReasoningEffort: "",
   };
-  for (const key of ["sessionModelProvider", "sessionModelModel"] as const) {
+  for (const key of ["sessionModelProvider", "sessionModelModel", "sessionModelReasoningEffort"] as const) {
     const raw = input[key];
     if (raw === undefined || raw === null || raw === "") continue;
     if (typeof raw !== "string") throw new Error(key + " 必须是字符串（收到 " + JSON.stringify(raw) + "）");

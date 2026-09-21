@@ -14,7 +14,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 ## 首次安装（无需配置）
 
 - **无需装依赖、无需配 Node**：DSH 及其依赖树随包分发在安装目录 `node_modules`，我们的子插件也落在那里（`node_modules/@dshana`）；启动只做 DSH boot + 服务监听，不写数据目录里的任何东西。
-- **无需配 API Key / 模型**：推理经受管 runtime 内 `hana.models` 发起，provider 凭据留在宿主。DSH 自带的两个 LLM adapter 行（`llm-deepseek` / `llm-pi-ai`）在我们的 roster patch 里停掉，llm 路由只剩宿主目录那几条（那两行要凭据库里的 key，而凭据在宿主手里，它们只会摆出选到就报 `no API key` 的路由）；设置里那页「模型」也一并停掉（它只编辑这两行的 settings 段，停掉后没可编辑对象，只剩空壳）。会话的模型跟着「谁开的」走：工具建的会话按**调用方那张角色卡配的模型**开（`agents/<id>/config.yaml` 的 `models.chat`，经 `agent:list` / `agent:config` 读，见 `app/agents.read`）；App 设置页的「会话模型」可以改成「自定义模型」固定一条（缺省是「复用调用方」）；你在 DSH models 页手设过默认则听你的，它对所有会话生效。那格默认不主动写（缺省保持缺省），只有它已经指向宿主目录里没有的路由时才就地换一条（优先留在原 provider 里换，再退角色卡模型、目录第一条；日志有「默认模型对账」，见 `src/lib/model-default-guard.ts`）。
+- **无需配 API Key / 模型**：推理经受管 runtime 内 `hana.models` 发起，provider 凭据留在宿主。DSH 自带的两个 LLM adapter 行（`llm-deepseek` / `llm-pi-ai`）在我们的 roster patch 里停掉，llm 路由只剩宿主目录那几条（那两行要凭据库里的 key，而凭据在宿主手里，它们只会摆出选到就报 `no API key` 的路由）；设置里那页「模型」也一并停掉（它只编辑这两行的 settings 段，停掉后没可编辑对象，只剩空壳）。会话的模型跟着「谁开的」走：工具建的会话按**调用方那张角色卡配的模型**开（`agents/<id>/config.yaml` 的 `models.chat`，经 `agent:list` / `agent:config` 读，见 `app/agents.read`）；App 设置页的「会话模型」可以改成「自定义模型」固定一条（`sessionModelProvider` / `sessionModelModel`，可选该模型支持的推理强度 `sessionModelReasoningEffort`；缺省是「复用调用方」）；你在 App 设置页的「默认模型」里手设过则听你的，它对所有会话生效。那格默认不主动写（缺省保持缺省），只有它已经指向宿主目录里没有的路由时才就地换一条（优先留在原 provider 里换，再退角色卡模型、目录第一条；日志有「默认模型对账」，见 `src/lib/model-default-guard.ts`）。
 - **默认模型**：读 DSH 自身配置（`DSH_HOME/settings.yaml` 的 `agent-default-model`）——用户层为空时它回落到 base 层那份官方路由，所以界面里直接开的会话先在 App 设置页的「默认模型」里选一个。
 - **数据目录**：固定用 App 内置独立目录（App 数据目录下的 `.dsh`），开箱即用；共享已有目录 / 切换数据源暂不提供。
 - `dshana(action="open")` 每次调用**必须显式传 `cwd`**。
