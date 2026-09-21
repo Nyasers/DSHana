@@ -110,7 +110,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 - 回看：`get`（最终结论）
 - 止损：`close`；越界权限：`approve`（提交后先让出回合，审批通知下一回合才到）
 
-`sessionId` 即访问凭证；`get` 纯本地读会话文件，DSH 未启动时不可用。
+`sessionId` 即访问凭证；`get` 的取数走受管 runtime 的官方查询面，不读会话文件、不发起推理，DSH 未启动时不可用。
 
 ## 主题
 
