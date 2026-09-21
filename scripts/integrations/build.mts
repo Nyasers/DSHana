@@ -94,6 +94,56 @@ export function duplicateCssClasses(built) {
   return problems.sort();
 }
 
+/**
+ * 我们从源码加进会话请求的那个可选字段，在生成物里要补成的形状。
+ * 与 src/types.ts 的 ModelSelection 一致：provider/model 必填，reasoningEffort 可选。
+ * 缩进照生成物的习惯（对象属性一律两格，嵌套对象不额外缩）。
+ */
+const SESSION_MODEL_SCHEMA = [
+  "  'model': z.object({",
+  "  'provider': z.string().readonly(),",
+  "  'model': z.string().readonly(),",
+  "  'reasoningEffort': z.string().readonly().optional(),",
+  "}).readonly().optional(),",
+].join("\n") + "\n";
+
+/**
+ * 把我们从源码声明的请求字段补进生成的 RPC 校验表（纯函数）。
+ *
+ * 为何得有这一手：`lib/typert.host.js` 是上游**发布时**由 dsh-typert-generator 从 FaceModel
+ * 生成的（不在上游 git 里，生成器也不在运行时依赖里），它对每个远端方法按 request 类型逐字段
+ * 列 zod 校验；而 zod 的 `z.object` 对未见过的键默认是**剥离**。于是只在 src/types.ts 里加的
+ * 字段在 RPC 边界被拿走，服务端读到的永远是 undefined——现场只剩「模型没生效」这种无从归因的
+ * 样子（服务端反而报它自己的默认路由不可服务）。
+ * 定位靠锚点：schema 常量名 + `z.object({` 换行。上游换了生成器/改名/换形状就抛，不静默放过；
+ * 若上游哪天把字段做进协议（schema 里已有 model），也抛——那是这里的补丁该撤的信号。
+ * @param text - 生成物文本（lib/typert.host.js）
+ * @param schemaNames - 要补的 schema 常量名（如 session_prompt_parameter_0）
+ * @param label - 报错里指代它的名字（包名）
+ * @returns 补好的文本
+ */
+export function patchGeneratedRequestModel(text, schemaNames, label = "生成物") {
+  let out = String(text ?? "");
+  for (const name of schemaNames) {
+    const re = new RegExp(`const \\w*${name}\\$schema = \\(\\) => \\([\\s\\S]*?z\\.object\\(\\{\\n`);
+    const m = re.exec(out);
+    if (!m) {
+      throw new Error(
+        `${label}: 生成物里找不到 ${name} 的 schema 锚点——` +
+          "上游换了生成物形状，补丁要重新对账（lib/typert.host.js 是生成的，只能靠锚点定位）",
+      );
+    }
+    const at = m.index + m[0].length;
+    const end = out.indexOf("\n}))", at);
+    const body = out.slice(at, end >= 0 ? end : out.length);
+    if (/'model':/.test(body)) {
+      throw new Error(`${label}: ${name} 的 schema 里已经有 model 字段——上游把它做进协议了，这里的补丁该撤`);
+    }
+    out = out.slice(0, at) + SESSION_MODEL_SCHEMA + out.slice(at);
+  }
+  return out;
+}
+
 /** 包名 → 本机依赖树里的原版包目录（模板与 externals 来源）。 */
 export function templatePackageDir(pkgName, repoRoot = REPO_ROOT) {
   return join(repoRoot, "node_modules", ".pnpm", "node_modules", pkgName);
@@ -270,6 +320,18 @@ export async function buildIntegrations(integrations, { tag, mirrorDir = MIRROR,
     if (serverArtifact) {
       mkdirSync(dirname(join(out, "lib", serverArtifact.file)), { recursive: true });
       cpSync(join(stage, "lib", serverArtifact.file), join(out, "lib", serverArtifact.file));
+    }
+
+    // 5b) 生成物补丁：模板里那份 RPC 校验表不认识我们从源码加进请求的字段，不改它就等于没加
+    //     （zod 在边界把未声明的键剥掉，服务端逻辑收到 undefined）。详见
+    //     patchGeneratedRequestModel：它按锚点定位、找不到就抛。
+    for (const g of Array.isArray(it.generatedPatches) ? it.generatedPatches : []) {
+      const target = join(out, String(g.path || ""));
+      if (!existsSync(target)) throw new Error(`integration ${short}: 生成物补丁目标不存在（${g.path}）`);
+      const schemas = Array.isArray(g.requestSchemas) ? g.requestSchemas : [];
+      if (schemas.length === 0) throw new Error(`integration ${short}: 生成物补丁没声明 requestSchemas（${g.path}）`);
+      writeFileSync(target, patchGeneratedRequestModel(readFileSync(target, "utf8"), schemas, pkg));
+      log(`[integrations] ${short}: ${g.path} 补上请求级模型字段（${schemas.join(", ")}）`);
     }
     const manifest = JSON.parse(readFileSync(join(template, "package.json"), "utf8"));
     // 版本戳：<上游版本>+dshana-<我们的干净版本>（合成在 scripts/shared/version.mts，与 derive 同一份）。
