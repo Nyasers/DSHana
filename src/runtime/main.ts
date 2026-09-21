@@ -38,6 +38,7 @@ import { connectAppRuntime } from "@hana/app-sdk";
 import { startTaskBridge } from "#/runtime/task-bridge.ts"; // DSH 事件 → Hana task 回投
 import { startApprovalBridge } from "#/runtime/approval-bridge.ts"; // DSH 审批 → Hana requestApproval / watch 对账
 import { createTaskBindingIndex, publishTaskBindingIndex } from "#/lib/task-binding.ts"; // 绑定事实源 = 宿主任务记录
+import { PROVIDER_RELOAD_GLOBAL_KEY } from "#/lib/provider-hooks.ts"; // 目录重载钩子键（provider 插件装）
 import { resolveInstallRoot, locateDsh } from "#/runtime/locate.ts";
 // 依赖随包物化在安装目录 node_modules（无运行时 ensure）。
 import { seedDshanaProfile } from "#/runtime/seed.ts";
@@ -449,6 +450,20 @@ export async function main(argv: string[]): Promise<number> {
           if (busy) throw new Error("DSH 仍有运行中/排队中的任务，先结束或停止它们再切换数据源。");
           info("switch-gate：无在途工作，允许切换数据源（prepare-switch）");
           return { ready: true };
+        }
+        if (action === "models-refresh") {
+          // 宿主模型/提供商变更：App 侧（lib/model-sync.js）订阅 app_event/models-changed 后
+          // 打进来，让 provider 子插件重拉目录并按差异重注册路由。两个 bundle 同进程不能互相
+          // import，约定键名见 lib/provider-hooks.ts；插件不在场（未激活/已退场）就是空操作。
+          const g = globalThis as unknown as Record<string, unknown>;
+          const reload = g[PROVIDER_RELOAD_GLOBAL_KEY];
+          if (typeof reload !== "function") {
+            info("models-refresh：provider 未装重载钩子（未激活），跳过");
+            return { changed: false };
+          }
+          const changed = await (reload as () => Promise<boolean>)();
+          info("models-refresh：changed=" + String(changed === true));
+          return { changed: changed === true };
         }
         if (action !== "rpc") throw new Error("未知控制动作：" + String(action));
         const body = args && args.body;

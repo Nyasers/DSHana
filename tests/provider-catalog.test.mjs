@@ -10,6 +10,7 @@ import {
   providerRoutes,
   listModelsForProvider,
   resolveModelInfo,
+  sameCatalog,
 } from "../src-cordis/plugins/provider/lib/catalog.ts";
 
 const catalog = [
@@ -55,4 +56,24 @@ test("resolveModelInfo: 元数据（context/defaultMaxTokens/reasoning/非推理
   const i1 = resolveModelInfo(catalog[1]);
   assert.equal(i1.reasoning, undefined);
   assert.equal(resolveModelInfo(null), null);
+});
+
+test("sameCatalog: 顺序无关、同值等价，目录变化才算变", () => {
+  const copy = JSON.parse(JSON.stringify(catalog));
+  assert.equal(sameCatalog(catalog, copy), true);
+  assert.equal(sameCatalog(catalog, [...catalog].reverse()), true); // 宿主重排不算变更
+  assert.equal(sameCatalog([], []), true);
+  assert.equal(sameCatalog(null, undefined), true);
+
+  // 增/删/改：条目、能力字段、推理档位、展示名，都算变更
+  assert.equal(sameCatalog(catalog, catalog.slice(0, 2)), false);
+  assert.equal(sameCatalog(catalog, [...catalog, { provider: "new", id: "m", name: "m" }]), false);
+  assert.equal(sameCatalog(catalog, catalog.map((m, i) => (i === 0 ? { ...m, maxTokens: 65536 } : m))), false);
+  // 增了一个 efffort 档位（medium）→ 目录展示变了，算变更；只是把 medium: false 写成省略
+  // 则与现状等价（supportedEfforts 不看 false 那一侧），不算变更
+  assert.equal(sameCatalog(catalog, catalog.map((m, i) => (i === 2 ? { ...m, thinkingLevels: { off: true, medium: true, high: true } } : m))), false);
+  assert.equal(sameCatalog(catalog, catalog.map((m, i) => (i === 2 ? { ...m, thinkingLevels: { off: true, high: true } } : m))), true);
+  assert.equal(sameCatalog(catalog, catalog.map((m, i) => (i === 1 ? { ...m, name: "换名" } : m))), false);
+  // 目录无关字段不进指纹（宿主可能附别的投影字段）
+  assert.equal(sameCatalog(catalog, catalog.map((m) => ({ ...m, unrelated: "x" }))), true);
 });

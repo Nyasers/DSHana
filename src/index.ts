@@ -30,6 +30,8 @@ import * as dshanaTool from "#/tools/index.ts";
 // 壳页/诊断面单 registrar（ctx.routes.register 只挂本 App 后端面；到受管 runtime 的服务
 // 由宿主按 /api/apps/<id>/routes/_runtime/<runtimeId>/ 自动代理，本文件不转发）
 import { registerDshanaRoutes, defaultDshanaRouteDeps } from "#/routes/dshana-routes.ts";
+// 宿主模型/提供商变更 → 受管 runtime 重拉目录（见 lib/model-sync.ts 的动因）
+import { installHostModelSync } from "#/lib/model-sync.ts";
 
 // ---- 统一日志：只走宿主 ctx.logger ----
 // App 侧不写自己的文件日志；ctx.logger 缺失（旧 host）或宿主抛错时回落 stderr。
@@ -135,11 +137,20 @@ export function apply(ctx) {
     }
   }
 
+  // ---- 宿主模型/提供商变更订阅：变更时经控制面通知 runtime 重拉目录（不重启 runtime）----
+  let uninstallModelSync: () => void = () => {};
+  try {
+    uninstallModelSync = installHostModelSync(ctx, log);
+  } catch (e) {
+    log("warn", "模型变更订阅安装异常（忽略，改宿主提供商需重启 runtime 生效）：" + ((e as any)?.message || e));
+  }
+
   // 返回 disposer：卸载/重载清理（停止受管 DSH runtime——若已启动；幂等）
   let disposed = false;
   return () => {
     if (disposed) return;
     disposed = true;
+    try { if (typeof uninstallModelSync === "function") uninstallModelSync(); } catch { /* 忽略 */ }
     try { if (typeof unregisterTool === "function") unregisterTool(); } catch { /* 忽略 */ }
     try { if (typeof unregisterRoutes === "function") unregisterRoutes(); } catch { /* 忽略 */ }
     // 受管 runtime 收尾：停 runtime + 清单例（Windows 依赖更新/App 卸载前须先停，见

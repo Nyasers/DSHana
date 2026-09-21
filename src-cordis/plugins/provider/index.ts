@@ -29,11 +29,16 @@ import { join, dirname } from "node:path";
 import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
 import { readNdjsonEvents } from "./lib/ndjson.ts";
-import { providerRoutes, listModelsForProvider, resolveModelInfo, supportedEfforts, modelPublishedMaxTokens, HOST_MAX_OUTPUT_TOKENS } from "./lib/catalog.ts";
+import { providerRoutes, listModelsForProvider, resolveModelInfo, supportedEfforts, modelPublishedMaxTokens, sameCatalog, HOST_MAX_OUTPUT_TOKENS } from "./lib/catalog.ts";
 import { toHanaMessages } from "./lib/messages.ts";
 import { buildDoneChunks, createHanaStreamState } from "./lib/stream.ts";
 import { resolveSessionIdentity, TASK_MAP_BROKEN, BINDING_UNAVAILABLE } from "./lib/identity.ts";
 import { errText } from "./lib/err-text.ts";
+
+// 目录重载钩子的键名：与 dsh-host 入口（src/runtime/main.ts 经 src/lib/provider-hooks.ts）
+// **字面一致**。本插件是独立的 cordis 插件包，读不到 App 侧的 #/ 路径映射，两个 bundle
+// 同进程不能互相 import（与 ACTIVE_MODEL_KEY / __dshanaHana 同款约定）。
+const PROVIDER_RELOAD_GLOBAL_KEY = "__dshanaReloadModels";
 
 export const name = "@dshana/provider";
 export const inject = ["llm"];
@@ -198,10 +203,16 @@ async function prepareImages(store, messages, signal) {
  * 运行时构建 HanaAdapter（extends 需要运行时 import 的 LlmAdapter）。
  * @param {Function} LlmAdapter LlmAdapter 基类（dsh-llm）
  * @param {Function} LlmError LlmError（dsh-llm）
- * @param {object} deps { models: 目录投影数组, hana: AppRuntimeClient, getImages: () => store|null }
+ * @param {object} deps { catalog?, models?, hana, getImages: () => store|null }
+ *
+ * 目录可换：deps.catalog 是插件持有的**活目录**（重拉时整体替换它的 models 字段），
+ * adapter 每次调用现读；没有 catalog 时退回 deps.models 的一次性快照（单测与旧调用姿势）。
  */
 export function buildHanaAdapter(LlmAdapter, LlmError, deps) {
-  const models = Array.isArray(deps.models) ? deps.models : [];
+  const catalog = deps && deps.catalog && typeof deps.catalog === "object"
+    ? deps.catalog
+    : { models: Array.isArray(deps && deps.models) ? deps.models : [] };
+  const currentModels = () => (Array.isArray(catalog.models) ? catalog.models : []);
   // adapter 方法在插件作用域之外（apply 的 ctx 在这里不可见），日志只能走 deps 注入。
   const logLine = typeof deps.log === "function" ? deps.log : () => {};
   const warnLine = typeof deps.warn === "function" ? deps.warn : () => {};
@@ -211,10 +222,11 @@ export function buildHanaAdapter(LlmAdapter, LlmError, deps) {
     }
 
     listModels(provider) {
-      return Promise.resolve(listModelsForProvider(provider, models));
+      return Promise.resolve(listModelsForProvider(provider, currentModels()));
     }
 
     resolveModel(provider, model, _signal) {
+      const models = currentModels();
       const item = models.find((m) => m && m.provider === provider && m.id === model) || null;
       const info = resolveModelInfo(item);
       if (!info) {
@@ -230,7 +242,7 @@ export function buildHanaAdapter(LlmAdapter, LlmError, deps) {
 
     async *stream(options) {
       const sessionId = options && options.sessionId;
-      const item = models.find((m) => m && m.provider === options.provider && m.id === options.model) || null;
+      const item = currentModels().find((m) => m && m.provider === options.provider && m.id === options.model) || null;
       const requestId = randomUUID();
       // 身份判定（三态，见 lib/identity.ts）：
       //   无绑定 ⇒ App 身份（用户在 WebUI 自建的会话）；
@@ -466,18 +478,61 @@ export async function apply(ctx, config) {
       return;
     }
     const routes = providerRoutes(models);
+    // 活目录：重载时整体替换它的 models 字段，adapter 每次调用现读（见 buildHanaAdapter）。
+    const catalog: { models: any[] } = { models };
     const adapter = buildHanaAdapter(LlmAdapter, LlmError, {
-      models,
+      catalog,
       hana,
       getImages: () => attachmentStore,
       log: (msg) => log(ctx, msg),
       warn: (msg) => warn(ctx, msg),
     });
     // 5. 注册（空 routes 不注册——llm 注册表要求非空；目录空已在上方 return）。
-    // 宿主目录是启动快照：受管进程存活期不变化（改宿主模型配置需 runtime 重启生效——
-    // 与受管 runtime 生命周期一致的取舍）。
-    ctx.llm.registerAdapter(routes, adapter);
+    // 句柄留着：宿主目录变更时用它的 replace 原子换路（见第 6 步）。
+    const registration = ctx.llm.registerAdapter(routes, adapter);
     log(ctx, "已注册 " + routes.length + " 个 provider 路由（" + models.length + " 个模型，源=hana.models.list）");
+    // 6. 目录重载钩子：宿主提供商/模型目录变更时（App 侧订阅 app_event/models-changed 后经控制面
+    //    models-refresh 打进来）重拉一次 hana.models.list()；有差异才重注册。
+    //    registration.replace 是官方给的原子换路，它自己会广播 llm/adapters-updated，前端模型
+    //    目录据此刷新——runtime 不用重启，插件也不用重载。
+    //    取不到新目录（宿主暂时不可用）时保留现状，绝不把路由清空。
+    const reload = async () => {
+      let listed;
+      try {
+        listed = await hana.models.list();
+      } catch (e) {
+        warn(ctx, "目录重载：hana.models.list 取不到，保留现状：" + errText(e));
+        return false;
+      }
+      const next: any[] = listed && Array.isArray(listed.models)
+        ? listed.models.filter((m) => m && typeof m.provider === "string" && m.provider && typeof m.id === "string" && m.id)
+        : [];
+      if (next.length === 0) {
+        warn(ctx, "目录重载：宿主目录为空，保留现状（不重注册）");
+        return false;
+      }
+      if (sameCatalog(catalog.models, next)) return false;
+      const nextRoutes = providerRoutes(next);
+      try {
+        // 先换路再换目录：replace 先整体校验候选集，被拒时目录保持旧值，两边不打架。
+        registration.replace(nextRoutes);
+      } catch (e) {
+        warn(ctx, "目录重载：provider 路由替换被拒，保留现状：" + errText(e));
+        return false;
+      }
+      catalog.models = next;
+      log(ctx, "目录已重载：" + nextRoutes.length + " 个 provider 路由 / " + next.length + " 个模型（宿主目录变更）");
+      return true;
+    };
+    const g = globalThis as unknown as Record<string, unknown>;
+    try {
+      g[PROVIDER_RELOAD_GLOBAL_KEY] = reload;
+    } catch { /* globalThis 只读兜底：重载钩子缺席，控制面按无变化处理 */ }
+    ctx.effect(() => () => {
+      try {
+        if (g[PROVIDER_RELOAD_GLOBAL_KEY] === reload) delete g[PROVIDER_RELOAD_GLOBAL_KEY];
+      } catch { /* 忽略 */ }
+    }, "@dshana/provider: 目录重载钩子");
   } catch (e) {
     // 顶层兜底：apply 永不抛出
     try {

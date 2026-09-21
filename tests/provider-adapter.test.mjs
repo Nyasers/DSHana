@@ -84,6 +84,23 @@ function streamOnce(options, hana) {
   return collect(adapter, options).then(() => hana.seen[0]);
 }
 
+test("live 目录：换掉 catalog.models 后 listModels/resolveModel 立刻看新的（不需要重建 adapter）", async () => {
+  const hana = makeHana(okEvents);
+  const catalog = { models: MODELS };
+  const adapter = buildHanaAdapter(FakeLlmAdapter, FakeLlmError, { catalog, hana });
+
+  assert.deepEqual((await adapter.listModels("hana")).map((m) => m.id), ["m1", "big", "small"]);
+  await assert.rejects(async () => { await adapter.resolveModel("hana", "late", undefined) }, /无模型/);
+
+  // 宿主目录变了：插件把包里的 models 整体换掉（provider/index.ts 的 reload 就这么干）
+  catalog.models = [{ provider: "hana", id: "late", name: "late" }, { provider: "other", id: "o", name: "o" }];
+
+  assert.deepEqual((await adapter.listModels("hana")).map((m) => m.id), ["late"]);
+  const info = await adapter.resolveModel("hana", "late", undefined);
+  assert.equal(info.provider, "hana");
+  assert.equal(info.id, "late");
+});
+
 const userMessages = [{ role: "user", content: [{ type: "text", text: "你好" }] }];
 const okEvents = [
   { type: "start", requestId: "r1" },

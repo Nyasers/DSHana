@@ -83,6 +83,33 @@ export function defaultEffortOf(item, efforts) {
   return efforts.includes("high") ? "high" : efforts[0];
 }
 
+/** 一份目录里影响路由与 DSH 目录展示的字段指纹（与宿主返回顺序无关）。 */
+function entrySignature(item) {
+  return JSON.stringify([
+    item && item.provider, item && item.id, item && item.name,
+    Array.isArray(item && item.input) ? [...item.input].sort() : [],
+    item && item.reasoning === true,
+    item && Number.isInteger(item.contextWindow) ? item.contextWindow : null,
+    item && Number.isInteger(item.maxTokens) ? item.maxTokens : null,
+    item && typeof item.defaultThinkingLevel === "string" ? item.defaultThinkingLevel : null,
+    item && item.xhigh === true,
+    [...asStringSet(item && item.thinkingLevels)].sort(),
+    [...asStringSet(item && item.customThinkingLevels)].sort(),
+  ]);
+}
+
+/**
+ * 两份宿主目录是否等价。等价 = 不重注册：重注册会让前端模型目录白刷一次。
+ * @param left - 当前目录。
+ * @param right - 刚拉到的目录。
+ * @returns 等价则 true。
+ */
+export function sameCatalog(left, right) {
+  const a = (left || []).map(entrySignature).sort().join("\u0002");
+  const b = (right || []).map(entrySignature).sort().join("\u0002");
+  return a === b;
+}
+
 /** 按 provider 分组（provider 路由集合；DSH registerAdapter 第一参数）。 */
 export function providerRoutes(models) {
   const out: any[] = [];
