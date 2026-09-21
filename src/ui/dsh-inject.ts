@@ -546,6 +546,45 @@ export async function injectDshIndex(
 }
 
 /**
+ * 从宿主的 pick 结果里取路径：没有（用户取消）返回 null。DSH 的目录流程把 null 当取消。
+ * @param result - `hana.resources.pick` 的返回值。
+ * @returns 选中的绝对路径，或 null。
+ */
+export function pickedPathOf(result) {
+  const first = result && Array.isArray(result.resources) ? result.resources[0] : null;
+  const path = first && typeof first === "object" && typeof first.path === "string" ? first.path : "";
+  return path || null;
+}
+
+/**
+ * 安装 `__DSH_DIRECTORY_PICKER__`（DSH 客户端在目录流程激活时读它）。
+ *
+ * DSH 的 native 目录流程有两个来源：本地桌面桥（官方桌面壳由 preload 注入）优先，没桥才叫宿主
+ * 进程的 OS chooser。后者要在宿主进程里 spawn 一个 worker 子进程跑 `IFileOpenDialog`（koffi 走 COM），
+ * 还先合成一次 Alt 把弹窗抢到前台——上游写明它只适合「操作者坐在宿主屏幕前」，而本形态里受管
+ * runtime 是沙箱里的后台子进程，那条路开不出来（客户端就把异常当错误弹出来）。这里注入桥：弹窗改由
+ * 宿主出（`hana.resources.pick`，`mode=directory`），用户面对的是自己的机器，不经沙箱。
+ * @param sdk - 宿主 UI SDK（缺省取当前全局的 `hana`）。
+ * @returns disposer：删掉桥（并恢复先前的值）。
+ */
+export function installDirectoryPickerBridge(sdk = (globalThis as any).hana) {
+  const host = globalThis as any;
+  const previous = host.__DSH_DIRECTORY_PICKER__;
+  host.__DSH_DIRECTORY_PICKER__ = {
+    async pick() {
+      if (!sdk || !sdk.resources || typeof sdk.resources.pick !== "function") {
+        throw new Error("宿主 SDK 无 hana.resources.pick（能力未授予？）");
+      }
+      return pickedPathOf(await sdk.resources.pick({ mode: "directory" }));
+    },
+  };
+  return () => {
+    try { delete host.__DSH_DIRECTORY_PICKER__; } catch { /* 忽略 */ }
+    if (previous !== undefined) host.__DSH_DIRECTORY_PICKER__ = previous;
+  };
+}
+
+/**
  * 安装 __DSH_TRANSPORT__ 与 __DSH_FILE_UPLOAD__（注入 index 前调用）。返回 disposer。
  *
  * 覆盖边界（全树核对）：`__DSH_TRANSPORT__` 在全树里**只有
@@ -597,7 +636,10 @@ export function installTransport(
   // writeText **不存在**时才走——嵌入场景里原生被 Permissions-Policy 关死，于是复制永远失败，
   // 还每次先留一条 [Violation]。影子必须在属性被读到之前就位；桥面已就绪，故放在 __DSHANA__ 之后。
   const restoreClipboard = installClipboardShadow({ bridge: window.__DSHANA__ });
+  // 目录选择器桥：同样必须在 DSH 注入之前（客户端在流程激活时读一次）。
+  const restoreDirectoryPicker = installDirectoryPickerBridge();
   return () => {
+    try { restoreDirectoryPicker(); } catch { /* 忽略 */ }
     try { restoreClipboard(); } catch { /* 忽略 */ }
     try { restoreTakeover(); } catch { /* 忽略 */ }
     try { delete window.__DSH_TRANSPORT__; } catch { /* 忽略 */ }

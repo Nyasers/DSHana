@@ -16,7 +16,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 - **无需装依赖、无需配 Node**：DSH 及其依赖树随包分发在安装目录 `node_modules`，我们的子插件也落在那里（`node_modules/@dshana`）；启动只做 DSH boot + 服务监听，不写数据目录里的任何东西。
 - **无需配 API Key / 模型**：推理经受管 runtime 内 `hana.models` 发起，provider 凭据留在宿主。DSH 自带的两个 LLM adapter 行（`llm-deepseek` / `llm-pi-ai`）在我们的 roster patch 里停掉，llm 路由只剩宿主目录那几条（那两行要凭据库里的 key，而凭据在宿主手里，它们只会摆出选到就报 `no API key` 的路由）；设置里那页「模型」也一并停掉（它只编辑这两行的 settings 段，停掉后没可编辑对象，只剩空壳）。会话的模型跟着「谁开的」走：工具建的会话按**调用方那张角色卡配的模型**开（`agents/<id>/config.yaml` 的 `models.chat`，经 `agent:list` / `agent:config` 读，见 `app/agents.read`）；App 设置页的「会话模型」可以改成「自定义模型」固定一条（`sessionModelProvider` / `sessionModelModel`，可选该模型支持的推理强度 `sessionModelReasoningEffort`；缺省是「复用调用方」）；你在 App 设置页的「默认模型」里手设过则听你的，它对所有会话生效。那格默认不主动写（缺省保持缺省），只有它已经指向宿主目录里没有的路由时才就地换一条（优先留在原 provider 里换，再退角色卡模型、目录第一条；日志有「默认模型对账」，见 `src/lib/model-default-guard.ts`）。
 - **默认模型**：读 DSH 自身配置（`DSH_HOME/settings.yaml` 的 `agent-default-model`）——用户层为空时它回落到 base 层那份官方路由，所以界面里直接开的会话先在 App 设置页的「默认模型」里选一个。
-- **目录选择器**：DSH 自带的 `directory-picker-auto` 按启动时采样的一把宿主事实（bindHost / ssh / platform / DISPLAY）挑后端，win32 + loopback 必落 native——那是在宿主进程里 spawn 一个子进程去开系统文件夹弹窗（koffi 走 COM）、还先合成一次 Alt 按键把弹窗抢到前台。本形态里这两条前提都不成立：DSH 是沙箱里的后台子进程，用户面对的是宿主的窗口而不是它的桌面，弹窗开不出来，客户端 native flow 就把它当错误弹出来。roster patch 里停掉 auto，直接组 browse 那一对：应用内浏览器，读整盘 + 新建目录 + 可手输路径，失败留在对话框里自己报。
+- **目录选择器**：DSH 的 workspace 选择对话框由 `directory-picker` seam 提供，官方 web-app 层挂的 `directory-picker-auto` 在 win32 + loopback 下挑 native；native 的客户端半优先读页面里的 `__DSH_DIRECTORY_PICKER__`（官方桌面壳由 preload 注入、弹 Electron 对话框），没桥才叫宿主进程的 OS chooser——后者要在宿主进程里 spawn 一个子进程跑 `IFileOpenDialog`（koffi 走 COM，还先合成一次 Alt 抢前台），上游写明它只适合「操作者坐在宿主屏幕前」，而本形态的受管 runtime 是沙箱里的后台子进程，开不出来。壳页在注入 DSH index 前把桥装上（`src/ui/dsh-inject.ts` 的 `installDirectoryPickerBridge`），弹窗改由宿主出：`hana.resources.pick`，`mode=directory`。用户看到的是自己机器上的系统弹窗，选择器不经沙箱。
 - **数据目录**：固定用 App 内置独立目录（App 数据目录下的 `.dsh`），开箱即用；共享已有目录 / 切换数据源暂不提供。
 - `dshana(action="open")` 每次调用**必须显式传 `cwd`**。
 
@@ -140,7 +140,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 | 界面里直接开的会话报 `no API key for provider route "deepseek-official"` | `agent-default-model` 的 user 层为空，值落回 base 层那条官方路由（工具建的会话不受影响：它们按调用方角色卡开） | 在 App 设置页的「默认模型」里选一个（写进 user 层，对所有会话生效） |
 | 主题没跟随宿主 | DSH 主题偏好是 light/dark 而非 system | 在 DSH 外观里选「跟随宿主」（偏好值 system） |
 | DSH 设置里找不到「模型」页 | 该页（`ui-settings-models`）随两个官方 LLM adapter 一起停掉——它只编辑那两行的 settings 段 | 不是故障：模型在 App 设置页的「会话模型」「默认模型」两节里配 |
-| 选工作区目录时弹一个错误 | 官方的 `directory-picker-auto` 挑了 native（系统弹窗），沙箱里的后台进程开不出来（见「首次安装」的目录选择器一条） | 已改钉 browse：重启 DSH 后走应用内浏览器；若仍旧，确认装好的树 `cordis.patch.yml` 里 `directory-picker` 行的 `disabled: true` 在、browse 那两行在 |
+| 选工作区目录时弹一个错误 | 目录弹窗落到了 DSH 宿主进程的 OS chooser（要在沙箱里 spawn 子进程开 `IFileOpenDialog`），而本形态的 runtime 是后台子进程 | 正常路径不该走到那里：壳页注入的目录桥让弹窗由宿主出（`hana.resources.pick`）。若仍报错，确认桥装上了（`__DSH_DIRECTORY_PICKER__`）且宿主授予了资源选择 |
 | bash 报 `E_ACCESSDENIED` | DSH bash 沙箱 Windows 限制 | 改用文件系统工具（write/read/edit） |
 | `reply` 连续 30 秒超时（`RPC callback.tools.execute`）/ 该会话后续提交全失败 | 上一轮的审批没能在回合边界被应答，宿主工具回调超时，会话卡住 | 不要原地重试：换新会话（`open`）；旧会话用 `close` 收敛（可能只得到宿主升级标记的 canceled） |
 

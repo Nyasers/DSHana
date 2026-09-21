@@ -111,7 +111,9 @@ DSHana 以**单卡 + 自带功能面板**注册（manifest `contributes.cards[0]
 
 ### 目录选择器
 
-DSH 的 workspace 选择对话框来自 `directory-picker` seam：宿主半列目录、客户端半渲染。官方在 web-app 层挂的是 `dsh-host-directory-picker-auto`，它按启动时采样的一把宿主事实（bindHost / ssh / platform / DISPLAY）挑 native 或 browse——win32 + loopback 必落 native，而那是在宿主进程里 spawn 子进程开系统文件夹弹窗（koffi 走 COM，还先合成一次 Alt 抢前台）。上游对它的适用面写得很直：只有操作者坐在宿主屏幕前才成立，远程形态组 browse。本形态两条都不成立（DSH 是沙箱里的后台子进程，用户面对的是宿主窗口），弹窗开不出来，客户端 native flow 就把异常交给 owner 的 `onError`，表现成每次选目录弹一个错误。roster patch 因此停掉 auto 行、直接组 `dsh-host-directory-picker-browse` + `dsh-client-ui-directory-picker-browse` 这一对（应用内浏览器：整盘只读列举、可新建目录、可手输路径，失败留在对话框内部）。这是上游点名过的钉法：钉一个交互就是在 patch 里直接组那一对，而不是留 auto 行。
+DSH 的 workspace 选择对话框来自 `directory-picker` seam（宿主半列目录或开系统弹窗，客户端半渲染）。官方 web-app 层挂的是 `dsh-host-directory-picker-auto`，它按启动时采样的一把宿主事实（bindHost / ssh / platform / DISPLAY）挑后端，win32 + loopback 必落 native。native 的客户端半优先读页面里的 `__DSH_DIRECTORY_PICKER__`（官方桌面壳由 preload 注入、弹 Electron 对话框），没桥才回落到宿主进程的 OS chooser——后者要在宿主进程里 spawn 一个子进程跑 `IFileOpenDialog`（koffi 走 COM，还先合成一次 Alt 把弹窗抢到前台），上游写明它只适合「操作者坐在宿主屏幕前」。本形态的受管 runtime 是沙箱里的后台子进程，那条回落路开不出来，客户端就把异常交给 owner 的 `onError`，表现成每次选目录弹一个错误。
+
+壳页因此自己提供桥：在注入 DSH index 之前装 `__DSH_DIRECTORY_PICKER__`（`src/ui/dsh-inject.ts` 的 `installDirectoryPickerBridge`），`pick()` 调宿主的 `hana.resources.pick({ mode: 'directory' })`。弹窗由宿主出、在用户自己的机器上，既不经沙箱，也不依赖 DSH 自己的桌面壳；roster 层不动，native 那一对照挂，只是其中宿主半永远不会被调到。
 
 ## 主题跟随
 
