@@ -13,12 +13,17 @@
 // 「有服务在听」；中继只在 DSH 就绪后才起，故等价于就绪门）。真机验收仍须装包后由主上下文做。
 //
 // 用法（仓库根，先 node src/build.ts && node src-cordis/build.ts）：
-//   node tests/e2e/runtime-boot.smoke.mjs [--keep] [--preflight]
+//   node tests/e2e/runtime-boot.smoke.mjs [--keep] [--preflight] [--packed]
 // 环境（缺省已指向本仓库）：DSH_REPO_ROOT、DSH_DATA_DIR、DSH_DEPS_ROOT、DSH_CORDIS_SRC、
-//   DSH_SMOKE_TIMEOUT_MS
+//   DSH_SMOKE_TIMEOUT_MS、DSH_PACKED_APP_DIR、HANA_HOME
+//
+// --packed：把来源换成**装好的 App 树**（安装目录的 node_modules / cordis / runtime 入口），
+// 验的是随包物化后的产物本身。DSH 版本 bump、重新装包之后先跑它一遍——仓库树能过不代表装好
+// 的树能过（0.1.6 那次 profile-boot 就是只在装好的树里不合格：哈希产物被压缩，导出名全丢）。
 import { fork } from "node:child_process";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { randomBytes, randomInt } from "node:crypto";
+import { homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,11 +31,27 @@ const here = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(process.env.DSH_REPO_ROOT || join(here, "..", ".."));
 const KEEP = process.argv.includes("--keep");
 const PREFLIGHT = process.argv.includes("--preflight");
+const PACKED = process.argv.includes("--packed");
+const appDir = PACKED ? resolvePackedAppDir() : null;
 const dataDir = resolve(process.env.DSH_DATA_DIR || join(REPO, "_tmp", "smoke-data"));
-const depsRoot = resolve(process.env.DSH_DEPS_ROOT || join(REPO, "node_modules"));
-const cordisSrc = resolve(process.env.DSH_CORDIS_SRC || join(REPO, "dist", "cordis"));
-const entry = join(REPO, "dist", "runtime", "dsh-host.mjs");
+const depsRoot = resolve(process.env.DSH_DEPS_ROOT || join(appDir || REPO, "node_modules"));
+const cordisSrc = resolve(process.env.DSH_CORDIS_SRC || join(appDir ? appDir : REPO, appDir ? "cordis" : join("dist", "cordis")));
+const entry = appDir ? join(appDir, "runtime", "dsh-host.mjs") : join(REPO, "dist", "runtime", "dsh-host.mjs");
 const READY_TIMEOUT_MS = Number(process.env.DSH_SMOKE_TIMEOUT_MS || 180000);
+
+/**
+ * 装好的 App 树（--packed）：HANA_HOME 下的 apps/<id>，或用 DSH_PACKED_APP_DIR 直接点名。
+ * @returns 绝对路径；入口文件不在时直接报错（别把“App 没装”误读成“服务没连上”）。
+ */
+function resolvePackedAppDir() {
+  const home = process.env.HANA_HOME || join(homedir(), ".hanako");
+  const dir = resolve(process.env.DSH_PACKED_APP_DIR || join(home, "apps", "dshana"));
+  const marker = join(dir, "runtime", "dsh-host.mjs");
+  if (!existsSync(marker)) {
+    throw new Error("--packed 指向的 App 树里没有 " + marker + "（用 DSH_PACKED_APP_DIR 或 HANA_HOME 指定，先确认 App 已安装）");
+  }
+  return dir;
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const opaque = (n = 24) => randomBytes(n).toString("base64url");
@@ -54,7 +75,8 @@ function writeConfig(payload) {
 }
 
 function forkEntry(configPath) {
-  console.log("[smoke] mode=" + (PREFLIGHT ? "preflight" : "boot") + " entry=" + entry);
+  console.log("[smoke] mode=" + (PREFLIGHT ? "preflight" : "boot") + (PACKED ? " source=packed" : " source=repo"));
+  console.log("[smoke] entry=" + entry);
   console.log("[smoke]   dataDir=" + dataDir + "\n  depsRoot=" + depsRoot + "\n  cordisSrc=" + cordisSrc);
   const child = fork(entry, [configPath], {
     stdio: ["ignore", "inherit", "inherit", "ipc"], // 子进程日志直接进本进程 stdout/stderr

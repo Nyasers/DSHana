@@ -106,6 +106,19 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 
 `sessionId` 即访问凭证；`get` 的取数走受管 runtime 的官方查询面，不读会话文件、不发起推理，DSH 未启动时不可用。
 
+## 改完源码之后（开发循环）
+
+三件工具都在仓库里，别再造临时脚本：
+
+| 要干什么 | 命令 |
+|---|---|
+| 把本地包装进宿主（卸载 → 提交 staging → 确认 → 等就绪，跨平台） | `pnpm run install:local -- --zip releases/<包>.zip` |
+| 体检**装好的**那棵树（预检：依赖就位 + 定位 DSH + profile 种子化） | `pnpm run smoke:packed -- --preflight` |
+| 同上但不加 `--preflight`：完整 boot 到中继有应答 | `pnpm run smoke:packed` |
+| 查宿主能力面：应用能调哪些 bus 动词、不能用哪些事件名（SDK 已发布契约）；某个字面在宿主 bundle 里出现在哪 | `pnpm run probe:host [-- --look models-changed]` |
+
+升级 DSH 或重新装包之后先跑一次 `smoke:packed`：仓库树能过不等于装好的树能过（0.1.6 那次 profile-boot 就是只在装好的树里不合格——哈希产物被压缩，导出名全丢）。
+
 ## 主题
 
 只有 DSH 主题偏好为 **system** 时跟随宿主配色（经 `@dshana/theme` 子插件注入）；在 DSH 内显式选 light/dark 时完全用 DSH 自己的主题，宿主配色不介入。
