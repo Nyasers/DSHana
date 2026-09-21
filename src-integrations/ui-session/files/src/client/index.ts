@@ -690,6 +690,11 @@ export function apply(ctx: Context): void {
 //     · 意见带写入时刻 at：只采纳比自己动手更新的。旧的是对方上次留下的陈述，不是指令；
 //     · 自己请求的那次导航落地时打 pendingApply 标记：那一刻的列表变化既不记时刻也不回宣告——
 //       这是防广播风暴的那一刀（没它两面会互相回声）。
+//   另有一条更根本的：期望的目标（钉住的 sid / 共用的当前选中）是**这一面的不动点**，
+//   列表每有变动都对一次，被挪开了就再请一次。DSH 客户端自己会把**上次打开的会话**
+//   （localStorage 的 dsh.sessions.current）恢复成主视图保留，那是它本地的记忆，与我们的
+//   期望目标无关；它可能落在钉住那次导航之前，也可能导航当时目标还不在列表里而失败——
+//   只对「共享状态变化」和「导航面到场」这两个时机跟一次，面就停在那一段恢复出来的会话上。
 //   settings / standalone 不参与。
 // 恢复落地的第一跳不算用户动作（只记 seen，随后与共享状态对一次），否则重载任一面都会
 // 把它自己恢复出来的选中当成新指令宣告出去，把对方拉回去。
@@ -818,28 +823,27 @@ function installCrossSurfaceSelection(ctx: Context): void {
     const offList = list.subscribe(() => {
       const snap = list.getSnapshot()
       const current = mainSessionId(list)
-      if (current === seen) return
-      seen = current
-      if (snap.phase !== 'ready') return
-      if (pendingApply !== undefined) {
-        // 自己刚请求的那次导航落地：不记时刻、不回宣告。
-        if (current === pendingApply) { pendingApply = undefined; return }
-        // 落地成了别的（请求被更晚的导航取代、目标已不在）：这枚标记作废，按本地变化照常走。
-        // 标记不能留在场上：它会把本地之后的每一次变化都吞掉，本面从此不再宣告。
-        pendingApply = undefined
+      if (current !== seen) {
+        seen = current
+        if (snap.phase !== 'ready') return
+        if (pendingApply !== undefined) {
+          // 自己刚请求的那次导航落地：不记时刻、不回宣告（随后那次对齐会认出目标已在位）。
+          // 落地成了别的（请求被更晚的导航取代、目标已不在）：这枚标记作废，按本地变化照常走。
+          // 标记不能留在场上：它会把本地之后的每一次变化都吞掉，本面从此不再宣告。
+          pendingApply = undefined
+        }
+        if (!settled) {
+          // 恢复落地的第一跳：只记录，随后与共享状态对一次（谁更新谁说了算）。
+          settled = true
+        } else if (!readOnly && current !== null) {
+          // 只读面不宣告本地变化：它只是在看，不该把另一个面的选中拉过来。
+          // 本地无选中也不宣告：空值在对面上表示「没有意见」，没有要传达的动作。
+          localAt = Date.now()
+          void Promise.resolve(write(current)).catch(() => { /* 写失败不回滚本地 */ })
+        }
       }
-      if (!settled) {
-        // 恢复落地的第一跳：只记录，随后与共享状态对一次（谁更新谁说了算）。
-        settled = true
-        applyRemote()
-        return
-      }
-      // 只读面不宣告本地变化：它只是在看，不该把另一个面的选中拉过来。
-      if (readOnly) return
-      // 本地无选中不宣告：空值在对面上表示「没有意见」，没有要传达的动作。
-      if (current === null) return
-      localAt = Date.now()
-      void Promise.resolve(write(current)).catch(() => { /* 写失败不回滚本地 */ })
+      // 列表每有变动都对一次期望目标。目标还没到列表里、上一次导航失败、或客户端自己恢复了
+      // 另一段会话，都在这里被纠回来；目标已在位时 applyRemote 当场返回，不会来回打。
       applyRemote()
     })
     applyRemote()
