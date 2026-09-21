@@ -153,7 +153,7 @@ export function titleFromProjections(summary) {
   return typeof values.title === "string" ? values.title : "";
 }
 
-/** 会话清单条目（mapSummary 产物；字段存在才带，缺省即未知）。 */
+/** 会话摘要条目（mapSummary 产物；字段存在才带，缺省即未知）。 */
 export interface SessionSummaryItem {
   sessionId: string;
   title: string;
@@ -177,7 +177,7 @@ interface SessionPage {
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
-/** 官方列表摘要 → 我们的清单条目（字段存在才带）。 */
+/** 官方列表摘要 → 我们的会话摘要条目（字段存在才带）。 */
 export function mapSummary(s: Record<string, any>): SessionSummaryItem {
   const src = s && typeof s === "object" ? s : {};
   const proj = src.projections && typeof src.projections === "object" ? src.projections : null;
@@ -219,14 +219,14 @@ function truncateSummary(text) {
 
 // ---------- 官方读面 ----------
 
-/** session/list → 全部清单条目。 */
+/** session/list → 该实例全部会话的摘要。 */
 async function listSummaries(ctx): Promise<SessionSummaryItem[]> {
   const value = await rpcViaControl(ctx, { method: "session/list", payload: {}, timeoutMs: 30000 });
   const raw = value && Array.isArray(value.items) ? value.items : [];
   return raw.map(mapSummary).filter((s) => s.sessionId);
 }
 
-/** 目标会话的清单条目（含 asOfSeq 与投影元数据）。找不到返回 null。 */
+/** 目标会话的摘要（含 asOfSeq 与投影元数据）。找不到返回 null。 */
 async function findSummary(ctx, sessionId): Promise<SessionSummaryItem | null> {
   for (let attempt = 0; attempt < 2; attempt++) {
     const found = (await listSummaries(ctx)).find((s) => s.sessionId === sessionId) || null;

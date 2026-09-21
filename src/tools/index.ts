@@ -30,9 +30,9 @@ import * as getAction from "#/tools/actions/get.ts";
 import * as approveAction from "#/tools/actions/approve.ts";
 import type { ToolCtx } from "#/types/host.ts";
 import type { ToolInputBase } from "#/tools/shared/types.ts";
-// 会话清单（list）不提供实现：任务绑定语义下会话靠句柄定位，“查任务”由宿主提供给 Agent 的
-// 内置任务查询工具（模型侧，本环境是 check_pending_tasks）承担——dshana 的 open/reply 建的
-// 就是本会话的后台任务，本来就出现在那份清单里，不需要本工具再开一扇只读门。
+// 查任务不经本工具：会话靠句柄（宿主 taskId）定位，任务清单由宿主提供给 Agent 的内置任务查询
+// 工具承担（模型侧，本环境是 check_pending_tasks）——dshana 的 open/reply 建的后台任务本来
+// 就在那份清单里，本工具面不开“先列清单再操作”的门。
 // 官方 session/list 仍被 get 用来定位读位点（见 tools/shared/query.ts）。
 
 /** subcommand 注册表（顺序即 description 的列举顺序）。 */

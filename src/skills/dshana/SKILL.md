@@ -52,7 +52,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 | `get` | 无 | taskId 或 sessionId（至少一个） | 回看该会话最近一轮的最终结论 |
 | `approve` | approvalId | outcome, taskId 或 sessionId | 应答挂起审批 |
 
-> `list`（会话清单）不在动作表内，也没有对应实现：查任务走宿主提供给 Agent 的内置任务查询工具（模型侧，本环境是 `check_pending_tasks`）。
+> 查任务走宿主提供给 Agent 的内置任务查询工具（模型侧，本环境是 `check_pending_tasks`）：dshana 的 open/reply 建的就是本会话的后台任务，本来就出现在那份清单里，不需要本工具另开一扇只读门。
 
 **句柄与凭证**：`taskId`（open/reply 返回）与 `approvalId` 是**句柄路径**，工具自己解析会话并按宿主记录的来源会话校验归属；`sessionId`（形如 `session-<uuid>`）是**凭证路径**，显式传入即视为"我要跨对话操作"，跳过归属校验。
 

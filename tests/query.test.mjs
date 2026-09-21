@@ -121,7 +121,7 @@ test("列表标题走投影 values.title（真机实测该键存在，空白会�
   assert.equal(titleFromProjections({}), "");
 });
 
-test("mapSummary: 官方摘要 → 清单条目（投影带 title/stats/usage，asOfSeq 一并带出）", () => {
+test("mapSummary: 官方摘要 → 会话摘要条目（投影带 title/stats/usage，asOfSeq 一并带出）", () => {
   const usage = { uncachedInputTokens: 1, outputTokens: 2, cacheReadTokens: 0, cacheWriteTokens: 0 };
   const item = mapSummary({
     sessionId: SID,
