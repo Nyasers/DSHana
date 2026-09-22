@@ -16,7 +16,7 @@
 import { hana } from "@hana/plugin-sdk";
 import { injectDshIndex, installTransport, type DshTransport } from "#/ui/dsh-inject.ts";
 import { isFaceView, roleForView } from "#/lib/face-role.ts";
-import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
+import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPreference } from "#/lib/seed-tokens.ts";
 
 (function () {
   "use strict";
@@ -411,6 +411,7 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
         // 先取走 boot-theme 行的偏好再注入：桥在 index 解析时就跑，它要立刻知道门开不开。
         dshPreference = readIndexThemePreference(html);
         // 注入前再垫一次：首屏那一帧之前宿主主题多半已到，垫上就不会先画 DSH 的近白底。
+        // 这一次拿得到 index 里的 boot-theme 偏好（上一行），所以 DSH 自选明暗时这里改走“撤垫片”。
         seedDshTokens();
         return injectDshIndex(html, base);
       })
@@ -817,16 +818,41 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
   // 同时在 <html> 上声明这一面的底座 token：桥落地后按它把 base 也压成同色（桥的映射表是
   // 一张、没有面的概念，这行声明就是那个面的维度）；两边写法不同、值同源。
   var seedView = "default";
+  // 撤垫片：按 token 名单抹自定义属性，另加 body 自身的 background-color（为压住 DSH 首帧样式里
+  // 那句 `body{background-color:#151517}` 而写的实色）。与主题桥退出跟随时抹的是同一份名单。
+  function clearSeedTokens() {
+    if (!document.body || !document.body.style) return;
+    for (var i = 0; i < SEED_TOKEN_KEYS.length; i++) {
+      try { document.body.style.removeProperty(SEED_TOKEN_KEYS[i]); } catch (e) { /* 忽略 */ }
+    }
+    try { document.body.style.removeProperty("background-color"); } catch (e) { /* 忽略 */ }
+  }
   function seedDshTokens() {
     if (!document.body) return;
     try {
       document.documentElement.setAttribute("data-dshana-backdrop", backdropTokenForView(seedView));
     } catch (e) { /* 忽略 */ }
+    // DSH 自己选了明暗时首帧归它（见 seedsForDshPreference）：不但不垫，还要把上一轮垫的抹掉——
+    // 那层是按宿主色写的，留着就会在模块装载那段把 DSH 自己的深浅色盖成宿主色。
+    if (!seedsForDshPreference(dshPreference)) { clearSeedTokens(); return; }
     var spec = seedTokensForView(seedView);
     var cs = getComputedStyle(document.documentElement);
     for (var i = 0; i < spec.length; i++) {
       var value = cs.getPropertyValue(spec[i][1]).trim();
       if (value) document.body.style.setProperty(spec[i][0], value);
+    }
+    // body 自身的背景也要垫：DSH 的首帧样式是
+    //   body{background-color:#fff} @media(prefers-color-scheme:dark){body{background-color:#151517}}
+    // —— 直接写 body 背景，跟的是**浏览器系统**偏好；上面那圈自定义属性只管
+    // var(--dsw-alias-bg-base) 那一层（.frame 与启动屏），盖不住它。系统暗色时就会先黑一帧。
+    // 内联 background-color 优先于样式表，拿这一面“可见底”那格的界面值垫上即可。
+    var backdropVar = null;
+    for (var k = 0; k < spec.length; k++) {
+      if (spec[k][0] === "--dsw-alias-bg-base") { backdropVar = spec[k][1]; break; }
+    }
+    if (backdropVar) {
+      var backdropValue = cs.getPropertyValue(backdropVar).trim();
+      if (backdropValue) document.body.style.backgroundColor = backdropValue;
     }
   }
   // 首屏主题：官方读法 hana.theme.getSnapshot()（宿主报过来的实况）；
