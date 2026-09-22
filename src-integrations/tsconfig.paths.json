@@ -1375,6 +1375,10 @@
         "../vendor/deepseek-harness/packages/llm/token-meter/src/client.ts",
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-token-meter"
       ],
+      "@deepseek-ai/dsh-token-meter/estimate": [
+        "../vendor/deepseek-harness/packages/llm/token-meter/src/estimate.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-token-meter"
+      ],
       "@deepseek-ai/dsh-lsp": [
         "../vendor/deepseek-harness/packages/lsp/lsp/src/index.ts"
       ],
