@@ -1,6 +1,6 @@
 {
   "package": "@deepseek-ai/dsh-client-ui-settings-general",
-  "upstreamVersion": "0.1.7-alpha.1",
+  "upstreamVersion": "0.1.7-alpha.2",
   "upstreamDir": "packages/client/ui-settings-general",
   "files": [
     {
@@ -13,7 +13,7 @@
     },
     {
       "path": "src/client/locales.ts",
-      "upstreamSha256": "408ae42353df685300600fc3ef0c81205d5afc4f45b64781ebf2442df211d200"
+      "upstreamSha256": "1a72b8de2b01070040a7cc4f66fa4e22d07913d7ddf0e5eeea759571ced3d0f3"
     }
   ],
   "notes": [

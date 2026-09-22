@@ -1,6 +1,6 @@
 {
   "package": "@deepseek-ai/dsh-client-ui-layout",
-  "upstreamVersion": "0.1.7-alpha.1",
+  "upstreamVersion": "0.1.7-alpha.2",
   "upstreamDir": "packages/client/ui-layout",
   "files": [
     {
