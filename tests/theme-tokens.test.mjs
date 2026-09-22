@@ -107,6 +107,10 @@ test("适配层编译：直连 / 偏移 / 固定值三形态", () => {
   assert.equal(compileTarget({ fixed: "#2b2b2b" }), "#2b2b2b");
   assert.deepEqual(targetHostVars({ of: "--bg", shift: 8 }), ["--bg", "--text"]);
   assert.deepEqual(targetHostVars({ of: "--bg", shift: 8, with: "--bg" }), ["--bg"]);
+  // 两端与编译同口径：零偏移只依赖基色，满偏移只依赖对比色（否则多列的那格变量缺一个，桥就会把
+  // 这条规则整条丢掉）。
+  assert.deepEqual(targetHostVars({ of: "--bg", shift: 0 }), ["--bg"]);
+  assert.deepEqual(targetHostVars({ of: "--bg", shift: 100 }), ["--text"]);
   assert.deepEqual(targetHostVars("--bg"), ["--bg"]);
   assert.deepEqual(targetHostVars("~x"), []);
   assert.deepEqual(targetHostVars({ fixed: "#000" }), []);

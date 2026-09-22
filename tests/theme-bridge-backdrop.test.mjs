@@ -83,7 +83,12 @@ function runBridge(backdrop, options) {
     body,
     readyState: "complete",
     head: { appendChild: (el) => { styleTags.push(el); } },
-    createElement: () => ({ id: "", textContent: "" }),
+    createElement: () => ({
+      id: "",
+      textContent: "",
+      // 退出跟随时桥会 remove() 掉它自己建的 <style>；harness 里只需不报错。
+      remove: () => {},
+    }),
     getElementById: (id) => styleTags.find((el) => el.id === id) || null,
     addEventListener: () => {},
   };
@@ -112,13 +117,15 @@ function runBridge(backdrop, options) {
   const code = BRIDGE_SRC.replaceAll("__DSH_THEME_TOKENS__", JSON.stringify(compileRules(TOKEN_MAP)));
   vm.runInNewContext(code, sandbox);
   const tag = styleTags.find((el) => el.id === "@dshana/theme-dyn");
+  // 这几格用 getter：观察者回调会再写一次，快照式取值会把断言变成空转（读到的是跑桥那一刻的值）。
   return {
-    css: tag ? tag.textContent : "",
-    dark: bodyAttrs.has("data-ds-dark-theme"),
-    colorScheme: rootStyle.get("color-scheme"),
-    seededKeys: [...bodyStyle.keys()],
+    get css() { return tag ? tag.textContent : ""; },
+    get dark() { return bodyAttrs.has("data-ds-dark-theme"); },
+    get colorScheme() { return rootStyle.get("color-scheme"); },
+    get seededKeys() { return [...bodyStyle.keys()]; },
     bodyAttrs,
     rootStyle,
+    setRootAttr: (name, value) => { attrs[name] = value; },
     fireObservers: () => observers.forEach((o) => o.fire()),
   };
 }
@@ -196,6 +203,19 @@ test("桥：presenter 在插件树激活时写的明暗标记会被纠回来", (
   bridge.fireObservers();
   assert.equal(bridge.dark, false, "presenter 写完 dark 标记后该被纠回宿主明暗");
   assert.equal(bridge.colorScheme, "light", "html 的 inline color-scheme 该被纠回宿主明暗");
+});
+
+test("桥：切到 dsh 显式偏好后，presenter 写的那格 color-scheme 不被抹掉", () => {
+  // 起点：跟随宿主（偏好 system + 宿主浅）→ 桥把 html 的 color-scheme 写成 light。
+  const bridge = runBridge(null, { appearance: "light" });
+  assert.equal(bridge.colorScheme, "light", "跟随时该自己写上宿主明暗");
+  // 用户把 dsh 外观改成显式深色：presenter 往同一格写 dark（标记它自己的 UA 明暗），偏好属性随之出现。
+  bridge.setRootAttr("data-dsh-theme-preference", "dark");
+  bridge.rootStyle.set("color-scheme", "dark");
+  bridge.fireObservers();
+  // 我们区分不了那一格的值是谁写的，所以退出跟随时不能抹：抹了就会落在 presenter 写入之后，
+  // 把它的 UA 明暗退回系统档。
+  assert.equal(bridge.colorScheme, "dark", "presenter 的值该留着");
 });
 
 test("桥：退出跟随时抹掉壳页垫的底色（主题切得干净）", () => {

@@ -125,8 +125,8 @@
   // 深色档——浅底上放浅色字。这里在跟随宿主时把两样对齐：
   //   · <html> 的 inline color-scheme → 原生 UA 控件（滚动条、表单）一起跟；
   //   · body 的 data-ds-dark-theme → 按宿主摘戴。
-  // 只在**已知**偏好且为 system 时动手；dsh 自己选了 light/dark 时撤掉自己的 inline
-  // color-scheme 与垫片，明暗交还它的 presenter。偏好未知时（presenter 的属性与壳页推送都还没
+  // 只在**已知**偏好且为 system 时动手；dsh 自己选了 light/dark 时不动 color-scheme（那一格归
+  // presenter，它自己会写），只把壳页垫片撤掉。偏好未知时（presenter 的属性与壳页推送都还没
   // 到）一律不动手：此刻抹垫片等于把首帧交回 dsh 的 boot 样式，而它认的是**浏览器系统**——
   // 宿主浅 + 系统深就是那一帧黑屏。
   function syncHostScheme() {
@@ -135,13 +135,16 @@
     if (!root) return;
     if (!prefKnown) return;
     if (!followHost()) {
-      try { if (root.style.colorScheme) root.style.removeProperty("color-scheme"); } catch (e) { /* 忽略 */ }
+      // 明暗交还 presenter：dsh 显式选了 light/dark 时，presenter 会往**同一格**写它自己的
+      // html color-scheme，而它随每次偏好变化重建快照、必然重写一遍。所以这里不碰那一格：
+      // 早先我们写的值会被它覆掉，删掉反而可能落在它写入之后、把它的值抹掉（它的 UA 明暗
+      // 就退回系统档）。我们没能力区分那一格当前的值是谁写的。
       clearSeed();
       return;
     }
     var a = hostAppearance();
     if (!a) {
-      try { if (root.style.colorScheme) root.style.removeProperty("color-scheme"); } catch (e) { /* 忽略 */ }
+      // 仍在跟随、但宿主的明暗未知：不动那一格（同上，不区分归属就别抹）。
       return;
     }
     // 写前比现值：html 的 style 属性也在观察名单里（presenter 会往同一个属性写 colorScheme），

@@ -50,11 +50,16 @@ export function compileTarget(target: AdapterTarget): string {
   );
 }
 
-/** 一条规则依赖的宿主变量（固定值不依赖任何宿主变量）。 */
+/** 一条规则依赖的宿主变量（固定值不依赖任何宿主变量）。必须与 compileTarget 的取值一致：
+ * 超报依赖会让桥把本来能落地的规则整条丢掉（多列的那个变量缺一格就不写了）。 */
 export function targetHostVars(target: AdapterTarget): string[] {
   if (typeof target === "string") return target.startsWith("~") ? [] : [target];
   if ("fixed" in target) return [];
+  const pct = Number(target.shift) || 0;
   const against = target.with || CONTRAST_VAR;
+  // 两端与编译同口径：≤0 编译成 var(of)、≥100 编译成 var(against)，各只依赖一格。
+  if (pct <= 0) return [target.of];
+  if (pct >= 100) return [against];
   return against === target.of ? [target.of] : [target.of, against];
 }
 
