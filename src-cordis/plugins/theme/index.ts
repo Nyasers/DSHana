@@ -50,16 +50,19 @@ import bridgeBody from "./assets/theme-bridge.js";
 
 export const name = "@dshana/theme";
 
-// 映射表在 ./token-map.js（纯数据零依赖，可被 node --test 直接 import；本文件顶部那句
-// assets/theme-bridge.js 的默认导出由打包器注入，普通 node import 会直接 SyntaxError）。
+// 规则表在 ./token-map.ts、编译在 ./adapter.ts（纯数据零依赖，可被 node --test 直接 import；
+// 本文件顶部那句 assets/theme-bridge.js 的默认导出由打包器注入，普通 node import 会直接
+// SyntaxError）。
 import { TOKEN_MAP } from "./token-map.ts";
+import { compileRules } from "./adapter.ts";
 import { errText } from "./err-text.ts";
 
 // 动态脚本：宿主声明（壳桥 vars + preference）直接应用。正文在
-// assets/theme-bridge.js（自包含浏览器 JS），唯一动态点 = TOKEN_MAP 数据表注入
-// （占位符 __DSH_THEME_TOKENS__ 模块初始化时替换为序列化常量）。
+// assets/theme-bridge.js（自包含浏览器 JS），唯一动态点 = 规则表注入——占位符
+// __DSH_THEME_TOKENS__ 在模块初始化时替换为 **编译后的三元组**（token / CSS 值 / 依赖的宿主
+// 变量）。编译只在这里做一次，桥不再自带第二份取值逻辑。
 const BRIDGE = `<script id="@dshana/theme-bridge">
-${bridgeBody.replace("__DSH_THEME_TOKENS__", JSON.stringify(TOKEN_MAP))}
+${bridgeBody.replace("__DSH_THEME_TOKENS__", JSON.stringify(compileRules(TOKEN_MAP)))}
 </script>`;
 
 export function apply(ctx, config) {

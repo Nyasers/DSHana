@@ -23,12 +23,17 @@
 // （FACE_BACKDROP）在映射表里的宿主变量，单测盯着这一点——映射改了而这里没跟，测试直接红。
 // 宿主变量取不到就跳过——不发明用户没选过的颜色。
 
-/** 一格垫片：[DSW token, 宿主主题变量]。 */
+/** 一格垫片：[DSW / dsh 首帧变量, 宿主主题变量]。 */
 export type SeedPair = readonly [string, string];
 
 const CENTER_SEED: ReadonlyArray<SeedPair> = [
   ["--dsw-alias-bg-base", "--bg"],
   ["--dsw-specific-sidebar-fill", "--sidebar-bg"],
+  // dsh index 里的首帧样式按 **@media (prefers-color-scheme: dark)** 写 body 底与启动屏底
+  // （ui-theme/src/boot-theme.ts），而那个媒体查询跟的是浏览器系统而非宿主主题。
+  // --dsw-alias-bg-base 已在规则表里（桥会盖），--dsh-boot-bg 不是 --dsw-* 成员、桥管不到，
+  // 只能靠这层垫片：它写 body 内联，优先级高于样式表，把系统判定的深/浅盖掉。
+  ["--dsh-boot-bg", "--bg"],
 ];
 
 /** 面 → 这一面可见底的 DSW token：中列面是中列的 --dsw-alias-bg-base，侧栏面是侧栏列的填色。 */
@@ -49,6 +54,7 @@ export const VIEW_SEEDS: Readonly<Record<string, ReadonlyArray<SeedPair>>> = {
   sidebar: [
     ["--dsw-alias-bg-base", "--sidebar-bg"],
     ["--dsw-specific-sidebar-fill", "--sidebar-bg"],
+    ["--dsh-boot-bg", "--sidebar-bg"],
   ],
 };
 
@@ -62,4 +68,19 @@ export function seedTokensForView(view: string): ReadonlyArray<SeedPair> {
  * “这一面的底是哪一格”，桥再用同一张表取出它对应的宿主变量（不新增第二份数据面）。 */
 export function backdropTokenForView(view: string): string {
   return FACE_BACKDROP[view] || FACE_BACKDROP.default;
+}
+
+/** 垫片写过的全部 token（各面摊平后的并集）。撤垫片按它抹，与面无关——各面的 token 键集相同，
+ * 只有取值用的宿主变量不同。桥里那份硬编码名单必须与它同源（单测盯着）。 */
+export const SEED_TOKEN_KEYS: ReadonlyArray<string> = [
+  ...new Set(Object.values(VIEW_SEEDS).flat().map(([token]) => token)),
+];
+
+/**
+ * DSH 自己显式选了 light/dark 时，首帧的明暗归它 index 里的 boot 样式（那份按偏好写死、
+ * 不带媒体查询），我们既不垫也不留——垫上反而会在模块装载那段把它的深色/浅色盖成宿主色。
+ * 偏好为 system（或尚未读到 index）时才垫：那一段的宿主色只能由我们提供。
+ */
+export function seedsForDshPreference(preference: string | null | undefined): boolean {
+  return preference !== "light" && preference !== "dark";
 }
