@@ -146,7 +146,7 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 - `src/manifest.json` 是 App v2 契约：`version` 由 derive 取主 `package.json`，`minAppVersion` 取随包 SDK 快照（现 `0.1013.0`）；capabilities 十一项（tools / tasks / session / models / agents.read / resources / runtime 三项 / ui 两项，清单见文件）。v1 专属字段（`author`、`trust`、`activationEvents`、`ui.hostCapabilities`、`network` 白名单）不在清单里。
 - `src/index.ts` 导出 `apply(ctx)`（兼导出 `default { apply }`）；apply 注册完即返回。统一日志只走宿主 `ctx.logger`；globalThis 宿主单例退役 → `src/lib/app-runtime.ts` module-scope 运行包。
 - 工具注册：`ctx.tools.register`，工具名 `dshana`（一个插件一个同名工具 + subcommand；v2 不自动加 `pluginId_` 前缀、重名被宿主当场拒）。动作五个：`open`/`reply`/`get`/`close`/`approve`，装配见 `src/tools/index.ts`、手册见 `src/skills/dshana/SKILL.md`。
-- 设置：`contributes.settings` 的 UI 由 App 自绘设置页承担（`ui.route: /settings.html`，宿主设置区渲染）；键与缺省以 `src/lib/config.ts` 为准，读写落 `dataDir/config.json`。
+- 设置：`contributes.settings` 的 UI 由 App 自绘设置页承担（`ui.route: /settings.html`，宿主设置区渲染）；键与缺省以 `src/lib/config.ts` 为准，读写落 `dataDir/settings.json`（旧 `config.json` 只在两键缺位时作读侧兼容）。
 - 数据读路径迁到 `ctx.dataDir`（宿主 `app-data/<id>/`）：list/get 读当前源的 `<DSH_HOME>/...`（projcache + jsonl zstd）；旧插件数据迁移见 `src/lib/legacy-migrate.ts` 与 `scripts/migrate/legacy.mts`。
 - 构建：`node src/build.ts` 产物 `dist/` = App 安装目录形态（根 `manifest.json` + `index.js` + `assets/` + `skills/` + `ui/` + `runtime/`）。
 
@@ -376,10 +376,11 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 ### 交付 5：pack 与派生同步收口（版本线）
 
 - 版本线为单一 1.x 线（开发期停在最后已发布基线、发版经 `pnpm version` 推进、DSH 跟随策略）；
-  cordis 包（roster + plugins，10 个 package.json）**等值跟随**主版本（无独立版本线）；
+  cordis 包（roster 一份 patch + 三个插件包：`@dshana/clipboard` / `provider` / `theme`）**等值跟随**
+  主版本（无独立版本线）；
   build metadata（+dsh-<dsh 依赖>）由 version-hook 发版时统一拼回再同步。
   版本线语义见 scripts/shared/version.mts 头注释。
-- pack.mts：静态项补 THIRD_PARTY_NOTICES.md；cordis dist 断言按清单校验（现 10 包）；
+- pack.mts：静态项补 THIRD_PARTY_NOTICES.md；cordis dist 断言按清单校验（现 3 包）；
   新增 dist/ui 断言（route 资源 fail-closed）；zip 根级 = manifest.json + index.js +
   assets/ + skills/ + ui/ + cordis/ + 物化的 node_modules/ + NOTICE/THIRD_PARTY_NOTICES。
 
