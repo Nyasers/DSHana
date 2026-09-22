@@ -112,7 +112,10 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * 每个会话的桥状态：同一会话在 v2 被 App 串行化（同刻唯一任务），故状态机按
- * sessionId 一个条目即可，不用 turn 级坐标（v1 的复杂终点源于跨任务共享会话）。
+ * sessionId 存条目即可，不用 turn 级坐标（v1 的复杂终点源于跨任务共享会话）。
+ * 一条桥只服务一个任务：终态后若该会话在宿主侧改绑到新任务（reply 在同会话上
+ * 续发），旧桥由分发侧换代（见 isSuperseded），新任务重新起桥，避免它的终态
+ * 回投被旧桥吞掉。
  */
 class SessionBridge {
   settled = false; // 已 complete/fail/cancel（幂等）
@@ -165,6 +168,22 @@ class SessionBridge {
     this.binding = b;
     this.taskId = b.taskId;
     return true;
+  }
+
+  /**
+   * 终态的桥只服务一个任务。宿主侧该会话若已改绑到别的任务（同会话续发），
+   * 本桥不再适用，调用侧应换代重建。读不到绑定则保守返回 false 忽略本帧
+   * （下一次事件会重试），与 load() 的 fail-closed 口径一致。
+   */
+  async isSuperseded(): Promise<boolean> {
+    let b: TaskBinding | null = null;
+    try {
+      b = await this.bindings.bySession(this.sessionId as string, { fresh: true });
+    } catch (e) {
+      this.note("换代判定读取会话绑定失败（本帧忽略）：" + errText(e));
+      return false;
+    }
+    return !!b && b.taskId !== this.taskId;
   }
 
   async onFrame(frame) {
@@ -419,7 +438,7 @@ export function startTaskBridge({
   cancelModelRequests,
 }: TaskBridgeOptions): () => void {
   const offs: Array<() => void> = [];
-  const bridges = new Map(); // sessionId → SessionBridge（终态后惰性清理）
+  const bridges = new Map(); // sessionId → SessionBridge（一个任务一条；终态后遇换代或超限时清理）
   const index = bindings || createTaskBindingIndex(hana && hana.tasks);
   const doCancelModels = typeof cancelModelRequests === "function"
     ? cancelModelRequests
@@ -438,6 +457,24 @@ export function startTaskBridge({
       /* 单事件订阅失败跳过 */
     }
   };
+  /**
+   * 帧分发：一条桥只服务一个任务。已终态的桥若发现宿主侧该会话改绑到新任务
+   * （同一会话上 reply 续发），就让位换代，本帧交给新桥处理。
+   */
+  const dispatchFrame = async (frame: DshEventFrame) => {
+    let b = bridges.get(frame.sessionId);
+    if (b && b.settled && (await b.isSuperseded())) {
+      bridges.delete(frame.sessionId);
+      b = undefined;
+    }
+    if (!b) {
+      pruneSettled();
+      b = new SessionBridge({ hana, bindings: index, log, serviceBaseUrl, bridgeKey, cancelModelRequests: doCancelModels });
+      b.sessionId = frame.sessionId;
+      bridges.set(frame.sessionId, b);
+    }
+    await b.onFrame(frame);
+  };
   for (const event of BRIDGE_EVENTS) {
     onEvent(event, (...args) => {
       let frame: DshEventFrame | null = null;
@@ -447,24 +484,11 @@ export function startTaskBridge({
         frame = null;
       }
       if (!frame) return;
-      try {
-        let b = bridges.get(frame.sessionId);
-        if (!b) {
-          pruneSettled();
-          b = new SessionBridge({ hana, bindings: index, log, serviceBaseUrl, bridgeKey, cancelModelRequests: doCancelModels });
-          b.sessionId = frame.sessionId;
-          bridges.set(frame.sessionId, b);
-        }
-        void b.onFrame(frame).catch((e) => {
-          try {
-            log && log("[task-bridge] 帧处理失败：" + errText(e));
-          } catch { /* 忽略 */ }
-        });
-      } catch (e) {
+      void dispatchFrame(frame).catch((e) => {
         try {
-          log && log("[task-bridge] 事件分发异常：" + errText(e));
+          log && log("[task-bridge] 帧处理失败：" + errText(e));
         } catch { /* 忽略 */ }
-      }
+      });
     });
   }
   const stop = () => {

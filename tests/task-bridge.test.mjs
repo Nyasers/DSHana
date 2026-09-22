@@ -7,7 +7,7 @@
 // 绑定事实源是宿主任务记录（metadata.dsh）：取消标记写回任务 metadata，不用私有映射文件。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifyDshEvent, BRIDGE_EVENTS, SessionBridge } from "../src/runtime/task-bridge.ts";
+import { classifyDshEvent, BRIDGE_EVENTS, SessionBridge, startTaskBridge } from "../src/runtime/task-bridge.ts";
 import { createTaskBindingIndex } from "../src/lib/task-binding.ts";
 
 test("classifyDshEvent: api-session/status true/false", () => {
@@ -152,4 +152,103 @@ test("终态判定：取消标记读不出 → 按已请求取消结算（fail-c
   await bridge.settle({ ok: true, message: "done" });
   assert.equal(calls.canceled.length, 1, "取消状态未知 ⇒ fail-closed 结算成 canceled");
   assert.equal(calls.completed.length, 0, "不得把不确定当成功");
+});
+
+// ---- 同会话续发（真机回归：reply 续发时旧桥已终态占位，新任务的终态回投被吞）----
+
+const SID_REBIND = "session-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+const tick = () => new Promise((r) => setTimeout(r, 20));
+
+/** 假宿主任务面：同会话两个任务先后绑定（t2 比 t1 新，对应 reply 的绑定换代）。 */
+function fakeRebindTasks() {
+  const store = new Map([
+    ["app:dshana:t1", {
+      taskId: "app:dshana:t1",
+      status: "running",
+      metadata: { dsh: { action: "create", sessionId: SID_REBIND, rpcId: "r_1" } },
+      createdAt: 1,
+      updatedAt: 1,
+    }],
+  ]);
+  return {
+    store,
+    list: async () => [...store.values()],
+    get: async (id) => store.get(id) || null,
+    update: async (id, patch) => {
+      const next = { ...(store.get(id) || {}), ...patch };
+      store.set(id, next);
+      return next;
+    },
+  };
+}
+
+/** 只收事件订阅的假 ctx：fire 手动投帧（模拟 DSH 侧事件）。 */
+function fakeCtx() {
+  const handlers = new Map();
+  return {
+    ctx: { on: (ev, h) => { handlers.set(ev, h); return () => handlers.delete(ev); } },
+    fire: (ev, ...args) => {
+      const h = handlers.get(ev);
+      if (h) h(...args);
+    },
+  };
+}
+
+function rebindHarness() {
+  const tasks = fakeRebindTasks();
+  const calls = { completed: [], failed: [], canceled: [] };
+  const hana = {
+    tasks: {
+      list: tasks.list,
+      get: tasks.get,
+      update: tasks.update,
+      complete: async (taskId, res) => { calls.completed.push({ taskId, res }); },
+      fail: async (taskId, msg) => { calls.failed.push({ taskId, msg }); },
+      cancel: async (taskId, msg) => { calls.canceled.push({ taskId, msg }); },
+    },
+  };
+  const { ctx, fire } = fakeCtx();
+  const stop = startTaskBridge({ ctx, hana, log: () => {} });
+  return { tasks, calls, fire, stop };
+}
+
+const turnEnd = { type: "turn/end", data: { reason: { kind: "completed" } } };
+
+test("同会话续发：旧桥终态后绑定换代，新任务的终态仍能回投", async () => {
+  const { tasks, calls, fire, stop } = rebindHarness();
+
+  // 第一轮：t1 的 turn/end → 结算 t1
+  fire("session/event", { id: SID_REBIND }, turnEnd);
+  await tick();
+  assert.deepEqual(calls.completed.map((c) => c.taskId), ["app:dshana:t1"]);
+
+  // 宿主换绑到 t2（reply 续发：sessionId 不变、任务记录换新）
+  tasks.store.set("app:dshana:t2", {
+    taskId: "app:dshana:t2",
+    status: "running",
+    metadata: { dsh: { action: "send", sessionId: SID_REBIND, rpcId: "r_2" } },
+    createdAt: 100,
+    updatedAt: 100,
+  });
+
+  // 第二轮：同一会话的新 turn/end → 必须回投到 t2，不得被已终态的旧桥吞掉
+  fire("session/event", { id: SID_REBIND }, turnEnd);
+  await tick();
+  assert.deepEqual(calls.completed.map((c) => c.taskId), ["app:dshana:t1", "app:dshana:t2"]);
+  assert.equal(calls.failed.length, 0);
+  stop();
+});
+
+test("同会话迟到帧：绑定未换代时旧桥不重建，不重复结算", async () => {
+  const { calls, fire, stop } = rebindHarness();
+
+  fire("session/event", { id: SID_REBIND }, turnEnd);
+  await tick();
+  // 宿主绑定仍是 t1（没有新任务）：再来一帧应被已终态的桥忽略
+  fire("session/event", { id: SID_REBIND }, turnEnd);
+  await tick();
+  assert.deepEqual(calls.completed.map((c) => c.taskId), ["app:dshana:t1"]);
+  assert.equal(calls.canceled.length, 0);
+  assert.equal(calls.failed.length, 0);
+  stop();
 });
