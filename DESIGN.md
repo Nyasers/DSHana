@@ -10,7 +10,8 @@
 
 - 不写日期栈记（“2026-xx-xx 定调”）、不写迁移步骤编号（“步骤 3 接线”）、不写“已退役/已删除”的注记。
 - 保留现状事实（依赖怎样装、路径在哪、失败向哪侧回落）、保留设计取舍的**理由**。
-- 指向本地未入库文档（`specs/`）的引用不入注释，避免注释指向外部找不到的东西。
+- 指向本地未入库文档（`specs/`、`SPECS.md`）的引用不入注释与公开文档：规划件带隐私信息、不入库，
+  引用只会指向克隆者拿不到的路径。
 
 **覆盖层是别人的文件。** `src-integrations/*/files/**` 是官方 DSH 文件的整体覆盖，里面只允许两类
 内容：上游原有注释，以及我们**无注释的代码改动**。我们自己的说明（为什么改、改了什么、与样例的
@@ -107,7 +108,7 @@ DSHana 以**单卡 + 自带功能面板**注册（manifest `contributes.cards[0]
 
 ### 设置面
 
-- **App 设置页**：`contributes.settings.ui.route`，宿主设置区渲染，不依赖 DSH 运行。两项常规（审批超时 / 任务超时，App 自持存储）+ 会话模型模式。模型候选读 `GET /dshana/models`，后端取**宿主模型目录**（`ctx.models.list`，能力面 `app/models.infer`）——宿主目录是「这条路走不走得通」的唯一事实源，页面因此不列 DSH 自己的目录，DSH 在不在跑都一样（`src/lib/model-catalog-view.ts` 归一化、按 provider 归组并附推理档）。见 `specs/current/sample-align`。
+- **App 设置页**：`contributes.settings.ui.route`，宿主设置区渲染，不依赖 DSH 运行。两项常规（审批超时 / 任务超时，App 自持存储）+ 会话模型模式。模型候选读 `GET /dshana/models`，后端取**宿主模型目录**（`ctx.models.list`，能力面 `app/models.infer`）——宿主目录是「这条路走不走得通」的唯一事实源，页面因此不列 DSH 自己的目录，DSH 在不在跑都一样（`src/lib/model-catalog-view.ts` 归一化、按 provider 归组并附推理档）。
 - **会话模型从哪来**：App 设置项 `sessionModelMode` 决定——`caller`（缺省，复用调用方那份）或 `custom`（`sessionModelProvider` / `sessionModelModel` / `sessionModelReasoningEffort` 固定一条，推理强度空串 = 不指定、由 DSH 决定）。优先级：工具入参显式 > App 自定义那条 > 用户手设的 DSH 默认（`caller` 模式下 user 层非空就不补） > **调用方那张角色卡**配的 `models.chat`（`agent:list` 的 `isCurrent` 优先，能力面 `app/agents.read`）。选出的那条**随会话请求带上**（集成层给 `session/create` 与 `session/prompt` 加了可选 `model` 字段，见 `src-integrations/api-session-controller`）：只在会话内生效，不写 `settings.yaml` 的全局默认；只在 create 上补，send 沿用会话已有的选择。见 `src/lib/caller-model.ts`（决策）、`agent-models.ts`（读角色卡）、`host-models.ts`（宿主目录）。
 - **DSH 自己的默认模型**（`agent-default-model`）：本页不经手它，也不在 config.json 存副本。它的用户层有值、而已不在宿主目录里时，`src/lib/model-default-guard.ts` 在 runtime 就绪与宿主 `models-changed` 之后就地对账换一条可服务的（优先留在原 provider 里换，再退角色卡模型、目录第一条）；用户层为空不动手——本形态里界面直接开的会话在 DSH 自己的模型选择器里选一条。
 
@@ -138,7 +139,7 @@ DSH 的 workspace 选择对话框来自 `directory-picker` seam（宿主半列�
 
 ## 架构决策与落地（接口基线 Hana 0.1013.0）
 
-DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 宿主插件（宿主进程内 boot DSH）迁移而来；上方架构总览与本节描述的都是当前形态。迁移顺序见 `specs/DSHana迁移到HanaAppV2.md` §13。
+DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 宿主插件（宿主进程内 boot DSH）迁移而来；上方架构总览与本节描述的都是当前形态。
 
 **manifest / apply 入口 / 设置 / 工具注册（迁移步骤 1）：**
 
@@ -374,10 +375,10 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 
 ### 交付 5：pack 与派生同步收口（版本线）
 
-- 版本线为单一 1.x 线（开发期停在最后已发布基线、发版经 `pnpm version` 推进、DSH 跟随策略），
-  细节与依据见 `specs/dshana-v2-定案与待议-2026-09-10.md` §5；cordis 包（roster + plugins，
-  10 个 package.json）**等值跟随**主版本（无独立版本线）；build metadata（+dsh-<dsh 依赖>）由
-  version-hook 发版时统一拼回再同步。版本线语义见 scripts/shared/version.mts 头注释。
+- 版本线为单一 1.x 线（开发期停在最后已发布基线、发版经 `pnpm version` 推进、DSH 跟随策略）；
+  cordis 包（roster + plugins，10 个 package.json）**等值跟随**主版本（无独立版本线）；
+  build metadata（+dsh-<dsh 依赖>）由 version-hook 发版时统一拼回再同步。
+  版本线语义见 scripts/shared/version.mts 头注释。
 - pack.mts：静态项补 THIRD_PARTY_NOTICES.md；cordis dist 断言按清单校验（现 10 包）；
   新增 dist/ui 断言（route 资源 fail-closed）；zip 根级 = manifest.json + index.js +
   assets/ + skills/ + ui/ + cordis/ + 物化的 node_modules/ + NOTICE/THIRD_PARTY_NOTICES。
@@ -398,7 +399,7 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 | settings | DSH Web 设置页「DSHana 设置」分页（默认模型/版本卡 + 更新总线） | **已退役（2026-09-12，改由 App 自己设置页承担）** | v1 更新链路（dshana.bus → 宿主）v2 无宿主侧；本地版本卡/默认模型 UI 保留；更新段退役（App 发版即 DSH 升级）——真机验收刀随 UI 修剪 |
 | logger | DSH 内日志收集 → dshanaBus → 宿主会话文件 | **已退役（2026-09-12）** | bus 一走它只剩“写一行到 cordis logger”，无存在价值；唯一消费者 theme 改为直接用内建 LoggerService（行首 `[theme]`） | v2 无宿主 WS 连接，总线缓冲不再送达；受管 runtime stdout 由宿主 runtime 日志承载（App 侧不再落盘，见 spec §8 j）——真机后移除总线转发段 |
 | bus | dshana.bus WS 服务端（宿主插件 IPC 通道） | **已退役（2026-09-12）** | v2 宿主不再连 dshana.bus：App→runtime = loopback HTTP RPC（决策 A），runtime→宿主 = connectAppRuntime（tasks/models）。无消费方即死代码——真机确认 logger/settings 无注入依赖后从 patch.yml 移除 |
-| acp-assist | dsh-acp agent 工厂 setup 后置（补 ACP 会话缺的默认 preset） | **已退役（2026-09-10）** | v2 不装载 dsh-acp，patch 对象不存在；roster 行与插件目录已删。依据见 `specs/dshana-v2-定案与待议-2026-09-10.md` §10 |
+| acp-assist | dsh-acp agent 工厂 setup 后置（补 ACP 会话缺的默认 preset） | **已退役（2026-09-10）** | v2 不装载 dsh-acp，patch 对象不存在；roster 行与插件目录已删 |
 
 ### 已测/未测边界（本刀）
 

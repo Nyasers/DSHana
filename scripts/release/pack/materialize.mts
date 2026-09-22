@@ -9,7 +9,7 @@
 // + 按目标替换过平台块的 workspace yaml；`pnpm install --prod` 因此只装交付面的生产闭包，仓库根
 // 那份清单（构建面，带 devDependencies）不进工位。
 // 实测（Windows + 热缓存）：单目标安装 8.4s / 210 MB，且不含其他平台的边角；而「通用树裁剪
-// 派生」会留残留且更大（见 specs §11）。
+// 派生」会留残留且更大。
 // 隔离的理由：不触碰仓库 node_modules（dev+prod 混合树，且动它会触发 pnpm 重建——Windows 上
 // 曾遇清理被拒导致树损坏）。
 import { createRequire } from "node:module";

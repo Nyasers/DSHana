@@ -1,7 +1,7 @@
 # integrations/ — hana 对官方 DSH 包的集成层（样例路线）
 
 本目录承载「hana 对 DSH 的改动」，形态与官方样例 hana-dsh 一致：**薄集成贴上游版本**，
-不是自研插件接管上游角色。背景与验收见 `specs/archived/hana-integrations-2026-09-12/spec.md`。
+不是自研插件接管上游角色。
 
 ## 为什么要有这一层
 

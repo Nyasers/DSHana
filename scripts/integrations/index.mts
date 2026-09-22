@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// scripts/integrations/index.mts — 集成层 CLI（见 src-integrations/README.md 与 specs/current/hana-integrations）
+// scripts/integrations/index.mts — 集成层 CLI（见 src-integrations/README.md）
 //
 // 用法：
 //   node scripts/integrations/index.mts verify          # 镜像版本一致 + 每个 overlay 记录的上游哈希仍成立
