@@ -118,7 +118,10 @@ jobs:
   # 平台包留在 release 资产里按名取用——详见 scripts/release/market-index.mts 头注。
   market-index:
     needs: package
-    if: ${{ needs.package.result == 'success' }}
+    # needs 链上只要有一环被 skip，GitHub 的隐式 success() 就会沿链传染下来把本 job 也跳过——
+    # 即使直接上游 package 是 success（tag 场景 create-release 不跑，dispatch 场景反过来，必然有一环 skip）。
+    # 所以 !cancelled() 必须与显式的 needs 判断成对出现：单加状态函数会把“上游必须成功”这层一并顶掉。
+    if: ${{ !cancelled() && needs.package.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
