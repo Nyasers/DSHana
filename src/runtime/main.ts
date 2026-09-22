@@ -574,23 +574,21 @@ export async function main(argv: string[]): Promise<number> {
 
 // ---- bundle 自执行：受管 runtime 进程加载即跑（宿主只等 stdout readyMarker / 进程退出）----
 const rawArgv = process.argv.slice(2);
+/**
+ * 失败必须**真正结束进程**：宿主父进程的 IPC 通道会保持事件循环活着，只设 process.exitCode
+ * 不会退出——宿主侧就一直停在 starting，App 侧只能等到超时（真实成因也随之后置）。
+ * 断开 IPC 通道再 exit，宿主按退出码归类，失败报告（reportFatal）已落盘。
+ * 成功就绪（OK）不走这里：进程由信号/断连驱动 shutdown() 退出。
+ */
+const exitWith = (code) => {
+  try { process.disconnect(); } catch { /* 无 IPC 通道（如直接 node 运行） */ }
+  process.exit(code);
+};
 main(rawArgv).then((code) => {
-  // main 正常返回只发生在：usage/help/失败退出（已 return code）或成功就绪后（OK）。
-  // 成功就绪后进程由信号/断连驱动 shutdown()（其内部 process.exit），此处不退出。
-  if (code !== EXIT.OK) {
-    try {
-      process.exitCode = code;
-    } catch {
-      process.exit(code);
-    }
-  }
+  if (code !== EXIT.OK) exitWith(code);
 }).catch((e) => {
   // main 自身抛出的意外错误（未被上述分支拦住的）：同样走 stderr + 退出码，不让它静默。
   err("fatal", "未预期的致命错误：" + errText(e));
   err("exit", "exit=" + EXIT.INTERNAL + " kind=internal");
-  try {
-    process.exitCode = EXIT.INTERNAL;
-  } catch {
-    process.exit(EXIT.INTERNAL);
-  }
+  exitWith(EXIT.INTERNAL);
 });

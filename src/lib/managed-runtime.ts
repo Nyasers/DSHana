@@ -608,6 +608,15 @@ async function doStartManaged(opts, attempt = 1) {
       );
     }
     if (Date.now() >= deadline) {
+      // 超时但已留下失败报告：子进程其实判了失败（只是没及时退出）。按报告归类，别把真实成因吞掉。
+      const fatal = readFatalReport(fatalPath);
+      if (fatal) {
+        const code = Object.prototype.hasOwnProperty.call(START_ERROR_HINTS, fatal.kind) ? fatal.kind : "timeout";
+        throw codedError(
+          fatalReportText(fatal) + "（runtime 未在 " + Math.round(READY_TIMEOUT_MS / 1000) + "s 内就绪）",
+          code,
+        );
+      }
       try { rmSync(fatalPath, { force: true }); } catch { /* 忽略 */ }
       throw codedError(
         "DSH 受管 runtime 启动超时（" + Math.round(READY_TIMEOUT_MS / 1000) + "s 内未就绪）。" +
