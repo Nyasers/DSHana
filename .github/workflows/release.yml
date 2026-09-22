@@ -22,6 +22,9 @@
 #
 # 产物命名与单一事实源：`dshana-v<version>[-<target>].zip`；version 取自 package.json，
 # pack.mts 会断言 manifest 与 cordis 包版本一致，不一致直接拒包（fail-closed）。
+#
+# runner 一律钉 ubuntu-24.04，不用 ubuntu-latest：镜像换代是 GitHub 侧的静默变化，
+# 发版流水线要的是可复现的构建地基，不能让 latest 在某个发版日悄悄换掉它。
 name: Release
 
 on:
@@ -34,12 +37,12 @@ jobs:
   # dispatch 手动场景无 tag，本 job 被 if 跳过，package 照常跑（只产 artifact）。
   create-release:
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           # vendor/deepseek-harness 是 submodule，镜像校验要读它的 tag（dsh-v<版本>）。
           submodules: recursive
@@ -69,7 +72,7 @@ jobs:
     # create-release 仅在 tag 场景运行，dispatch 场景会被 skip；被 needs 的 job skip 会让下游
     # 默认 if(success()) 一起 skip → 这里显式放行「非 failure」结果（success/skipped 都继续）。
     if: ${{ needs.create-release.result != 'failure' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     strategy:
@@ -78,16 +81,16 @@ jobs:
         target: [linux-x64, darwin-arm64, darwin-x64, win32-x64, universal]
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           # package 链会跑 prepackage（derive + build），同样要读 submodule 的 tag。
           submodules: recursive
           fetch-depth: 0
 
       # 显式装 pnpm（读 package.json packageManager 钉版本），不依赖 runner 预装 corepack
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -100,7 +103,7 @@ jobs:
         run: pnpm run package --target=${{ matrix.target }}
 
       - name: Upload package artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: pkg-${{ matrix.target }}
           retention-days: 3
@@ -115,15 +118,15 @@ jobs:
   market-index:
     needs: package
     if: ${{ needs.package.result == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -140,7 +143,7 @@ jobs:
         run: pnpm run derive:manifest
 
       - name: Download package artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
@@ -164,7 +167,7 @@ jobs:
           echo "--- index.v2.json (head) ---"
           head -c 400 index.v2.json
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: market-index
           retention-days: 3
@@ -175,18 +178,18 @@ jobs:
   publish:
     needs: [package, market-index]
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
           fetch-depth: 0
 
       - name: Download all package artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 

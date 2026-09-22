@@ -5,17 +5,18 @@ on:
     branches: [master]
 jobs:
   build-and-audit:
-    runs-on: ubuntu-latest
+    # runner 钉具体版本：镜像换代是 GitHub 侧的静默变化，CI 要可复现的环境
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           # vendor/deepseek-harness 是 submodule，镜像校验要读它的 tag（dsh-v<版本>）；
           # 浅克隆拿不到 tag，submodule 不递归则目录为空。两者都必要。
           submodules: recursive
           fetch-depth: 0
       # 显式装 pnpm（读 package.json packageManager 字段钉版本），不依赖 runner 预装 corepack
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: ".nvmrc"
           cache: pnpm
@@ -24,6 +25,6 @@ jobs:
       # 本地跑 `node scripts/derive/index.mts` 写回后要一并提交，这一步拦「忘了提交」。
       - run: pnpm run derive:check
       - run: pnpm run build
-      # 单测：139 例（node --test tests/，含 provider/task-bridge/watch-sse/cancel-chain/approval-bridge 等）
+      # 单测：node --test tests/，含 provider / task-bridge / watch-sse / cancel-chain / approval-bridge 等
       - run: pnpm run test
       - run: pnpm audit --audit-level=high
