@@ -11,22 +11,22 @@
 //             arguments: OBJECT, thoughtSignature? }]
 //   toolResult role:"toolResult" { toolCallId, toolName, isError, content: text/image[] }
 // DSH 侧等价（@deepseek-ai/dsh-llm）：
-//   user/assistant Message.content 是 ContentBlock[]（text/reasoning/image/tool-call/
-//   tool-result）；tool 结果 = user 角色消息且 content 为 [ToolResultBlock{toolCallId,
-//   content, isError}]；assistant 消息 source.replayState 是我们存的 'hana' 回放信封
-//   （每块一个 metadata，见 lib/replay.js）。
+//   user/assistant Message.content 是 ContentBlock[]（text/reasoning/image/tool-call）；
+//   tool 结果是一条独立的 role:"tool" 消息，带 toolCallId/content/isError
+//   （createToolResultMessage，source.kind === "tool"）；assistant 消息 source.replayState
+//   是我们存的 'hana' 回放信封（每块一个 metadata，见 lib/replay.js）。
+//   历史兼容：user 消息 content 内的 { type:"tool-result", toolCallId, content, isError }
+//   块同样按工具结果处理。
 // 转换纪律：DSH 文本/推理块原样搬进 hana 内容项；tool-call 的 arguments 是 JSON **字符串**，
-// 需 parse 成对象（失败回落 {}）；tool-result 拆成独立 toolResult 消息（toolName 从同批
+// 需 parse 成对象（失败回落 {}）；工具结果转成独立 toolResult 消息（toolName 从同批
 // 前置 assistant 的 tool-call 反查）；图片块必须已解析为 base64（images 参数），缺失抛错。
 // 零依赖纯函数（node --test 可直接 import）。抛错带 .code 供 adapter 映射 LlmError。
 
+/** 该消息承载工具结果：role:"tool" 消息，或 user 消息 content 内嵌的 tool-result 块。 */
 export function isToolResultMessage(message) {
-  return (
-    message &&
-    message.role === "user" &&
-    Array.isArray(message.content) &&
-    message.content.some((b) => b && b.type === "tool-result")
-  );
+  if (!message || !Array.isArray(message.content)) return false;
+  if (message.role === "tool") return true;
+  return message.role === "user" && message.content.some((b) => b && b.type === "tool-result");
 }
 
 /** 预扫描 assistant 消息的 tool-call 块：callId → toolName（toolResult 反查用）。 */
@@ -126,6 +126,24 @@ function textBlockToHana(b) {
 }
 
 /**
+ * 工具结果的内层内容块 → hana toolResult content 项。
+ * @param blocks DSH ToolResultBlock.content（text/image）
+ * @param images 已解析的图片字节表
+ * @returns hana toolResult content 项（空内容落一个空文本项）
+ */
+function toolResultContent(blocks, images) {
+  const inner = Array.isArray(blocks) ? blocks : [];
+  const out: any[] = [];
+  for (const ib of inner) {
+    if (!ib) continue;
+    if (ib.type === "image") out.push(normalizeImage(ib, images));
+    else if (ib.type === "text") out.push(textBlockToHana(ib));
+  }
+  if (out.length === 0) out.push({ type: "text", text: "" });
+  return out;
+}
+
+/**
  * DSH 消息数组 → hana models.stream 消息数组。
  * @param {object} o { messages: DSH Message[], images: Map<string,{data,mimeType}>|null }
  * @returns {{ messages: Array, systemPrompt?: string }}
@@ -147,6 +165,18 @@ export function toHanaMessages({ messages, images }) {
       if (content.length > 0) out.push({ role: "assistant", content });
       continue;
     }
+    // tool：DSH 工具结果消息（role:"tool"，见 createToolResultMessage）
+    if (m.role === "tool") {
+      const callId = String(m.toolCallId ?? (m.source && m.source.callId) ?? "");
+      out.push({
+        role: "toolResult",
+        toolCallId: callId,
+        toolName: toolNames.get(callId) || "tool",
+        content: toolResultContent(m.content, images),
+        isError: m.isError === true,
+      });
+      continue;
+    }
     // user（可能携带 tool-result / 文本 / 图片）
     if (m.role === "user") {
       const contentBlocks = Array.isArray(m.content) ? m.content : [];
@@ -161,19 +191,12 @@ export function toHanaMessages({ messages, images }) {
             textItems.length = 0;
             imageItems.length = 0;
           }
-          const inner = Array.isArray(b.content) ? b.content : [];
-          const resultContent: any[] = [];
-          for (const ib of inner) {
-            if (!ib) continue;
-            if (ib.type === "image") resultContent.push(normalizeImage(ib, images));
-            else if (ib.type === "text") resultContent.push(textBlockToHana(ib));
-          }
-          if (resultContent.length === 0) resultContent.push({ type: "text", text: "" });
+          const callId = String(b.toolCallId ?? "");
           out.push({
             role: "toolResult",
-            toolCallId: String(b.toolCallId ?? ""),
-            toolName: toolNames.get(String(b.toolCallId ?? "")) || "tool",
-            content: resultContent,
+            toolCallId: callId,
+            toolName: toolNames.get(callId) || "tool",
+            content: toolResultContent(b.content, images),
             isError: b.isError === true,
           });
           continue;

@@ -43,7 +43,36 @@ test("assistant 历史：文本/推理/tool-call → hana assistant content（�
   assert.equal(content[2].thoughtSignature, "sig-thought");
 });
 
-test("tool-result 消息：拆为独立 toolResult（toolName 反查 + content 数组 + isError）", () => {
+test("tool 消息（DSH 形态）：转独立 toolResult（toolName 反查 + content 数组 + isError）", () => {
+  const msgs = [
+    { role: "assistant", content: [{ type: "tool-call", id: "c1", name: "read", arguments: "{}" }], source: { kind: "model", provider: "p", model: "m" } },
+    { role: "tool", source: { kind: "tool", callId: "c1" }, toolCallId: "c1", content: [{ type: "text", text: "ok" }], isError: false },
+  ];
+  const { messages } = toHanaMessages({ messages: msgs, images: null });
+  assert.equal(messages.length, 2);
+  const tr = messages[1];
+  assert.equal(tr.role, "toolResult");
+  assert.equal(tr.toolCallId, "c1");
+  assert.equal(tr.toolName, "read");
+  assert.deepEqual(tr.content, [{ type: "text", text: "ok" }]);
+  assert.equal(tr.isError, false);
+  assert.equal(isToolResultMessage(msgs[1]), true);
+});
+
+test("tool 消息：isError 透传、callId 缺 toolCallId 时读 source.callId、空内容落空文本项", () => {
+  const msgs = [
+    { role: "assistant", content: [{ type: "tool-call", id: "c9", name: "bash", arguments: "{}" }], source: { kind: "model", provider: "p", model: "m" } },
+    { role: "tool", source: { kind: "tool", callId: "c9" }, content: [], isError: true },
+  ];
+  const { messages } = toHanaMessages({ messages: msgs, images: null });
+  const tr = messages[1];
+  assert.equal(tr.toolCallId, "c9");
+  assert.equal(tr.toolName, "bash");
+  assert.equal(tr.isError, true);
+  assert.deepEqual(tr.content, [{ type: "text", text: "" }]);
+});
+
+test("兼容形态：user 消息内嵌的 tool-result 块同样拆为独立 toolResult", () => {
   const msgs = [
     { role: "assistant", content: [{ type: "tool-call", id: "c1", name: "bash", arguments: "{}" }], source: { kind: "model", provider: "p", model: "m" } },
     { role: "user", content: [{ type: "tool-result", toolCallId: "c1", content: [{ type: "text", text: "ok" }], isError: false }], source: { kind: "tool", callId: "c1" } },
