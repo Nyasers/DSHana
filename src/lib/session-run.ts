@@ -80,12 +80,15 @@ export function normalizeCreateSend({ action, input }: { action?: unknown; input
   };
 }
 
+/** 会话模型选择：provider/model 必填，推理强度可选（不传 = 由 DSH 决定）。 */
+type ModelSelection = { provider: string; model: string; reasoningEffort?: string };
+
 /**
  * selectModel 载荷组装（纯函数）：显式传了 provider/model/effort 任一时需要；
  * 只传其一/只传 effort 时另一侧从 DSH 默认模型（settings.yaml agent-default-model）补齐；
  * 补不出且确需选择时报错（沿用 v1 文案语义）。全不传返回 null（不随请求带模型）。
  */
-export function resolveModelSelection(parsed, dshHome) {
+export function resolveModelSelection(parsed, dshHome): ModelSelection | null {
   const { provider: p, model: m, reasoningEffort: e } = parsed || {};
   if (!p && !m && !e) return null;
   let provider = p;
@@ -178,7 +181,7 @@ async function waitTaskTerminalWithTimeout(ctx, taskId, sessionId, timeoutSec, l
 // session.create resume（{ sessionId, cwd }）；(b) 活跃/空闲在 DSH agent Map（list 不含）
 // → 直接 prompt（无 session.create）；list 也不含 = 会话不存在（prompt admission 会以
 // session/not-found 报错）。
-async function establishSession(ctx, base, parsed, log, modelSelection = null) {
+async function establishSession(ctx, base, parsed, log, modelSelection: ModelSelection | null = null) {
   const withModel = modelSelection ? { model: modelSelection } : {};
   if (parsed.action === "create") {
     const createPayload = {

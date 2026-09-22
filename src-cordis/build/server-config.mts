@@ -38,7 +38,7 @@ async function loadRspack() {
     const coreDir = join(envDir, "node_modules", "@rspack", "core");
     const pkg = JSON.parse(fs.readFileSync(join(coreDir, "package.json"), "utf8"));
     const dot = pkg.exports?.["."];
-    let entry = null;
+    let entry: string | null = null;
     if (typeof dot === "string") entry = dot;
     else if (dot && typeof dot === "object") entry = dot.default ?? dot.import ?? dot.require ?? null;
     const mod = await import(pathToFileURL(join(coreDir, entry || pkg.main || "dist/index.js")).href);
@@ -124,7 +124,7 @@ export async function buildServerBundle({ id, pkgDir, outDir, entry = "src/index
     devtool: false,
     stats: "errors-warnings",
   });
-  await new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     compiler.run((err, stats) => {
       if (err) return reject(err);
       if (!stats || stats.hasErrors()) {

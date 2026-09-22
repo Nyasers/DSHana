@@ -581,7 +581,7 @@ const rawArgv = process.argv.slice(2);
  * 成功就绪（OK）不走这里：进程由信号/断连驱动 shutdown() 退出。
  */
 const exitWith = (code) => {
-  try { process.disconnect(); } catch { /* 无 IPC 通道（如直接 node 运行） */ }
+  try { process.disconnect?.(); } catch { /* 无 IPC 通道（如直接 node 运行） */ }
   process.exit(code);
 };
 main(rawArgv).then((code) => {

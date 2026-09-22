@@ -86,7 +86,7 @@ export function duplicateCssClasses(built) {
       byClass.get(c.className).push(`${b.short}:${c.file}`);
     }
   }
-  const problems = [];
+  const problems: string[] = [];
   for (const [className, sources] of byClass) {
     const distinct = [...new Set(sources)];
     if (distinct.length > 1) problems.push(`类名 ${className} 由多个源文件生成：${distinct.join(" / ")}`);
@@ -251,7 +251,12 @@ export async function buildIntegrations(integrations, { tag, mirrorDir = MIRROR,
       throw new Error(`integration ${short}: halves 既没 client 也没 server（没东西可编译）`);
     }
 
-    let clientArtifact = null;
+    /** client 半的编译结果（集成只声明 server 半时是 null）。 */
+    let clientArtifact: {
+      bytes: number;
+      externals: string[];
+      cssClasses: Array<{ className: string; local: string; scope: string; file: string }>;
+    } | null = null;
     if (wantClient) {
       // 3a) externals = 原版 bundle 自己的 require 集合。
       //    例外：client 半只有类型导入的包（如 dsh-client-hmr）——原版产物里**零 require**。
@@ -300,7 +305,7 @@ export async function buildIntegrations(integrations, { tag, mirrorDir = MIRROR,
     }
 
     // 4c) 编译 server 半（可选）：上游 api 包发布的是单文件 ESM bundle，重打姿势见 server-config.mts。
-    let serverArtifact = null;
+    let serverArtifact: { file: string; bytes: number } | null = null;
     if (serverDecl) {
       const entry = String(serverDecl.entry || "src/index.ts");
       if (!existsSync(join(stage, entry))) throw new Error(`integration ${short}: server 入口不存在（${entry}）`);
@@ -339,7 +344,7 @@ export async function buildIntegrations(integrations, { tag, mirrorDir = MIRROR,
     manifest.version = patchVersion(manifest.version);
     writeFileSync(join(out, "package.json"), JSON.stringify(manifest, null, 2));
 
-    const parts = [];
+    const parts: string[] = [];
     if (clientArtifact) parts.push(`client.js ${clientArtifact.bytes}B，externals ${clientArtifact.externals.length} 个`);
     if (serverArtifact) parts.push(`${serverArtifact.file} ${serverArtifact.bytes}B`);
     log(`[integrations] ${short}: ${pkg}@${manifest.version} 编译完成（${parts.join("；")}）`);

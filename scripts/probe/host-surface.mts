@@ -30,12 +30,12 @@ const value = (name) => {
   return at >= 0 ? argv[at + 1] : undefined;
 };
 const valuesOf = (name) => {
-  const out = [];
+  const out: string[] = [];
   for (let i = 0; i < argv.length; i += 1) if (argv[i] === name && argv[i + 1]) out.push(argv[i + 1]);
   return out;
 };
 
-function fail(code, message) {
+function fail(code, message): never {
   console.error("[host-surface] " + message);
   process.exit(code);
 }
@@ -48,7 +48,7 @@ const context = Number(value("--context") || 220);
 function newestBundle() {
   const root = join(home, "artifacts", "server");
   if (!existsSync(root)) return null;
-  const found = [];
+  const found: Array<{ file: string; at: number }> = [];
   for (const entry of readdirSync(root)) {
     const file = join(root, entry, "bundle", "index.js");
     if (existsSync(file)) found.push({ file, at: statSync(file).mtimeMs });
@@ -80,7 +80,8 @@ async function appBus() {
 
 /** 在宿主 bundle 里找字面。 */
 function look(needles) {
-  const bundle = value("--bundle") ? resolve(value("--bundle")) : newestBundle();
+  const bundleArg = value("--bundle");
+  const bundle = bundleArg ? resolve(bundleArg) : newestBundle();
   if (!bundle || !existsSync(bundle)) {
     fail(2, "找不到宿主 server bundle（用 --bundle 指定，或确认 " + home + " 下有 artifacts/server/*/bundle/index.js）");
   }

@@ -57,7 +57,7 @@ export function declareInstallationPlugins(nodeModulesDir) {
     throw new Error(`${BUNDLE_PACKAGE} 不声明 dsh.bundle.patch，不是 bundle 层：${manifestPath}`);
   }
   const dependencies = { ...(manifest.dependencies ?? {}) };
-  const declared = [];
+  const declared: string[] = [];
   for (const name of plugins) {
     const key = `${PLUGINS_SCOPE}/${name}`;
     const spec = `file:../../${key}`;

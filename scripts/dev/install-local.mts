@@ -22,6 +22,7 @@ import { createHash } from "node:crypto";
 import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { errText } from "../shared/err-text.mts";
 // 仅为加载 Node 版本断言（本入口以 TypeScript 直跑，依赖原生类型剥离；仓库纪律：每个 CLI 入口都得触达它）
 import "../shared/root.mts";
 
@@ -32,8 +33,8 @@ const value = (name) => {
   return at >= 0 ? argv[at + 1] : undefined;
 };
 
-/** 参数/环境问题（退出码 2）或运行失败（退出码 1）。 */
-function fail(code, message) {
+/** 参数/环境问题（退出码 2）或运行失败（退出码 1）。return 类型是 never：调用点靠它完成收窄。 */
+function fail(code, message): never {
   console.error("[install-local] " + message);
   process.exit(code);
 }
@@ -65,7 +66,7 @@ const log = (...args) => { if (!quiet) console.log("[install-local]", ...args); 
  * @param {number} [timeoutMs] AbortSignal 超时。
  * @returns {Promise<any>} 解析后的 JSON。
  */
-async function api(method, path, body, timeoutMs = 1800000) {
+async function api(method, path, body, timeoutMs = 1800000): Promise<any> {
   const res = await fetch(base + path, {
     method,
     headers: {
@@ -76,7 +77,7 @@ async function api(method, path, body, timeoutMs = 1800000) {
     signal: AbortSignal.timeout(timeoutMs),
   });
   const text = await res.text();
-  let parsed = null;
+  let parsed: any = null;
   try { parsed = text ? JSON.parse(text) : null; } catch { /* 非 JSON 原样带回 */ }
   if (!res.ok) {
     const detail = parsed ? JSON.stringify(parsed) : text.slice(0, 400);
@@ -134,12 +135,13 @@ async function main() {
   for (;;) {
     attempt += 1;
     await sleep(attempt === 1 ? 2000 : 5000);
-    let state = null;
+    // boot-state 形状由 App 侧决定（phase/ready/service/error/note），这里只做转发展示。
+    let state: any = null;
     try {
       const boot = await api("GET", "/api/apps/" + appId + "/routes/" + appId + "/boot-state", undefined, 20000);
       state = boot && boot.state ? boot.state : null;
     } catch (e) {
-      log("  第 " + attempt + " 次：boot-state 取不到（" + e.message + "）");
+      log("  第 " + attempt + " 次：boot-state 取不到（" + errText(e) + "）");
     }
     if (state) {
       log("  第 " + attempt + " 次：phase=" + state.phase + " ready=" + state.ready
