@@ -239,6 +239,33 @@ test("同会话续发：旧桥终态后绑定换代，新任务的终态仍能�
   stop();
 });
 
+test("同会话续发：同一 tick 内两个终态帧只换一条桥，不重复结算", async () => {
+  const { tasks, calls, fire, stop } = rebindHarness();
+
+  fire("session/event", { id: SID_REBIND }, turnEnd);
+  await tick();
+  assert.deepEqual(calls.completed.map((c) => c.taskId), ["app:dshana:t1"]);
+
+  tasks.store.set("app:dshana:t2", {
+    taskId: "app:dshana:t2",
+    status: "running",
+    metadata: { dsh: { action: "send", sessionId: SID_REBIND, rpcId: "r_2" } },
+    createdAt: 100,
+    updatedAt: 100,
+  });
+
+  // 两条终态帧在同一个 tick 内到达：换代判定 await 期间会交错，
+  // 换代必须是原子的，否则同一轮会建出两条桥各自结算一次。
+  fire("session/event", { id: SID_REBIND }, turnEnd);
+  fire("api-session/status", SID_REBIND, false);
+  await tick();
+
+  const t2 = calls.completed.filter((c) => c.taskId === "app:dshana:t2");
+  assert.equal(t2.length, 1, "同一个新任务只能结算一次");
+  assert.equal(calls.failed.length, 0);
+  stop();
+});
+
 test("同会话迟到帧：绑定未换代时旧桥不重建，不重复结算", async () => {
   const { calls, fire, stop } = rebindHarness();
 

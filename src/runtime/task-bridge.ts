@@ -460,12 +460,22 @@ export function startTaskBridge({
   /**
    * 帧分发：一条桥只服务一个任务。已终态的桥若发现宿主侧该会话改绑到新任务
    * （同一会话上 reply 续发），就让位换代，本帧交给新桥处理。
+   * 换代判定要 await（读绑定），期间可能有第二个帧进来：删前先确认 map 里
+   * 仍是自己查看的那条，否则复用别人已换上的新桥，否则同一轮会建出两条桥
+   * 各自结算一次。
    */
   const dispatchFrame = async (frame: DshEventFrame) => {
     let b = bridges.get(frame.sessionId);
-    if (b && b.settled && (await b.isSuperseded())) {
-      bridges.delete(frame.sessionId);
-      b = undefined;
+    if (b && b.settled) {
+      const inspected = b;
+      if (await inspected.isSuperseded()) {
+        if (bridges.get(frame.sessionId) === inspected) {
+          bridges.delete(frame.sessionId);
+          b = undefined;
+        } else {
+          b = bridges.get(frame.sessionId);
+        }
+      }
     }
     if (!b) {
       pruneSettled();
