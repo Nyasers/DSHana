@@ -48,6 +48,14 @@ export const MUX_CHUNK_KIND_ACK = 2;
 export const MUX_CHUNK_QUERY = "dshanaMuxChunks";
 export const MUX_CHUNK_QUERY_VALUE = "1";
 
+/**
+ * 闸门票面（页面在 mux URL 上声明；中继取走后不上上游 DSH）。
+ * 页面带上「钉住的会话 + 对应的宿主任务」，中继据此只让活跃任务的流建起来，
+ * 任务失活即拒建并断开活流（执行侧见 src/runtime/bridge.ts 的闸门段）。
+ */
+export const MUX_GATE_SID_QUERY = "dshanaSid";
+export const MUX_GATE_TASK_QUERY = "dshanaTask";
+
 const MAGIC_LEN = MUX_CHUNK_MAGIC.length;
 const CHUNK_HEADER_LEN = MAGIC_LEN + 2;
 const ACK_LEN = MAGIC_LEN + 1 + 4;

@@ -367,6 +367,19 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
     }
     startInjection(s.proxyPrefix, s.runtimeId);
   }
+  /**
+   * 卡页的闸门票面（工具出卡时写进查询串：sid = 钉住的 DSH 会话，tid = 对应的宿主任务）。
+   * 有票的页面把票面带到 mux URL 上，中继据此只让活跃任务的流建起来（失活即拒建并断开，
+   * 见 src/runtime/bridge.ts）。无票（主卡 / FP / 直开页）不闸。
+   */
+  function cardTicket(): { sessionId: string; taskId: string } | null {
+    try {
+      const q = new URLSearchParams(location.search);
+      const sessionId = String(q.get("sid") || "").trim();
+      const taskId = String(q.get("tid") || "").trim();
+      return sessionId || taskId ? { sessionId, taskId } : null;
+    } catch (e) { return null; }
+  }
   function startInjection(prefix, runtimeId) {
     if (injected.started) return;
     injected.started = true;
@@ -383,6 +396,8 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
       bridge: SURFACE_API,
       // 目录桥要的宿主 SDK：它是本文件头顶那个 import（不在 globalThis 上，DSH 侧自己也拿不到）。
       sdk: hana,
+      // 闸门票面：带票的页面在 mux URL 上带 sid/tid，中继按「任务还活跃」放行或拒建。
+      gate: cardTicket(),
     });
     // 取 index：privatePrefix 已是完整代理路径（含 _surface 票据，宿主路由直认），用原生同源
     // fetch——hana.api.fetch 的入参是「App 路由相对路径」（会再拼 /api/apps/<id>/routes/），
@@ -419,9 +434,8 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
   var CARD_FREEZE_GRACE_MS = 5000;
   var CARD_FREEZE_MAX_MS = 20000;
   function mountCardStrip() {
-    let pinned: string | null = null;
-    try { pinned = new URLSearchParams(location.search).get("sid"); } catch (e) { pinned = null; }
-    const sid = pinned !== null && pinned.trim() ? pinned.trim() : "";
+    const ticket = cardTicket();
+    const sid = ticket ? ticket.sessionId : "";
     if (!sid) return;
     const root = document.getElementById("root");
     if (root === null || root.parentNode === null) return;

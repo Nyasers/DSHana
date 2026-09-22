@@ -39,6 +39,7 @@ import { connectAppRuntime } from "@hana/app-sdk";
 import { startTaskBridge } from "#/runtime/task-bridge.ts"; // DSH 事件 → Hana task 回投
 import { startApprovalBridge } from "#/runtime/approval-bridge.ts"; // DSH 审批 → Hana requestApproval / watch 对账
 import { createTaskBindingIndex, publishTaskBindingIndex } from "#/lib/task-binding.ts"; // 绑定事实源 = 宿主任务记录
+import { recordIsTerminal, TERMINAL_STATUSES } from "#/lib/watch-sse.ts"; // 闸门判据：宿主任务终态
 import { PROVIDER_RELOAD_GLOBAL_KEY } from "#/lib/provider-hooks.ts"; // 目录重载钩子键（provider 插件装）
 import { resolveInstallRoot, locateDsh } from "#/runtime/locate.ts";
 
@@ -417,6 +418,24 @@ export async function main(argv: string[]): Promise<number> {
     await shutdown("auth-failed", EXIT.PORT);
     return EXIT.PORT;
   }
+  // 绑定事实源 = 宿主任务记录的 metadata.dsh：中继闸门与两桥共用同一个索引（各自进程内短 TTL
+  // 缓存，模型请求热路径不至于每请求往返宿主）。读取失败在各自读点显式处理（fail-closed）。
+  const bindings = createTaskBindingIndex(hana.tasks);
+
+  // 闸门（卡的流）：带票（dshanaSid / dshanaTask）的 WS 只在对应宿主任务还活跃时放行/留活——
+  // 任务失活就断开并拒建（中继侧执行，见 bridge.ts）。无票不闸（主卡 / FP / 直开页）；读不出
+  // 记录按放行（宁多活一条流，不误杀在用会话）。
+  const streamGate = async (ticket: { sessionId: string; taskId: string }): Promise<boolean> => {
+    try {
+      if (ticket.taskId) return !recordIsTerminal(await hana.tasks.get(ticket.taskId));
+      const entry = await bindings.bySession(ticket.sessionId, { fresh: true });
+      if (!entry) return true; // 无绑定（用户在 DSH UI 里自建的会话）：没有 task 可判，不闸
+      return !TERMINAL_STATUSES.includes(String(entry.status));
+    } catch (e) {
+      info("stream-gate", "闸门判定失败（放行）：" + errText(e));
+      return true;
+    }
+  };
   try {
     state.bridge = await startDshBridge({
       port: opts.bridgePort,
@@ -424,6 +443,7 @@ export async function main(argv: string[]): Promise<number> {
       controlKey: opts.controlKey,
       upstreamOrigin,
       upstreamCookie: dshCookie,
+      gate: streamGate,
       // 控制面：App 工具（controller.invoke）经宿主 ctx.runtime.fetch(runtimeId, "/_control") 到达
       // 这里，由本进程带 cookie 转发到 DSH /api（App 侧不直接摸 DSH HTTP，也不需 network 到中继）。
       // 参数 = 客户端信封本身（buildClientRequest 产物，含 rpcId/method/payload）。
@@ -491,9 +511,6 @@ export async function main(argv: string[]): Promise<number> {
   }
   // 反向 session.cancel 经中继（带 bridgeKey），不走免鉴权的 DSH 端口。
   const serviceBaseUrl = "http://127.0.0.1:" + opts.bridgePort;
-  // 绑定事实源 = 宿主任务记录的 metadata.dsh：两桥共用同一个索引（各自进程内短 TTL 缓存，
-  // 模型请求热路径不至于每请求往返宿主）。读取失败在各自读点显式处理（fail-closed）。
-  const bindings = createTaskBindingIndex(hana.tasks);
   // provider 是 cordis 子插件 bundle，与本 runtime bundle 同进程但不能互相 import：
   // 绑定索引经 globalThis 约定交付（键名见 lib/task-binding.ts），供模型请求的身份判定读取。
   state.stopBindings = publishTaskBindingIndex(bindings);

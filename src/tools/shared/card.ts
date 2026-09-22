@@ -56,6 +56,8 @@ export function sessionCard({ action, sessionId, taskId, delivery, cwd }: Sessio
     "ts=" + now,
     "at=" + now,
     "sid=" + encodeURIComponent(sessionId),
+    // 闸门票面：卡页把宿主任务一并带到查询串，转给 mux URL 供中继按「任务是否活跃」放行。
+    "tid=" + encodeURIComponent(taskId),
   ];
   if (cwd) params.push("cwd=" + encodeURIComponent(cwd));
   const what = WHAT[action] || WHAT.open;

@@ -20,6 +20,8 @@ import {
   ChunkAssembler,
   MUX_CHUNK_QUERY,
   MUX_CHUNK_QUERY_VALUE,
+  MUX_GATE_SID_QUERY,
+  MUX_GATE_TASK_QUERY,
   decodeMuxControlFrame,
   decodeUtf8,
   encodeAck,
@@ -304,12 +306,20 @@ class Inbox {
 }
 
 /** 经 api/remote.mux WS 复用多条远端流的载体（对齐样例的 DshStreamMux）。 */
-export function createStreamMux(privateBase, WebSocketCtor = window.WebSocket) {
+export function createStreamMux(
+  privateBase: any,
+  WebSocketCtor: any = window.WebSocket,
+  gate: { sessionId?: string; taskId?: string } | null = null,
+) {
   const wsUrl = new URL("api/remote.mux", privateBase);
   wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
   // 声明本页支持承载面分片：中继据此把超限帧按尺寸切开（宿主的 1 MiB 上游帧上限）。
   // 不声明就走原样透传（约定见 lib/mux-chunks.ts）。
   wsUrl.searchParams.set(MUX_CHUNK_QUERY, MUX_CHUNK_QUERY_VALUE);
+  // 闸门票面：卡页带上「钉住的会话 + 对应的宿主任务」，中继据此只让活跃任务的流建起来
+  // （任务失活即拒建并断开活流，见 src/runtime/bridge.ts 的闸门段）。无票页面（主卡 / FP）不带。
+  if (gate && gate.sessionId) wsUrl.searchParams.set(MUX_GATE_SID_QUERY, String(gate.sessionId));
+  if (gate && gate.taskId) wsUrl.searchParams.set(MUX_GATE_TASK_QUERY, String(gate.taskId));
   let socket: WebSocket | null = null;
   const streams = new Map<string, any>();
   let nextId = 0;
@@ -637,11 +647,11 @@ export interface DshTransport {
 
 export function installTransport(
   privateBase: URL,
-  { role, bridge, sdk }: { role?: string; bridge?: Record<string, unknown>; sdk?: any } = {},
+  { role, bridge, sdk, gate }: { role?: string; bridge?: Record<string, unknown>; sdk?: any; gate?: { sessionId?: string; taskId?: string } | null } = {},
 ): DshTransport {
   // 请求接管先装：它必须早于任何 DSH 侧代码执行（注入 index 前调用本函数）。
   const restoreTakeover = installRequestTakeover(privateBase);
-  const mux = createStreamMux(privateBase);
+  const mux = createStreamMux(privateBase, undefined, gate || null);
   const runtimeFetch = createRuntimeFetch(privateBase);
   window.__DSH_TRANSPORT__ = {
     fetch: runtimeFetch,
