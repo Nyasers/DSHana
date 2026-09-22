@@ -84,6 +84,10 @@ export function resolveReasoningEffort(explicit) {
 // 应用设置的缺省值（单位：秒）：由代码持有。
 // 设置页是 App 自己的页（contributes.settings.ui.route），manifest 不声明 schema，运行时缺省
 // 就取这里（30 / 1800）；设置页读写经 App 后端路由直接落 dataDir/settings.json。
+import { SESSION_CARD_DISPLAYS, SESSION_CARD_DISPLAY_DEFAULT } from "#/lib/card-display-modes.ts";
+/** 会话流卡档位（词表与缺省在 lib/card-display-modes.ts，这里转出去给服务端调用方）。 */
+export { SESSION_CARD_DISPLAYS };
+
 export const APP_SETTING_DEFAULTS = {
   approvalTimeoutSec: 30,
   defaultTimeoutSec: 1800,
@@ -94,6 +98,10 @@ export const APP_SETTING_DEFAULTS = {
   sessionModelProvider: "",
   sessionModelModel: "",
   sessionModelReasoningEffort: "",
+  // 会话流卡的展示档位（never / open-only / all）：卡是一次会话一张的 iframe，reply 一发一张
+  // 会在聊天流里叠起来，是本 App 最贵的那类可见物。open-only = 一个会话只留一张（卡页按 sid
+  // 跟踪整段会话，所以那唯一一张仍然活），见 lib/card-display.ts。
+  sessionCardDisplay: SESSION_CARD_DISPLAY_DEFAULT,
 };
 
 function msToSec(ms) {

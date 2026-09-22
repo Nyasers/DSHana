@@ -24,6 +24,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { isAbsolute, join, normalize } from "node:path";
 import { appDataDir, getAppRuntime } from "#/lib/app-runtime.ts";
 import { APP_SETTING_DEFAULTS, resolveApprovalTimeoutSec, resolveDefaultTimeoutSec } from "#/lib/config.ts";
+import { SESSION_CARD_DISPLAYS } from "#/lib/card-display-modes.ts";
 
 export const SETTINGS_VERSION = 1;
 export const SOURCE_MODES = Object.freeze(["private", "shared"]);
@@ -42,6 +43,7 @@ export const SETTINGS_KEYS = Object.freeze([
   "sessionModelProvider",
   "sessionModelModel",
   "sessionModelReasoningEffort",
+  "sessionCardDisplay",
 ]);
 export const DEFAULT_SETTINGS = Object.freeze({
   mode: "private",
@@ -53,6 +55,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   sessionModelProvider: APP_SETTING_DEFAULTS.sessionModelProvider,
   sessionModelModel: APP_SETTING_DEFAULTS.sessionModelModel,
   sessionModelReasoningEffort: APP_SETTING_DEFAULTS.sessionModelReasoningEffort,
+  sessionCardDisplay: APP_SETTING_DEFAULTS.sessionCardDisplay,
 });
 /** 会话模型模式：caller = 按调用方角色卡（缺省），custom = 用固定的一条。 */
 export const SESSION_MODEL_MODES = Object.freeze(["caller", "custom"]);
@@ -69,6 +72,19 @@ export const privateHomeOf = (dataDir) => join(dataDir, PRIVATE_HOME_NAME);
 export function normalizeHomeForId(home, platform = process.platform) {
   const p = String(home).replace(/\\/g, "/").replace(/\/+$/, "");
   return platform === "win32" ? p.toLowerCase() : p;
+}
+
+/**
+ * 会话流卡的展示档位（工具回执里的 details.card）：三选一，缺省沿用 APP_SETTING_DEFAULTS。
+ * 判定与词表在 lib/card-display.ts（那边的归一函数与本处同口径，本处多的是"写入口的拒绝"）。
+ */
+function normalizeCardDisplay(input) {
+  const raw = input.sessionCardDisplay;
+  if (raw === undefined || raw === null) return { sessionCardDisplay: APP_SETTING_DEFAULTS.sessionCardDisplay };
+  if (!SESSION_CARD_DISPLAYS.includes(raw)) {
+    throw new Error("会话流卡档位只能是 " + SESSION_CARD_DISPLAYS.join(" / ") + "（收到 " + JSON.stringify(raw) + "）");
+  }
+  return { sessionCardDisplay: raw };
 }
 
 const PROFILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -153,9 +169,9 @@ export function validateSettings(input) {
       throw new Error("shared 模式必须给出 DSH 数据目录（非空字符串，不含 NUL）");
     }
     if (!isAbsolute(input.path)) throw new Error("shared 目录必须是绝对路径（收到 " + input.path + "）");
-    return { mode: "shared", path: normalize(input.path), profile, ...normalizeTimeouts(input), ...normalizeSessionModel(input) };
+    return { mode: "shared", path: normalize(input.path), profile, ...normalizeTimeouts(input), ...normalizeSessionModel(input), ...normalizeCardDisplay(input) };
   }
-  return { mode: "private", path: null, profile, ...normalizeTimeouts(input), ...normalizeSessionModel(input) };
+  return { mode: "private", path: null, profile, ...normalizeTimeouts(input), ...normalizeSessionModel(input), ...normalizeCardDisplay(input) };
 }
 
 /**
