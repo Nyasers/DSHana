@@ -1,5 +1,46 @@
 # Changelog
 
+## [1.0.0-rc.18+dsh-0.1.7-alpha.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.17%2Bdsh-0.1.6-alpha.2...v1.0.0-rc.18%2Bdsh-0.1.7-alpha.2) (2026-09-22)
+
+### Features
+
+* **bridge:** 会话流卡加闸——带票的流只在宿主任务活跃时建/留 ([e472b03](https://github.com/Nyasers/DSHana/commit/e472b03ee2b3ab7509d9710a54ab8dd0ee0078ce))
+* **card:** 聊天流卡片档位（never / open-only / all），缺省一个会话一张 ([a2191c1](https://github.com/Nyasers/DSHana/commit/a2191c146c97fd7c8adfd2551709533b5e21ac3d))
+* **cordis:** 设置里的「模型」页随两个官方 adapter 一起停 ([aba5351](https://github.com/Nyasers/DSHana/commit/aba5351dd66e5e9976205af09e428ed6a6a4592a))
+* **cordis:** 停掉官方自带的两个 LLM adapter，模型路由一律由宿主提供 ([559c719](https://github.com/Nyasers/DSHana/commit/559c71939877c917746178862fe22bd466798399))
+* **dsh:** pin 0.1.6-alpha.2 → 0.1.7-alpha.1，14 个 overlay 按新上游 rebase ([8ebd9e3](https://github.com/Nyasers/DSHana/commit/8ebd9e3233c3c06f44f2e4fcb62b6d3284872ad1))
+* **dsh:** pin 0.1.7-alpha.1 → 0.1.7-alpha.2，2 个 overlay 按新上游 rebase ([3023ef0](https://github.com/Nyasers/DSHana/commit/3023ef0077c0536d07d6a37bd9a619945eb64e15))
+* **integrations:** 外观里的「跟随系统」改叫「跟随宿主」 ([0728027](https://github.com/Nyasers/DSHana/commit/0728027ed02ef02ef7251a4618a2fcfac750ff61))
+* **integrations:** FP 侧栏的面板行跨面打开到主卡 ([705c779](https://github.com/Nyasers/DSHana/commit/705c779aa41e114e58e5a8edeed364ac9ef4f553))
+* **model:** 会话模型按调用方角色卡补，App 设置可切「复用调用方 / 自定义模型」 ([54aa246](https://github.com/Nyasers/DSHana/commit/54aa2463808d9fa6c287237fe079383ade5a5cd3))
+* **model:** 会话模型随请求带上，自定义那条可配推理强度 ([6d20d85](https://github.com/Nyasers/DSHana/commit/6d20d8553af3e5b0b44d04f8e04b323249b369a3))
+* **model:** 默认模型按宿主事实对账，角色卡配的模型优先 ([fdb3111](https://github.com/Nyasers/DSHana/commit/fdb31118855a43ad7cad34f0c931eca5f5c4c97c))
+* **picker:** 目录弹窗改由宿主出，DSH 的 native 流程读壳页注入的桥 ([bb2f482](https://github.com/Nyasers/DSHana/commit/bb2f482b523a75ebbbc5d8402fd24299ae044d66))
+* **provider:** 宿主模型目录变更免重启跟随 ([10f85c1](https://github.com/Nyasers/DSHana/commit/10f85c1c0911d3e1bf3705451d5caae4561de9e7))
+* **runtime:** 吸收桌面壳的启动失败诊断保真 ([dea6668](https://github.com/Nyasers/DSHana/commit/dea666893535d85a49f0975714521de9f0623e78))
+* **theme:** 主题适配层落地（全量 token 映射 + 偏移档），修首帧黑屏与明暗错档 ([6e6ea80](https://github.com/Nyasers/DSHana/commit/6e6ea80e01a275ba76c2de848e40269e233acc85))
+
+### Bug Fixes
+
+* **dsh:** 目录选择器钉死 browse，不让 auto 在沙箱里挑 native ([1078fa6](https://github.com/Nyasers/DSHana/commit/1078fa63df68d0c67b706236775502f59803374e))
+* **integrations:** 会话模型字段补进生成的 RPC 校验表 ([870bba5](https://github.com/Nyasers/DSHana/commit/870bba5facf03a62949f308bc1eeb1d0835e654b))
+* **pack:** 交付树的 package.json 独立成文件，构建输入不进包 ([8235f4c](https://github.com/Nyasers/DSHana/commit/8235f4c587e4d45aee6c2e2056723a94ec14ffc1))
+* **picker:** 目录桥改从壳页传入宿主 SDK（它是模块导入，不在 globalThis 上） ([eabc5b4](https://github.com/Nyasers/DSHana/commit/eabc5b497678f00c3a41c657da162cebc4919068))
+* **provider:** 工具结果按 DSH 的 role:"tool" 消息转换 ([b6b7e2f](https://github.com/Nyasers/DSHana/commit/b6b7e2fb7da8301b0afab32d164f6e52cabf1860))
+* **runtime:** 失败路径真正退出，超时分支先读失败报告 ([30511bc](https://github.com/Nyasers/DSHana/commit/30511bc9b4cfc3a12222ea719010f5df56c49237))
+* **runtime:** profile-boot 认稳定入口，哈希产物只作回退 ([2ad4b49](https://github.com/Nyasers/DSHana/commit/2ad4b498fe51bf5963bde0d7fda19d7ccdc39d66))
+* **storage:** 卡片共享键不再随挂载累积，应用加载时回收陈旧键 ([fb0a1aa](https://github.com/Nyasers/DSHana/commit/fb0a1aaf2d8516a92d986a514b86fc5ec40e377d))
+* **task-bridge:** 桥按任务换代，同会话续发不再吞终态 ([1690e4b](https://github.com/Nyasers/DSHana/commit/1690e4bdfe41029ab8a1ce0ff37069c2ade16a21))
+* **task-bridge:** 桥换代改为原子，同一轮不重复建桥 ([5b9eb4b](https://github.com/Nyasers/DSHana/commit/5b9eb4b667f1be89eb65996d55c9520cfde2ed58))
+* **theme:** 两条 review 意见——不抹 presenter 的 color-scheme，依赖清单与编译同口径 ([fe2fd28](https://github.com/Nyasers/DSHana/commit/fe2fd2869d1e9ebd3f0cb0664c9422accb3d2155))
+* **types:** 三域 tsc 诊断收敛到 0 ([3b9babf](https://github.com/Nyasers/DSHana/commit/3b9babf5792811c9487818a97c6bce3cca9415cf))
+* **ui-session:** 会话选中的接收端改请视图所有者导航 ([71f976f](https://github.com/Nyasers/DSHana/commit/71f976f09aa0f4cba964b3bbd6aadb353af7f499))
+* **ui-session:** 期望的选中是这一面的不动点，列表每次变动都重新对齐 ([18b63db](https://github.com/Nyasers/DSHana/commit/18b63db4785f13a12a9185a26211b5ec5e502bf1))
+
+### Performance Improvements
+
+* **cancel,card:** 取消确认不进工具回调；会话终结的流卡断流冻结 ([37e59af](https://github.com/Nyasers/DSHana/commit/37e59afc8ad68fc5d90c4f02cbf34435995022e7))
+
 ## [1.0.0-rc.17+dsh-0.1.6-alpha.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.16%2Bdsh-0.1.5-rc.2...v1.0.0-rc.17%2Bdsh-0.1.6-alpha.2) (2026-09-21)
 
 ### Features
@@ -492,6 +533,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
