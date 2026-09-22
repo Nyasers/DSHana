@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// scripts/vendor/dsh.mts — 让 vendor/deepseek-harness 站在 package.json 声明版本对应的 dsh tag 上。
+// scripts/vendor/dsh.mts — 让 vendor/deepseek-harness 站在 packaging/package.json 声明版本对应的 dsh tag 上。
 //
 // 为什么 gitlink 与工作树 HEAD 都要对：build 的上游源走 `git show <tag>`（tag），类型解析
 // （mirrorPathEntries）走**工作树**。只对一条，就会重现「同一份上游被读成两个版本」那类
@@ -21,10 +21,10 @@ import { execSync } from "node:child_process";
 
 import { ROOT } from "../shared/root.mts";
 import { isDirectRun } from "../shared/run.mts";
-import { readPkg } from "../shared/version.mts";
+import { dshPin } from "../shared/version.mts";
 
 /** 一句话说明源 → 目标（derive 任务与 CLI 共用）。 */
-export const ABOUT = "package.json#dependencies[@deepseek-ai/dsh] → vendor/deepseek-harness 的 checkout";
+export const ABOUT = "packaging/package.json#dependencies[@deepseek-ai/dsh] → vendor/deepseek-harness 的 checkout";
 
 /** 读一条 git 输出（trim；失败返回 null）。 */
 function gitOut(cmd: string): string | null {
@@ -37,16 +37,16 @@ function gitOut(cmd: string): string | null {
 
 const short = (sha: string | null): string => (sha ? sha.slice(0, 12) : "（无）");
 
-/** package.json 声明的 dsh 版本对应的 tag 名（未声明则 null）。 */
+/** 交付面声明的 dsh 版本对应的 tag 名（未声明则 null）。 */
 function tagOf(): string | null {
-  const dep = readPkg("package.json")?.dependencies?.["@deepseek-ai/dsh"];
-  return typeof dep === "string" && dep ? "dsh-v" + dep : null;
+  const dep = dshPin();
+  return dep ? "dsh-v" + dep : null;
 }
 
 /** 只读检查：返回差异描述（空数组 = 一致）。 */
 export function inspect(): string[] {
   const tag = tagOf();
-  if (!tag) return ["package.json 未声明 dependencies['@deepseek-ai/dsh']"];
+  if (!tag) return ["packaging/package.json 未声明 dependencies['@deepseek-ai/dsh']"];
   // 用 refs/tags/ 全名：避免与同名分支歧义，也绕开 `^` 在 cmd 下是转义符的坑。
   const tagSha = gitOut(`git -C vendor/deepseek-harness rev-parse --verify --quiet refs/tags/${tag}`);
   if (!tagSha) return [`vendor/deepseek-harness 无 ${tag}（镜像未 fetch 到该 tag？）`];
@@ -63,7 +63,7 @@ export function inspect(): string[] {
 /** 修复：checkout 到 tag，并把 gitlink 更新进 index。 */
 export function repair(): void {
   const tag = tagOf();
-  if (!tag) throw new Error("package.json 未声明 dependencies['@deepseek-ai/dsh']");
+  if (!tag) throw new Error("packaging/package.json 未声明 dependencies['@deepseek-ai/dsh']");
   console.log(`[sync-vendor-dsh] git -C vendor/deepseek-harness checkout ${tag}`);
   execSync(`git -C vendor/deepseek-harness checkout ${tag}`, { cwd: ROOT, stdio: "inherit" });
   execSync("git add vendor/deepseek-harness", { cwd: ROOT, stdio: "inherit" });

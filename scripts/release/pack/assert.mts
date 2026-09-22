@@ -7,8 +7,14 @@
 import fs from "fs-extra";
 import { join } from "node:path";
 
-/** 交付树 package.json 允许出现的键（构建输入一律不进安装包）。 */
-export const PRODUCT_PACKAGE_KEYS = ["name", "type", "version"];
+/**
+ * 交付树 package.json 允许出现的键。
+ * name / type / version 是实体（version 由 derive 的 product-package 任务同步），dependencies 是
+ * 交付清单自己的运行时依赖声明：装机侧不跑 pnpm（依赖已物化进安装树），这个字段在运行期是惰性的，
+ * 留着只为「这包依赖什么」有据可查。其余（scripts / devDependencies / packageManager / imports /
+ * private）是构建面，不进包。
+ */
+export const PRODUCT_PACKAGE_KEYS = ["name", "type", "version", "dependencies"];
 
 /**
  * 交付树 package.json 校验：字段白名单 + 版本一致 + type: module。
@@ -28,7 +34,7 @@ export function assertProductPackage(outDir, version) {
   const extra = keys.filter((k) => !allowed.includes(k));
   if (extra.length || keys.length !== allowed.length) {
     throw new Error(
-      "交付树 package.json 字段不对：只允许 " + allowed.join("/") + "（多出 " + extra.join("/") + "）——构建入口字段不进安装包",
+      "交付树 package.json 字段不对：只允许 " + allowed.join("/") + "（多出 " + extra.join("/") + "）——构建面字段不进安装包",
     );
   }
   if (j.version !== version) {

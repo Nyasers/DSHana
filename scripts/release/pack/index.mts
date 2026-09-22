@@ -11,9 +11,10 @@
 // 产出：releases/dshana-v<version>[-<target>].zip + .sha256。**zip 根 = 包根**：manifest.json、
 //   index.js、node_modules/、ui/ 等全部在 zip 根级，不得套一层目录（宿主安装时在包根读 manifest.json）。
 // 两个临时目录的分工（都在 _tmp/ 下，起手清残留、用完即清、收尾由 postpackage 钩子清）：
-//   · _tmp/pkg-root/<target>：依赖物化**工位**。要跑一次真 install，就得有个像独立项目的目录
-//     ——package.json + pnpm-lock.yaml + 为该目标生成的 pnpm-workspace.yaml（supportedArchitectures）
-//     三件套放进去跑 pnpm install --prod。隔离在 _tmp 下，仓库自身的 node_modules 与锁文件不被污染。
+//   · _tmp/pkg-root/<target>：依赖物化**工位**。要跑一次真 install，就得有个像独立项目的目录——
+//     交付面自带的三件（packaging/package.json + packaging/pnpm-lock.yaml + 按目标替换过
+//     supportedArchitectures 的 pnpm-workspace.yaml）落进去跑 `pnpm install --prod --frozen-lockfile`。
+//     隔离在 _tmp 下，仓库自身的 node_modules 与锁文件不被污染。
 //   · _tmp/pkg：交付**组装台**。只放要进包的东西（dist/ + 物化依赖树 + cordis + ui + manifest），
 //     不带 pnpm 的中间物（lockfile、workspace yaml、.modules.yaml 这些是构建输入，不是交付物）。
 //     把「工位」与「组装台」分开，就是不让构建输入混进安装包；组装出包后立即删。
@@ -58,7 +59,7 @@ const staticItems = [
   // manifest.json 与 skills 已随 src 域（src/manifest.json、src/skills/，build:src 产出
   // dist 副本），不再经根级静态复制
   // 注：package.json 也不在清单里：仓库那份带 scripts/devDependencies/packageManager/imports
-  // （构建入口），交付树只要 name/version/type 三件——见 product-package.mts。
+  // （构建入口），交付面那份（packaging/package.json，单独复制）才是包根要的——见 packaging/README.md。
   // 注：pnpm-workspace.yaml / pnpm-lock.yaml 不随包——安装侧不执行任何 pnpm install
   // （依赖已物化进包），两份文件在本流程里没有消费方
 ];
@@ -137,14 +138,16 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
   const pkgDir = join(pkgRoot, base); // 组装暂存目录（内容原样进 zip 根，此目录名不出现在包里）
   fs.removeSync(pkgDir);
   fs.copySync(distDir, pkgDir);
-  // 依赖树拷贝排除两处：
-  //  · node_modules/.bin —— 内容全为可执行入口软链，进 zip 跨机解压即断，宿主装机时
-  //    以 INSTALL_ARCHIVE_SYMLINK 直接拒收；仓库内无消费方（runtime 经 createRequire 解析包，
-  //    不经 .bin）。
-  //  · node_modules/.pnpm —— hoisted 布局下不生成虚拟存储，仅剩 lock.yaml 残留；
-  //    @deepseek-ai/dsh-app-boot 在顶层 node_modules，createRequire 直接命中，不触发 .pnpm 回退。
+  // 依赖树拷进包时剔掉 node_modules 下的点号条目——pnpm 自己的账本，不是依赖：
+  //  · .bin —— 内容全为可执行入口软链，进 zip 跨机解压即断，宿主装机时以 INSTALL_ARCHIVE_SYMLINK
+  //    直接拒收；仓库内无消费方（runtime 经 createRequire 解析包，不经 .bin）。
+  //  · .pnpm —— hoisted 布局下不生成虚拟存储，仅剩 lock.yaml 残留；@deepseek-ai/dsh-app-boot 在顶层
+  //    node_modules，createRequire 直接命中，不触发 .pnpm 回退。
+  //  · .pnpm-workspace-state-v1.json / .modules.yaml —— pnpm 的安装状态，里面记着**构建机的绝对
+  //    路径**（工位目录）与当次 allowBuilds 决定，只对装它的那台机器有意义。
+  // 依赖名不会以点开头，按这个口径一刀切比逐个列举稳。
   fs.copySync(modules, join(pkgDir, "node_modules"), {
-    filter: (srcPath) => !/[\/\\]node_modules[\/\\]\.(bin|pnpm)([\/\\]|$)/.test(srcPath),
+    filter: (srcPath) => !/[\/\\]node_modules[\/\\]\./.test(srcPath),
   });
   applyIntegrations(join(pkgDir, "node_modules"));
   // @dshana 子插件落进安装树的 node_modules（与 @deepseek-ai/* 同锚点）：DSH 的 runtime 解析模式

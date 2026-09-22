@@ -1,7 +1,7 @@
 # integrations/ — hana 对官方 DSH 包的集成层（样例路线）
 
 本目录承载「hana 对 DSH 的改动」，形态与官方样例 hana-dsh 一致：**薄集成贴上游版本**，
-不是自研插件接管上游角色。背景与验收见 `specs/current/hana-integrations/spec.md`。
+不是自研插件接管上游角色。背景与验收见 `specs/archived/hana-integrations-2026-09-12/spec.md`。
 
 ## 为什么要有这一层
 
@@ -24,7 +24,7 @@ integrations/<短名>/
 ```json
 {
   "package": "@deepseek-ai/dsh-client-ui-layout",
-  "upstreamVersion": "0.1.5-rc.2",
+  "upstreamVersion": "0.1.7-alpha.1",
   "upstreamDir": "packages/client/ui-layout",
   "files": [
     { "path": "src/client/index.ts", "upstreamSha256": "<写入时上游同名文件的 sha256>" }
@@ -36,7 +36,9 @@ integrations/<短名>/
 
 `node scripts/integrations/index.mts verify`（已接进 `pnpm run build`，在 build:src 之前）：
 
-1. **镜像版本一致**：`vendor/deepseek-harness` 必须含 tag `dsh-v<dependencies.@deepseek-ai/dsh>`；
+1. **镜像版本一致**：`vendor/deepseek-harness` 必须含 tag `dsh-v<版本>`，版本取自交付面清单
+   `packaging/package.json` 的 `dependencies["@deepseek-ai/dsh"]`（仓库根那份 devDependencies 里的
+   同名声明的版本必须与它一致，闸会当场比）；
 2. **overlay 未过期**：对每个 `files[].path`，重算**当前镜像该 tag 下同名文件**的 sha256，
    与清单里记录的比对。不一致 = 上游动过 → **构建失败**，并指出该 rebase 哪个文件、更新哪个哈希。
 
@@ -54,7 +56,7 @@ integrations/<短名>/
 
 - **只写 delta**：overlay 文件里除必要改动外不留私货，便于上游升级时人工比对。
 - **不改上游未涉及的包**。
-- 产物版本号带 `<上游版本>+dshana-<我们的干净版本>`（例 `0.1.5-rc.2+dshana-1.0.0-beta.5`）：
+- 产物版本号带 `<上游版本>+dshana-<我们的干净版本>`（例 `0.1.7-alpha.1+dshana-1.0.0-rc.18`）：
   安装树里一眼可见“这包被改过”、被哪个 dshana 版本改的。版本段只有一个来源——主
   `package.json`（合成在 `scripts/shared/version.mts`，与 derive/version 同一份）；
   清单里不写任何手写版本字段。

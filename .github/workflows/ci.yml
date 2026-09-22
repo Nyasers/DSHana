@@ -20,6 +20,9 @@ jobs:
           node-version-file: ".nvmrc"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # 派生文件闸：manifest / cordis 子插件版本 / 交付面清单与锁 / 镜像 paths 都是派生产物，
+      # 本地跑 `node scripts/derive/index.mts` 写回后要一并提交，这一步拦「忘了提交」。
+      - run: pnpm run derive:check
       - run: pnpm run build
       # 单测：139 例（node --test tests/，含 provider/task-bridge/watch-sse/cancel-chain/approval-bridge 等）
       - run: pnpm run test

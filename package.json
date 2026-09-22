@@ -2,7 +2,7 @@
   "name": "dshana",
   "version": "1.0.0-rc.17+dsh-0.1.6-alpha.2",
   "private": true,
-  "packageManager": "pnpm@12.3.4+sha512.961aa41fb077da3a04a441d9f8e15ebc0c96da8ef710b2eb67bf9ee7cb0610eabd48f1fd85f51cffe73846785fa0f87c56a3a872a1d893f8446741b5cce45457",
+  "packageManager": "pnpm@12.4.1+sha512.2e81e399d73fe8390dab25e06aa788ab7a5908248d2f5a370f82b481147a6a7a367bf8048f9a6fdb6460f21a66f0542dedb8b94ca2c8723596741920b1656d4c",
   "engines": {
     "node": "^22.18.0 || >=23.6.0"
   },
@@ -47,11 +47,9 @@
     "preversion": "pnpm run build",
     "version": "node scripts/release/version.mts"
   },
-  "dependencies": {
-    "@deepseek-ai/dsh": "0.1.7-alpha.1"
-  },
   "devDependencies": {
-    "@deepseek-ai/cordis": "4.0.2",
+    "@deepseek-ai/cordis": "^4.0.3",
+    "@deepseek-ai/dsh": "0.1.7-alpha.1",
     "@deepseek-ai/dsh-host-open-in-app": "0.1.7-alpha.1",
     "@hana/app-sdk": "file:vendor/hana-app-sdk/hana-app-sdk.tgz",
     "@hana/plugin-components": "file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz",

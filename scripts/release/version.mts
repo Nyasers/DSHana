@@ -15,7 +15,7 @@
 //   version 钩子内做（此时版本号已落盘、git 未动，是唯一能表达完整版的时机）。
 //
 // 版本规则：build metadata 保留且恒为 dsh 依赖段
-//   `+dsh-<dependencies.@deepseek-ai/dsh>`（本脚本自动重算，不接受自定义——版本号一眼可见
+//   `+dsh-<packaging/package.json#dependencies.@deepseek-ai/dsh>`（本脚本自动重算，不接受自定义——版本号一眼可见
 //   跑在哪个 dsh 上，防手误漂移）；pnpm version 算号剥 build，此处拼回完整版再同步派生。
 //   bump 子命令映射：beta/hotfix 末段递增 = prerelease（裸跑，保留 preid 递增末段）；毕业 =
 //   patch/minor/major（node-semver 语义）；从正式版开 pre 线 =
@@ -41,7 +41,7 @@ import { execSync } from "node:child_process";
 
 import { errText } from "../shared/err-text.mts";
 import { ROOT } from "../shared/root.mts";
-import { versionCommitFiles, readPkg, writePkg } from "../shared/version.mts";
+import { versionCommitFiles, readPkg, readShipPkg, writePkg } from "../shared/version.mts";
 const run = (cmd, desc) => {
   console.log("[version-hook] " + desc + "...");
   try {
@@ -57,9 +57,10 @@ const run = (cmd, desc) => {
 function main() {
   const pkg = readPkg("package.json");
   const bare = pkg.version;
-  const dshDep = pkg?.dependencies?.["@deepseek-ai/dsh"];
+  // dsh 依赖段读交付面清单（packaging/package.json）——与 vendor 镜像 tag、集成漂移闸同源
+  const dshDep = readShipPkg()?.dependencies?.["@deepseek-ai/dsh"];
   if (typeof bare !== "string" || !bare || !dshDep) {
-    console.error("[version-hook] package.json version 或 @deepseek-ai/dsh 依赖声明缺失（bare=" + bare + ", dsh=" + dshDep + "）");
+    console.error("[version-hook] package.json version 或 packaging/package.json 的 @deepseek-ai/dsh 依赖声明缺失（bare=" + bare + ", dsh=" + dshDep + "）");
     process.exit(1);
   }
   // 1) 拼回完整版（build 段 = dsh 依赖段，版本规则见文件头）写主

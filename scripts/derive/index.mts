@@ -15,7 +15,7 @@
 //   product-package 主 package.json#version    → packaging/package.json（交付树的包根那份）
 //   thirdparty   vendor/hana-app-sdk 的 manifest → THIRD_PARTY_NOTICES.md（分发合规）
 //   paths        镜像包清单                       → src-integrations/tsconfig.paths.json（编辑器）
-//   vendor       主 package.json 的 dsh 依赖       → vendor/deepseek-harness 的 checkout（状态型）
+//   vendor       交付面清单的 dsh 依赖           → vendor/deepseek-harness 的 checkout（状态型）
 //
 // 不进本表：NOTICE（主体是我们自己的许可声明，只有仓库 URL 会漂，而那事几年一遇，手改即可）；
 // changelog（源是 git log，只有发版时有意义，不是"随时可校验"那类）。
@@ -35,6 +35,7 @@ import { ROOT } from "../shared/root.mts";
 import { isDirectRun } from "../shared/run.mts";
 import { cordisPkgPaths, readPkg } from "../shared/version.mts";
 import { dshTask } from "../vendor/dsh.mts";
+import { packageLockTask } from "./package-lock.mts";
 import { packedVersion, thirdpartyTask } from "./thirdparty.mts";
 
 export { ROOT };
@@ -156,16 +157,23 @@ const pathsTask: FileTask = {
 };
 
 /**
- * 任务：vendor —— 让 vendor/deepseek-harness 站在 `dependencies["@deepseek-ai/dsh"]` 对应的
- * tag 上（gitlink 与工作树 HEAD 两处都要对，缘由见该模块的文件头）。
+ * 任务：vendor —— 让 vendor/deepseek-harness 站在交付面清单（packaging/package.json）声明的
+ * dsh 版本对应的 tag 上（gitlink 与工作树 HEAD 两处都要对，缘由见该模块的文件头）。
  *
  * 检查与修复在 scripts/vendor/dsh.mts，与 `pnpm run sync:vendor:dsh` 共用一份实现；
  * 这里只把它挂进本表，让 derive --check 与全量派生一并覆盖。
  */
 const vendorTask: StateTask = dshTask;
 
+/**
+ * 任务：package-lock —— 交付面清单的运行时依赖 → packaging/pnpm-lock.yaml（出包工位按它做干净安装）。
+ *
+ * 检查与修复在 scripts/derive/package-lock.mts（同样产物靠 pnpm 跑，不是我们算，所以是状态型）。
+ */
+const packageLockTaskRef: StateTask = packageLockTask;
+
 /** 全部任务（main 按名筛选用）。 */
-export const TASKS: DeriveTask[] = [manifestTask, cordisTask, productPackageTask, pathsTask, vendorTask, thirdpartyTask];
+export const TASKS: DeriveTask[] = [manifestTask, cordisTask, productPackageTask, pathsTask, vendorTask, thirdpartyTask, packageLockTaskRef];
 
 /** 跑一个任务：比较期望内容与磁盘，写回或报漂。返回漂移文件数。 */
 export function runTask(task: DeriveTask, { checkOnly, log = console.log } = { checkOnly: false, log: console.log as (m: string) => void }): number {

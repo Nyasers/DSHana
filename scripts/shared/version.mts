@@ -55,3 +55,18 @@ export function cleanVersion(version) {
 export function patchVersion(upstreamVersion) {
   return `${cleanVersion(upstreamVersion)}+dshana-${cleanVersion(readPkg("package.json").version)}`;
 }
+
+// ---- 交付面清单（packaging/package.json）----
+// 运行时依赖的唯一真源：pack 物化按它做一次干净安装（工位 = 根 package.json + 这份 + 锁文件 +
+// 按目标生成的 workspace yaml）；vendor 镜像 tag、集成漂移闸的 tag、产物版本串里的 `+dsh-…`
+// 都从这里读。根 package.json 只留构建面（devDependencies），不声明运行时依赖。
+export const SHIP_PKG_REL = "packaging/package.json";
+
+/** 交付面清单（packaging/package.json）。 */
+export const readShipPkg = () => readPkg(SHIP_PKG_REL);
+
+/** 声明的 DSH 版本（未声明返回 null）。 */
+export function dshPin() {
+  const v = readShipPkg()?.dependencies?.["@deepseek-ai/dsh"];
+  return typeof v === "string" && v ? v : null;
+}

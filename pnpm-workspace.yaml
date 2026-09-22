@@ -1,4 +1,6 @@
-# pnpm 11 构建脚本白名单（allowBuilds 取代 package.json 的 allowScripts / onlyBuiltDependencies）
+# pnpm 构建脚本白名单。pnpm 11 起 allowBuilds 取代 pnpm 10 的 onlyBuiltDependencies 一族
+# （onlyBuiltDependencies / neverBuiltDependencies / onlyBuiltDependenciesFile / ignoredBuiltDependencies
+# 已被静默忽略），所以旧的数组写法在这里不会生效。
 # dsh 运行时树依赖的 install scripts：部署（pnpm add 到数据目录 dsh-pkg）时需放行。
 # 本地开发（pnpm install 装构建树）与 CI（--frozen-lockfile）同样读取本文件，白名单不参与 lockfile 解析。
 allowBuilds:
@@ -10,8 +12,8 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - "@deepseek-ai/*"
 
-# 本地 vendor 的官方 SDK（非 registry 包）：pnpm 12 的 overrides 只能放这里（package.json
-# 的 pnpm 字段 pnpm 11+ 不再读）。四个 tgz 全部映射到本地，任何对 @hana/* 的依赖（直接
+# 本地 vendor 的官方 SDK（非 registry 包）：只能放这里（pnpm 11+ 不再读 package.json 的 pnpm 字段，
+# 那份会被打印为 ignored）。四个 tgz 全部映射到本地，任何对 @hana/* 的依赖（直接
 # 或传递）都解析到 vendor（版本 0.0.0），不去 registry 取（registry 上没有，否则 404）。
 #   - app-sdk：Node 侧 App 契约（connectAppRuntime 等；runtime bundle 构建期内联）
 #   - plugin-sdk：浏览器侧（dist/browser.js，ui bundle 构建期内联）
