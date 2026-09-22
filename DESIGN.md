@@ -101,6 +101,7 @@ DSHana 以**单卡 + 自带功能面板**注册（manifest `contributes.cards[0]
 - **自举台**：DSHANA 字标 + 细圆环 + 一行状态小字；报错时下方直接一块 `<pre>`（时间线/折叠详情已撤）。boot-state 由**主卡单独轮询**，FP 只读跨面共享快照（订阅，不重复取）；owner 不在场（快照不存在/下线/过旧）时 FP 才自取。
 - **三态 + 设置页**：default（full / detached 共用一页 = 整幅 DSH UI，顶部 44px 让位宿主 chrome）/ main（主卡，无 DSH 侧栏——侧栏归 FP）/ sidebar（FP，只有侧栏）；settings 是 App 自己的设置页（`ui.route`，不注入 DSH）。面由**页面静态声明**（`<meta name="hana-dshana-role">` + `data-dshana-view`）；映射到 DSH 侧上游角色词：default→standalone / sidebar→navigation / main→workspace。`?dshana-view=` 与 `@dshana/view` 均已退役。
 - **注入鉴权**：壳页以 `appSurfaceSession` 作为 `_surface` 路径段取得运行时代理凭据（同源预请求种 `hana_app_runtime` cookie 兜住子请求）；未取得票据时不下挂内容，面板上说明原因。装配只做一次（本文档里 DSH 前端实例、它的载体与监听都绑在这唯一一次装配上），而中继前缀里含 runtimeId：宿主重启或运行体重建之后这份前缀就是死端点（宿主对它的 WS 升级当场断开，DSH 的流载体连试两次后折成 `gateway/internal`，界面停在「历史加载失败」）。重载是唯一干净的出路——旧实例在文档里还活着，就地重注入会留下两套。故壳页在**取到的新快照说 `runtimeId` 与装配时不同**时重载本页；判断放在取到快照之后，凭据本已失效的页面不会去重载（那只会撞上宿主的 403），照旧停在凭据缺失的提示上。
+- **会话流卡（`ui/stream.html`）的生命周期**：工具出卡把 DSH 会话 id 写进查询串（`?sid=`），注入的 DSH UI 钉在那一段上，壳页在顶部挂一行跟踪态（取 `GET /dshana/card-state`：只在 `tracked` / `cancelling` 期间慢轮询 4s，其余状态停手）。**会话终结（`ended`）后断消息流并拒绝重开**（`transport.freezeStreams` → `createStreamMux.freeze`）：DSH 的 `$events` 是长命订阅、断了会自己重连（见 `dsh-client-connection`），只关 socket 等于没冻；冻结让在途流按终态收场、载体关闭、之后 `openStream` 一律拒——陈旧卡因此不再吃连接、不再接更新，壳页也不再为它打请求（卡成快照）。冻结前先等一次静默（无在途流）或到 20s 封顶，避开首屏/历史读到一半。主卡与 FP 不带 `sid`，不参与冻结。
 - **承载面分片（`api/remote.mux`）**：宿主对 App 受管服务的 WS 中继有 1 MiB **上游帧**上限（上游 ws 客户端 `maxPayload: 1024 * 1024`，超限即把下游连接 `close(1011, "Managed service stopped")`），而 DSH 的 mux 帧是原子 JSON——长会话打开时的首帧就是整段历史 snapshot，一帧就能超，DSH 又只立刻重试一次（两次都撞上限就折成 `gateway/internal` 终态），于是历史流永远打不开。分片点必须在宿主**之前**，而本 App 的运行时中继与页面载体正好夹在这条管子的两侧、都是本仓库代码（DSH 协议两端一行不改）：中继把超限消息按尺寸切成二进制分片（信封与上限见 `src/lib/mux-chunks.ts`），载体在页面侧**先拼字节再解码**、重组回一条完整消息交给 DSH。每片回一次执，中继只在 768 KiB 窗口内在途——宿主另有一条「转发下一帧前下游缓冲超 1 MiB 就掐」的守卫（同样报 1011），而且它判的是**线上字节**（一片 128 KiB 载荷在线上是 131,088 字节），所以窗口取 768 KiB（6 片 = 线上 786,528），给 live 帧与 ping 留 256 KiB；只把帧切小不够，发得快一样致命，尤其远端访问时页面排空更慢。开关显式：载体在 mux URL 上带 `dshanaMuxChunks=1` 声明（宿主只滤掉凭据类查询参数，其余原样转发），中继只在看到它时才启用帧搬运（`src/runtime/mux-relay.ts`），否则保持原来的原始 socket 双向透传——旧文档与新中继不会互相看不懂。帧搬运只认 WS 帧头：未改动的帧原样转发（控制帧立即转，DSH 的 mux ping 不会被大消息卡住，pong 由宿主的 ws 客户端负责），只有超限消息被重写成分片；窗口用尽只是等回执，不断链。
 
 ### 设置面
@@ -201,8 +202,11 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
   canceled/aborted，来源会话停止按钮等）= task-bridge 对 running 任务经 hana.tasks.watch
   (taskId) SSE 观察，取消到达 → 本进程 DSH session.cancel + cancelSessionModelRequests
   （只停本会话 requestId；单例 runtime 不误停他人会话）。取消确认窗口（App 侧
-  CANCEL_CONFIRM_MS=15s 轮询 tasks.get）超窗未确认 → 升级 ctx.tasks.cancel 兜底并如实
-  告知（残余风险：DSH 进程若真未响应，宿主已 canceled——写入本刀真机边界验收项）。
+  CANCEL_CONFIRM_MS=15s 轮询 tasks.get）超窗未确认 → 升级 ctx.tasks.cancel 兜底并如实告知
+  （残余风险：DSH 进程若真未响应，宿主已 canceled——写入本刀真机边界验收项）。**窗口只在后台
+  结算里走**：工具路径（requestCancel）写标记 + 发 RPC 后立即返回，终态结算丢后台；把 15s
+  等待放进工具回调就是占着宿主回调（多张卡同时取消会堵住宿主通道，SKILL 里那条 30s 回调上限
+  就是这么撞的）。执行超时看门狗（cancelSessionWork）本就在后台，才等满窗口求收尾判断。
 - **决策 F（watch SSE 消费侧 = 受管 runtime 子进程）**：需要「宿主审批 outcome → DSH
   approval/request 等待者」与「宿主 task 取消 → DSH session.cancel」的都是 runtime 内模块
   （approval-bridge / task-bridge）；App 主进程不消费 SSE（应答走 ctx.tasks.respondApproval

@@ -14,7 +14,7 @@
 // 授权并种 hana_app_runtime cookie）。视觉沿袭 v1 webui-shell 纸张风（CSS 变量 +
 // fallback 纸张色），数据语义 v2 boot-state（phase idle/starting/ready/error/stopped）。
 import { hana } from "@hana/plugin-sdk";
-import { injectDshIndex, installTransport } from "#/ui/dsh-inject.ts";
+import { injectDshIndex, installTransport, type DshTransport } from "#/ui/dsh-inject.ts";
 import { isFaceView, roleForView } from "#/lib/face-role.ts";
 import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
 
@@ -352,7 +352,7 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
   // 两份实例挤在一个文档里。故本页只在**取到的新快照说 runtimeId 与装配时不同**时整页重载——
   // 重载带走宿主新发的 surface 凭据，重新装配一次就干净了。判断放在取到快照之后，所以凭据
   // 本已失效的页面不会去重载（那只会撞上宿主的 403），照旧停在「凭据缺失」的提示上。
-  var injected = { started: false, dispose: null as (() => void) | null, runtimeId: null as string | null, reloading: false };
+  var injected = { started: false, transport: null as DshTransport | null, runtimeId: null as string | null, reloading: false };
   /** 装配时代的 runtimeId 与本次快照不同：这份文档的装配面已经指向不存在的运行时。 */
   function runtimeReplaced(s) {
     return injected.started && injected.runtimeId !== null
@@ -375,7 +375,7 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
     seedView = view;
     var privatePrefix = withSurfaceTicket(prefix, surfaceSession());
     var base = new URL(privatePrefix, location.origin);
-    injected.dispose = installTransport(base, {
+    injected.transport = installTransport(base, {
       // 面 → DSH 侧上游角色词：sidebar（FP）= navigation（只有侧栏）；
       // default（full / 拆窗）= standalone（整幅 DSH UI，可折叠）；main 与 settings = workspace
       // （中列 + 右列，无 DSH 侧栏）。
@@ -407,8 +407,17 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
 
   // ---- 卡状态条：URL 带 sid 的面（工具出卡时钉住的那一段 DSH 会话）在顶部挂一行跟踪态 ----
   // 片段与卡页同源：App 后端 /dshana/card-state 返回的就是可直接换进 DOM 的状态行。
-  // 只取一次（不轮询）；取不到就整条撤掉，不占版面。行内样式：这条只属于带 sid 的面，
-  // 不为它往四个页面的 CSS 里各拄一份（片段里的 .state/.dot/.detail 由页面提供）。
+  // 状态跟踪 + 陈旧卡冻结（会话终结后不再占消息流）：
+  //   · 非终态（tracked / cancelling）期间慢轮询，终态即停手——陈旧卡不再打任何请求；
+  //   · 终态（ended）后断消息流并拒绝重开（transport.freezeStreams）。DSH 的 $events 是长命
+  //     订阅（断了会重连），不拒重开就冻不住；多张这样的卡叠在会话里就是宿主卡顿的来源。
+  //   · unknown（无绑定/读不到）不冻：无从判断，宁可不冻。
+  // 冻结前先等一次静默（无在途流）——首屏/历史正走流的时候收线会得半截。
+  // 取不到状态就整条撤掉，不占版面。行内样式：这条只属于带 sid 的面，不为它往四个页面的
+  // CSS 里各拄一份（片段里的 .state/.dot/.detail 由页面提供）。
+  var CARD_POLL_MS = 4000;
+  var CARD_FREEZE_GRACE_MS = 5000;
+  var CARD_FREEZE_MAX_MS = 20000;
   function mountCardStrip() {
     let pinned: string | null = null;
     try { pinned = new URLSearchParams(location.search).get("sid"); } catch (e) { pinned = null; }
@@ -425,15 +434,50 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
       try { root.style.height = ""; } catch (e) { /* 忽略 */ }
       if (strip.parentNode !== null) strip.parentNode.removeChild(strip);
     };
-    hana.api.fetch("dshana/card-state?sessionId=" + encodeURIComponent(sid), {
-      method: "GET", cache: "no-store", headers: { Accept: "text/html" }
-    }).then((res: Response) => {
-      if (!res.ok) throw new Error("card-state HTTP " + res.status);
-      return res.text();
-    }).then((html: string) => {
-      if (html && html.trim()) strip.innerHTML = html;
-      else drop();
-    }).catch(() => { drop(); });
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let frozen = false;
+    let terminalSeenAt = 0;
+    const stop = (): void => { if (timer !== null) { clearTimeout(timer); timer = null; } };
+    const freeze = (): void => {
+      if (frozen) return;
+      frozen = true;
+      stop();
+      try { if (injected.transport) injected.transport.freezeStreams(); } catch (e) { /* 忽略 */ }
+    };
+    const scheduleFreeze = (): void => {
+      if (frozen || terminalSeenAt !== 0) return;
+      terminalSeenAt = Date.now();
+      const tick = (): void => {
+        const waited = Date.now() - terminalSeenAt;
+        let busy = false;
+        try { busy = !!(injected.transport && injected.transport.hasActiveStreams()); } catch (e) { busy = false; }
+        if ((waited >= CARD_FREEZE_GRACE_MS && !busy) || waited >= CARD_FREEZE_MAX_MS) { freeze(); return; }
+        timer = setTimeout(tick, 1000);
+      };
+      timer = setTimeout(tick, 1000);
+    };
+    const read = (): Promise<string> =>
+      hana.api.fetch("dshana/card-state?sessionId=" + encodeURIComponent(sid), {
+        method: "GET", cache: "no-store", headers: { Accept: "text/html" }
+      }).then((res: Response) => {
+        if (!res.ok) throw new Error("card-state HTTP " + res.status);
+        return res.text();
+      }).then((html: string) => {
+        if (!html || !html.trim()) { drop(); return "gone"; }
+        strip.innerHTML = html;
+        const stateEl = strip.querySelector("[data-state]");
+        return stateEl ? String(stateEl.getAttribute("data-state") || "") : "";
+      });
+    const loop = (): void => {
+      read().then((state: string) => {
+        if (frozen) return;
+        if (state === "ended") { scheduleFreeze(); return; }
+        // tracked / cancelling 才继续问；其余（unknown / gone / 无状态）停手：卡成快照。
+        if (state !== "tracked" && state !== "cancelling") return;
+        timer = setTimeout(loop, CARD_POLL_MS);
+      }).catch(() => { stop(); drop(); });
+    };
+    loop();
   }
   // DSH index 的 boot-theme 行（ui-theme/src/boot-theme.ts 生成，紧跟 <body> 开标签）：
   //   const preference = "system"|"light"|"dark"
@@ -935,7 +979,7 @@ import { backdropTokenForView, seedTokensForView } from "#/lib/seed-tokens.ts";
       }
       // 卸载释放注入的 transport（WS 载体等）
       window.addEventListener("pagehide", function () {
-        if (injected.dispose) { try { injected.dispose(); } catch (e) { /* 忽略 */ } }
+        if (injected.transport) { try { injected.transport.dispose(); } catch (e) { /* 忽略 */ } }
         // owner 下线：删掉本页的共享键。键的消费方是「此刻挂着的面」，页面一走就没人读；
         // 下一个实例自己取一次快照（poll 的过期兜底）。FP 不写键，不必删。
         if (!isSidebar) { try { dropShared(); } catch (e) { /* 忽略 */ } }

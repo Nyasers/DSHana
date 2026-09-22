@@ -24,8 +24,8 @@
 //   POST /dshana/stop        停止受管 runtime（幂等）
 //   GET  /dshana/models      模型候选（按 provider 分组，读宿主模型目录 ctx.models.list）——设置页的
 //                            「会话模型」按它列 provider/模型/推理档，不依赖 DSH 运行
-//   GET  /dshana/card-state  会话流卡页的状态面（一次性取数：读宿主任务记录的绑定；回卡页
-//                            可直接换进 DOM 的状态行 HTML）
+//   GET  /dshana/card-state  会话流卡页的状态面（按需取数：读宿主任务记录的绑定；回卡页
+//                            可直接换进 DOM 的状态行 HTML。卡页在非终态期间慢轮询，终态即停）
 //
 // 依赖注入（可测性）：deps = { appId, version, getSnapshot(), start(), stop(), log() }。
 // 默认实现经 src/lib/managed-runtime.ts 读取真实单例；测试注入 fake。
@@ -287,8 +287,8 @@ export function registerDshanaRoutes(app, deps) {
       }
     });
 
-    // ---- GET /dshana/card-state：会话流卡页的状态面（一次性取数，无 SSE / 无轮询）----
-    // 卡页（ui/card.html，宿主以 /api/apps/<appId>/ui/card.html 服务）加载后取一次：读宿主
+    // ---- GET /dshana/card-state：会话流卡页的状态面（无 SSE；卡页在非终态期间慢轮询，终态即停）----
+    // 卡页（ui/stream.html，宿主以 /api/apps/<appId>/ui/stream.html 服务）加载后取数据：读宿主
     // 任务记录里的绑定给出该 DSH 会话的跟踪态。响应是卡页可直接换进 DOM 的状态行
     // HTML（形制见 cardStateHtml）。会话 id 形态不对回 400（形状错，不是「没状态」）。
     app.get(DASHANA_ROUTE_PREFIX + "/card-state", async (c) => {
