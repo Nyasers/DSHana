@@ -1,6 +1,6 @@
 {
   "name": "dshana",
-  "version": "1.0.0-rc.17+dsh-0.1.6-alpha.2",
+  "version": "1.0.0-rc.18+dsh-0.1.7-alpha.2",
   "private": true,
   "packageManager": "pnpm@12.4.1+sha512.2e81e399d73fe8390dab25e06aa788ab7a5908248d2f5a370f82b481147a6a7a367bf8048f9a6fdb6460f21a66f0542dedb8b94ca2c8723596741920b1656d4c",
   "engines": {

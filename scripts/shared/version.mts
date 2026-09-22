@@ -26,10 +26,11 @@ export function cordisPkgPaths() {
   return out.sort();
 }
 
-// 派生同步目标（随主版本同步的文件）：src/manifest.json（src 域构件）+ cordis 包（不含主 package.json——
-// 主是事实源，由 bump 阶段改；这里指"跟随"它的文件）
+// 派生同步目标（随主版本同步的文件）：src/manifest.json（src 域构件）+ packaging/package.json
+//（交付树包根，derive 的 product-package 任务）+ cordis 包（不含主 package.json——主是事实源，
+// 由 bump 阶段改；这里指"跟随"它的文件）
 export function derivedVersionTargets() {
-  return ["src/manifest.json", ...cordisPkgPaths()];
+  return ["src/manifest.json", "packaging/package.json", ...cordisPkgPaths()];
 }
 
 // 版本文件全集（含主 package.json——version-hook 提交范围用：pnpm version 已改主待收口）
