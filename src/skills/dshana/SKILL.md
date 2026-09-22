@@ -26,10 +26,10 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 
 | 状态 | 表现 | 怎么办 |
 |---|---|---|
-| 未启动（idle） | 说明 + 「启动 DSH」按钮 | App 加载后会自动拉起；也可手动点 |
-| 启动中（starting） | 阶段时间线 + 日志尾滚动 | 等即可（首次含 DSH boot） |
+| 未启动（idle） | 台面只有一行「DSH 未启动」 | 打开本卡会补一次启动请求；也可以等自动链 |
+| 启动中（starting） | 细圆环 + 「正在启动 DSH…」 | 等即可（首次含 DSH boot） |
 | 就绪（ready） | 页面装载 DSH Web UI | 直接用 |
-| 需要处理（error / stopped） | 失败原因 + 原始错误折叠 | 看指引重试；端口占用会自动换端口 |
+| 需要处理（error / stopped） | 状态行 + 一块 `<pre>`（code / message / note / runtimeId / port） | 看 `<pre>` 定位；自动链按退避重试，端口占用自动换端口 |
 
 **读状态的出口**：`boot-state`（壳页与 Agent 都用；含 phase/error/userText）。App 侧不再写文件日志——日志一律走宿主 `ctx.logger`，受管子进程输出由宿主运行日志捕获。
 
@@ -131,12 +131,12 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
-| 卡在「启动中」很久 | 首次 boot 较慢 | 看日志尾；`boot-state` 的 `logTail` 会滚动显示进度 |
+| 卡在「启动中」很久 | 首次 boot 较慢（含插件就位与服务监听） | 等即可；持续不动看宿主日志与 `error.userText`（boot 快照不带日志尾） |
 | 状态转「需要处理」 | runtime 启动失败 | 看 `error.userText` 与原始错误；日志定位 |
 | 提示端口被占用 | 端口竞争 | 会自动换随机端口重试；持续失败看日志 |
 | DSH Web UI 打不开但状态就绪 | 注入失败 / surface 票据缺失 | 重开卡；反复出现查中继前缀与 surface 授权 |
-| `dshana` 报 runtime 未就绪 | DSH 还没起来 | 等就绪或点「启动 DSH」；持续失败看 boot 状态 |
-| 默认模型改了不生效 | DSH 内存态与文件不一致 | 重启 DSH（停止后重新启动）再确认 |
+| `dshana` 报 runtime 未就绪 | DSH 还没起来 | 等就绪即可（工具首调会重新拉起）；持续失败看 boot 状态与宿主日志 |
+| 改了宿主提供商/模型，DSH 里的候选没变 | DSH 侧的 provider 路由与模型目录是启动快照 | 正常路径由 `models-changed` 订阅经控制面触发重拉（不重启 runtime）；订阅面不可用时重启 runtime |
 | 模型报 `no API key for provider route "deepseek-official"` | 官方自带的 LLM adapter 还在服务那条路由（本形态里它拿不到 key），说明 roster patch 没随包落地或被人改过 | 确认装好的树 `cordis.patch.yml` 里 `llm-deepseek` / `llm-pi-ai` 是 `disabled: true`，然后重启 DSH |
 | 默认模型指向宿主没配的提供商/模型（你手设过的那个消失了） | 宿主换过提供商或删了凭据 | 不用手改：App 在 runtime 就绪与宿主模型变更后会对账，换成宿主目录里一条可服务的（日志有「默认模型对账」）；这格现在只由 DSH 自己与对账维护，App 设置页不再有它的入口 |
 | 界面里直接开的会话报 `no API key for provider route "deepseek-official"` | `agent-default-model` 的 user 层为空，值落回 base 层那条官方路由（工具建的会话不受影响：它们按调用方角色卡开） | 在 DSH 自己的模型选择器里选一条可服务的（会话级；App 设置页不再有默认模型的入口） |
@@ -150,7 +150,11 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 
 ## 已知限制
 
-- **升级 DSH = 装新 App 包 + 重启宿主**：DSH 版本随 App 声明，无独立升级通道。
-- 拆窗、钉回、切页面都不停 DSH 后台；停 App 或退出 Hana 才由宿主回收进程。
-- 越界权限默认走审批：deferred 通知 → `dshana(action="approve", …)` 应答；`approvalTimeoutSec` 内无人应答自动拒绝（缺省 30 秒；仅显式设 0 禁用）。审批**只能在新回合被应答**：同回合内等待会撞上宿主回调上限，见排错表。
-- 任务默认新建会话；`reply` 传 taskId 句柄或 sessionId 凭证续用（resume）；会话与账本在 App 数据目录内（不碰 `~/.dsh`）。
+- **升级 DSH = 装新 App 包 + 重启宿主**：DSH 版本由 App 声明的依赖（`@deepseek-ai/dsh`）决定，产物版本段带上它；无独立升级通道。
+- **壳页没有「启动 / 重启 DSH」的入口**：台面只报状态。拉起由 `apply` 后的自动链、工具首调、以及打开卡页时补的那一次请求承担，失败按退避重试（5s 起、封顶 5min）。要真正重启只能卸载重装或重启宿主。
+- **拆窗、钉回、切页面都不停 DSH 后台**：只有卸载/重载 App 或退出 Hana，宿主才回收受管 runtime。
+- **数据源固定为 App 内置独立目录**（`<dataDir>/.dsh`，即本形态的 `DSH_HOME`），不碰用户主目录的 `~/.dsh`；共享已有 DSH 目录 / 切换数据源的链未启用（`POST /dshana/settings/restart` 回 503）。
+- **会话↔任务的绑定不落 App 文件**：事实源是宿主任务记录（`metadata.dsh` 的 sessionId / rpcId / timeoutSec / approvalTimeoutMs / cancel），读取失败一律 fail-closed。DSH 未启动时 `list` / `get` 不可用。
+- **越界权限默认走审批，且只能在新回合被应答**：`open` / `reply` 提交后须结束本回合，审批通知（含 `approvalId`）下一回合才到；同回合内空等会撞上宿主工具回调的 30 秒上限，并可能卡住该会话。`approvalTimeoutSec` 内无人应答自动拒绝（缺省 30 秒；显式设 0 禁用）。DSH Web UI 里直接开的会话没有委派任务，审批请求没有应答者，按 fail-closed 处理。
+- **会话流卡在会话终结后冻结**：宿主任务进终态那一刻起，该卡的流按终态收场并拒绝重开（陈旧卡成快照）；中继侧另有一道闸门，带票的流只在宿主任务活跃期建/留。主卡与 FP 不带会话票，不参与冻结与闸门。
+- **模型分两条路**：工具建的会话按调用方角色卡配的模型开（App 设置可改成固定的自定义那条）；DSH Web UI 里直接开的会话用 DSH 自己的模型选择器选的那条，候选只来自宿主目录、且是启动快照——宿主改提供商后由 `models-changed` 订阅触发重拉，订阅面不可用时才需要重启 runtime。

@@ -57,13 +57,13 @@ export function phaseCopy(phase: string, { ready = false, errText = null }: { re
     case "starting":
       return "DSH 正在启动（受管 runtime 拉起、插件与依赖就位、服务监听）……";
     case "idle":
-      return "DSH 尚未启动。App 加载后会自动拉起受管 runtime；也可点下方「启动 DSH」手动触发。";
+      return "DSH 尚未启动。App 加载后会自动拉起受管 runtime；打开本卡也会补一次启动请求。";
     case "error":
       return errText
         ? "DSH 启动失败：" + errText
-        : "DSH 启动失败（无详细错误）。可点「启动 DSH」重试；持续失败请看日志。";
+        : "DSH 启动失败（无详细错误）。自动链会按退避重试；持续失败请看宿主日志。";
     case "stopped":
-      return "DSH 已停止（用户或卸载流程触发）。再次 create/send 或点「启动 DSH」可重新启动。";
+      return "DSH 已停止（卸载流程或手动停止触发）。再次 create/send 可重新启动。";
     default:
       return "未知状态：" + String(phase);
   }

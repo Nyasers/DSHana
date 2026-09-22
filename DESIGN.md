@@ -343,9 +343,9 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
   siteNavEntry + fpFullPanel，cardForm:"flush"），同卡 `functionPanel`
   `{ id: "dshana-sidebar-panel", label: "DSHana 状态", route: "/dshana/sidebar.html" }`
   ——FP 由主卡自带（宿主 0.944.2+ 的 route 形态），不再用 `pageOf` 同伴卡过渡。
-- 壳页三态（精简版，v2 无自动链 UI）：idle（说明 + 「启动 DSH」按钮 → POST /dshana/start）、
-  starting（轮询 boot-state）、error/action-needed（错误码 + 用户可读指引 + 重试）、ready
-  （iframe src = 宿主代理前缀 + `?dshana-view=main|sidebar`）。**DSH UI 的 SPA base 适配**
+- 壳页三态（免交互，无手动启动按钮）：idle（只报状态；打开卡页补一次 POST /dshana/start）、
+  starting（轮询 boot-state，台面只有 loader + 状态行）、error/action（错误码 + 用户可读指引，
+  装在一坧 `<pre>` 里）、ready（同文档注入 DSH index，请求走宿主代理前缀）。**DSH UI 的 SPA base 适配**
   （资源/API/WS 前缀）宿主不代做，真机对账（见下）。
 
 ### 交付 3：ui/ 静态树归位
