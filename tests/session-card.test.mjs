@@ -88,7 +88,7 @@ test("sessionCard：没有 cwd 就不塞这一格（卡页只认有值的那几�
   assert.equal(q.get("cwd"), null);
 });
 
-test("reply：同样带卡；没有 cwd 时 route 不带 cwd、dsh 的 cwd 仍是缺省态", async () => {
+test("reply：缺省档位（open-only）下不挂卡；卡面字面量单验", async () => {
   const loc = { action: "send", sessionId: SID, rpcId: "rpc-2", taskId: "task-2", delivery: "next-step" };
   const { out, fake } = await run("reply", loc, { task: "接着跑", sessionId: SID });
 
@@ -103,8 +103,13 @@ test("reply：同样带卡；没有 cwd 时 route 不带 cwd、dsh 的 cwd 仍�
   });
   assert.match(out.content[0].text, /next-step/);
   assert.equal(fake.calls[0].action, "send", "工具面是 reply，提交链内部仍是 send");
+  // 档位缺省是 open-only（lib/card-display.ts）：reply 不再叠卡——卡页按 sid 跟整段会话，
+  // open 那一张已经跟到这一轮了，再发一张只是多一个 iframe。要在流里继续看到回复的卡，
+  // 把档位改成 all。
+  assert.equal(out.details.card, undefined, "open-only 档位下 reply 不该挂卡");
 
-  const card = out.details.card;
+  // 卡面字面量本身仍然要正确（档位选 all 时走的就是它）：没有 cwd 就不塞这一格。
+  const card = sessionCard({ action: "reply", sessionId: SID, taskId: "task-2", delivery: "next-step" });
   assert.equal(card.pluginId, "dshana");
   assert.match(card.title, /续发消息/);
   const q = cardQuery(card);

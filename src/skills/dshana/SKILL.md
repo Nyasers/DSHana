@@ -15,6 +15,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 
 - **无需装依赖、无需配 Node**：DSH 及其依赖树随包分发在安装目录 `node_modules`，我们的子插件也落在那里（`node_modules/@dshana`）；启动只做 DSH boot + 服务监听，不写数据目录里的任何东西。
 - **无需配 API Key / 模型**：推理经受管 runtime 内 `hana.models` 发起，provider 凭据留在宿主。DSH 自带的两个 LLM adapter 行（`llm-deepseek` / `llm-pi-ai`）在我们的 roster patch 里停掉，llm 路由只剩宿主目录那几条（那两行要凭据库里的 key，而凭据在宿主手里，它们只会摆出选到就报 `no API key` 的路由）；设置里那页「模型」也一并停掉（它只编辑这两行的 settings 段，停掉后没可编辑对象，只剩空壳）。会话的模型跟着「谁开的」走：工具建的会话按**调用方那张角色卡配的模型**开（`agents/<id>/config.yaml` 的 `models.chat`，经 `agent:list` / `agent:config` 读，见 `app/agents.read`）；App 设置页的「会话模型」可以改成「自定义模型」固定一条（`sessionModelProvider` / `sessionModelModel`，可选该模型支持的推理强度 `sessionModelReasoningEffort`；缺省是「复用调用方」）；DSH 自己那格默认模型（`agent-default-model`）本页不经手：你手设过、而已不在宿主目录里时，就地对账换一条可服务的（优先留在原 provider 里换，再退角色卡模型、目录第一条；日志有「默认模型对账」，见 `src/lib/model-default-guard.ts`）。
+- **聊天流卡档位**（`sessionCardDisplay`，App 设置页「聊天流卡片」）：卡是一次会话一张、注入 DSH 会话的 iframe，reply 一发一张会在聊天流里叠起来。缺省 `open-only` = 一个会话只留一张（open 那张；卡页按 `?sid=` 跟踪整段会话，所以那张一直活着）；`all` = 每发一次挂一张（旧行为）；`never` = 一张也不挂——任务照跑、结果照投，只是没有那张句柄卡（看会话用 `get`）。
 - **默认模型**：DSH 自己的 `agent-default-model`（`DSH_HOME/settings.yaml`）——用户层为空时回落到 base 层那份官方路由。界面里直接开的会话在 DSH 自己的模型选择器里选一条，候选就是宿主目录那几条；App 设置页只列候选给「会话模型」用，不经手这格。
 - **目录选择器**：DSH 的 workspace 选择对话框由 `directory-picker` seam 提供，官方 web-app 层挂的 `directory-picker-auto` 在 win32 + loopback 下挑 native；native 的客户端半优先读页面里的 `__DSH_DIRECTORY_PICKER__`（官方桌面壳由 preload 注入、弹 Electron 对话框），没桥才叫宿主进程的 OS chooser——后者要在宿主进程里 spawn 一个子进程跑 `IFileOpenDialog`（koffi 走 COM，还先合成一次 Alt 抢前台），上游写明它只适合「操作者坐在宿主屏幕前」，而本形态的受管 runtime 是沙箱里的后台子进程，开不出来。壳页在注入 DSH index 前把桥装上（`src/ui/dsh-inject.ts` 的 `installDirectoryPickerBridge`），弹窗改由宿主出：`hana.resources.pick`，`mode=directory`。用户看到的是自己机器上的系统弹窗，选择器不经沙箱。
 - **数据目录**：固定用 App 内置独立目录（App 数据目录下的 `.dsh`），开箱即用；共享已有目录 / 切换数据源暂不提供。
@@ -60,7 +61,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 ### action=open：开一个子代理并交首件活
 
 - **task + cwd 必填**；不允许传 `sessionId`（续会话用 `reply`）
-- **固定异步**：立即返回 `{ content, details: { dsh: { action: "open", taskId, sessionId, rpcId, status: "running", delivery: "next-step", cwd }, card } }`；任务在后台执行，完成/失败按回执里的 `delivery` 档投递回发起会话：结果在下一个输入点自动贴回，不必为等它结束回合（会话空闲时自动起新一轮）；要看过程或最终结论用 `get`
+- **固定异步**：立即返回 `{ content, details: { dsh: { action: "open", taskId, sessionId, rpcId, status: "running", delivery: "next-step", cwd }, card } }`（`card` 挂不挂按 App 设置「聊天流卡片」的档位，见《首次安装》；缺省 `open-only` 时 open 挂，`never` 时不挂）；任务在后台执行，完成/失败按回执里的 `delivery` 档投递回发起会话：结果在下一个输入点自动贴回，不必为等它结束回合（会话空闲时自动起新一轮）；要看过程或最终结论用 `get`
 - **投递档位（回执里的 `delivery`）**：宿主不替作者默选档位，本 App 在 create 时显式声明，档位定死后 update 改不了。`next-step`（当前值）＝结果在下一个输入收集点贴回本会话，相当于 `session:send` 的 `steer`：不打断在途请求，也不要求模型结束回合专门等；`next-turn` 才是本回合结束后另起一轮（`followUp`）。回执里的值就是实际档位，别自行推断。
 - **句柄**：返回值里的 `taskId` 就是后续 `reply` / `close` / `get` 用的句柄，优先用它
 - `label` 是显示名（宿主任务列表与结果通知里可见），缺省按动作给默认前缀

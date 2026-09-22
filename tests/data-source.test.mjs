@@ -43,6 +43,9 @@ const SESSION_DEFAULTS = {
   sessionModelModel: "",
   sessionModelReasoningEffort: "",
 };
+// 会话流卡档位缺省：open-only（一个会话一张）。词表与缺省的单一事实源在
+// lib/card-display-modes.ts，这里只把值钉住。
+const CARD_DEFAULTS = { sessionCardDisplay: "open-only" };
 
 test("validateSettings: private 默认落位，profile 被强制为内置名", () => {
   assert.deepEqual(validateSettings({ mode: "private", path: null, profile: "whatever" }), {
@@ -51,6 +54,7 @@ test("validateSettings: private 默认落位，profile 被强制为内置名", (
     profile: PRIVATE_PROFILE,
     ...TIMEOUT_DEFAULTS,
     ...SESSION_DEFAULTS,
+    ...CARD_DEFAULTS,
   });
   assert.deepEqual(validateSettings({ mode: "private" }), {
     mode: "private",
@@ -58,6 +62,7 @@ test("validateSettings: private 默认落位，profile 被强制为内置名", (
     profile: PRIVATE_PROFILE,
     ...TIMEOUT_DEFAULTS,
     ...SESSION_DEFAULTS,
+    ...CARD_DEFAULTS,
   });
   assert.deepEqual(DEFAULT_SETTINGS, {
     mode: "private",
@@ -65,6 +70,7 @@ test("validateSettings: private 默认落位，profile 被强制为内置名", (
     profile: PRIVATE_PROFILE,
     ...TIMEOUT_DEFAULTS,
     ...SESSION_DEFAULTS,
+    ...CARD_DEFAULTS,
   });
 });
 
@@ -200,6 +206,7 @@ test("store.write: 原子落盘 + revision 递增 + lastShared 记录（不留 .
       profile: PRIVATE_PROFILE,
       ...TIMEOUT_DEFAULTS,
       ...SESSION_DEFAULTS,
+      ...CARD_DEFAULTS,
     });
   });
 });

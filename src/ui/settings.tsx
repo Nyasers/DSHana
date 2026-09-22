@@ -32,6 +32,7 @@ import {
 } from "@hana/plugin-components/settings";
 import type { SelectOption } from "@hana/plugin-components/settings";
 import "@hana/plugin-components/settings.css";
+import { SESSION_CARD_DISPLAYS, SESSION_CARD_DISPLAY_DEFAULT } from "#/lib/card-display-modes.ts";
 
 // ---- 主题跟随（与壳页同一姿势）----
 const THEME_STYLE_ATTR = "data-hana-theme-style";
@@ -163,6 +164,19 @@ function sessionOf(settings: any): { mode: string; picked: string; effort: strin
   };
 }
 
+/** 会话流卡档位的标签（值与 lib/card-display-modes.ts 同词表）。 */
+const CARD_DISPLAY_OPTIONS: SelectOption[] = [
+  { value: "open-only", label: "只在开启时挂一张" },
+  { value: "all", label: "每次提交都挂" },
+  { value: "never", label: "不挂卡" },
+];
+
+/** 档位读回：不在词表内的值（旧档 / 脏值）按缺省档显示。 */
+function cardDisplayOf(settings: any): string {
+  const v = typeof settings?.sessionCardDisplay === "string" ? settings.sessionCardDisplay : "";
+  return SESSION_CARD_DISPLAYS.includes(v) ? v : SESSION_CARD_DISPLAY_DEFAULT;
+}
+
 function App() {
   const [draft, setDraft] = useState<Record<string, string>>(() => stringifySettings(null));
   const [cfgHint, setCfgHint] = useState("");
@@ -171,6 +185,12 @@ function App() {
   const [cfgSaved, setCfgSaved] = useState(false);
   // 自持设置的 revision（乐观并发：写回带上，落后就 409）
   const [cfgRevision, setCfgRevision] = useState<number | null>(null);
+  // 聊天流卡档位（never / open-only / all）：与后端 global.sessionCardDisplay 同词汇。
+  const [cardDisplay, setCardDisplay] = useState<string>(SESSION_CARD_DISPLAY_DEFAULT);
+  const [cardHint, setCardHint] = useState("");
+  const [cardWarn, setCardWarn] = useState(false);
+  const [cardSaving, setCardSaving] = useState(false);
+  const [cardSaved, setCardSaved] = useState(false);
   const [sessionMode, setSessionMode] = useState<string>("caller");
   const [customPicked, setCustomPicked] = useState("");
   const [sessionEffort, setSessionEffort] = useState("");
@@ -197,6 +217,7 @@ function App() {
       setSessionMode(sess.mode);
       setCustomPicked(sess.picked);
       setSessionEffort(sess.effort);
+      setCardDisplay(cardDisplayOf(data && data.settings));
       setCfgRevision(data && typeof data.revision === "number" ? data.revision : null);
       setCfgHint("");
       setCfgWarn(false);
@@ -322,6 +343,34 @@ function App() {
     }
   };
 
+  const saveCard = async () => {
+    setCardSaving(true);
+    setCardHint("");
+    setCardWarn(false);
+    try {
+      const { res, data } = await readJson("dshana/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ settings: { sessionCardDisplay: cardDisplay }, expectedRevision: cfgRevision ?? undefined }),
+      });
+      if (res.status === 409) {
+        setCardWarn(true);
+        setCardHint("设置已被别处改过，已刷新。");
+        await loadConfig();
+        return;
+      }
+      if (!res.ok || !data || data.ok !== true) throw new Error((data && data.error) || "HTTP " + res.status);
+      setCardDisplay(cardDisplayOf(data.settings));
+      if (typeof data.revision === "number") setCfgRevision(data.revision);
+      setCardSaved(true);
+    } catch (e) {
+      setCardHint("保存失败：" + errText(e));
+      setCardWarn(true);
+    } finally {
+      setCardSaving(false);
+    }
+  };
+
   const modelOpts = modelOptions(model);
   const sessionSel = splitPicked(customPicked);
   const sessionEffortOptions: SelectOption[] = effortsOf(model, sessionSel.provider, sessionSel.model).map((e) => ({
@@ -428,6 +477,31 @@ function App() {
               labels={{ idle: "保存", saving: "保存中", saved: "已保存" }}
               onSavedFeedbackEnd={() => setSessionSaved(false)}
               onClick={() => void saveSession()}
+            />
+          }
+        />
+      </SettingsSection>
+
+      <SettingsSection
+        title="聊天流卡片"
+        description="dshana 每次 open / reply 都会在聊天流里挂一张卡（一个注入 DSH 会话的 iframe）。卡多起来是聊天流变卡的主因，这里控制挂多少张。"
+      >
+        <SettingRow
+          label="展示档位"
+          hint="只在开启时挂一张 = 一个会话一张（reply 不再叠卡，那张卡按 sid 跟着整段会话）；每次提交都挂 = 每发一条消息一张；不挂卡 = 一张也不挂，任务照跑、结果照投，要看会话用 get。"
+          layout="stacked"
+          control={<Select ariaLabel="聊天流卡片档位" value={cardDisplay} options={CARD_DISPLAY_OPTIONS} onChange={setCardDisplay} />}
+        />
+        <SettingRow
+          label=""
+          hint={cardHint || undefined}
+          hintVariant={cardWarn ? "warn" : "default"}
+          control={
+            <SaveButton
+              status={cardSaving ? "saving" : cardSaved ? "saved" : "idle"}
+              labels={{ idle: "保存", saving: "保存中", saved: "已保存" }}
+              onSavedFeedbackEnd={() => setCardSaved(false)}
+              onClick={() => void saveCard()}
             />
           }
         />
