@@ -1,10 +1,9 @@
 /** Web SSE transport for page-owned client entry reconciliation and rebuilt code replacement. */
 import type { Context } from '@deepseek-ai/cordis'
 import type { PluginsEventParseResult } from '../events.ts'
-import { EVENTS_ENDPOINT, parsePluginsEventFrame } from '../events.ts'
+import { EVENTS_ROUTE, parsePluginsEventFrame } from '../events.ts'
 
 export type { PluginsEventFrame } from '../events.ts'
-export { EVENTS_ENDPOINT } from '../events.ts'
 
 /** Cordis plugin name. */
 export const name = 'client-hmr'
@@ -29,7 +28,7 @@ export function apply(ctx: Context): void {
     // EventSource 无法被 fetch 型 transport 包装，所以只能把**地址**换到 App 的私有运行时基址
     // （桥的 runtimeUrl）。裸路径会打到宿主源，被凭据闸 403（missing_credential）。
     const bridge = (globalThis as { __DSHANA__?: { runtimeUrl?: (path: string) => string } }).__DSHANA__
-    const source = new EventSource(bridge?.runtimeUrl?.(EVENTS_ENDPOINT) ?? EVENTS_ENDPOINT)
+    const source = new EventSource(bridge?.runtimeUrl?.(EVENTS_ROUTE) ?? EVENTS_ROUTE)
     source.addEventListener('message', (event: MessageEvent<string>) => {
       let value: unknown
       try {

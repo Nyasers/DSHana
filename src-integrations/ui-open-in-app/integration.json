@@ -1,11 +1,11 @@
 {
   "package": "@deepseek-ai/dsh-client-ui-open-in-app",
-  "upstreamVersion": "0.1.6-alpha.2",
+  "upstreamVersion": "0.1.7-alpha.1",
   "upstreamDir": "packages/client/ui-open-in-app",
   "files": [
     {
       "path": "src/client/index.ts",
-      "upstreamSha256": "0c68fb16abc723096a86fccd3c223319c46f97aed47c5b0564878a53b43a8df6"
+      "upstreamSha256": "25fe2eeb17f7b03147dd543ad38327ec41718f777e33ba9b7f5dbc44978beb77"
     }
   ],
   "notes": [

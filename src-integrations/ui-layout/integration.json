@@ -1,15 +1,15 @@
 {
   "package": "@deepseek-ai/dsh-client-ui-layout",
-  "upstreamVersion": "0.1.6-alpha.2",
+  "upstreamVersion": "0.1.7-alpha.1",
   "upstreamDir": "packages/client/ui-layout",
   "files": [
     {
       "path": "src/client/AppFrame.tsx",
-      "upstreamSha256": "98abc310aaf2a764fae01235278c4e363ae042102806d752f15a9f68b840675e"
+      "upstreamSha256": "1716bbb1f45cd76f0e1dfc593dfdb9d921ac232b09f84f3a476e160958ea7462"
     },
     {
       "path": "src/client/AppFrame.module.css",
-      "upstreamSha256": "d3ecfc590ff09208e9f939c2a43faaa0de1bb41ba329d79725cbe6f98790d9f8"
+      "upstreamSha256": "ccb235bf98e933f7d78f4fe2d835c991bb986ddb598f60f8a8ffeb3f5e533640"
     }
   ],
   "notes": [

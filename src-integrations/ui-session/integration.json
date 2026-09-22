@@ -1,11 +1,11 @@
 {
   "package": "@deepseek-ai/dsh-client-ui-session",
-  "upstreamVersion": "0.1.6-alpha.2",
+  "upstreamVersion": "0.1.7-alpha.1",
   "upstreamDir": "packages/client/ui-session",
   "files": [
     {
       "path": "src/client/index.ts",
-      "upstreamSha256": "a0e77b7910fb3cc915a577432b9e445eef37e9b08fdd15b74405d55984bd07d2"
+      "upstreamSha256": "0cb0ce97ad1753c3c9747948c8d0894661fd498c083c6fdf44f8e87257e65ba0"
     }
   ],
   "notes": [

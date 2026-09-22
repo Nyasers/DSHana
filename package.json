@@ -48,16 +48,17 @@
     "version": "node scripts/release/version.mts"
   },
   "dependencies": {
-    "@deepseek-ai/dsh": "0.1.6-alpha.2"
+    "@deepseek-ai/dsh": "0.1.7-alpha.1"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.2",
-    "@deepseek-ai/dsh-host-open-in-app": "0.1.6-alpha.2",
+    "@deepseek-ai/dsh-host-open-in-app": "0.1.7-alpha.1",
     "@hana/app-sdk": "file:vendor/hana-app-sdk/hana-app-sdk.tgz",
     "@hana/plugin-components": "file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz",
     "@hana/plugin-protocol": "file:vendor/hana-app-sdk/hana-plugin-protocol-0.0.0.tgz",
     "@hana/plugin-sdk": "file:vendor/hana-app-sdk/hana-plugin-sdk-0.0.0.tgz",
     "@rspack/core": "^2.2.3",
+    "@tanstack/react-virtual": "^3.14.9",
     "@types/archiver": "^8.0.0",
     "@types/clean-css": "^4.2.11",
     "@types/fs-extra": "^11.0.4",

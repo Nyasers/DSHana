@@ -1,6 +1,6 @@
 {
   "package": "@deepseek-ai/dsh-api-session-controller",
-  "upstreamVersion": "0.1.6-alpha.2",
+  "upstreamVersion": "0.1.7-alpha.1",
   "upstreamDir": "packages/api/session-controller",
   "halves": {
     "client": false,
@@ -12,11 +12,11 @@
   "files": [
     {
       "path": "src/types.ts",
-      "upstreamSha256": "b5c13ff15429ebc737ef1a11b15b2f0d2d9d00b4f3f0778dfbc45ced6a854514"
+      "upstreamSha256": "863ab6dd9d97707dcb8e1b6074b0e7761ca8083d9b338a04e758c4bf704e0d24"
     },
     {
       "path": "src/commands.ts",
-      "upstreamSha256": "a28710b2368df8747cdb88f08c97358eab0dc64f2c2c653868a8fe7129f30944"
+      "upstreamSha256": "b1c4ba9b741a5b9d3673b17a98a6d8d3d699c886ae84fe525cce68632ec37db8"
     }
   ],
   "generatedPatches": [

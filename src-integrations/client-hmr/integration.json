@@ -1,11 +1,11 @@
 {
   "package": "@deepseek-ai/dsh-client-hmr",
-  "upstreamVersion": "0.1.6-alpha.2",
+  "upstreamVersion": "0.1.7-alpha.1",
   "upstreamDir": "packages/client/hmr",
   "files": [
     {
       "path": "src/client/index.ts",
-      "upstreamSha256": "cf080d4c060550edbc2de37d72ad5b9419ac4cadb46af659ced81229a16f6af7"
+      "upstreamSha256": "569fb912a465a69ec3c971e73de5a6982f624bab8c3fafba293de1ca09313b42"
     }
   ],
   "notes": [
