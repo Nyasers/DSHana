@@ -108,6 +108,13 @@ test("buildRuntimeConfig: dshHome（当前数据源 W3）只在显式传时出�
   assert.equal(withHome.dshHome, "/x/dsh-home");
 });
 
+test("buildRuntimeConfig: 覆盖项 fatalPath 只在显式传时出现", () => {
+  const base = buildRuntimeConfig({ dataDir: "/x", dshPort: 1, bridgePort: 2, bridgeKey: "k".repeat(32), controlKey: "c".repeat(32) });
+  assert.ok(!("fatalPath" in base));
+  const withFatal = buildRuntimeConfig({ dataDir: "/x", dshPort: 1, bridgePort: 2, bridgeKey: "k".repeat(32), controlKey: "c".repeat(32), fatalPath: "/x/runtime-fatal.json" });
+  assert.equal(withFatal.fatalPath, "/x/runtime-fatal.json");
+});
+
 test("classifyRuntimeFailure: 退出码契约归类（src/runtime/main.js EXIT 同步）", () => {
   assert.equal(classifyRuntimeFailure({ exitCode: 7 }).kind, "port-busy");
   assert.equal(classifyRuntimeFailure({ exitCode: 4 }).kind, "deps");

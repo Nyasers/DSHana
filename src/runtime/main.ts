@@ -31,6 +31,7 @@ import http from "node:http";
 import { parseRuntimeConfig, UsageError, USAGE } from "#/runtime/options.ts";
 import { startDshBridge } from "#/runtime/bridge.ts";
 import { info, warn, err } from "#/runtime/log.ts";
+import { runtimeErrorState } from "#/lib/runtime-error.ts";
 // @hana/app-sdk 为 devDependencies（file:vendor/hana-app-sdk/hana-app-sdk.tgz，版本随宿主
 // 0.946.2 App 契约）；connectAppRuntime 运行时实现经 rspack 构建时静态内联进本 bundle（只
 // 依赖 node:crypto，无运行时包解析——见 rspack.config.mts 打包纪律注释）。升级 = 换 vendor
@@ -262,6 +263,21 @@ export async function main(argv: string[]): Promise<number> {
     process.stdout.write(USAGE);
     return EXIT.OK;
   }
+  /**
+   * 致命路径统一出口：先把结构化失败报告写到 opts.fatalPath（App 据此把真实成因呈现给
+   * 用户，而不是只报退出码（含嵌套 AggregateError 的每一层）），再由各分支继续 err/退出。
+   * 报告写失败不影响退出。
+   */
+  const reportFatal = (kind, error) => {
+    if (!opts.fatalPath) return;
+    try {
+      const message = runtimeErrorState(error).message || String(error);
+      const causes = error instanceof AggregateError ? error.errors.map((e) => runtimeErrorState(e).message) : [];
+      writeFileSync(opts.fatalPath, JSON.stringify({ ok: false, kind, message, causes, at: new Date().toISOString() }), { mode: 0o600 });
+    } catch (e) {
+      warn("fatal-report", "写失败报告失败（忽略）：" + errText(e));
+    }
+  };
   info(opts.preflight
     ? `dsh-host 启动（preflight 预检）：dshHome=${opts.dshHome} dataDir=${opts.dataDir}`
     : `dsh-host 启动（managed node runtime entry）：dshPort=${opts.dshPort} bridgePort=${opts.bridgePort} dataDir=${opts.dataDir}`);
@@ -272,6 +288,7 @@ export async function main(argv: string[]): Promise<number> {
     installRoot = resolveInstallRoot(entryFile);
   } catch (e) {
     err("install-root", errText(e));
+    reportFatal("install-root", e);
     return EXIT.INTERNAL;
   }
   const dataDir = resolve(opts.dataDir);
@@ -307,6 +324,7 @@ export async function main(argv: string[]): Promise<number> {
       " Node 进程时经父进程 IPC fd 注入受管通道。直接 node 运行无父 IPC，无法" +
       " 连接宿主 tasks/models/network，退出。",
     );
+    reportFatal("ipc", e);
     return EXIT.IPC_UNAVAILABLE;
   }
   state.hana = hana;
@@ -346,12 +364,14 @@ export async function main(argv: string[]): Promise<number> {
   } catch (e) {
     err("locate", errText(e));
     err("exit", "exit=" + EXIT.DEPS + " kind=locate");
+    reportFatal("deps", e);
     return EXIT.DEPS;
   }
   const missing = missingArtifacts(depsRoot, rosterPatch);
   if (missing.length > 0) {
     err("artifacts", "产物不在位（先跑 pnpm run build 再打包/运行）：" + missing.join("、"));
     err("exit", "exit=" + EXIT.SEED + " kind=artifacts-missing");
+    reportFatal("seed", new Error("产物不在位：" + missing.join("、")));
     return EXIT.SEED;
   }
 
@@ -371,6 +391,7 @@ export async function main(argv: string[]): Promise<number> {
     const kind = /EADDRINUSE|address already in use/i.test(text) ? "port-busy" : "boot-failed";
     err("boot", `runProfile 失败（${kind}）：${text}`);
     err("exit", "exit=" + EXIT.PORT + " kind=" + kind);
+    reportFatal(kind, e);
     return EXIT.PORT;
   }
   state.ctx = boot.ctx;
@@ -384,6 +405,7 @@ export async function main(argv: string[]): Promise<number> {
     const kind = /未在期望端口/.test(text) ? "port-unreachable" : "boot-failed";
     err("ready", `就绪等待失败（${kind}）：${text}`);
     err("exit", "exit=" + EXIT.PORT + " kind=" + kind);
+    reportFatal(kind, e);
     await shutdown("ready-failed", EXIT.PORT);
     return EXIT.PORT;
   }
@@ -415,6 +437,7 @@ export async function main(argv: string[]): Promise<number> {
   } catch (e) {
     err("auth", "DSH 凭据交换失败（中继无法通过 DSH 鉴权）：" + errText(e));
     err("exit", "exit=" + EXIT.PORT + " kind=auth-exchange");
+    reportFatal("auth-exchange", e);
     await shutdown("auth-failed", EXIT.PORT);
     return EXIT.PORT;
   }
@@ -506,6 +529,7 @@ export async function main(argv: string[]): Promise<number> {
   } catch (e) {
     err("dshbridge", "中继启动失败：" + errText(e));
     err("exit", "exit=" + EXIT.PORT + " kind=bridge-bind");
+    reportFatal("bridge-bind", e);
     await shutdown("bridge-failed", EXIT.PORT);
     return EXIT.PORT;
   }
@@ -559,5 +583,14 @@ main(rawArgv).then((code) => {
     } catch {
       process.exit(code);
     }
+  }
+}).catch((e) => {
+  // main 自身抛出的意外错误（未被上述分支拦住的）：同样走 stderr + 退出码，不让它静默。
+  err("fatal", "未预期的致命错误：" + errText(e));
+  err("exit", "exit=" + EXIT.INTERNAL + " kind=internal");
+  try {
+    process.exitCode = EXIT.INTERNAL;
+  } catch {
+    process.exit(EXIT.INTERNAL);
   }
 });

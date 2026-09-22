@@ -28,6 +28,7 @@ import { mkdirSync, writeFileSync, chmodSync, rmSync, readFileSync } from "node:
 import { randomInt, randomBytes } from "node:crypto";
 import { appDataDir, appLogger, getAppRuntime } from "#/lib/app-runtime.ts";
 import { currentSource } from "#/lib/data-source.ts";
+import { parseRuntimeFatal, fatalReportText } from "#/lib/runtime-error.ts";
 import type { HanaPluginContextV2 } from "#/types/host.ts";
 // 依赖随包物化在安装目录 <installRoot>/node_modules，
 // 无运行时安装与 spawn。
@@ -170,6 +171,7 @@ interface RuntimeConfig {
   readyMarker: string;
   dshHome?: string;
   depsRoot?: string;
+  fatalPath?: string;
 }
 
 /**
@@ -179,7 +181,7 @@ interface RuntimeConfig {
  * 敏感项（bridgeKey）只进本对象→写 0600 文件→argv 只传路径，不出现在 argv/日志。
  */
 export function buildRuntimeConfig(opts) {
-  const { dataDir, dshHome, dshPort, bridgePort, bridgeKey, controlKey, depsRoot, readyMarker = READY_MARKER } = opts || {};
+  const { dataDir, dshHome, dshPort, bridgePort, bridgeKey, controlKey, depsRoot, fatalPath, readyMarker = READY_MARKER } = opts || {};
   if (typeof dataDir !== "string" || !dataDir) throw new Error("buildRuntimeConfig: dataDir 必填（App ctx.dataDir）");
   if (!Number.isInteger(dshPort) || dshPort < 1 || dshPort > 65535) throw new Error("buildRuntimeConfig: dshPort 必填（1..65535）");
   if (!Number.isInteger(bridgePort) || bridgePort < 1 || bridgePort > 65535) throw new Error("buildRuntimeConfig: bridgePort 必填（1..65535）");
@@ -188,6 +190,7 @@ export function buildRuntimeConfig(opts) {
   const config: RuntimeConfig = { dataDir, dshPort, bridgePort, bridgeKey, controlKey, readyMarker };
   if (typeof dshHome === "string" && dshHome) config.dshHome = dshHome;
   if (typeof depsRoot === "string" && depsRoot) config.depsRoot = depsRoot;
+  if (typeof fatalPath === "string" && fatalPath) config.fatalPath = fatalPath;
   return config;
 }
 
@@ -237,6 +240,20 @@ export function classifyRuntimeFailure(info) {
     return { kind: "boot-failed", userText: START_ERROR_HINTS["boot-failed"] };
   }
   return { kind: "unknown", userText: START_ERROR_HINTS.unknown };
+}
+
+/**
+ * 读取并删除子进程写下的结构化失败报告（若存在）：读不到/形状不符返回 null，调用方
+ * 回落到退出码归类。报告一次性（读出即删），免得下次启动读到陈旧成因。
+ */
+function readFatalReport(fatalPath) {
+  try {
+    const raw = readFileSync(fatalPath, "utf8");
+    rmSync(fatalPath, { force: true });
+    return parseRuntimeFatal(JSON.parse(raw));
+  } catch {
+    return null;
+  }
 }
 
 function logApp(level, ...args) {
@@ -506,6 +523,10 @@ async function doStartManaged(opts, attempt = 1) {
   const bridgeKey = randomBytes(24).toString("base64url");
   const controlKey = randomBytes(24).toString("base64url");
   const readyMarker = makeReadyMarker();
+  // 启动失败报告文件：子进程在任一致命路径退出前写下 { ok:false, kind, message, causes }，
+  // 本侧失败时读回并把真实成因（含嵌套层）折叠进用户可见诊断（见 src/lib/runtime-error.ts）。
+  // 每次启动一份随机名，失败后即删；成功路径不起作用（子进程只在致命时写）。
+  const fatalPath = join(dataDir, "runtime-fatal-" + randomBytes(9).toString("hex") + ".json");
   const config = buildRuntimeConfig({
     dataDir,
     dshHome: source.home,
@@ -514,6 +535,7 @@ async function doStartManaged(opts, attempt = 1) {
     bridgeKey,
     controlKey,
     readyMarker,
+    fatalPath,
     cordisSrc: typeof opts.cordisSrc === "string" && opts.cordisSrc ? opts.cordisSrc : undefined,
     depsRoot: typeof opts.depsRoot === "string" && opts.depsRoot ? opts.depsRoot : undefined,
   });
@@ -539,6 +561,7 @@ async function doStartManaged(opts, attempt = 1) {
   } catch (e) {
     // 启动失败：配置文件中含 bridgeKey，立即删除（不残留凭据）
     try { rmSync(configPath, { force: true }); } catch { /* 忽略 */ }
+    try { rmSync(fatalPath, { force: true }); } catch { /* 子进程未写也无妨 */ }
     // 宿主侧 start 拒绝（能力/授权/校验失败）：归类上报
     const text = errText(e);
     logApp("error", "[managed-runtime] ctx.runtime.start 被宿主拒绝：" + text);
@@ -575,10 +598,17 @@ async function doStartManaged(opts, attempt = 1) {
     if (state === "failed" || state === "exited" || state === "stopped") {
       const cls = classifyRuntimeFailure(cur);
       managed.lastInfo = cur;
+      // 读回子进程的结构化失败报告（若有）：把真实成因折叠进用户可见诊断，而不是只报归类提示。
+      const fatal = readFatalReport(fatalPath);
       logApp("error", "[managed-runtime] DSH runtime 终态异常：" + state + " exit=" + (cur && cur.exitCode));
-      throw codedError(cls.userText + "（runtime state=" + state + " exitCode=" + (cur && cur.exitCode) + "）", cls.kind);
+      const detail = fatal ? "（" + fatalReportText(fatal) + "）" : "";
+      throw codedError(
+        cls.userText + detail + "（runtime state=" + state + " exitCode=" + (cur && cur.exitCode) + "）",
+        cls.kind,
+      );
     }
     if (Date.now() >= deadline) {
+      try { rmSync(fatalPath, { force: true }); } catch { /* 忽略 */ }
       throw codedError(
         "DSH 受管 runtime 启动超时（" + Math.round(READY_TIMEOUT_MS / 1000) + "s 内未就绪）。" +
           "首次启动含 DSH boot，若仍在进行请稍候；查看 App 日志/runtime 日志。",

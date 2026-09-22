@@ -9,7 +9,7 @@
 // argv（进程列表可见）、环境变量或日志里。
 //
 // 配置文件 schema（JSON）：
-//   { dataDir, dshHome?, dshPort, bridgePort, bridgeKey, controlKey, readyMarker, depsRoot? }
+//   { dataDir, dshHome?, dshPort, bridgePort, bridgeKey, controlKey, readyMarker, depsRoot?, fatalPath? }
 //   或预检形态（数据源切换探针）：
 //   { dataDir, dshHome, preflight:true, resultPath }
 //   · dataDir       App ctx.dataDir 绝对路径（App 数据根；.dsh / .runtime-tmp 等均在其下）
@@ -17,6 +17,8 @@
 //   · preflight     true = 只做「依赖就位 + 定位 DSH + 产物在位」可用性预检，不 boot DSH，
 //                   也不往目标 home 写任何东西；结果写 resultPath（{ok} 或 {ok:false,error}）后退出
 //   · resultPath    预检结果文件绝对路径（仅 preflight 形态）
+//   · fatalPath     启动失败报告写入的绝对路径（可选）：任一致命路径退出前写
+//                   { ok:false, kind, message, causes[] }，由 App 读回并折叠进用户可见诊断
 //   · dshPort       DSH webserver 内部监听端口（1..65535，runtime 自用，不由宿主暴露）
 //   · bridgePort    中继端口 = 注册给宿主的 service.port（宿主代理目标；1..65535）
 //   · bridgeKey     中继鉴权 key（header x-hana-dsh-bridge / 路径 /_hana/<key>/）
@@ -66,6 +68,10 @@ export function normalizeRuntimeConfig(input) {
   if (resultPath && (!isAbsolute(resultPath) || resultPath.includes("\0"))) {
     throw new UsageError("配置项 resultPath 必须是绝对路径且不含 NUL（收到 " + JSON.stringify(input.resultPath) + "）");
   }
+  const fatalPath = typeof input.fatalPath === "string" && input.fatalPath ? input.fatalPath : null;
+  if (fatalPath && (!isAbsolute(fatalPath) || fatalPath.includes("\0"))) {
+    throw new UsageError("配置项 fatalPath 必须是绝对路径且不含 NUL（收到 " + JSON.stringify(input.fatalPath) + "）");
+  }
   if (input.preflight === true) {
     // 预检模式（数据源切换的可用性探针）：不起服务、不拿凭据，只要目标 home + 结果文件
     if (!dshHome) throw new UsageError("预检配置必须携带 dshHome（目标数据源的 DSH_HOME 绝对路径）");
@@ -99,6 +105,7 @@ export function normalizeRuntimeConfig(input) {
     controlKey,
     readyMarker,
     depsRoot: typeof input.depsRoot === "string" && input.depsRoot ? input.depsRoot : null,
+    ...(fatalPath ? { fatalPath } : {}),
   };
 }
 

@@ -67,6 +67,13 @@ test("parseRuntimeConfig: 可选 dshHome（当前数据源 W3）——须绝对�
   assert.throws(() => normalizeRuntimeConfig({ ...GOOD, dshHome: "/x\0y" }), /dshHome/);
 });
 
+test("normalizeRuntimeConfig: fatalPath 可选，且必须为绝对路径", () => {
+  assert.ok(!("fatalPath" in normalizeRuntimeConfig(GOOD)), "未传时不出现该键");
+  assert.equal(normalizeRuntimeConfig({ ...GOOD, fatalPath: "/d/runtime-fatal.json" }).fatalPath, "/d/runtime-fatal.json");
+  assert.throws(() => normalizeRuntimeConfig({ ...GOOD, fatalPath: "rel.json" }), (e) => e instanceof UsageError && /fatalPath/.test(e.message));
+  assert.throws(() => normalizeRuntimeConfig({ ...GOOD, fatalPath: "/x\0y" }), /fatalPath/);
+});
+
 test("parseRuntimeConfig: readyMarker 缺省 DSH_READY", () => {
   const o = normalizeRuntimeConfig({ ...GOOD, readyMarker: undefined });
   assert.equal(o.readyMarker, "DSH_READY");
