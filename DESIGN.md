@@ -105,9 +105,9 @@ DSHana 以**单卡 + 自带功能面板**注册（manifest `contributes.cards[0]
 
 ### 设置面
 
-- **DSH 内设置**：`agent-default-model`（默认模型，Provider/模型/推理强度三级联动）与 DSH 版本显示，由 `@dshana/settings` 子插件在 DSH 设置页的分页承载。
-- **会话模型从哪来**：App 设置项 `sessionModelMode` 决定——`caller`（缺省，复用调用方那份）或 `custom`（`sessionModelProvider` / `sessionModelModel` / `sessionModelReasoningEffort` 固定一条，推理强度空串 = 不指定、由 DSH 决定）。优先级：工具入参显式 > App 自定义那条 > 用户手设的 DSH 默认（`caller` 模式下 user 层非空就不补） > **调用方那张角色卡**配的 `models.chat`（`agent:list` 的 `isCurrent` 优先，能力面 `app/agents.read`）。选出的那条**随会话请求带上**（集成层给 `session/create` 与 `session/prompt` 加了可选 `model` 字段，见 `src-integrations/api-session-controller`）：只在会话内生效，不写 `settings.yaml` 的全局默认；只在 create 上补，send 沿用会话已有的选择。user 层有值但已不可服务时才由 `src/lib/model-default-guard.ts` 就地对账。见 `src/lib/caller-model.ts`（决策）、`agent-models.ts`（读角色卡）、`host-models.ts`（宿主目录）。
-- **App 级设置**（数据源、两个超时）：迁到 App 自绘设置页，由宿主设置区渲染（`contributes.settings.ui.route`），不依赖 DSH 运行。见 `specs/current/sample-align`。
+- **App 设置页**：`contributes.settings.ui.route`，宿主设置区渲染，不依赖 DSH 运行。两项常规（审批超时 / 任务超时，App 自持存储）+ 会话模型模式。模型候选读 `GET /dshana/models`，后端取**宿主模型目录**（`ctx.models.list`，能力面 `app/models.infer`）——宿主目录是「这条路走不走得通」的唯一事实源，页面因此不列 DSH 自己的目录，DSH 在不在跑都一样（`src/lib/model-catalog-view.ts` 归一化、按 provider 归组并附推理档）。见 `specs/current/sample-align`。
+- **会话模型从哪来**：App 设置项 `sessionModelMode` 决定——`caller`（缺省，复用调用方那份）或 `custom`（`sessionModelProvider` / `sessionModelModel` / `sessionModelReasoningEffort` 固定一条，推理强度空串 = 不指定、由 DSH 决定）。优先级：工具入参显式 > App 自定义那条 > 用户手设的 DSH 默认（`caller` 模式下 user 层非空就不补） > **调用方那张角色卡**配的 `models.chat`（`agent:list` 的 `isCurrent` 优先，能力面 `app/agents.read`）。选出的那条**随会话请求带上**（集成层给 `session/create` 与 `session/prompt` 加了可选 `model` 字段，见 `src-integrations/api-session-controller`）：只在会话内生效，不写 `settings.yaml` 的全局默认；只在 create 上补，send 沿用会话已有的选择。见 `src/lib/caller-model.ts`（决策）、`agent-models.ts`（读角色卡）、`host-models.ts`（宿主目录）。
+- **DSH 自己的默认模型**（`agent-default-model`）：本页不经手它，也不在 config.json 存副本。它的用户层有值、而已不在宿主目录里时，`src/lib/model-default-guard.ts` 在 runtime 就绪与宿主 `models-changed` 之后就地对账换一条可服务的（优先留在原 provider 里换，再退角色卡模型、目录第一条）；用户层为空不动手——本形态里界面直接开的会话在 DSH 自己的模型选择器里选一条。
 
 ### 目录选择器
 

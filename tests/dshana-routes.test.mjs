@@ -63,7 +63,7 @@ function makeFakeDeps(over = {}) {
   };
 }
 
-test("挂载清单：GET boot-state/health/settings/model/card-state + POST start/stop/settings/model（前缀 dshana）", () => {
+test("挂载清单：GET boot-state/health/settings/models/card-state + POST start/stop/settings（前缀 dshana）", () => {
   const { app, routes } = makeFakeApp();
   registerDshanaRoutes(app, makeFakeDeps());
   const paths = routes.map(([m, p]) => m + " " + p).sort();
@@ -71,9 +71,8 @@ test("挂载清单：GET boot-state/health/settings/model/card-state + POST star
     "GET /dshana/boot-state",
     "GET /dshana/card-state",
     "GET /dshana/health",
-    "GET /dshana/model",
+    "GET /dshana/models",
     "GET /dshana/settings",
-    "POST /dshana/model",
     "POST /dshana/settings",
     "POST /dshana/settings/restart",
     "POST /dshana/start",
@@ -259,127 +258,50 @@ test("POST /dshana/stop: 停 runtime（幂等）", async () => {
   assert.equal(deps.calls.getSnapshot >= 1, true);
 });
 
-// ---- 默认模型（值归 DSH 的 settings 段；路由只过手）----
+// ---- 模型候选（读宿主模型目录；与 DSH 运行状态无关）----
 
-const READY_STATE = { phase: "ready", ready: true, runtimeId: "rt-1", proxyPrefix: null, service: { state: "ready", port: 4317 }, error: null, note: "ready", updatedAt: "t" };
-
-function modelCtx(body) {
-  const ctx = makeFakeCtx();
-  ctx.req = { json: async () => body };
-  return ctx;
-}
-
-test("GET /dshana/model: DSH 未运行 → ok=false/ready=false（不碰读模型）", async () => {
+test("GET /dshana/models: 200 返回宿主目录的分组视图", async () => {
   const { app, routes } = makeFakeApp();
-  let called = 0;
-  registerDshanaRoutes(app, makeFakeDeps({ readModel: async () => { called += 1; return {}; } }));
-  const [,, handler] = routes.find(([m, p]) => m === "GET" && p === "/dshana/model");
-  const ctx = makeFakeCtx();
-  await handler(ctx);
-  assert.equal(ctx.status, 200);
-  assert.equal(ctx.body.ok, false);
-  assert.equal(ctx.body.ready, false);
-  assert.match(ctx.body.error, /未运行/);
-  assert.equal(called, 0, "未就绪时不应去读 DSH");
-});
-
-test("GET /dshana/model: 就绪 → 原样回读面结果（当前值 + revision + 候选）", async () => {
-  const { app, routes } = makeFakeApp();
-  const model = {
-    current: { provider: "deepseek-official", model: "deepseek-flash" },
-    revision: 3,
-    applies: "live",
-    writable: true,
-    catalog: { default: null, routableProviders: ["deepseek-official"], groups: [{ id: "deepseek-official", name: "DeepSeek", models: [{ id: "deepseek-flash", name: "DeepSeek-V41-Flash" }] }], failures: [] },
-    catalogError: null,
-  };
-  registerDshanaRoutes(app, makeFakeDeps({ getSnapshot: () => READY_STATE, readModel: async () => model }));
-  const [,, handler] = routes.find(([m, p]) => m === "GET" && p === "/dshana/model");
+  registerDshanaRoutes(app, makeFakeDeps({
+    listHostModels: async () => [
+      { provider: "deepseek", id: "deepseek-flash", name: "DeepSeek-V41-Flash", reasoning: true, thinkingLevels: ["off", "high", "max"], defaultThinkingLevel: "high" },
+      { provider: "agnes", id: "agnes-3.0-flash", name: "Agnes 3.0 Flash" },
+    ],
+  }));
+  const [,, handler] = routes.find(([m, p]) => m === "GET" && p === "/dshana/models");
   const ctx = makeFakeCtx();
   await handler(ctx);
   assert.equal(ctx.status, 200);
   assert.equal(ctx.body.ok, true);
-  assert.equal(ctx.body.ready, true);
-  assert.equal(ctx.body.model.revision, 3);
-  assert.equal(ctx.body.model.catalog.groups.length, 1);
+  assert.deepEqual(ctx.body.catalog.groups.map((g) => g.id), ["agnes", "deepseek"]);
+  const deepseek = ctx.body.catalog.groups.find((g) => g.id === "deepseek");
+  assert.equal(deepseek.models[0].name, "DeepSeek-V41-Flash");
+  assert.deepEqual(deepseek.models[0].efforts.map((e) => e.id), ["off", "high", "max"]);
+  assert.equal(deepseek.models[0].defaultEffort, "high");
 });
 
-test("GET /dshana/model: 读面抛错 → ok=false/ready=true + error（不假装成功）", async () => {
+test("GET /dshana/models: 不碰 DSH 快照（未就绪也照读宿主目录）", async () => {
+  const { app, routes } = makeFakeApp();
+  const deps = makeFakeDeps({ listHostModels: async () => [{ provider: "deepseek", id: "deepseek-flash", name: "Flash" }] });
+  registerDshanaRoutes(app, deps);
+  const [,, handler] = routes.find(([m, p]) => m === "GET" && p === "/dshana/models");
+  const ctx = makeFakeCtx();
+  await handler(ctx);
+  assert.equal(ctx.body.ok, true);
+  assert.equal(deps.calls.getSnapshot, 0, "模型候选不看 DSH 状态");
+});
+
+test("GET /dshana/models: 宿主目录读取失败 → ok=false + error（不假装成空目录）", async () => {
   const { app, routes } = makeFakeApp();
   registerDshanaRoutes(app, makeFakeDeps({
-    getSnapshot: () => READY_STATE,
-    readModel: async () => { throw new Error("中继尚未就绪"); },
+    listHostModels: async () => { throw new Error("ctx.models.list 不可用（manifest 未声明 app/models.infer 或未授权）"); },
   }));
-  const [,, handler] = routes.find(([m, p]) => m === "GET" && p === "/dshana/model");
+  const [,, handler] = routes.find(([m, p]) => m === "GET" && p === "/dshana/models");
   const ctx = makeFakeCtx();
   await handler(ctx);
   assert.equal(ctx.status, 200);
   assert.equal(ctx.body.ok, false);
-  assert.equal(ctx.body.ready, true);
-  assert.match(ctx.body.error, /中继尚未就绪/);
-});
-
-test("POST /dshana/model: 缺 provider/model → 400（不写）", async () => {
-  const { app, routes } = makeFakeApp();
-  let called = 0;
-  registerDshanaRoutes(app, makeFakeDeps({
-    getSnapshot: () => READY_STATE,
-    writeModel: async () => { called += 1; return {}; },
-  }));
-  const [,, handler] = routes.find(([m, p]) => m === "POST" && p === "/dshana/model");
-  const ctx = modelCtx({ provider: "deepseek-official" });
-  await handler(ctx);
-  assert.equal(ctx.status, 400);
-  assert.equal(ctx.body.ok, false);
-  assert.equal(called, 0);
-});
-
-test("POST /dshana/model: 成功 → 200，patch 带到写面（含 expectedRevision）", async () => {
-  const { app, routes } = makeFakeApp();
-  let written = null;
-  registerDshanaRoutes(app, makeFakeDeps({
-    getSnapshot: () => READY_STATE,
-    writeModel: async (patch) => { written = patch; return { current: { provider: patch.provider, model: patch.model }, revision: 4 }; },
-  }));
-  const [,, handler] = routes.find(([m, p]) => m === "POST" && p === "/dshana/model");
-  const ctx = modelCtx({ provider: "deepseek-official", model: "deepseek-pro", reasoningEffort: "high", expectedRevision: 3, extra: 1 });
-  await handler(ctx);
-  assert.equal(ctx.status, 200);
-  assert.equal(ctx.body.ok, true);
-  assert.deepEqual(written, { provider: "deepseek-official", model: "deepseek-pro", reasoningEffort: "high", expectedRevision: 3 });
-  assert.equal(ctx.body.model.revision, 4);
-});
-
-test("POST /dshana/model: 段被别处改过 → 409 + code（上游 settings/conflict 上抬）", async () => {
-  const { app, routes } = makeFakeApp();
-  registerDshanaRoutes(app, makeFakeDeps({
-    getSnapshot: () => READY_STATE,
-    writeModel: async () => {
-      const e = new Error("默认模型已被别处改过（段 revision 前进），请刷新后重试");
-      e.code = "SETTINGS_CONFLICT";
-      throw e;
-    },
-  }));
-  const [,, handler] = routes.find(([m, p]) => m === "POST" && p === "/dshana/model");
-  const ctx = modelCtx({ provider: "deepseek-official", model: "deepseek-flash" });
-  await handler(ctx);
-  assert.equal(ctx.status, 409);
-  assert.equal(ctx.body.ok, false);
-  assert.equal(ctx.body.code, "SETTINGS_CONFLICT");
-});
-
-test("POST /dshana/model: 非冲突失败 → 200/ok=false + error（不是 409）", async () => {
-  const { app, routes } = makeFakeApp();
-  registerDshanaRoutes(app, makeFakeDeps({
-    getSnapshot: () => READY_STATE,
-    writeModel: async () => { throw new Error("settings/replace HTTP 500"); },
-  }));
-  const [,, handler] = routes.find(([m, p]) => m === "POST" && p === "/dshana/model");
-  const ctx = modelCtx({ provider: "deepseek-official", model: "deepseek-flash" });
-  await handler(ctx);
-  assert.equal(ctx.status, 200);
-  assert.equal(ctx.body.ok, false);
-  assert.match(ctx.body.error, /HTTP 500/);
+  assert.match(ctx.body.error, /app\/models\.infer/);
 });
 
 // ---- 数据源切换：入口暂时撤下（实现留在 lib/source-switch.ts 与其单测里）----

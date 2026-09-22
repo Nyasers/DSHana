@@ -4,7 +4,6 @@
 // tests/model-settings.test.mjs — 默认模型通道的纯函数契约（真机探测核对过的形状，见
 // tests/e2e/settings-model.probe.mjs）：
 //   · settings/describe 的段是数组（namespaces: [{ns,...}]），不是以段名为键的对象；
-//   · session/modelCatalog 是无参方法，信封不能包 session 家族的 request 层（bare）；
 //   · 段版本冲突的码是 settings/conflict（DSH 侧 SettingsConflictError 自报 SETTINGS_CONFLICT）。
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -36,14 +35,6 @@ test("isSettingsConflict: 认 settings/conflict（网关形态）与 SETTINGS_CO
   other.code = "gateway/bad-request";
   assert.equal(isSettingsConflict(other), false);
   assert.equal(isSettingsConflict(null), false);
-});
-
-test("信封：session/modelCatalog 走 bare（不包 request），session/cancel 仍包", () => {
-  const bare = buildClientRequest({ method: "session/modelCatalog", payload: {}, bare: true });
-  assert.deepEqual(bare.body.payload.args, {});
-  const wrapped = buildClientRequest({ method: "session/cancel", payload: { sessionId: "s1" } });
-  assert.equal(typeof wrapped.body.payload.args.request, "object");
-  assert.equal(wrapped.body.payload.args.request.sessionId, "s1");
 });
 
 test("信封：settings/replace 的 args 按参数名给（ns/section/expectedRevision）", () => {

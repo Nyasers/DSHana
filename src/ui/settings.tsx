@@ -16,8 +16,8 @@
 //   1) 跟随宿主主题：hana.theme.getSnapshot() 首屏 + hana.theme.subscribe 事件，不轮询。
 //      宿主主题 CSS 在 settings.css 之后注入，变量覆盖顺序因此正确。
 //   2) 常规两项：读回来的就是运行时生效值，保存后同样以后端返回的生效值为准，不做本地猜测。
-//   3) 默认模型：这份值的正主是 DSH 的 settings 段 agent-default-model，本页只是它的一扇门
-//      （不在 config.json 存副本），DSH 未运行时本节给体面态并给启动入口。
+//   3) 会话模型：模型候选读 App 后端的 /dshana/models（宿主模型目录 ctx.models.list 的分组视图），
+//      不读 DSH 自己的目录，所以本页与 DSH 在不在跑无关。
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { hana } from "@hana/plugin-sdk";
@@ -69,16 +69,11 @@ function applyTheme(snap: ThemeSnap | null | undefined) {
 }
 
 // ---- 小工具 ----
-const START_TIMEOUT_MS = 120000;
 const MODEL_KEY_SEP = "\u0000"; // provider 与 model id 之间（见 modelOptions）
 
 function errText(e: unknown) {
   const m = e && (e as { message?: string }).message;
   return m || String(e);
-}
-
-function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
 }
 
 /** 常规两项：字段名与提示语（值本身由后端与 config.ts 的缺省值决定）。 */
@@ -157,7 +152,7 @@ const SESSION_MODES: SelectOption[] = [
   { value: "custom", label: "自定义模型" },
 ];
 
-/** 会话模型设置读回：模式 + 自定义那条（合成 provider\0model，与默认模型那一节同写法）。 */
+/** 会话模型设置读回：模式 + 自定义那条（合成 provider\0model，与 modelOptions 同一写法）。 */
 function sessionOf(settings: any): { mode: string; picked: string; effort: string } {
   const provider = typeof settings?.sessionModelProvider === "string" ? settings.sessionModelProvider : "";
   const model = typeof settings?.sessionModelModel === "string" ? settings.sessionModelModel : "";
@@ -183,14 +178,7 @@ function App() {
   const [sessionSaved, setSessionSaved] = useState(false);
   const [sessionHint, setSessionHint] = useState("");
   const [sessionWarn, setSessionWarn] = useState(false);
-  const [model, setModel] = useState<any>(null); // 最近一次读回的整份状态（ready/current/revision/catalog）
-  const [modelHint, setModelHint] = useState("");
-  const [modelWarn, setModelWarn] = useState(false);
-  const [picked, setPicked] = useState("");
-  const [effort, setEffort] = useState("");
-  const [modelSaving, setModelSaving] = useState(false);
-  const [modelSaved, setModelSaved] = useState(false);
-  const [starting, setStarting] = useState(false);
+  const [model, setModel] = useState<any>(null); // 最近一次读回的模型候选（{catalog:{groups}} 或 {error}）
   const alive = useRef(true);
 
   useEffect(() => {
@@ -218,40 +206,19 @@ function App() {
     }
   }, []);
 
-  const loadModel = useCallback(async (): Promise<boolean> => {
+  const loadModel = useCallback(async () => {
     try {
-      const { res, data } = await readJson("dshana/model");
+      const { res, data } = await readJson("dshana/models");
       if (!data) throw new Error("HTTP " + res.status);
-      if (!data.ready) {
-        setModel({ ready: false, error: data.error || "" });
-        setStarting(false);
-        return false;
-      }
       if (!data.ok) {
-        setModel({ ready: true });
-        setModelWarn(true);
-        setModelHint("读取失败：" + (data.error || "未知原因"));
-        return false;
+        setModel({ error: data.error || "未知原因" });
+        return;
       }
-      setModel(data.model || {});
-      setModelWarn(false);
-      setModelHint("");
-      return true;
+      setModel({ catalog: data.catalog || {} });
     } catch (e) {
-      setModel({ ready: false, error: "" });
-      setModelWarn(true);
-      setModelHint("读取失败：" + errText(e));
-      return false;
+      setModel({ error: errText(e) });
     }
   }, []);
-
-  // 每次读回整份状态后，把选择与档位对齐到权威当前值。
-  useEffect(() => {
-    const cur = model && model.current;
-    if (!cur || !cur.provider) return;
-    setPicked(String(cur.provider) + MODEL_KEY_SEP + String(cur.model || ""));
-    setEffort(typeof cur.reasoningEffort === "string" ? cur.reasoningEffort : "");
-  }, [model]);
 
   useEffect(() => {
     void loadConfig();
@@ -260,14 +227,18 @@ function App() {
 
   // 设置变更广播的落地：宿主 App 存储只有 get/set、没有订阅口（已核 SDK 的 d.ts），
   // 所以本页在重新可见时重读一次——另一个窗口改过设置也不会拿着旧值继续操作。
+  // 模型目录也是宿主侧的事实（宿主设置里加/改提供商后随之变），一并重读。
   // 切换进行中不重读（免得把页面上的进度显示冲掉）。
   useEffect(() => {
     const onVisible = () => {
-      if (document.visibilityState === "visible") void loadConfig();
+      if (document.visibilityState === "visible") {
+        void loadConfig();
+        void loadModel();
+      }
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [loadConfig]);
+  }, [loadConfig, loadModel]);
 
   const saveConfig = async () => {
     const patch: Record<string, number> = {};
@@ -305,48 +276,6 @@ function App() {
       setCfgWarn(true);
     } finally {
       setCfgSaving(false);
-    }
-  };
-
-  const saveModel = async () => {
-    const sel = splitPicked(picked);
-    if (!sel.provider || !sel.model) {
-      setModelWarn(true);
-      setModelHint("请先选一个模型。");
-      return;
-    }
-    const body: Record<string, unknown> = { provider: sel.provider, model: sel.model };
-    if (effort) body.reasoningEffort = effort;
-    if (model && typeof model.revision === "number") body.expectedRevision = model.revision;
-    setModelSaving(true);
-    setModelWarn(false);
-    setModelHint("");
-    try {
-      const { res, data } = await readJson("dshana/model", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (res.status === 409) {
-        setModelWarn(true);
-        setModelHint("默认模型已被别处改过，已刷新。");
-        await loadModel();
-        return;
-      }
-      if (!data || data.ok !== true) throw new Error((data && data.error) || "HTTP " + res.status);
-      // 写回只回 current/revision（候选不在写作范围内）：整份状态从 GET 重读，避免用半份数据
-      // 覆盖候选列表。重读失败时如实说，不假装成功。
-      const reread = await loadModel();
-      if (reread) setModelSaved(true);
-      else {
-        setModelWarn(true);
-        setModelHint("已保存，但重读状态失败，请刷新本页");
-      }
-    } catch (e) {
-      setModelWarn(true);
-      setModelHint("保存失败：" + errText(e));
-    } finally {
-      setModelSaving(false);
     }
   };
 
@@ -393,68 +322,18 @@ function App() {
     }
   };
 
-  const startDsh = async () => {
-    setStarting(true);
-    setModelWarn(false);
-    setModelHint("");
-    try {
-      await hana.api.fetch("dshana/start", { method: "POST", cache: "no-store" });
-    } catch (e) {
-      if (!alive.current) return;
-      setStarting(false);
-      setModelWarn(true);
-      setModelHint("启动请求失败：" + errText(e));
-      return;
-    }
-    const deadline = Date.now() + START_TIMEOUT_MS;
-    while (Date.now() < deadline) {
-      await sleep(2000);
-      if (!alive.current) return;
-      try {
-        const { data } = await readJson("dshana/model");
-        if (data && data.ready && data.ok === true) {
-          setModel(data.model || {});
-          setModelWarn(false);
-          setModelHint("");
-          setStarting(false);
-          return;
-        }
-        if (data && data.ready && data.ok !== true) {
-          setModelWarn(true);
-          setModelHint("读取失败：" + (data.error || "未知原因"));
-          setStarting(false);
-          return;
-        }
-      } catch {
-        continue; // 启动中路由/中继还没就绪，接着等
-      }
-    }
-    if (!alive.current) return;
-    setStarting(false);
-    setModelWarn(true);
-    setModelHint("启动超时：DSH 还没就绪，稍后刷新本页重试。");
-  };
-
   const modelOpts = modelOptions(model);
-  const sel = splitPicked(picked);
-  const effortOptions: SelectOption[] = effortsOf(model, sel.provider, sel.model).map((e) => ({
-    value: String(e.id || ""),
-    label: String(e.name || e.id || ""),
-  }));
   const sessionSel = splitPicked(customPicked);
   const sessionEffortOptions: SelectOption[] = effortsOf(model, sessionSel.provider, sessionSel.model).map((e) => ({
     value: String(e.id || ""),
     label: String(e.name || e.id || ""),
   }));
-  const dshReady = !!(model && model.ready !== false);
-  const modelEmpty = model && model.catalog && modelOpts.length === 0;
-  const fails = (model && model.catalog && model.catalog.failures) || [];
-  const catalogHint = modelEmpty
-    ? "DSH 目前没有可选的模型。"
-    : fails.length
-      ? "部分 provider 加载失败：" + fails.map((f: any) => f.name || f.id).join("、")
-      : model && model.catalogError
-        ? "候选暂不可用：" + model.catalogError
+  const catalogHint = !model
+    ? ""
+    : model.error
+      ? "模型候选读取失败：" + model.error
+      : modelOpts.length === 0
+        ? "宿主目录里没有可选模型（先在宿主设置里配好提供商与凭据）。"
         : "";
 
   return (
@@ -480,7 +359,7 @@ function App() {
           />
         ))}
         <SettingRow
-          label="保存"
+          label=""
           hint={cfgHint || undefined}
           hintVariant={cfgWarn ? "warn" : "default"}
           control={
@@ -540,7 +419,7 @@ function App() {
           </>
         )}
         <SettingRow
-          label="保存"
+          label=""
           hint={sessionMode === "custom" ? undefined : sessionHint || undefined}
           hintVariant={sessionWarn ? "warn" : "default"}
           control={
@@ -552,69 +431,6 @@ function App() {
             />
           }
         />
-      </SettingsSection>
-
-      <SettingsSection
-        title="默认模型"
-        description="DSH 自己的默认模型：界面里直接开的会话用它，也对没有单独选过模型的会话生效。工具建的新会话按上面的「会话模型」走。改完立即生效（DSH 的 settings 段，applies=live）。"
-      >
-        {!dshReady ? (
-          <SettingRow
-            label="DSH 未运行"
-            hint={modelHint || (model && model.error) || "默认模型在 DSH 起来后才能选"}
-            hintVariant="warn"
-            control={
-              <Button variant="primary" loading={starting} onClick={() => void startDsh()}>
-                启动 DSH
-              </Button>
-            }
-          />
-        ) : (
-          <>
-            <SettingRow
-              label="模型"
-              hint={modelHint || catalogHint || undefined}
-              hintVariant={modelWarn ? "warn" : "default"}
-              layout="stacked"
-              control={
-                <Select
-                  ariaLabel="默认模型"
-                  value={picked}
-                  options={modelOpts}
-                  disabled={modelOpts.length === 0}
-                  onChange={setPicked}
-                />
-              }
-            />
-            {effortOptions.length > 0 && (
-              <SettingRow
-                label="推理强度"
-                hint="该模型支持的档位；留空则沿用 DSH 当前的设置。"
-                layout="stacked"
-                control={
-                  <Select
-                    ariaLabel="推理强度"
-                    placeholder="保持当前设置"
-                    value={effort}
-                    options={effortOptions}
-                    onChange={setEffort}
-                  />
-                }
-              />
-            )}
-            <SettingRow
-              label="保存"
-              control={
-                <SaveButton
-                  status={modelSaving ? "saving" : modelSaved ? "saved" : "idle"}
-                  labels={{ idle: "保存", saving: "保存中", saved: "已保存" }}
-                  onSavedFeedbackEnd={() => setModelSaved(false)}
-                  onClick={() => void saveModel()}
-                />
-              }
-            />
-          </>
-        )}
       </SettingsSection>
     </SettingsPage>
   );

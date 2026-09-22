@@ -14,7 +14,7 @@
 // session.* 的 request/_request 包装 + requestId 注入；响应 rpcId 回显 + result.ok）。
 import { buildClientRequest, parseServerResponse, defaultRpcTimeoutMs } from "#/lib/rpc-envelope.ts";
 
-/** 一元 RPC 的公共入参（信封字段 + 超时/中止；bare = 不走 session 信封）。 */
+/** 一元 RPC 的公共入参（信封字段 + 超时/中止）。 */
 interface RpcCallInput {
   method: string;
   payload?: unknown;
@@ -24,8 +24,6 @@ interface RpcCallInput {
   signal?: AbortSignal | null;
   /** 超时毫秒（>0 采用；否则用默认）。 */
   timeoutMs?: number;
-  /** true = 顶层方法（不包 session 信封）。 */
-  bare?: boolean;
 }
 
 /** 各封装传给 rpcCallWithFetch 的公共可选项。 */
@@ -36,9 +34,9 @@ interface RpcOpts {
 }
 
 /** 注入式 RPC 调用：fetchFn(url, init) => Promise<Response>；超时/中止经 AbortSignal。 */
-export async function rpcCallWithFetch(fetchFn, base, { method, payload, rpcId, signal, timeoutMs, bare }: RpcCallInput) {
+export async function rpcCallWithFetch(fetchFn, base, { method, payload, rpcId, signal, timeoutMs }: RpcCallInput) {
   if (typeof fetchFn !== "function") throw new Error("dsh-rpc: 需要 fetch 注入（ctx.network.fetch / 全局 fetch）");
-  const { body } = buildClientRequest({ method, payload, rpcId, bare });
+  const { body } = buildClientRequest({ method, payload, rpcId });
   const deadline = Number(timeoutMs) > 0 ? Number(timeoutMs) : defaultRpcTimeoutMs();
   const ctl = AbortSignal.timeout(deadline);
   const merged = signal ? AbortSignal.any([signal, ctl]) : ctl;
@@ -108,18 +106,6 @@ export function rpcSettingsReplace(
   return rpcCallWithFetch(fetchFn, base, {
     method: "settings/replace",
     payload: args,
-    rpcId: opts.rpcId,
-    signal: opts.signal,
-    timeoutMs: opts.timeoutMs,
-  });
-}
-
-/** session/modelCatalog：候选模型（按 provider 分组）。无参方法——不走 session 信封（bare）。 */
-export function rpcModelCatalog(fetchFn, base, opts: RpcOpts = {}) {
-  return rpcCallWithFetch(fetchFn, base, {
-    method: "session/modelCatalog",
-    payload: {},
-    bare: true,
     rpcId: opts.rpcId,
     signal: opts.signal,
     timeoutMs: opts.timeoutMs,

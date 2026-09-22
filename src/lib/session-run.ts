@@ -97,7 +97,7 @@ export function resolveModelSelection(parsed, dshHome) {
   }
   if (!provider || !model) {
     throw new Error(
-      "需要 provider/model：请显式传 provider/model，或先在 App 设置页的「默认模型」里选一个（DSH 的 settings 段 agent-default-model）",
+      "需要 provider/model：请显式传 provider/model，或在 DSH 自己的模型选择器里选一条（本 App 不再提供默认模型的设置入口）",
     );
   }
   return { provider, model, ...(e ? { reasoningEffort: e } : {}) };

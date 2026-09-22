@@ -15,9 +15,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 // 读 DSH_HOME/settings.yaml 的 agent-default-model（行级解析，零依赖）——
-// dsh 默认模型：**用户手设过**才有这一格（App 设置页的「默认模型」写它；DSH 设置里没有模型页——
-// 两个官方 LLM adapter 在 roster patch 里 disabled，推理路由一律由宿主提供）。工具建的会话不依赖它：
-// 模型随会话请求带上，由 App 按调用方算。
+// dsh 默认模型：**用户手设过**才有这一格（DSH 自带的模型页随两个官方 LLM adapter 一起停掉，
+// 推理路由一律由宿主提供，所以这格要么是用户手设的、要么是 model-default-guard 对账写回的可服务
+// 路由）。工具建的会话不依赖它：模型随会话请求带上，由 App 按调用方算。
 // 返回 { provider, model } 或 null。
 export function readDshDefaultModel(dshHome: string): { provider: string; model?: string } | null {
   try {
