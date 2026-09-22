@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// scripts/integrations/index.mts — 集成层 CLI（见 src-integrations/README.md 与 specs/current/hana-integrations）
+// scripts/integrations/index.mts — 集成层 CLI（见 src-integrations/README.md）
 //
 // 用法：
 //   node scripts/integrations/index.mts verify          # 镜像版本一致 + 每个 overlay 记录的上游哈希仍成立
@@ -15,11 +15,9 @@
 //
 // 分工：校验纯函数在 verify.mts，镜像访问与落盘在 mirror.mts，编译进包在 build.mts；
 // 本文件是 CLI 门面（子命令表 + 过闸），退出码 2 = 用法/子命令错，1 = 运行期失败。
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-
 import { errText } from "../shared/err-text.mts";
 import { isDirectRun } from "../shared/run.mts";
+import { readPkg, readShipPkg } from "../shared/version.mts";
 import { buildIntegrations } from "./build.mts";
 import { REPO_ROOT, loadIntegrations, mirrorHasTag, readUpstreamFromMirror, stageIntegrations } from "./mirror.mts";
 import { dshVersionOf, sha256, tagForVersion, verifyIntegrations } from "./verify.mts";
@@ -102,10 +100,20 @@ async function main() {
     console.error(`[integrations] 未知子命令：${cmd}（支持 ${Object.keys(COMMANDS).join("/")}）`);
     process.exit(2);
   }
-  const pkgJson = JSON.parse(readFileSync(join(REPO_ROOT, "package.json"), "utf8"));
-  const version = dshVersionOf(pkgJson);
+  // pin 读交付面清单（packaging/package.json）：运行时依赖只有一个真源
+  const version = dshVersionOf(readShipPkg());
   if (!version) {
-    console.error("[integrations] package.json 未声明 dependencies['@deepseek-ai/dsh']");
+    console.error("[integrations] packaging/package.json 未声明 dependencies['@deepseek-ai/dsh']");
+    process.exit(1);
+  }
+  // 根那份 devDependencies 也应声明同一版本（开发侧要那棵树）：两处不一致就停。
+  // 为什么允许两处：DSH 版本既由出货面决定（物化 / 镜像 tag / 版本串），又是开发面直接装的依赖；
+  // 一致性由这条闸守，不靠人记得同时改。
+  const devPin = readPkg("package.json")?.devDependencies?.["@deepseek-ai/dsh"];
+  if (devPin !== undefined && devPin !== version) {
+    console.error(
+      `[integrations] DSH pin 不一致：packaging/package.json 是 ${version}，package.json devDependencies 是 ${devPin}`,
+    );
     process.exit(1);
   }
   await COMMANDS[cmd]({ tag: tagForVersion(version), version });

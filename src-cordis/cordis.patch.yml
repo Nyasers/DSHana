@@ -12,10 +12,42 @@
 #   1) 对官方行的覆盖 / disable（我们自己的值）
 #   2) @dshana/* 定制插件 insert
 #
-# 机制：一切经本 bundle 的 dsh.bundle.patch 声明（见 src-cordis/package.json），不使用 profile
-# 用户层 cordis.patch.yml，也不使用命令行 --patch 叠加。
+# 机制：一切经本 patch 文件声明，runtime 启动时经 runProfile 的 patchFiles 作启动期 overlay 传进去
+# （见 src-cordis/build.ts）；不使用 profile 用户层 cordis.patch.yml，也不使用命令行 --patch 叠加。
+# profile 用官方随附的 `web`，我们不往数据目录里的 cordis.yml / cordis.patch.yml 写任何东西。
 
-# ── 1) 对官方行的覆盖 ───────────────────────────────────────────────────────
+# ── 1) 对官方行的覆盖 / disable ───────────────────────────────────────────────
+
+# 官方自带的两个 LLM adapter 行停掉。本形态的推理一律走宿主：@dshana/provider 在受管 runtime 内
+# 经 hana.models 发起，路由集合 = 宿主目录（models.list）。这两行各要自己的凭据
+# （llm-deepseek 的 `llm-deepseek:` 段 + 凭据库，llm-pi-ai 的 `llm-pi-ai:` 段里的 provider
+# profiles），而凭据在宿主手里，它们永远拿不到 key。官方那条 deepseek-official 路由却照样出现在
+# 模型选择器里（base 层的缺省模型也正指向它），于是选中它、或干脆用缺省，就在提交时报 no API key。
+# 停掉之后 llm 注册表里只剩宿主目录那几条路由，模型面单一事实源。
+- id: llm-deepseek
+  disabled: true
+
+- id: llm-pi-ai
+  disabled: true
+
+# 设置里的「模型」页（ui-settings-models）跟着一起停。它编辑的正是上面那两行的 settings 段
+# （llm-deepseek 的模型列表、llm-pi-ai 的 provider profiles），两行停掉之后这一页没有可编辑对象，
+# 只剩一个空壳；它顺带提供的 onboarding 弹窗与欢迎提示也只是把用户引到这一页。设置导航按已注册
+# 分节构建（ui-settings-general 的 navList），停掉这个插件后那一格随之消失。
+# 模型配置的入口留在宿主侧：App 设置页的「会话模型」与「默认模型」两节。
+- id: ui-settings-models
+  disabled: true
+
+# 目录选择器不动：官方 web-app 层的 directory-picker-auto 在 win32 + loopback 下挑 native，
+# 而 native 的客户端半优先读页面里的目录桥（官方桌面壳由 preload 注入）——壳页在注入 DSH index
+# 前把 __DSH_DIRECTORY_PICKER__ 装上（照 hana.resources.pick 要目录），所以用户看到的是宿主的
+# 系统弹窗，而不是沙箱里的后台子进程去 spawn worker 开 IFileOpenDialog。见 src/ui/dsh-inject.ts。
+
+# 缺省模型不在这里写死：base 层给的是官方路由 deepseek-official/deepseek-flash，上面那行停掉
+# 之后这条路由没人服务。写死一个宿主 provider/model 也不行——宿主配了哪些提供商、它们叫什么
+# 名字，是每台 Hana 各自的配置。模型从哪来由 App 定：工具建的会话按**调用方那张角色卡**配的
+# models.chat 开（src/lib/caller-model.ts；App 设置里可改成固定一条），用户手设的默认则对所有
+# 会话生效、它若指向宿主目录里没有的路由，由 src/lib/model-default-guard.ts 就地换一条可服务的。
 
 # web-runtime（官方 @deepseek-ai/dsh-web-app 行）：App 内嵌场景不开系统浏览器、不打印 URL
 # （由宿主卡片 / iframe 承载），surfaceContext 保留（模型可见 Web 面说明）。trustedHosts 沿用

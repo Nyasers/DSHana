@@ -5,8 +5,11 @@
 //
 // 生产依赖物化（自包含打包）：逐目标在各自的隔离暂存目录里做**干净安装**，得到只含该平台资产的
 // node_modules（hoisted 布局：顶层真实目录、无软链接——软链进 zip 跨机解压即断）。
+// 工位就是一个独立项目：交付面自带的两份（`packaging/package.json` + `packaging/pnpm-lock.yaml`）
+// + 按目标替换过平台块的 workspace yaml；`pnpm install --prod` 因此只装交付面的生产闭包，仓库根
+// 那份清单（构建面，带 devDependencies）不进工位。
 // 实测（Windows + 热缓存）：单目标安装 8.4s / 210 MB，且不含其他平台的边角；而「通用树裁剪
-// 派生」会留残留且更大（见 specs §11）。
+// 派生」会留残留且更大。
 // 隔离的理由：不触碰仓库 node_modules（dev+prod 混合树，且动它会触发 pnpm 重建——Windows 上
 // 曾遇清理被拒导致树损坏）。
 import { createRequire } from "node:module";
@@ -29,8 +32,9 @@ export function materializeProdDeps(spec) {
   const modules = join(dir, "node_modules");
   fs.removeSync(dir);
   fs.ensureDirSync(dir);
-  fs.copySync(join(ROOT, "package.json"), join(dir, "package.json"));
-  fs.copySync(join(ROOT, "pnpm-lock.yaml"), join(dir, "pnpm-lock.yaml"));
+  // 工位 = 交付面自带的两份（清单 + 它的锁文件）+ 按目标替换过平台块的 workspace yaml。
+  fs.copySync(join(ROOT, "packaging", "package.json"), join(dir, "package.json"));
+  fs.copySync(join(ROOT, "packaging", "pnpm-lock.yaml"), join(dir, "pnpm-lock.yaml"));
   fs.writeFileSync(join(dir, "pnpm-workspace.yaml"), stagingWorkspaceYaml(spec), "utf8");
   console.log(`[pack] 物化 ${spec.name}（干净安装，隔离目录 _tmp/pkg-root/${spec.name}）...`);
   const res = spawnSync("pnpm", ["install", "--prod", "--frozen-lockfile"], {

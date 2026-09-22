@@ -19,15 +19,16 @@ import type { ReactNode } from 'react'
 import type {
   PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore,
 } from '@deepseek-ai/dsh-client-ui-slots'
-import { computeColumns, RIGHTBAR_DEFAULT_RATIO, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAULT } from './columns.ts'
+import { CENTER_MIN, clampWidth, computeColumns, RIGHTBAR_DEFAULT_RATIO, RIGHTBAR_MAX_RATIO, RIGHTBAR_MIN, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAULT } from './columns.ts'
 import { DocumentTitle } from './DocumentTitle.tsx'
+import type { MainPanelId } from './service.ts'
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
 
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
   & PropsRuntime<'root'>
-  & PropsRenderSlots<'sidebar' | 'main' | 'rightbar' | 'shell.overlay'>
+  & PropsRenderSlots<'sidebar' | 'main' | 'rightbar' | 'shell.overlay' | 'shell.leading'>
   & PropsStore<ReturnType<typeof createLayoutStore>>
   & PropsLocale<'common'>
 
@@ -40,6 +41,24 @@ function CenterColumn(props: { children?: ReactNode }) {
 function MainPanel({ usePanelInfo, renderSlot }: Pick<PropsRuntime<'root'>, 'usePanelInfo'> & PropsRenderSlots<'main'>) {
   const panelId = usePanelInfo(info => info.activePanelId)
   return renderSlot('main', {}, { entryKey: panelId ?? 'conversation' })
+}
+
+/**
+ * Marks the frame while the Conversation is selected — the deepened drag band
+ * (AppFrame.module.css) keys off the attribute. A DOM write from a child keeps
+ * the frame itself out of the panel subscription: selecting a panel must not
+ * re-render the columns.
+ */
+function ConversationMarker({ usePanelInfo, frameRef }: Pick<PropsRuntime<'root'>, 'usePanelInfo'> & { frameRef: React.RefObject<HTMLDivElement | null> }) {
+  const conversationActive = usePanelInfo(info => info.activePanelId === null)
+  useLayoutEffect(() => {
+    const frame = frameRef.current
+    /* v8 ignore next -- the ref is attached by effect time: the marker renders inside the frame div. */
+    if (frame === null) return
+    if (conversationActive) frame.setAttribute('data-panel-conversation', '')
+    else frame.removeAttribute('data-panel-conversation')
+  }, [conversationActive, frameRef])
+  return null
 }
 
 /**
@@ -143,6 +162,43 @@ export function AppFrame({
   }
   const surface = ROLE_SURFACES[role ?? ''] ?? 'standalone'
 
+  // 跨面主面板：本面（workspace）接收 FP 侧栏选中的而行（FP 整面只有侧栏、没有中列，
+  // 面板页只能由本面打开）。读快照一次 + 订阅变化；FP 不在场时本面不动。
+  useEffect(() => {
+    if (surface !== 'workspace') return
+    const bridge = (window as {
+      __DSHANA__?: {
+        readPanelView?: () => Promise<{ panelId: string | null }>
+        onPanelViewChanged?: (listener: () => void) => () => void
+      }
+    }).__DSHANA__
+    const read = bridge?.readPanelView
+    const onChanged = bridge?.onPanelViewChanged
+    if (read === undefined || onChanged === undefined) return
+    let active = true
+    let applied: string | null | undefined
+    const apply = (): void => {
+      void read().then((next) => {
+        if (!active) return
+        const panelId = next?.panelId ?? null
+        if (panelId === applied) return
+        applied = panelId
+        try {
+          actions.selectPanel(panelId as MainPanelId | null)
+        } catch (error: unknown) {
+          // 面板条目还没挂上（本面刚起）或已被摘掉：保持当前选中。
+          console.warn('[dshana/ui-layout] 跨面面板没能落地。', error)
+        }
+      }, () => { /* 读失败保持当前 */ })
+    }
+    const off = onChanged(apply)
+    apply()
+    return () => {
+      active = false
+      off()
+    }
+  }, [surface, actions])
+
   // Track the frame's own box (not the window): rAF-throttled ResizeObserver.
   useLayoutEffect(() => {
     const el = frameRef.current
@@ -182,8 +238,10 @@ export function AppFrame({
     : layoutInfo.sidebar === 0 ? SIDEBAR_DEFAULT : layoutInfo.sidebar
   const frameSidebarPreference = sidebarPresent ? sidebarPreference : 0
   const rightbarPreference = layoutInfo.rightbar ?? viewport * RIGHTBAR_DEFAULT_RATIO
-  // Desktop reopen controls occupy the macOS session header or Windows caption row.
-  const collapsedWidth = document.documentElement.dataset.platform === 'darwin'
+  // Desktop reopen controls occupy the frame's shell.leading seat (macOS) or
+  // the Windows caption row; neither platform keeps an icon rail.
+  const darwin = document.documentElement.dataset.platform === 'darwin'
+  const collapsedWidth = darwin
     || document.documentElement.hasAttribute('data-windows-titlebar') ? 0 : SIDEBAR_COLLAPSED
   // Opening on a narrow frame collapses the left sidebar. Eligibility must
   // include that space before the occupant's first shown report arrives.
@@ -205,6 +263,42 @@ export function AppFrame({
   // Track-level transitions pause for the whole gesture: eased tracks would
   // detach the column edge from the pointer (AppFrame.module.css).
   const [dragging, setDragging] = useState(false)
+  // Track easing is scoped to a discrete open/close toggle: data-animating
+  // goes up when the collapse state or the rightbar track flips and comes down
+  // at transition end (timeout as the reduced-motion/covered-frame fallback).
+  // Steady-state viewport updates stay instant (AppFrame.module.css), and so
+  // does a toggle arriving together with a viewport change — that is the
+  // responsive auto-collapse firing mid window-resize, where easing would
+  // chase the live window edge. The counter restarts the settle window when a
+  // re-toggle interrupts a running transition.
+  const [animating, setAnimating] = useState(0)
+  const trackToggle = `${sidebarCollapsed}:${layoutInfo.rightbarTrack}`
+  const previousToggle = useRef(trackToggle)
+  const previousViewport = useRef(viewport)
+  useLayoutEffect(() => {
+    const viewportChanged = previousViewport.current !== viewport
+    previousViewport.current = viewport
+    if (previousToggle.current === trackToggle) return
+    previousToggle.current = trackToggle
+    if (viewportChanged) return
+    setAnimating(token => token + 1)
+  }, [trackToggle, viewport])
+  useEffect(() => {
+    if (animating === 0) return
+    const frame = frameRef.current
+    /* v8 ignore next -- the ref is always attached by effect time: the frame div renders unconditionally. */
+    if (frame === null) return
+    const settle = () => { setAnimating(0) }
+    const onTransitionEnd = (event: TransitionEvent) => {
+      if (event.target === frame && event.propertyName === 'grid-template-columns') settle()
+    }
+    frame.addEventListener('transitionend', onTransitionEnd)
+    const timer = setTimeout(settle, 600)
+    return () => {
+      frame.removeEventListener('transitionend', onTransitionEnd)
+      clearTimeout(timer)
+    }
+  }, [animating])
   const onDragEnd = useCallback(() => { setDragging(false) }, [])
   const onSidebarStart = useCallback(() => { sidebarBase.current = colsRef.current.sidebar; setDragging(true) }, [])
   const onSidebarDrag = useCallback((dx: number) => {
@@ -215,6 +309,14 @@ export function AppFrame({
     actions.setRightbar(rightbarBase.current - dx)
   }, [actions])
   const productTitle = process.env.DSH_CLIENT_TITLE ?? t('brand.localBuild')
+  // The rendered template lets the grid solve the squeeze natively: the centre
+  // declares its protected minimum and the right column bids up to the clamped
+  // preference, so a window resize lands in the same layout pass as the frame
+  // edge. The JS solve lags the viewport by a ResizeObserver + rAF frame; when
+  // it priced the squeeze itself, the centre column absorbed each width change
+  // whole and was corrected two frames later — visible jitter. cols keeps only
+  // the discrete decisions (track present, collapse state) and the drag base.
+  const rightbarMax = cols.rightbar === 0 ? 0 : clampWidth(rightbarPreference, RIGHTBAR_MIN, viewport * RIGHTBAR_MAX_RATIO)
   const renderedSidebarWidth = sidebarPresent ? cols.sidebar : viewport
   const sidebar = useMemo(() => renderSlot('sidebar', {
     collapsed: sidebarCollapsed,
@@ -224,6 +326,13 @@ export function AppFrame({
     <MainPanel usePanelInfo={usePanelInfo} renderSlot={renderSlot} />
   ), [usePanelInfo, renderSlot])
   const overlays = useMemo(() => renderSlot('shell.overlay', {}), [renderSlot])
+  // Window-chrome seat over the main panels' top-left corner: only a fully
+  // hidden sidebar column on macOS desktop leaves window chrome without a
+  // home — the Windows zero-width collapse keeps its controls in the caption
+  // row (ui-sidebar). AppFrame.module.css publishes the matching
+  // --dsh-frame-leading-clearance under the same collapsed condition.
+  const leading = useMemo(() => renderSlot('shell.leading', {}), [renderSlot])
+  const leadingMounted = darwin && sidebarCollapsed
 
   return (
     <div
@@ -234,15 +343,21 @@ export function AppFrame({
           ? { '--dsh-windows-sidebar-width': `${cols.sidebar}px` } : {}),
         gridTemplateColumns: surface === 'navigation' || surface === 'stream'
           ? 'minmax(0, 1fr)'
-          : `${cols.sidebar}px minmax(0, 1fr) ${cols.rightbar}px`,
+          : `${cols.sidebar}px minmax(${cols.rightbar === 0 ? 0 : CENTER_MIN}px, 1fr) minmax(0px, ${rightbarMax}px)`,
       }}
       data-sidebar-collapsed={sidebarCollapsed || undefined}
       data-rightbar-collapsed={cols.rightbar === 0 || undefined}
       data-rightbar-fullscreen={layoutInfo.rightbarFullscreen || undefined}
       data-rightbar-instant={layoutInfo.rightbarInstant || undefined}
       data-dragging={dragging || undefined}
+      data-animating={animating > 0 || undefined}
       data-dshana-surface={surface}
     >
+      {/* First child: app-regions compose in document order, so everything
+          mounted later (chrome controls, overlays) subtracts its no-drag
+          from this band. */}
+      {darwin && <div className={css.leadingBand} data-shell-leading-band />}
+      <ConversationMarker usePanelInfo={usePanelInfo} frameRef={frameRef} />
       <DocumentTitle
         productTitle={productTitle}
         useSessions={useSessions}
@@ -276,6 +391,11 @@ export function AppFrame({
       <div className={css.overlayLayer} data-shell-overlay>
         {overlays}
       </div>
+      {leadingMounted && (
+        <div className={css.leadingSeat} data-shell-leading>
+          {leading}
+        </div>
+      )}
       {/* The collapsed rail is fixed-width: no resize handle while closed. */}
       {sidebarPresent && !sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
       {(surface === 'workspace' || surface === 'standalone') && layoutInfo.rightbarShown && !layoutInfo.rightbarFullscreen && normal.rightbar > 0 && (

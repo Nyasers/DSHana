@@ -27,18 +27,35 @@ import { APP_SETTING_DEFAULTS, resolveApprovalTimeoutSec, resolveDefaultTimeoutS
 
 export const SETTINGS_VERSION = 1;
 export const SOURCE_MODES = Object.freeze(["private", "shared"]);
-/** 内置独立目录名：与 DSH 自身默认目录 ~/.dsh 命名统一（早期 v2 的 dsh-home 不再读取）。 */
+/** 内置独立目录名：与 DSH 自身默认目录 ~/.dsh 命名统一。 */
 export const PRIVATE_HOME_NAME = ".dsh";
-/** 内置独立目录固定 profile：runtime 只 seed/启动这一个 profile。 */
-export const PRIVATE_PROFILE = "dshana";
-export const SETTINGS_KEYS = Object.freeze(["mode", "path", "profile", "approvalTimeoutSec", "defaultTimeoutSec"]);
+/** 内置独立目录固定 profile：runtime 只启动官方随附的这一个（首次加载时由 DSH 自建，我们不种子化）。
+ * settings 里那个同名的 profile 键只为兼容旧存档保留，实际不再影响启动。 */
+export const PRIVATE_PROFILE = "web";
+export const SETTINGS_KEYS = Object.freeze([
+  "mode",
+  "path",
+  "profile",
+  "approvalTimeoutSec",
+  "defaultTimeoutSec",
+  "sessionModelMode",
+  "sessionModelProvider",
+  "sessionModelModel",
+  "sessionModelReasoningEffort",
+]);
 export const DEFAULT_SETTINGS = Object.freeze({
   mode: "private",
   path: null,
   profile: PRIVATE_PROFILE,
   approvalTimeoutSec: APP_SETTING_DEFAULTS.approvalTimeoutSec,
   defaultTimeoutSec: APP_SETTING_DEFAULTS.defaultTimeoutSec,
+  sessionModelMode: APP_SETTING_DEFAULTS.sessionModelMode,
+  sessionModelProvider: APP_SETTING_DEFAULTS.sessionModelProvider,
+  sessionModelModel: APP_SETTING_DEFAULTS.sessionModelModel,
+  sessionModelReasoningEffort: APP_SETTING_DEFAULTS.sessionModelReasoningEffort,
 });
+/** 会话模型模式：caller = 按调用方角色卡（缺省），custom = 用固定的一条。 */
+export const SESSION_MODEL_MODES = Object.freeze(["caller", "custom"]);
 
 /** DSH 自己的默认数据目录（shared 的「DSH 默认目录」候选）。 */
 export const defaultDshHome = () => join(homedir(), ".dsh");
@@ -80,8 +97,42 @@ function normalizeTimeouts(input): { approvalTimeoutSec: number; defaultTimeoutS
 }
 
 /**
+ * 会话模型设置（工具建的会话用哪个模型）：模式限定两种；custom 时 provider/model 都要有。
+ * caller 模式下那两个值原样保留（来回切不丢用户选过的那条）。
+ */
+function normalizeSessionModel(input) {
+  const mode = input.sessionModelMode === undefined || input.sessionModelMode === null
+    ? APP_SETTING_DEFAULTS.sessionModelMode
+    : input.sessionModelMode;
+  if (!SESSION_MODEL_MODES.includes(mode)) {
+    throw new Error("会话模型模式只能是 caller 或 custom（收到 " + JSON.stringify(mode) + "）");
+  }
+  const out: {
+    sessionModelMode: string;
+    sessionModelProvider: string;
+    sessionModelModel: string;
+    sessionModelReasoningEffort: string;
+  } = {
+    sessionModelMode: mode,
+    sessionModelProvider: "",
+    sessionModelModel: "",
+    sessionModelReasoningEffort: "",
+  };
+  for (const key of ["sessionModelProvider", "sessionModelModel", "sessionModelReasoningEffort"] as const) {
+    const raw = input[key];
+    if (raw === undefined || raw === null || raw === "") continue;
+    if (typeof raw !== "string") throw new Error(key + " 必须是字符串（收到 " + JSON.stringify(raw) + "）");
+    out[key] = raw.trim();
+  }
+  if (mode === "custom" && (!out.sessionModelProvider || !out.sessionModelModel)) {
+    throw new Error("会话模型选「自定义模型」时需要 provider 与 model 都填");
+  }
+  return out;
+}
+
+/**
  * 设置校验（纯函数）：未知键拒绝、mode 限定、shared 必须是绝对路径、profile 简单名、
- * 两个超时必须是非负整数秒。
+ * 两个超时必须是非负整数秒、会话模型模式与自定义选择。
  * private 的 profile 被强制为 PRIVATE_PROFILE（内置目录只跑这一个 profile）。
  */
 export function validateSettings(input) {
@@ -102,9 +153,9 @@ export function validateSettings(input) {
       throw new Error("shared 模式必须给出 DSH 数据目录（非空字符串，不含 NUL）");
     }
     if (!isAbsolute(input.path)) throw new Error("shared 目录必须是绝对路径（收到 " + input.path + "）");
-    return { mode: "shared", path: normalize(input.path), profile, ...normalizeTimeouts(input) };
+    return { mode: "shared", path: normalize(input.path), profile, ...normalizeTimeouts(input), ...normalizeSessionModel(input) };
   }
-  return { mode: "private", path: null, profile, ...normalizeTimeouts(input) };
+  return { mode: "private", path: null, profile, ...normalizeTimeouts(input), ...normalizeSessionModel(input) };
 }
 
 /**
@@ -124,16 +175,16 @@ export function sourceOf(settings, dataDir) {
 }
 
 /**
- * 存量兼容：两个超时原先写在 <dataDir>/config.json 的 global.*（自持存储之前的栈）。
- * settings.json 里没有这两个键时，从旧位置读一次当初始值（只在读路径生效，不当场落盘）；
- * 下次经 POST /settings 写设置时，它们就自然迁进自持存储，旧位置不再被写入。
+ * 超时两键的读侧兼容：settings.json 缺这两个键时，从 <dataDir>/config.json 的 global.*
+ * 读一次当初始值（只在读路径生效，不当场落盘）；写设置时它们落进 settings.json，这条路
+ * 只在缺键时用到。
  */
 function withLegacyTimeouts(raw, dataDir) {
   const out = raw && typeof raw === "object" && !Array.isArray(raw) ? { ...raw } : {};
   if (!("approvalTimeoutSec" in out)) out.approvalTimeoutSec = resolveApprovalTimeoutSec({ dataDir });
   if (!("defaultTimeoutSec" in out)) out.defaultTimeoutSec = resolveDefaultTimeoutSec({ dataDir });
-  // 其余键（mode/path/profile）缺省落位；顺序要紧：先补旧位置的超时，缺哪个补哪个，
-  // 然后才铺默认，否则默认会先把键占住、旧位置的值就永远读不到了。
+  // 其余键（mode/path/profile）缺省落位；顺序要紧：先补完那两个旧位置的超时，缺哪个补哪个，
+  // 然后才铺默认，否则默认会先把键占住、那份兼容值就永远读不到了。
   return { ...DEFAULT_SETTINGS, ...out };
 }
 
@@ -153,7 +204,7 @@ function readLastShared(raw) {
 }
 
 /**
- * 自持设置存储（ctx.dataDir/integration/settings.json，0600，原子写）。
+ * 自持设置存储（ctx.dataDir/settings.json，0600，原子写）。
  * 读失败（文件损坏/版本不符）抛错——设置是切换数据源的依据，静默回退会切错源；
  * 文件不存在 = 未设置过，回落 private 默认。
  */
@@ -161,8 +212,7 @@ export function createDataSourceStore(ctx) {
   if (!ctx || typeof ctx.dataDir !== "string" || !ctx.dataDir) {
     throw new Error("data-source: 需要 App ctx（ctx.dataDir）");
   }
-  const directory = join(ctx.dataDir, "integration");
-  const filename = join(directory, "settings.json");
+  const filename = join(ctx.dataDir, "settings.json");
   let cached: SettingsSnapshot | null = null;
 
   const store = {
@@ -231,7 +281,7 @@ export function createDataSourceStore(ctx) {
           ? { lastShared: { path: settings.path, profile: settings.profile } }
           : (previous.lastShared ? { lastShared: previous.lastShared } : {})),
       };
-      await mkdir(directory, { recursive: true, mode: 0o700 });
+      await mkdir(ctx.dataDir, { recursive: true }); // 目录归宿主建，这里只保证写原子文件时它在
       const pending = filename + ".pending";
       await writeFile(pending, JSON.stringify(next, null, 2) + "\n", { mode: 0o600 });
       await rename(pending, filename);
@@ -280,7 +330,7 @@ export function resetDataSourceStore() {
  * 读失败（损坏/版本不符）抛错，与 store 同口径；文件不存在则回落 private 默认。
  */
 export function readSettingsSync(dataDir) {
-  const filename = join(dataDir, "integration", "settings.json");
+  const filename = join(dataDir, "settings.json");
   let stored;
   try {
     stored = JSON.parse(readFileSync(filename, "utf8"));

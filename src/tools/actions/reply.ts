@@ -44,8 +44,11 @@ export const fields = {
   timeout: { type: "number", description: "任务超时（秒），缺省用 App 设置 defaultTimeoutSec" },
   agentPreset: { type: "string", description: "agent 预设（standard/ptc/cordis/minimal）" },
   reasoningEffort: { type: "string", description: "推理强度（off/high/max）" },
-  provider: { type: "string", description: "显式 provider（显式即成为 dsh 新默认）" },
-  model: { type: "string", description: "显式 model id（与 provider 一起传时覆盖 dsh 默认）" },
+  provider: { type: "string", description: "显式 provider（随这次请求带上，不改 dsh 的全局默认）" },
+  model: {
+    type: "string",
+    description: "显式 model id（与 provider 一起传时覆盖缺省；不传则：已显式传 effort 时从 dsh 默认补齐，否则沿用该会话自己的选择）",
+  },
 };
 export const required = ["task"];
 

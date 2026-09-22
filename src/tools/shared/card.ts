@@ -5,8 +5,9 @@
 //
 // 卡页 = ui/stream.html（只读会话流面）：工具出卡时把这张 DSH 会话的 id 写进查询串，
 // 页面据此把注入的 DSH UI 钉在那一段上（面 = stream，输入位收起）。任务回执本身不另画页面：
-// 会话/目录/taskId 在卡的 title / description 里，实时跟踪态由卡页向 App 后端取一次
-// /dshana/card-state 补在顶部一行。
+// 会话/目录/taskId 在卡的 title / description 里，实时跟踪态由卡页向 App 后端取
+// /dshana/card-state 补在顶部一行：非终态（tracked / cancelling）期间慢轮询，会话终结后
+// 停手并断掉消息流（陈旧卡冻结，见 ui/app-shell.ts 的 mountCardStrip）。
 //
 // 宿主契约（server 0.951.4 bundle 实证，见 APPS.md「形式归属」）：工具结果的 details.card
 // 被运行时透传成流内 plugin_card 块，随后由卡 iframe 加载 route。三条硬要求：
@@ -55,6 +56,8 @@ export function sessionCard({ action, sessionId, taskId, delivery, cwd }: Sessio
     "ts=" + now,
     "at=" + now,
     "sid=" + encodeURIComponent(sessionId),
+    // 闸门票面：卡页把宿主任务一并带到查询串，转给 mux URL 供中继按「任务是否活跃」放行。
+    "tid=" + encodeURIComponent(taskId),
   ];
   if (cwd) params.push("cwd=" + encodeURIComponent(cwd));
   const what = WHAT[action] || WHAT.open;

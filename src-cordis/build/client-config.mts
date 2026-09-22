@@ -97,15 +97,18 @@ export function scopedClassName(id, file, local, pkgDir) {
   return "dv_" + cssScopeOf(id) + "_" + moduleHash(id, file, pkgDir) + "_" + local;
 }
 
+/** 一条 class 名的记账（class 名 → 生成它的源文件）：构建期的类名唯一性闸读它。 */
+type CssClassRecord = { className: string; local: string; scope: string; file: string };
+
 // css-modules 虚拟模块源码：class 名映射（默认导出）+ 样式文本注入 style 标签（幂等）。
 // 类名与官方产物等价：官方是 lightningcss 的 [hash]_[local]，本链没有哈希，就用包身份 +
 // 模块身份自己造一段唯一的键（见 scopedClassName）。关键是唯一性：多个被重建的包共用一条
-// 编译链，一个平坦前缀会让两个包的 local 落到同一个 class 上（ui-chat 的 frame/column 与
-// ui-layout 的 frame/centerCol 曾经就是同一个名字），样式互相顶掉。残余情况由构建期的
+// 编译链，一个平坦前缀会让两个包的 local 落到同一个 class 上（ui-chat 有 frame/column、
+// ui-layout 有 frame/centerCol，这类同名 local 会互相顶掉样式）。残余情况由构建期的
 // 类名唯一性闸兜底。
 // 注入点 = 模块 materialization（factory 执行）——官方 css-modules 同款时机
 // （claimStyles 记账 style[data-plugin]）。
-function cssModuleSource(id, fileId, css, emitted = [], pkgDir) {
+function cssModuleSource(id, fileId, css, emitted: CssClassRecord[] = [], pkgDir) {
   const locals = new Set<string>();
   const prefixed: Record<string, string> = {};
   const tokenRe = /\.([A-Za-z_][A-Za-z0-9_-]*)/g;
@@ -147,7 +150,7 @@ function styleTagId(id, file) {
 // css-modules 虚拟 loader："./x.module.css" → 样式注入 + class 映射（见 cssModuleSource）。
 // 插件按包实例化（closure 带包 id）——style 注入的 data-plugin/data-plugin-css 标记需要
 // 归属当前 client bundle 的包名（claimStyles/HMR 记账按 data-plugin 认领）。
-function createCssModulePlugin(id, emitted = [], pkgDir) {
+function createCssModulePlugin(id, emitted: CssClassRecord[] = [], pkgDir) {
   return {
     name: "hanako-css-modules",
     resolveId(source, importer) {
@@ -182,7 +185,7 @@ export async function buildClientBundle({ id, pkgDir, outDir, externals = ["reac
     "process.env.NODE_ENV": JSON.stringify("production"),
   };
   // 本次构建生成的全部 class 名（→ 源文件）：构建期的类名唯一性闸读它。
-  const cssClasses: Array<{ className: string; local: string; scope: string; file: string }> = [];
+  const cssClasses: CssClassRecord[] = [];
   await build({
     name: id + "/client",
     entry: { client: clientEntry(pkgDir, entry) },

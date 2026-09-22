@@ -2,7 +2,7 @@
   "name": "dshana",
   "version": "1.0.0-rc.17+dsh-0.1.6-alpha.2",
   "private": true,
-  "packageManager": "pnpm@12.3.4+sha512.961aa41fb077da3a04a441d9f8e15ebc0c96da8ef710b2eb67bf9ee7cb0610eabd48f1fd85f51cffe73846785fa0f87c56a3a872a1d893f8446741b5cce45457",
+  "packageManager": "pnpm@12.4.1+sha512.2e81e399d73fe8390dab25e06aa788ab7a5908248d2f5a370f82b481147a6a7a367bf8048f9a6fdb6460f21a66f0542dedb8b94ca2c8723596741920b1656d4c",
   "engines": {
     "node": "^22.18.0 || >=23.6.0"
   },
@@ -22,6 +22,7 @@
     "derive:check": "node scripts/derive/index.mts --check",
     "derive:manifest": "node scripts/derive/index.mts manifest",
     "derive:cordis": "node scripts/derive/index.mts cordis",
+    "derive:product-package": "node scripts/derive/index.mts product-package",
     "derive:paths": "node scripts/derive/index.mts paths",
     "derive:vendor": "node scripts/derive/index.mts vendor",
     "sync:vendor": "pnpm run sync:vendor:sdk && pnpm run sync:vendor:dsh",
@@ -32,6 +33,9 @@
     "prepackage": "pnpm run derive && pnpm run build",
     "package": "node scripts/release/pack/index.mts",
     "postpackage": "node scripts/release/clean-tmp.mts",
+    "install:local": "node scripts/dev/install-local.mts",
+    "probe:host": "node scripts/probe/host-surface.mts",
+    "smoke:packed": "node tests/e2e/runtime-boot.smoke.mjs --packed",
     "index": "node scripts/release/market-index.mts",
     "package:linux:x64": "pnpm run package --target=linux-x64",
     "package:linux:arm64": "pnpm run package --target=linux-arm64",
@@ -43,17 +47,16 @@
     "preversion": "pnpm run build",
     "version": "node scripts/release/version.mts"
   },
-  "dependencies": {
-    "@deepseek-ai/dsh": "0.1.6-alpha.2"
-  },
   "devDependencies": {
-    "@deepseek-ai/cordis": "4.0.2",
-    "@deepseek-ai/dsh-host-open-in-app": "0.1.6-alpha.2",
+    "@deepseek-ai/cordis": "^4.0.3",
+    "@deepseek-ai/dsh": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-host-open-in-app": "0.1.7-alpha.1",
     "@hana/app-sdk": "file:vendor/hana-app-sdk/hana-app-sdk.tgz",
     "@hana/plugin-components": "file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz",
     "@hana/plugin-protocol": "file:vendor/hana-app-sdk/hana-plugin-protocol-0.0.0.tgz",
     "@hana/plugin-sdk": "file:vendor/hana-app-sdk/hana-plugin-sdk-0.0.0.tgz",
     "@rspack/core": "^2.2.3",
+    "@tanstack/react-virtual": "^3.14.9",
     "@types/archiver": "^8.0.0",
     "@types/clean-css": "^4.2.11",
     "@types/fs-extra": "^11.0.4",

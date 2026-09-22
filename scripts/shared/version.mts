@@ -12,9 +12,10 @@ import { ROOT } from "./root.mts";
 
 export { ROOT };
 
-// cordis 包 package.json 清单（相对 ROOT；随插件整体发版不独立发布，历史独立号废弃）
+// cordis 子插件 package.json 清单（相对 ROOT；随插件整体发版，不独立发布）。
+// roster patch 是一份 cordis.patch.yml 文件（不是包），不在这里。
 export function cordisPkgPaths() {
-  const out = ["src-cordis/package.json"];
+  const out: string[] = [];
   const plugins = path.join(ROOT, "src-cordis", "plugins");
   for (const name of fs.readdirSync(plugins)) {
     const p = path.join(plugins, name);
@@ -53,4 +54,19 @@ export function cleanVersion(version) {
 // 不另设修订号：同一版本里改两次覆盖层应当由发版流程 bump 版本，而不是在这里编计数。
 export function patchVersion(upstreamVersion) {
   return `${cleanVersion(upstreamVersion)}+dshana-${cleanVersion(readPkg("package.json").version)}`;
+}
+
+// ---- 交付面清单（packaging/package.json）----
+// 运行时依赖的唯一真源：pack 物化按它做一次干净安装（工位 = 根 package.json + 这份 + 锁文件 +
+// 按目标生成的 workspace yaml）；vendor 镜像 tag、集成漂移闸的 tag、产物版本串里的 `+dsh-…`
+// 都从这里读。根 package.json 只留构建面（devDependencies），不声明运行时依赖。
+export const SHIP_PKG_REL = "packaging/package.json";
+
+/** 交付面清单（packaging/package.json）。 */
+export const readShipPkg = () => readPkg(SHIP_PKG_REL);
+
+/** 声明的 DSH 版本（未声明返回 null）。 */
+export function dshPin() {
+  const v = readShipPkg()?.dependencies?.["@deepseek-ai/dsh"];
+  return typeof v === "string" && v ? v : null;
 }

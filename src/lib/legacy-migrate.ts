@@ -12,9 +12,9 @@
 //   · logs/* **不迁移**：App 侧日志走宿主 ctx.logger，旧日志无落点
 //   · config.json（v1 全局设置）→ 参考拷贝 dataDir/legacy-config.json + 映射建议输出
 //     （v2 设置存宿主 preferences（contributes.settings 经 ctx.config），脚本不代写宿主态）
-//   · profiles/dshana **不复制**：其 node_modules/@dsh-hanako 是 junction/拷贝指向 v1 插件
-//     安装目录（已过时）；v2 每次受管 runtime 启动经 seed.js 用 installDir cordis/ 自愈重建
-//     （junction 指向只读目录可读）。迁移后 v2 首个 runtime 启动即重新种子化 profile。
+//   · profiles/dshana **不复制**：profile 是 DSH 自己的目录（v2 用官方随附的 web profile，
+//     首次加载时由 DSH 自建）；旧 profile 里的 node_modules/@dsh** 是指向 v1 插件安装目录的
+//     junction/拷贝（已过时），留着也不被读取，但没必要搬进新家。
 //
 // 纪律：
 //   · 源（旧插件数据）只读——备份是"复制到目标数据区的独立备份"，绝不删/改旧数据
@@ -205,7 +205,7 @@ export function planLegacyMigration({ legacyRoot, dataDir, force = false }) {
     steps,
     warnings,
     sourceInfo,
-    skip: { profiles: "v2 runtime seed 每次启动用 installDir cordis/ 自愈重建 profile（junction 指向过时 v1 安装目录，不迁移）", nodeModules: "App 依赖随包物化在安装目录（不复制）；.node 文件锁不迁移" },
+    skip: { profiles: "profile 是 DSH 自己的目录（v2 用官方随附的 web profile，由 DSH 首次加载时自建），不迁移；旧 profile 里的 junction 也不搬", nodeModules: "App 依赖随包物化在安装目录（不复制）；.node 文件锁不迁移" },
   };
 }
 

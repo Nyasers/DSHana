@@ -5,7 +5,7 @@
 //
 // 语义对齐 subagent 的「创建即带任务」：新建 DSH 会话 + 立即提交首条 prompt（task/cwd 必填），
 // 固定异步，结果作为后台结果回投来源会话。提交链见 lib/session-run.ts
-// （ctx.tasks.create → 受管 runtime 就绪 → session.create/selectModel → 绑定回写宿主任务记录 → prompt）。
+// （ctx.tasks.create → 受管 runtime 就绪 → session.create（带模型）→ 绑定回写宿主任务记录 → prompt）。
 //
 // 模块契约（六个 action 模块共用，见 tools/index.ts）：导出 command / summary / fields /
 // required / readOnly / run；run(input, ctx, deps) 中 deps 仅单测注入提交链。
@@ -46,8 +46,11 @@ export const fields = {
   timeout: { type: "number", description: "任务超时（秒），缺省用 App 设置 defaultTimeoutSec" },
   agentPreset: { type: "string", description: "agent 预设（standard/ptc/cordis/minimal）" },
   reasoningEffort: { type: "string", description: "推理强度（off/high/max）" },
-  provider: { type: "string", description: "显式 provider（显式即成为 dsh 新默认）" },
-  model: { type: "string", description: "显式 model id（与 provider 一起传时覆盖 dsh 默认）" },
+  provider: { type: "string", description: "显式 provider（随这次请求带上，不改 dsh 的全局默认）" },
+  model: {
+    type: "string",
+    description: "显式 model id（与 provider 一起传时覆盖缺省；不传则：已显式传 effort 时从 dsh 默认补齐，都没传时按调用方角色卡配的模型开）",
+  },
 };
 export const required = ["task", "cwd"];
 

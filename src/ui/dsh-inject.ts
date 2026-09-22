@@ -20,6 +20,8 @@ import {
   ChunkAssembler,
   MUX_CHUNK_QUERY,
   MUX_CHUNK_QUERY_VALUE,
+  MUX_GATE_SID_QUERY,
+  MUX_GATE_TASK_QUERY,
   decodeMuxControlFrame,
   decodeUtf8,
   encodeAck,
@@ -304,15 +306,25 @@ class Inbox {
 }
 
 /** 经 api/remote.mux WS 复用多条远端流的载体（对齐样例的 DshStreamMux）。 */
-export function createStreamMux(privateBase, WebSocketCtor = window.WebSocket) {
+export function createStreamMux(
+  privateBase: any,
+  WebSocketCtor: any = window.WebSocket,
+  gate: { sessionId?: string; taskId?: string } | null = null,
+) {
   const wsUrl = new URL("api/remote.mux", privateBase);
   wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
   // 声明本页支持承载面分片：中继据此把超限帧按尺寸切开（宿主的 1 MiB 上游帧上限）。
-  // 不声明就走原来的原样透传——旧文档与新中继不会互相看不懂（约定见 lib/mux-chunks.ts）。
+  // 不声明就走原样透传（约定见 lib/mux-chunks.ts）。
   wsUrl.searchParams.set(MUX_CHUNK_QUERY, MUX_CHUNK_QUERY_VALUE);
+  // 闸门票面：卡页带上「钉住的会话 + 对应的宿主任务」，中继据此只让活跃任务的流建起来
+  // （任务失活即拒建并断开活流，见 src/runtime/bridge.ts 的闸门段）。无票页面（主卡 / FP）不带。
+  if (gate && gate.sessionId) wsUrl.searchParams.set(MUX_GATE_SID_QUERY, String(gate.sessionId));
+  if (gate && gate.taskId) wsUrl.searchParams.set(MUX_GATE_TASK_QUERY, String(gate.taskId));
   let socket: WebSocket | null = null;
   const streams = new Map<string, any>();
   let nextId = 0;
+  /** 冻结标志：终态卡不再接受新流（DSH 的 $events 会自己重连，不拒就是没冻住）。 */
+  let frozen = false;
   /** 分片重组：一条消息的分片在同一载体上连续到达，换载体即作废。 */
   const assembler = new ChunkAssembler();
 
@@ -395,6 +407,7 @@ export function createStreamMux(privateBase, WebSocketCtor = window.WebSocket) {
 
   /** 发一帧。返回 false = 这条载体当场不可用（调用方按载体失败收场，不在死载体上空等）。 */
   const send = (frame): boolean => {
+    if (frozen) return false; // 冻结后不再开载体（cancel 帧也不必补发：会话已终结）
     const s = connect();
     const data = JSON.stringify(frame);
     if (s.readyState === WebSocketCtor.OPEN) {
@@ -413,7 +426,23 @@ export function createStreamMux(privateBase, WebSocketCtor = window.WebSocket) {
 
   return {
     url: wsUrl.toString(),
+    /** 主载体上还有在途流？调用方用它在冻结前等一次静默。 */
+    hasActiveStreams: () => streams.size > 0,
+    /**
+     * 冻结（会话已终结的卡）：断开当前载体、让在途流以终态收场（不是载体丢失），
+     * 并拒绝之后的 openStream。DSH 的事件订阅断了会重连，不拒就冻不住。
+     */
+    freeze: () => {
+      frozen = true;
+      const s = socket;
+      socket = null;
+      assembler.reset();
+      // 同 dispose 的取向：页面主动收线不属于载体故障，按终态处理（内核客户端 close() 同语义）。
+      failAll(new Error("DSH stream carrier frozen"));
+      try { if (s) s.close(1000, "frozen"); } catch { /* 忽略 */ }
+    },
     async *openStream(endpoint, payload, signal) {
+      if (frozen) throw new Error("DSH stream carrier frozen（会话已终结，本卡不再订阅）");
       if (signal && signal.aborted) throw signal.reason || new DOMException("Aborted", "AbortError");
       if (streams.size >= MAX_STREAMS) throw new Error("Too many DSH remote streams");
       const streamId = "hana-" + (++nextId);
@@ -496,8 +525,8 @@ export async function injectDshIndex(
   base.href = privateBase.toString();
   document.head.prepend(base);
   // head 忠实搬运，**保持原顺序**（样式与脚本的相对次序决定优先级；只搬不重排）。
-  // 对比旧实现的两处差异：① 多搬 <style>（旧实现漏搬，主题插件的静态 fallback
-  // 就是这样丢的）；② 内联/外部脚本与样式混在同一趟有序遍历里，不再分块。
+  // 两条要点：① <style> 必须一起搬——主题插件的静态 fallback 就挂在它上面，漏搬即丢；
+  // ② 内联/外部脚本与样式在同一趟有序遍历里处理，不按类型分块。
   // module entry 最后加载（它依赖前面的东西）。
   let moduleEntry: string | null = null;
   for (const node of parsed.head.children) {
@@ -536,13 +565,55 @@ export async function injectDshIndex(
   if (!moduleEntry) throw new Error("DSH index did not declare a module entry");
   // body 内联脚本（**必须早于 module entry**）：dsh 自己的 boot-theme 行就在 <body> 开头——
   // 它设 documentElement.style.colorScheme、body[data-ds-dark-theme]、--dsh-content-font-size。
-  // 旧实现只搬 head，这行就丢了：dsh 的明暗标记与内容字号就不会初始化。
+  // 漏了它 dsh 的明暗标记与内容字号就不会初始化。
   for (const source of parsed.body.querySelectorAll("script:not([src])")) {
     const script = document.createElement("script");
     script.textContent = source.textContent;
     document.head.append(script);
   }
   await appendScript(resolveIndexAssetUrl(moduleEntry, privateBase).toString(), true);
+}
+
+/**
+ * 从宿主的 pick 结果里取路径：没有（用户取消）返回 null。DSH 的目录流程把 null 当取消。
+ * @param result - `hana.resources.pick` 的返回值。
+ * @returns 选中的绝对路径，或 null。
+ */
+export function pickedPathOf(result) {
+  const first = result && Array.isArray(result.resources) ? result.resources[0] : null;
+  const path = first && typeof first === "object" && typeof first.path === "string" ? first.path : "";
+  return path || null;
+}
+
+/**
+ * 安装 `__DSH_DIRECTORY_PICKER__`（DSH 客户端在目录流程激活时读它）。
+ *
+ * DSH 的 native 目录流程有两个来源：本地桌面桥（官方桌面壳由 preload 注入）优先，没桥才叫宿主
+ * 进程的 OS chooser。后者要在宿主进程里 spawn 一个 worker 子进程跑 `IFileOpenDialog`（koffi 走 COM），
+ * 还先合成一次 Alt 把弹窗抢到前台——上游写明它只适合「操作者坐在宿主屏幕前」，而本形态里受管
+ * runtime 是沙箱里的后台子进程，那条路开不出来（客户端就把异常当错误弹出来）。这里注入桥：弹窗改由
+ * 宿主出（`hana.resources.pick`，`mode=directory`），用户面对的是自己的机器，不经沙箱。
+ * @param sdk - 壳页的宿主 UI SDK。它在本包里是**模块作用域的导入**（app-shell 的
+ *   `import { hana } from "@hana/plugin-sdk"`），不在 `globalThis` 上，所以调用方必须传进来；
+ *   全局只当兼底，供别的宿主形态。
+ * @returns disposer：删掉桥（并恢复先前的值）。
+ */
+export function installDirectoryPickerBridge(sdk) {
+  const host = globalThis as any;
+  const previous = host.__DSH_DIRECTORY_PICKER__;
+  host.__DSH_DIRECTORY_PICKER__ = {
+    async pick() {
+      const api = sdk || host.hana;
+      if (!api || !api.resources || typeof api.resources.pick !== "function") {
+        throw new Error(api ? "宿主 SDK 里没有 resources.pick" : "壳页没拿到宿主 SDK（它不在 globalThis 上，得由壳页传）");
+      }
+      return pickedPathOf(await api.resources.pick({ mode: "directory" }));
+    },
+  };
+  return () => {
+    try { delete host.__DSH_DIRECTORY_PICKER__; } catch { /* 忽略 */ }
+    if (previous !== undefined) host.__DSH_DIRECTORY_PICKER__ = previous;
+  };
 }
 
 /**
@@ -565,13 +636,22 @@ export async function injectDshIndex(
  * 上面两处逐包补丁保留（同一目标、互为兼容，不再新增第三处）；__DSH_TRANSPORT__ 仍是内核 connection
  * 客户端的 opt-in 通道，语义不变（它对外部 origin 抛错，接管层则原样放行）。
  */
+export interface DshTransport {
+  /** 会话已终结的卡：断消息流并拒绝重开（陈旧卡不再吃连接与渲染）。 */
+  freezeStreams(): void;
+  /** 主载体上还有在途流？（冻结前的静默判断用它。） */
+  hasActiveStreams(): boolean;
+  /** 整页收尾（pagehide）：还原全部接管 + 断流。 */
+  dispose(): void;
+}
+
 export function installTransport(
   privateBase: URL,
-  { role, bridge }: { role?: string; bridge?: Record<string, unknown> } = {},
-) {
+  { role, bridge, sdk, gate }: { role?: string; bridge?: Record<string, unknown>; sdk?: any; gate?: { sessionId?: string; taskId?: string } | null } = {},
+): DshTransport {
   // 请求接管先装：它必须早于任何 DSH 侧代码执行（注入 index 前调用本函数）。
   const restoreTakeover = installRequestTakeover(privateBase);
-  const mux = createStreamMux(privateBase);
+  const mux = createStreamMux(privateBase, undefined, gate || null);
   const runtimeFetch = createRuntimeFetch(privateBase);
   window.__DSH_TRANSPORT__ = {
     fetch: runtimeFetch,
@@ -597,12 +677,24 @@ export function installTransport(
   // writeText **不存在**时才走——嵌入场景里原生被 Permissions-Policy 关死，于是复制永远失败，
   // 还每次先留一条 [Violation]。影子必须在属性被读到之前就位；桥面已就绪，故放在 __DSHANA__ 之后。
   const restoreClipboard = installClipboardShadow({ bridge: window.__DSHANA__ });
-  return () => {
-    try { restoreClipboard(); } catch { /* 忽略 */ }
-    try { restoreTakeover(); } catch { /* 忽略 */ }
-    try { delete window.__DSH_TRANSPORT__; } catch { /* 忽略 */ }
-    try { delete window.__DSH_FILE_UPLOAD__; } catch { /* 忽略 */ }
-    try { delete window.__DSHANA__; } catch { /* 忽略 */ }
-    mux.dispose();
+  // 目录选择器桥：同样必须在 DSH 注入之前（客户端在流程激活时读一次）。SDK 由壳页传入——
+  // 它是模块作用域的导入，不在 globalThis 上。
+  const restoreDirectoryPicker = installDirectoryPickerBridge(sdk);
+  return {
+    freezeStreams() {
+      mux.freeze();
+    },
+    hasActiveStreams() {
+      return mux.hasActiveStreams();
+    },
+    dispose() {
+      try { restoreDirectoryPicker(); } catch { /* 忽略 */ }
+      try { restoreClipboard(); } catch { /* 忽略 */ }
+      try { restoreTakeover(); } catch { /* 忽略 */ }
+      try { delete window.__DSH_TRANSPORT__; } catch { /* 忽略 */ }
+      try { delete window.__DSH_FILE_UPLOAD__; } catch { /* 忽略 */ }
+      try { delete window.__DSHANA__; } catch { /* 忽略 */ }
+      mux.dispose();
+    },
   };
 }

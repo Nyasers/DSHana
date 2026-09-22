@@ -3,8 +3,8 @@
 //
 // scripts/release/clean-tmp.mts — 打包临时目录清理（package.json 的 postpackage 钩子）
 //
-// 打包的中间原料（_tmp/pkg/ 铺平目录）与依赖暂存树（_tmp/pkg-root/）都可再生，
-// 真正的产物只有 releases/ 下的 zip + sha256。本脚本把它们清掉。
+// 打包的中间原料（_tmp/pkg/ 铺平目录）、依赖暂存树（_tmp/pkg-root/）与锁文件派生工位
+// （_tmp/pkg-lock/）都可再生，真正的产物只有 releases/ 下的 zip + sha256。本脚本把它们清掉。
 //
 // 为什么单独成脚本而不是内联在 pack 脚本尾部：
 //   · 声明式——package.json 里一眼可见"打包后要清临时目录"这条纪律；
@@ -17,11 +17,11 @@ import { join } from "node:path";
 
 import { ROOT } from "../shared/root.mts";
 
-for (const rel of [join("_tmp", "pkg"), join("_tmp", "pkg-root")]) {
+for (const rel of [join("_tmp", "pkg"), join("_tmp", "pkg-root"), join("_tmp", "pkg-lock")]) {
   const abs = join(ROOT, rel);
   if (fs.pathExistsSync(abs)) {
     fs.removeSync(abs);
     console.log(`[clean-tmp] 已清理 ${rel.replace(/\\/g, "/")}`);
   }
 }
-console.log("[clean-tmp] 临时目录干净（_tmp/pkg、_tmp/pkg-root）");
+console.log("[clean-tmp] 临时目录干净（_tmp/pkg、_tmp/pkg-root、_tmp/pkg-lock）");

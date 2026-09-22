@@ -18,8 +18,8 @@
 //
 // 依赖部署：DSH 依赖（@deepseek-ai/dsh + cordis + 官方插件树 + 多平台原生产物）由
 // scripts/release/pack/index.mts 在构建时物化进安装目录 node_modules（hoisted 布局，安装即用、无运行时
-// 安装，版本随 App 声明）；cordis 产物（@dshana/*）在安装目录 cordis/，profile 经 junction
-// 暴露（src/runtime/seed.ts）；受管子进程入口 = runtime/dsh-host.mjs（dist 构建产物）。
+// 安装，版本随 App 声明）；@dshana 子插件随包落在安装树 node_modules/@dshana（与 @deepseek-ai/*
+// 同锚点：DSH 的 runtime 解析模式从安装树算解析代，不建链接）；受管子进程入口 = runtime/dsh-host.mjs。
 //
 // 日志：只走宿主 ctx.logger；ctx.logger 缺失或抛错时回落 stderr（宁可吵，不静默丢日志）。
 import { initAppRuntime, toolCtxFrom } from "#/lib/app-runtime.ts";
@@ -30,6 +30,12 @@ import * as dshanaTool from "#/tools/index.ts";
 // 壳页/诊断面单 registrar（ctx.routes.register 只挂本 App 后端面；到受管 runtime 的服务
 // 由宿主按 /api/apps/<id>/routes/_runtime/<runtimeId>/ 自动代理，本文件不转发）
 import { registerDshanaRoutes, defaultDshanaRouteDeps } from "#/routes/dshana-routes.ts";
+// 宿主模型/提供商变更 → 受管 runtime 重拉目录（见 lib/model-sync.ts 的动因）
+import { installHostModelSync } from "#/lib/model-sync.ts";
+// 默认模型对账：DSH 缺省模型必须落在宿主目录里（见 lib/model-default-guard.ts 的动因）
+import { installModelDefaultGuard, runModelDefaultGuard } from "#/lib/model-default-guard.ts";
+// 应用态存储收尾：清掉 UI 跨面共享通道在本生命周期之外的键（见 lib/shared-state.ts）
+import { renewSharedState } from "#/lib/shared-state.ts";
 
 // ---- 统一日志：只走宿主 ctx.logger ----
 // App 侧不写自己的文件日志；ctx.logger 缺失（旧 host）或宿主抛错时回落 stderr。
@@ -126,6 +132,12 @@ export function apply(ctx) {
     try {
       Promise.resolve()
         .then(() => ensureManagedRuntime({}))
+        .then(() => runModelDefaultGuard(ctx, log))
+        .then((r) => {
+          if (r && r.status === "repaired") {
+            log("info", "apply 自动链：默认模型已按宿主目录对账修正（" + ((r.next && (r.next.provider + "/" + r.next.model)) || "") + "）");
+          }
+        })
         .catch((e) => {
           log("warn", "apply 自动链启动 DSH runtime 失败（状态经 boot-state 展示，可手动重试）：" + ((e as any)?.message || e));
         });
@@ -135,11 +147,51 @@ export function apply(ctx) {
     }
   }
 
+  // ---- 应用态存储收尾：UI 共享通道的键就是一次 App 生命周期的事（本次加载写的，上次加载留的，
+  //      被杀掉的进程删不掉自己那份），加载时清空整个 `dshana.` 前缀。
+  //      维护动作：fire-and-forget，失败不影响 apply（见 lib/shared-state.ts）。
+  {
+    try {
+      Promise.resolve()
+        .then(() => renewSharedState(ctx && ctx.storage ? ctx.storage.global : null))
+        .then((r) => {
+          if (r.removed > 0 || r.failed > 0) {
+            log("info", `应用态存储收尾：清共享键 ${r.removed} 个（扫描 ${r.scanned} 键，失败 ${r.failed}）`);
+          }
+        })
+        .catch((e) => {
+          log("warn", "应用态存储收尾异常（忽略）：" + ((e as any)?.message || e));
+        });
+    } catch (e) {
+      log("warn", "应用态存储收尾触发异常（忽略）：" + ((e as any)?.message || e));
+    }
+  }
+
+  // ---- 宿主模型/提供商变更订阅：变更时经控制面通知 runtime 重拉目录（不重启 runtime）----
+  let uninstallModelSync: () => void = () => {};
+  try {
+    uninstallModelSync = installHostModelSync(ctx, log);
+  } catch (e) {
+    log("warn", "模型变更订阅安装异常（忽略，改宿主提供商需重启 runtime 生效）：" + ((e as any)?.message || e));
+  }
+
+  // ---- 默认模型对账（见 lib/model-default-guard.ts 的动因）：runtime 就绪那一次在自动链里跑，
+  //      此后跟随宿主的 models-changed。缺省模型不能写死在 roster patch 里（宿主配了哪些提供商
+  //      每台 Hana 不同），只能按运行时事实修：现值不在宿主目录里就换成目录里第一条可服务的。
+  let uninstallModelGuard: () => void = () => {};
+  try {
+    uninstallModelGuard = installModelDefaultGuard(ctx, log);
+  } catch (e) {
+    log("warn", "默认模型对账订阅安装异常（忽略）：" + ((e as any)?.message || e));
+  }
+
   // 返回 disposer：卸载/重载清理（停止受管 DSH runtime——若已启动；幂等）
   let disposed = false;
   return () => {
     if (disposed) return;
     disposed = true;
+    try { if (typeof uninstallModelSync === "function") uninstallModelSync(); } catch { /* 忽略 */ }
+    try { if (typeof uninstallModelGuard === "function") uninstallModelGuard(); } catch { /* 忽略 */ }
     try { if (typeof unregisterTool === "function") unregisterTool(); } catch { /* 忽略 */ }
     try { if (typeof unregisterRoutes === "function") unregisterRoutes(); } catch { /* 忽略 */ }
     // 受管 runtime 收尾：停 runtime + 清单例（Windows 依赖更新/App 卸载前须先停，见

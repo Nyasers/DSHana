@@ -7,8 +7,8 @@
 //
 // 打包纪律：
 //   - @deepseek-ai/*（dsh/cordis/dsh-* 官方插件树）**不静态打进**：它们随包物化在安装目录
-//     node_modules（自包含打包，见 scripts/release/pack/index.mts），运行时直接解析，不再安装、不额外下载，
-//     但仍不能静态打进本 bundle——dsh 定位/动态 import 一律 /* webpackIgnore: true */ 保留原生
+//     node_modules（自包含打包，见 scripts/release/pack/index.mts），运行时直接解析（不安装、
+//     不下载），但仍不能静态打进本 bundle——dsh 定位/动态 import 一律 /* webpackIgnore: true */ 保留原生
 //     import()（见 src/runtime/locate.js 与 main.js）；
 //   - @hana/app-sdk 的 connectAppRuntime 运行时实现来自 devDependencies（file:vendor/
 //     hana-app-sdk/hana-app-sdk.tgz，0.946.2，Apache-2.0，来源与许可声明见 THIRD_PARTY_NOTICES.md），

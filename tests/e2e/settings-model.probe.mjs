@@ -3,37 +3,34 @@
 //
 // tests/e2e/settings-model.probe.mjs — 默认模型读写面真机探测（开发者本机用，非 node --test 默认集）
 //
-// 目的：在真 DSH 上核实 App 侧实现所依赖的三条契约（全是我们不能靠猜的东西）：
+// 目的：在真 DSH 上核实默认模型对账所依赖的两条契约（全是我们不能靠猜的东西）：
 //   ① settings/describe 的实际返回形状，以及 agent-default-model 段视图（value + revision）；
-//   ② session/modelCatalog 的形状（default / routableProviders / groups / failures）；
-//   ③ settings/replace 的参数名与冲突语义：带当前 revision 写回成功（revision 前进），
+//   ② settings/replace 的参数名与冲突语义：带当前 revision 写回成功（revision 前进），
 //      带过期 revision 被拒——拒绝的错误码/文案就是 App 侧映射 409 的依据。
 // 写入一律**原值原样写回**（no-op），并在结束时恢复原值；不碰别的段。
 //
 // 用法（仓库根，先 pnpm run build && node src-cordis/build.ts）：
 //   node tests/e2e/settings-model.probe.mjs [--keep]
-// 环境：DSH_REPO_ROOT、DSH_DATA_DIR、DSH_DEPS_ROOT、DSH_CORDIS_SRC、DSH_PROBE_TIMEOUT_MS
+// 环境：DSH_REPO_ROOT、DSH_DATA_DIR、DSH_DEPS_ROOT、DSH_PROBE_TIMEOUT_MS
 import { fork } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { randomBytes, randomInt } from "node:crypto";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildClientRequest, parseServerResponse } from "../../src/lib/rpc-envelope.js";
+import { buildClientRequest, parseServerResponse } from "../../src/lib/rpc-envelope.ts";
 import {
   AGENT_DEFAULT_MODEL_NS,
   isSettingsConflict,
-  rpcModelCatalog,
   rpcSettingsDescribe,
   rpcSettingsReplace,
   settingsViewOf,
-} from "../../src/lib/dsh-rpc.js";
+} from "../../src/lib/dsh-rpc.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(process.env.DSH_REPO_ROOT || join(here, "..", ".."));
 const KEEP = process.argv.includes("--keep");
 const dataDir = resolve(process.env.DSH_DATA_DIR || join(REPO, "_tmp", "probe-model-data"));
 const depsRoot = resolve(process.env.DSH_DEPS_ROOT || join(REPO, "node_modules"));
-const cordisSrc = resolve(process.env.DSH_CORDIS_SRC || join(REPO, "dist", "cordis"));
 const entry = join(REPO, "dist", "runtime", "dsh-host.mjs");
 const READY_TIMEOUT_MS = Number(process.env.DSH_PROBE_TIMEOUT_MS || 240000);
 
@@ -108,12 +105,9 @@ function controlClient(port, controlKey) {
           async json() { return res; },
         };
       };
-      return (method === "settings/describe" ? rpcSettingsDescribe : method === "settings/replace" ? rpcSettingsReplace : rpcModelCatalog)(
-        fn,
-        "",
-        payload,
-        opts,
-      );
+      if (method === "settings/describe") return rpcSettingsDescribe(fn, "", payload, opts);
+      if (method === "settings/replace") return rpcSettingsReplace(fn, "", payload, opts);
+      throw new Error("probe 只支持 settings/describe 与 settings/replace：" + method);
     },
   };
 }
@@ -125,7 +119,7 @@ async function runProbe() {
   const controlKey = opaque();
   const configPath = writeConfig({
     dataDir, dshHome: join(dataDir, ".dsh"), dshPort, bridgePort,
-    bridgeKey: opaque(), controlKey, readyMarker: "PROBE_READY:" + opaque(12), cordisSrc, depsRoot,
+    bridgeKey: opaque(), controlKey, readyMarker: "PROBE_READY:" + opaque(12), depsRoot,
   });
   say("dataDir=" + dataDir);
   const { child, exit } = forkEntry(configPath);
@@ -156,26 +150,14 @@ async function runProbe() {
     }
     const original = view && view.value && typeof view.value === "object" ? { ...view.value } : null;
 
-    // ② 候选模型
-    const catalog = await ctl.fetchVia("session/modelCatalog", {});
-    say("② session/modelCatalog → keys=" + keysOf(catalog));
-    say("   default=" + short(catalog && catalog.default) + " routableProviders=" + short(catalog && catalog.routableProviders));
-    const groups = (catalog && catalog.groups) || [];
-    say("   groups=" + groups.length + " → " + groups.map((g) => (g && g.id) + "(" + ((g && g.models) || []).length + ")").join(", "));
-    const first = groups.find((g) => g && Array.isArray(g.models) && g.models.length);
-    if (first) say("   首个模型样例：" + short(first.models[0]));
-    say("   failures=" + short(catalog && catalog.failures));
-    if (!Array.isArray(groups)) { say("   **groups 不是数组**"); pass = false; }
-    if (!catalog || !catalog.default) { say("   **缺 default**（页面要拿它做兜底选中）"); pass = false; }
-
-    // ③ 写回与冲突
+    // ② 写回与冲突
     if (view && original && typeof view.revision === "number") {
       const same = await ctl.fetchVia("settings/replace", {
         ns: AGENT_DEFAULT_MODEL_NS,
         section: original,
         expectedRevision: view.revision,
       });
-      say("③ settings/replace(原值, rev=" + view.revision + ") → value=" + short(same && same.value) + " revision=" + (same && same.revision));
+      say("② settings/replace(原值, rev=" + view.revision + ") → value=" + short(same && same.value) + " revision=" + (same && same.revision));
       if (!same || typeof same.revision !== "number" || same.revision === view.revision) {
         say("   注：revision 未前进（同值写入可能不 bump，不据此判失败）");
       }
@@ -196,7 +178,7 @@ async function runProbe() {
       const restored = await ctl.fetchVia("settings/replace", { ns: AGENT_DEFAULT_MODEL_NS, section: original });
       say("   恢复原值 → value=" + short(restored && restored.value));
     } else {
-      say("③ 跳过写回（没有可用的段视图/原值）");
+      say("② 跳过写回（没有可用的段视图/原值）");
     }
   } catch (e) {
     say("PROBE_FAIL：" + ((e && e.message) || e));

@@ -22,10 +22,10 @@
 //   POST /dshana/start       手动触发受管 runtime 启动（App 自动链之外的兑底入口；fire-and-forget，
 //                            立刻 202 返回，壳页轮询 boot-state 跟进；已就绪/启动中幂等）
 //   POST /dshana/stop        停止受管 runtime（幂等）
-//   GET  /dshana/model       默认模型（读自 DSH 的 settings 段 agent-default-model）+ 候选模型目
-//   POST /dshana/model       改默认模型（整段替换；带 expectedRevision，落后就 409）
-//   GET  /dshana/card-state  会话流卡页的状态面（一次性取数：读宿主任务记录的绑定；回卡页
-//                            可直接换进 DOM 的状态行 HTML）
+//   GET  /dshana/models      模型候选（按 provider 分组，读宿主模型目录 ctx.models.list）——设置页的
+//                            「会话模型」按它列 provider/模型/推理档，不依赖 DSH 运行
+//   GET  /dshana/card-state  会话流卡页的状态面（按需取数：读宿主任务记录的绑定；回卡页
+//                            可直接换进 DOM 的状态行 HTML。卡页在非终态期间慢轮询，终态即停）
 //
 // 依赖注入（可测性）：deps = { appId, version, getSnapshot(), start(), stop(), log() }。
 // 默认实现经 src/lib/managed-runtime.ts 读取真实单例；测试注入 fake。
@@ -35,7 +35,7 @@ import { managedRuntimeDetails, ensureManagedRuntime, stopManagedRuntime, bridge
 import { buildBootSnapshot, APP_ID } from "#/lib/boot-state.ts";
 import { dataSources, sourceOf } from "#/lib/data-source.ts";
 // 数据源切换（lib/source-switch.ts）的入口暂时撤下：链未在真机验证过，见 POST /dshana/settings/restart。
-import { readDefaultModel, writeDefaultModel } from "#/lib/model-settings.ts";
+import { groupHostCatalog } from "#/lib/model-catalog-view.ts";
 import {
   createTaskBindingIndex,
   isValidSessionId,
@@ -45,7 +45,7 @@ import {
 export const DASHANA_ROUTE_PREFIX = "/dshana";
 
 // ---- 应用设置（GET/POST /dshana/settings）----
-// 两个超时与数据模式同栈：一份设置（dataDir/integration/settings.json）、一个 revision，
+// 两个超时与数据模式同栈：一份设置（dataDir/settings.json）、一个 revision，
 // 缺省值由 lib/config.ts 的 APP_SETTING_DEFAULTS 单点持有（30 / 1800）。
 // 为什么不用 schema 门：设置标签页直接渲染本 App 自己的页
 // （contributes.settings.ui.route），配置经 App 自己的后端读写，宿主不再代画表单。
@@ -125,8 +125,6 @@ export function defaultDshanaRouteDeps(ctx) {
   // dataDir。真机曾按 ctx.config.dataDir 取 → 恒为空串 → POST /dshana/settings 必 500
   // （读路径只静默降级，所以先前没暴露）。
   const dataDir = ctx && typeof ctx.dataDir === "string" ? ctx.dataDir : "";
-  // 默认模型不经我们存储：经中继打 DSH 自己的 settings 服务（与 session/cancel 同一条通道）。
-  const appFetch = ctx && ctx.network && typeof ctx.network.fetch === "function" ? ctx.network.fetch : null;
   return {
     appId: (ctx && ctx.appId) || APP_ID,
     version: "",
@@ -162,13 +160,13 @@ export function defaultDshanaRouteDeps(ctx) {
       return { state: "tracked", label: "运行中", detail: "App 侧仍在跟踪（rpcId " + String(binding.rpcId || "") + "）" };
     },
     readSettings: () => readSettingsView(ctx, dataDir),
-    readModel: () => {
-      if (!appFetch) throw new Error("ctx.network.fetch 不可用（manifest network 白名单 / 宿主代发门）");
-      return readDefaultModel(appFetch);
-    },
-    writeModel: (patch) => {
-      if (!appFetch) throw new Error("ctx.network.fetch 不可用（manifest network 白名单 / 宿主代发门）");
-      return writeDefaultModel(appFetch, patch);
+    // 模型候选只认宿主目录（ctx.models.list）：它是「这条路走不走得通」的唯一事实源，
+    // 也让候选与 DSH 在不在跑无关。
+    listHostModels: async () => {
+      const list = ctx && ctx.models && typeof ctx.models.list === "function" ? ctx.models.list.bind(ctx.models) : null;
+      if (!list) throw new Error("ctx.models.list 不可用（manifest 未声明 app/models.infer 或未授权）");
+      const listed = await list();
+      return (listed && listed.models) || [];
     },
     writeSettings: async (patch, expectedRevision) => {
       if (!dataDir) throw new Error("ctx.dataDir 不可用（宿主未提供 App 数据目录），无法写应用设置");
@@ -223,11 +221,8 @@ export function registerDshanaRoutes(app, deps) {
       ? d.readCardState
       : () => ({ state: "unknown", label: "未接线", detail: "deps.readCardState 未注入" });
   const writeSettings = typeof d.writeSettings === "function" ? d.writeSettings : (patch) => patch;
-  const readModel = typeof d.readModel === "function" ? d.readModel : async () => {
-    throw new Error("默认模型读写不可用：deps.readModel 未注入");
-  };
-  const writeModel = typeof d.writeModel === "function" ? d.writeModel : async () => {
-    throw new Error("默认模型读写不可用：deps.writeModel 未注入");
+  const listHostModels = typeof d.listHostModels === "function" ? d.listHostModels : async () => {
+    throw new Error("模型候选不可用：deps.listHostModels 未注入");
   };
 
   const json = (c, status, body) => {
@@ -281,23 +276,19 @@ export function registerDshanaRoutes(app, deps) {
       }
     });
 
-    // ---- GET /dshana/model：默认模型 + 候选（DSH 未运行时给 ready=false，不是错误）----
-    // 契约：一律 200，成败看 ok / ready——设置页不依赖 DSH 运行也能渲染（AC W2-1）。
-    app.get(DASHANA_ROUTE_PREFIX + "/model", async (c) => {
-      const snap = getSnapshot();
-      if (!snap.ready) {
-        return json(c, 200, { ok: false, ready: false, error: "DSH 未运行：默认模型在 DSH 起来后才能读" });
-      }
+    // ---- GET /dshana/models：模型候选（宿主目录的分组视图）----
+    // 一律 200，成败看 ok：本页不依赖 DSH 运行（AC W2-1），DSH 在不在跑都不影响这份候选。
+    app.get(DASHANA_ROUTE_PREFIX + "/models", async (c) => {
       try {
-        return json(c, 200, { ok: true, ready: true, model: await readModel() });
+        return json(c, 200, { ok: true, catalog: { groups: groupHostCatalog(await listHostModels()) } });
       } catch (e) {
-        log("warn", "/dshana/model 读取失败：" + errText(e));
-        return json(c, 200, { ok: false, ready: true, error: errText(e) });
+        log("warn", "/dshana/models 读取失败：" + errText(e));
+        return json(c, 200, { ok: false, error: errText(e) });
       }
     });
 
-    // ---- GET /dshana/card-state：会话流卡页的状态面（一次性取数，无 SSE / 无轮询）----
-    // 卡页（ui/card.html，宿主以 /api/apps/<appId>/ui/card.html 服务）加载后取一次：读宿主
+    // ---- GET /dshana/card-state：会话流卡页的状态面（无 SSE；卡页在非终态期间慢轮询，终态即停）----
+    // 卡页（ui/stream.html，宿主以 /api/apps/<appId>/ui/stream.html 服务）加载后取数据：读宿主
     // 任务记录里的绑定给出该 DSH 会话的跟踪态。响应是卡页可直接换进 DOM 的状态行
     // HTML（形制见 cardStateHtml）。会话 id 形态不对回 400（形状错，不是「没状态」）。
     app.get(DASHANA_ROUTE_PREFIX + "/card-state", async (c) => {
@@ -322,7 +313,7 @@ export function registerDshanaRoutes(app, deps) {
         if (before.ready || before.phase === "ready" || before.phase === "starting") {
           return json(c, 200, { ok: true, accepted: false, reason: before.phase === "starting" ? "starting" : "already-ready", state: before });
         }
-        // fire-and-forget：start 含 runtime 拉起与 profile 种子化，不让 HTTP 请求挂起；
+        // fire-and-forget：start 含 runtime 拉起与 DSH boot，不让 HTTP 请求挂起；
         // 壳页以轮询 boot-state 跟进。错误只在单例 phase=error 与日志中反映。
         const p = Promise.resolve().then(() => start());
         p.then(
@@ -376,41 +367,6 @@ export function registerDshanaRoutes(app, deps) {
       }
     });
 
-    // ---- POST /dshana/model：改默认模型（DSH settings 段整段替换）----
-    // 409 = 段 revision 已前进（别处改过）：上游 DSH 报 settings/conflict，这里原样上抬。
-    app.post(DASHANA_ROUTE_PREFIX + "/model", async (c) => {
-      const snap = getSnapshot();
-      if (!snap.ready) {
-        return json(c, 200, { ok: false, ready: false, error: "DSH 未运行：默认模型在 DSH 起来后才能改" });
-      }
-      let body: any = null;
-      try {
-        body = c && c.req && typeof c.req.json === "function" ? await c.req.json() : null;
-      } catch {
-        body = null;
-      }
-      const provider = typeof body?.provider === "string" ? body.provider.trim() : "";
-      const model = typeof body?.model === "string" ? body.model.trim() : "";
-      if (!provider || !model) {
-        return json(c, 400, { ok: false, error: "需要 provider 与 model（非空字符串）" });
-      }
-      const patch: Record<string, any> = { provider, model };
-      if (typeof body.reasoningEffort === "string" && body.reasoningEffort.trim()) {
-        patch.reasoningEffort = body.reasoningEffort.trim();
-      }
-      if (typeof body.expectedRevision === "number" && Number.isFinite(body.expectedRevision)) {
-        patch.expectedRevision = body.expectedRevision;
-      }
-      try {
-        return json(c, 200, { ok: true, ready: true, model: await writeModel(patch) });
-      } catch (e) {
-        if ((e as any)?.code === "SETTINGS_CONFLICT") {
-          return json(c, 409, { ok: false, ready: true, code: "SETTINGS_CONFLICT", error: (e as any)?.message || "默认模型已被别处改过" });
-        }
-        log("warn", "/dshana/model 写入失败：" + errText(e));
-        return json(c, 200, { ok: false, ready: true, error: errText(e) });
-      }
-    });
     // ---- POST /dshana/settings/restart：数据源切换（入口暂撤）----
     // 切换链（lib/source-switch.ts）还没跑通：停旧、起新、失败回滚这条链没有在真机上验证过，
     // 而它第一步就会停掉正在跑的 runtime。为避免半成品被误触发，这里先只回一句明确的
@@ -433,12 +389,11 @@ export function dshanaRoutesTable() {
     ["GET", DASHANA_ROUTE_PREFIX + "/boot-state"],
     ["GET", DASHANA_ROUTE_PREFIX + "/health"],
     ["GET", DASHANA_ROUTE_PREFIX + "/settings"],
-    ["GET", DASHANA_ROUTE_PREFIX + "/model"],
+    ["GET", DASHANA_ROUTE_PREFIX + "/models"],
     ["GET", DASHANA_ROUTE_PREFIX + "/card-state"],
     ["POST", DASHANA_ROUTE_PREFIX + "/start"],
     ["POST", DASHANA_ROUTE_PREFIX + "/stop"],
     ["POST", DASHANA_ROUTE_PREFIX + "/settings"],
     ["POST", DASHANA_ROUTE_PREFIX + "/settings/restart"],
-    ["POST", DASHANA_ROUTE_PREFIX + "/model"],
   ];
 }

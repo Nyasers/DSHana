@@ -8,7 +8,8 @@
 //      不落盘、不落日志；
 //   ② ensureManagedRuntime（未起则启动到 ready；单例，一个 runtime 服务多会话）；
 //   ③ 经 loopback HTTP Unary RPC（同一信封协议，见 lib/rpc-envelope.js）把
-//      session.create / selectModel / prompt 提交给受管 runtime 内的 DSH web 服务；
+//      session.create / prompt 提交给受管 runtime 内的 DSH web 服务（模型选择随这两个请求
+//      一起下传，见集成 api-session-controller）；
 //   ④ 把 DSH 坐标（metadata.dsh：action/cwd/sessionId/rpcId/timeoutSec/approvalTimeoutMs）
 //      回写宿主任务记录（ctx.tasks.update）——绑定事实源就是这份记录，受管 runtime 的
 //      task-bridge / approval-bridge（src/runtime/*）与 provider 身份判定直接读它
@@ -32,6 +33,7 @@ import { nextRpcId } from "#/lib/rpc-envelope.ts";
 import { isValidSessionId, dshMetadataFor } from "#/lib/task-binding.ts";
 import { withSessionTurn, enterSessionTurn } from "#/lib/session-serialize.ts";
 import { readDshDefaultModel } from "#/lib/config.ts";
+import { callerPlanDeps, resolveCallerPlan } from "#/lib/caller-model.ts";
 import { serviceBase } from "#/lib/service-base.ts";
 import { rpcViaControl } from "#/lib/controller.ts";
 import { resolveTaskTimeoutSec, resolveApprovalTimeoutMs, cancelSessionWork } from "#/lib/cancel-chain.ts";
@@ -78,12 +80,15 @@ export function normalizeCreateSend({ action, input }: { action?: unknown; input
   };
 }
 
+/** 会话模型选择：provider/model 必填，推理强度可选（不传 = 由 DSH 决定）。 */
+type ModelSelection = { provider: string; model: string; reasoningEffort?: string };
+
 /**
  * selectModel 载荷组装（纯函数）：显式传了 provider/model/effort 任一时需要；
  * 只传其一/只传 effort 时另一侧从 DSH 默认模型（settings.yaml agent-default-model）补齐；
- * 补不出且确需选择时报错（沿用 v1 文案语义）。全不传返回 null（不 selectModel）。
+ * 补不出且确需选择时报错（沿用 v1 文案语义）。全不传返回 null（不随请求带模型）。
  */
-export function resolveModelSelection(parsed, dshHome) {
+export function resolveModelSelection(parsed, dshHome): ModelSelection | null {
   const { provider: p, model: m, reasoningEffort: e } = parsed || {};
   if (!p && !m && !e) return null;
   let provider = p;
@@ -95,7 +100,7 @@ export function resolveModelSelection(parsed, dshHome) {
   }
   if (!provider || !model) {
     throw new Error(
-      "需要 provider/model：请显式传 provider/model，或先在 DSH models 页设置默认模型（settings.yaml agent-default-model）",
+      "需要 provider/model：请显式传 provider/model，或在 DSH 自己的模型选择器里选一条（本 App 不再提供默认模型的设置入口）",
     );
   }
   return { provider, model, ...(e ? { reasoningEffort: e } : {}) };
@@ -176,11 +181,13 @@ async function waitTaskTerminalWithTimeout(ctx, taskId, sessionId, timeoutSec, l
 // session.create resume（{ sessionId, cwd }）；(b) 活跃/空闲在 DSH agent Map（list 不含）
 // → 直接 prompt（无 session.create）；list 也不含 = 会话不存在（prompt admission 会以
 // session/not-found 报错）。
-async function establishSession(ctx, base, parsed, log) {
+async function establishSession(ctx, base, parsed, log, modelSelection: ModelSelection | null = null) {
+  const withModel = modelSelection ? { model: modelSelection } : {};
   if (parsed.action === "create") {
     const createPayload = {
       cwd: parsed.cwd,
       ...(parsed.agentPreset ? { agentPreset: parsed.agentPreset } : {}),
+      ...withModel,
     };
     const value = await rpcCall(ctx, base, { method: "session/create", payload: createPayload });
     const sessionId = value && value.sessionId;
@@ -203,6 +210,7 @@ async function establishSession(ctx, base, parsed, log) {
         sessionId: parsed.sessionId,
         cwd: listed.cwd,
         ...(parsed.agentPreset ? { agentPreset: parsed.agentPreset } : {}),
+        ...withModel,
       },
     });
     return { sessionId: parsed.sessionId, resumed: true, effectiveCwd: listed.cwd };
@@ -221,7 +229,7 @@ function logLine(log, msg) {
 /**
  * create/send 提交入口（tools/actions/open.ts / tools/actions/reply.ts 调用）。返回 { promise, ready }：
  *   ready  —— prompt 被 DSH 接受后 resolve loc { action, sessionId, rpcId, taskId, cwd }；
- *             提交阶段失败（runtime 起不来/会话建立失败/selectModel 失败/prompt 拒绝）
+ *             提交阶段失败（runtime 起不来/会话建立失败/模型不可用/prompt 拒绝）
  *             时 reject（任务已 fail 标记，错误直接抛给 execute）。
  *   promise —— 后台继续等到 Hana task 终态并释放同会话串行化锁（fire-and-forget；
  *             终态结果由宿主投递到来源会话）。调用方 catch 记录即可，不 await。
@@ -258,7 +266,7 @@ export interface DshSubmitInput {
   action: "create" | "send";
   input: any;
   callToken?: string;
-  log?: { info?: (msg: string) => void; error?: (msg: string) => void };
+  log?: { info?: (msg: string) => void; warn?: (msg: string) => void; error?: (msg: string) => void };
 }
 export function submitDshTask({ action, input, callToken, log }: DshSubmitInput): DshSubmitHandle {
   const parsed = normalizeCreateSend({ action, input });
@@ -321,7 +329,7 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
       taskId = task && task.taskId;
       if (!taskId) throw new Error("ctx.tasks.create 未返回 taskId（宿主契约异常）");
 
-      // ② 受管 runtime 就绪（单例；首启含 profile 种子化与 boot）
+      // ② 受管 runtime 就绪（单例；首启含 DSH boot）
       try {
         const rt = await ensureManagedRuntime({ taskId });
         logLine(log, "[dsh-session] runtime 就绪 runtimeId=" + (rt && rt.runtimeId) + "（task=" + taskId + "）");
@@ -331,10 +339,36 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
       }
       const base = serviceBase();
 
-      // ③ 会话建立（create 新建 / send 沿用）
+      // ③ 会话模型：显式入参 > 用户设的默认（DSH 自己生效，不用我们动手）> 调用方角色卡（create 才补）
+      // 它随 create / prompt 的请求一起下传（集成层给这两个请求加了可选 model）：会话就地装上，
+      // 不碰 DSH 的全局默认——settings.yaml 那格只在用户手设过时才有值。
+      // dshHome = 当前数据源：默认模型/预设从当前源的 settings.yaml 解析
+      const dshHome = await currentDshHome(dataDir);
+      let modelSelection = resolveModelSelection(parsed, dshHome);
+      if (!modelSelection && parsed.action === "create") {
+        const plan = await resolveCallerPlan(parsed, callerPlanDeps(ctx, dshHome, dataDir), (m) =>
+          logLine(log, "[dsh-session] 会话模型：" + m),
+        );
+        if (plan.kind === "select") {
+          modelSelection = {
+            provider: plan.provider,
+            model: plan.model,
+            ...(plan.reasoningEffort ? { reasoningEffort: plan.reasoningEffort } : {}),
+          };
+          logLine(
+            log,
+            "[dsh-session] 会话模型随请求带上：" + plan.provider + "/" + plan.model +
+              (plan.reasoningEffort ? "（推理强度 " + plan.reasoningEffort + "）" : ""),
+          );
+        } else {
+          logLine(log, "[dsh-session] 会话模型不随请求带（" + plan.reason + "）：交给 DSH 的选择");
+        }
+      }
+
+      // ④ 会话建立（create 新建 / send 沿用）：模型选择随 create 的请求一起下传
       let established: { sessionId: string; effectiveCwd?: string | null } | null = null;
       try {
-        established = await establishSession(ctx, base, parsed, log);
+        established = await establishSession(ctx, base, parsed, log, modelSelection);
       } catch (e) {
         await failTask(ctx, taskId, "DSH 会话建立失败：" + errText(e));
         throw e;
@@ -342,27 +376,6 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
       sessionId = established.sessionId;
       // create：会话已知后立即占住队列槽位（到任务终态释放；防 create 后立即 send 重叠）
       if (parsed.action === "create") releaseNewSessionTurn = enterSessionTurn(sessionId);
-
-      // ④ 显式 provider/model/effort → selectModel（model-unavailable 降级不带 effort 重试）
-      // dshHome = 当前数据源：默认模型/预设从当前源的 settings.yaml 解析
-      const selection = resolveModelSelection(parsed, await currentDshHome(dataDir));
-      if (selection) {
-        try {
-          await rpcCall(ctx, base, { method: "session/selectModel", payload: { sessionId, ...selection } });
-        } catch (e) {
-          if (
-            parsed.reasoningEffort &&
-            String((e as any)?.message || "").includes("model-unavailable")
-          ) {
-            await rpcCall(ctx, base, {
-              method: "session/selectModel",
-              payload: { sessionId, provider: selection.provider, model: selection.model },
-            });
-          } else {
-            throw e;
-          }
-        }
-      }
       // ⑤ 绑定回写宿主任务记录（先于 prompt；rpcId = prompt requestId = jsonl
       //    data.source.rpcId 关联键）。这份 metadata.dsh 就是全部下游的绑定事实源：
       //      · 受管 runtime 的 task-bridge / approval-bridge 按 sessionId 找 taskId；
@@ -387,11 +400,16 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
       if (!back || !back.taskId) {
         logLine(log, "[dsh-session][warn] 宿主任务绑定回写未确认（task=" + taskId + "）");
       }
-      // ⑥ prompt（fire：{ accepted:true } 立即返回）
+      // ⑥ prompt（fire：{ accepted:true } 立即返回）：模型选择随这次 prompt 下传（send 路径）
       await rpcCall(ctx, base, {
         method: "session/prompt",
         rpcId,
-        payload: { sessionId, mode: "queue", content: [{ type: "text", text: parsed.taskText }] },
+        payload: {
+          sessionId,
+          mode: "queue",
+          content: [{ type: "text", text: parsed.taskText }],
+          ...(modelSelection ? { model: modelSelection } : {}),
+        },
       });
       logLine(log, "[dsh-session] prompt 已提交（" + parsed.action + "）session=" + sessionId + " rpcId=" + rpcId);
       // ready 后 execute 可返回；本后台继续等 task 终态（释放串行化锁）

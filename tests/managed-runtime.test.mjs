@@ -16,7 +16,13 @@ import {
   RUNTIME_ENTRY,
   PORT_MIN,
   PORT_MAX,
+  RUNTIME_HANDOFF_DIR,
+  writeRuntimeConfigFile,
 } from "../src/lib/managed-runtime.ts";
+
+import { mkdtempSync, readFileSync, existsSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, dirname } from "node:path";
 
 test("choosePort: 落在 [PORT_MIN, PORT_MAX) 的确定整数（宿主 service 端口契约 1024..65535）", () => {
   assert.equal(choosePort(() => PORT_MIN), PORT_MIN);
@@ -64,17 +70,15 @@ test("buildRuntimeConfig: 基础形态（与 options.js normalizeRuntimeConfig �
   });
 });
 
-test("buildRuntimeConfig: 覆盖项（cordisSrc/depsRoot）只在显式传时出现", () => {
+test("buildRuntimeConfig: 覆盖项 depsRoot 只在显式传时出现", () => {
   const base = buildRuntimeConfig({ dataDir: "/x", dshPort: 1, bridgePort: 2, bridgeKey: "k".repeat(32), controlKey: "c".repeat(32) });
   assert.ok(!("depsRoot" in base));
-  assert.ok(!("cordisSrc" in base));
   const full = buildRuntimeConfig({
     dataDir: "/x",
     dshPort: 8080,
     bridgePort: 8081,
     bridgeKey: "k".repeat(32),
     controlKey: "c".repeat(32),
-    cordisSrc: "/install/cordis",
     depsRoot: "/deps/node_modules",
     readyMarker: "MY_READY",
   });
@@ -84,7 +88,6 @@ test("buildRuntimeConfig: 覆盖项（cordisSrc/depsRoot）只在显式传时出
     bridgePort: 8081,
     bridgeKey: "k".repeat(32),
     controlKey: "c".repeat(32),
-    cordisSrc: "/install/cordis",
     depsRoot: "/deps/node_modules",
     readyMarker: "MY_READY",
   });
@@ -103,6 +106,13 @@ test("buildRuntimeConfig: dshHome（当前数据源 W3）只在显式传时出�
   assert.ok(!("dshHome" in base), "未传时不出现（子进程自回落 <dataDir>/dsh-home）");
   const withHome = buildRuntimeConfig({ dataDir: "/x", dshHome: "/x/dsh-home", dshPort: 1, bridgePort: 2, bridgeKey: "k".repeat(32), controlKey: "c".repeat(32) });
   assert.equal(withHome.dshHome, "/x/dsh-home");
+});
+
+test("buildRuntimeConfig: 覆盖项 fatalPath 只在显式传时出现", () => {
+  const base = buildRuntimeConfig({ dataDir: "/x", dshPort: 1, bridgePort: 2, bridgeKey: "k".repeat(32), controlKey: "c".repeat(32) });
+  assert.ok(!("fatalPath" in base));
+  const withFatal = buildRuntimeConfig({ dataDir: "/x", dshPort: 1, bridgePort: 2, bridgeKey: "k".repeat(32), controlKey: "c".repeat(32), fatalPath: "/x/runtime-fatal.json" });
+  assert.equal(withFatal.fatalPath, "/x/runtime-fatal.json");
 });
 
 test("classifyRuntimeFailure: 退出码契约归类（src/runtime/main.js EXIT 同步）", () => {
@@ -126,4 +136,17 @@ test("常量契约：entry 相对安装根 / marker 前缀 / 端口区间", () =
   assert.equal(READY_MARKER, "DSH_READY");
   assert.equal(PORT_MIN, 38000);
   assert.equal(PORT_MAX, 52000);
+});
+
+test("私有运行时配置落在宿主临时目录 .runtime-tmp，不另开目录", () => {
+  const dataDir = mkdtempSync(join(tmpdir(), "dshana-handoff-"));
+  try {
+    const path = writeRuntimeConfigFile(dataDir, { dataDir, dshPort: 1, bridgePort: 2, bridgeKey: "k".repeat(16), controlKey: "c".repeat(16), readyMarker: "m" });
+    assert.equal(dirname(path), join(dataDir, RUNTIME_HANDOFF_DIR));
+    assert.ok(existsSync(path));
+    assert.equal(JSON.parse(readFileSync(path, "utf8")).dataDir, dataDir);
+    assert.equal(existsSync(join(dataDir, "integration")), false);
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
 });

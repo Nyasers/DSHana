@@ -1,29 +1,70 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// scripts/release/pack/assert.mts — 出包前的三处断言（产物不完整就拒包）。
+// scripts/release/pack/assert.mts — 出包前的四处断言（产物不完整就拒包）。
 //
 // 都在 fail-closed 一侧：宁可不出包，也不出一个装了起不来的包。
 import fs from "fs-extra";
 import { join } from "node:path";
 
 /**
- * cordis 包 version 一致性校验（防回归，与 manifest 校验对称）：cordis 包（roster bundle
- * dshana + 子插件）version 与主 package.json 同批由 derive/version（pnpm version 发版流程）
- * 同步，pack 时读 dist 产物校验一致——手改/漏同步即出包版本漂移。
+ * 交付树 package.json 允许出现的键。
+ * name / type / version 是实体（version 由 derive 的 product-package 任务同步），dependencies 是
+ * 交付清单自己的运行时依赖声明：装机侧不跑 pnpm（依赖已物化进安装树），这个字段在运行期是惰性的，
+ * 留着只为「这包依赖什么」有据可查。其余（scripts / devDependencies / packageManager / imports /
+ * private）是构建面，不进包。
+ */
+export const PRODUCT_PACKAGE_KEYS = ["name", "type", "version", "dependencies"];
+
+/**
+ * 交付树 package.json 校验：字段白名单 + 版本一致 + type: module。
+ * 那份文件是 packaging/package.json（手写实体，version 由 derive 的 product-package 任务同步），
+ * pack 复制成包根的 package.json。它被改坏/抄了旧版就直接拒包。
+ * @param outDir - 交付目录（dist 或组装树）
+ * @param version - 本次出包的版本
+ */
+export function assertProductPackage(outDir, version) {
+  const p = join(outDir, "package.json");
+  if (!fs.pathExistsSync(p)) {
+    throw new Error("交付树的 package.json 缺失（packaging/package.json 没复制进来）：拒绝出包");
+  }
+  const j = fs.readJsonSync(p);
+  const keys = Object.keys(j).sort();
+  const allowed = [...PRODUCT_PACKAGE_KEYS].sort();
+  const extra = keys.filter((k) => !allowed.includes(k));
+  if (extra.length || keys.length !== allowed.length) {
+    throw new Error(
+      "交付树 package.json 字段不对：只允许 " + allowed.join("/") + "（多出 " + extra.join("/") + "）——构建面字段不进安装包",
+    );
+  }
+  if (j.version !== version) {
+    throw new Error(
+      `交付树 package.json version ${j.version} ≠ 本次出包版本 ${version}（跑 node scripts/derive/index.mts 同步后再打包）`,
+    );
+  }
+  if (j.type !== "module") {
+    throw new Error('交付树 package.json 必须 type: "module"（包根 index.js 是 ESM，缺了它宿主按 CommonJS 解析）');
+  }
+}
+
+/**
+ * cordis 子插件包 version 一致性校验（防回归，与 manifest 校验对称）：子插件（provider /
+theme / clipboard）version 与主 package.json 同批由 derive/version（pnpm version 发版流程）
+同步，pack 时读 dist 产物校验一致——手改/漏同步即出包版本漂移。
+ * roster patch（dist/cordis.patch.yml）不是包，只校验在位。
  */
 export function assertCordisDistVersions(outDir, version) {
   const cordisRoot = join(outDir, "cordis");
-  // cordis 未组装 = 构建未跑/被清：fail-closed（校验放行空产物会让缺 bundle 的包过包）
+  // cordis 未组装 = 构建未跑/被清：fail-closed（校验放行空产物会让缺插件的包过包）
   if (!fs.pathExistsSync(cordisRoot)) {
     throw new Error("cordis 产物缺失（dist/cordis 不存在）：先跑 pnpm run build 再打包");
   }
-  // 完整性：必需包（roster bundle dshana + 子插件）全部存在且 package.json 版本一致——
-  // 缺失/部分产物（含 count=0）一律拒包，防 build 失败后残留部分 dist 被误打包。
-  // （roster 就是 bundle dshana + 子插件：connection 由官方 dsh-web-app bundle 提供，
-  // index 处理归官方 frontend-static，设置页由宿主面承担。）
+  if (!fs.pathExistsSync(join(outDir, "cordis.patch.yml"))) {
+    throw new Error("roster patch 缺失（dist/cordis.patch.yml 不存在）：先跑 pnpm run build 再打包");
+  }
+  // 完整性：子插件全部存在且 package.json 版本一致——缺失/部分产物（含 count=0）
+  // 一律拒包，防 build 失败后残留部分 dist 被误打包。
   const required = [
-    "dshana",
     "clipboard", "provider", "theme",
   ];
   let count = 0;
@@ -42,7 +83,7 @@ export function assertCordisDistVersions(outDir, version) {
     }
     count += 1;
   }
-  console.log(`[pack] cordis 包版本一致（${count} 个 = ${version}）`);
+  console.log(`[pack] cordis 子插件版本一致（${count} 个 = ${version}）+ roster patch 在位`);
 }
 
 /** App ui/ 静态树断言（cards route 资源面；相对资源契约）：缺失 = 卡片 404，拒包。 */

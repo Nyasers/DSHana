@@ -10,7 +10,7 @@
 //     readyMarker:带随机 opaque }, ... }) → 状态轮询等到 ready / failed / exited。
 //     绝不把 runtimeId 当就绪：starting 只是宿主已拉起进程，DSH 真就绪 = 子
 //     进程真实监听后打印的 readyMarker → host 侧 service.state=ready。
-//     端口不再暴露给用户：区间随机 + 占用自动换端口重试；就绪缓存每次经
+//     端口不暴露给用户：区间随机 + 占用自动换端口重试；就绪缓存每次经
 //     runtime.get 探活，子进程崩溃可被父侧识别并重起（对齐样例 controller 边界）。
 //   单例语义：一个 App runtime 服务多个 DSH 会话（每会话的 taskId 经任务桥各自携带，
 //     不把单次启动任务绑成全局焦点）；首次 create 时启动（tools/actions/open.ts 接线点），
@@ -22,12 +22,13 @@
 //
 // 参数契约（与 src/runtime/options.ts 对偶；增删需两处同步 + tests/）：
 //   唯一的子进程入参是私有运行时配置文件路径（argv[1]），由 writeRuntimeConfigFile 落盘、
-//   buildRuntimeConfig 生产 schema；不再有命令行明文参数（凭据/端口不进 argv）。
+//   buildRuntimeConfig 生产 schema；命令行不带明文参数（凭据/端口不进 argv）。
 import { join } from "node:path";
 import { mkdirSync, writeFileSync, chmodSync, rmSync, readFileSync } from "node:fs";
 import { randomInt, randomBytes } from "node:crypto";
 import { appDataDir, appLogger, getAppRuntime } from "#/lib/app-runtime.ts";
 import { currentSource } from "#/lib/data-source.ts";
+import { parseRuntimeFatal, fatalReportText } from "#/lib/runtime-error.ts";
 import type { HanaPluginContextV2 } from "#/types/host.ts";
 // 依赖随包物化在安装目录 <installRoot>/node_modules，
 // 无运行时安装与 spawn。
@@ -41,13 +42,13 @@ export const MAX_START_ATTEMPTS = 3; // 端口占用（随机撞车）自动换�
 /** runtime 终态集合（宿主 runtime state 契约）。 */
 export const TERMINAL_STATES = new Set(["failed", "exited", "stopped"]);
 export const READY_POLL_MS = 300;
-export const READY_TIMEOUT_MS = 240000; // 首次启动含 profile 种子化与 DSH boot，需更宽容限
+export const READY_TIMEOUT_MS = 240000; // 首次启动含 DSH boot，需更宽容限
 export const START_ERROR_HINTS = {
   "port-busy": "端口被占用或 DSH 无法监听（服务代理未就绪）。已自动换随机端口重试，仍失败请查看 runtime 日志并确认本机回环端口可用。",
   "port-unreachable": "DSH 未在期望端口完成监听（webServer 服务端口与期望不符或探测失败）。查看 runtime 日志定位。",
   "boot-failed": "DSH runProfile 启动失败（见 runtime 日志）。",
   deps: "DSH 依赖缺失：包内 node_modules 不完整（依赖应随包物化）。请重新安装本 App。",
-  seed: "dshana profile 初始化失败（见 runtime 日志；profile 迁移拒绝/scope 链接失败由种子化引导）。",
+  seed: "产物不在位：包内 node_modules/@dshana 子插件或 roster patch 缺失（请重装本 App）。",
   "not-authorized": "宿主未授权本 App 启动受管 runtime（local-machine 能力未授予或已撤销）。检查 App 能力与授权状态。",
   unknown: "受管 runtime 启动失败（见 runtime 日志与状态）。",
 };
@@ -169,18 +170,18 @@ interface RuntimeConfig {
   controlKey: string;
   readyMarker: string;
   dshHome?: string;
-  cordisSrc?: string;
   depsRoot?: string;
+  fatalPath?: string;
 }
 
 /**
  * 私有运行时配置构造（与 src/runtime/options.js normalizeRuntimeConfig 对偶）。opts:
- * { dataDir, dshHome?, dshPort, bridgePort, bridgeKey, controlKey, cordisSrc?, depsRoot?, readyMarker? }
+ * { dataDir, dshHome?, dshPort, bridgePort, bridgeKey, controlKey, depsRoot?, readyMarker? }
  * dshHome = 当前数据源的 DSH_HOME；缺省时子进程回落 dataDir/.dsh。
  * 敏感项（bridgeKey）只进本对象→写 0600 文件→argv 只传路径，不出现在 argv/日志。
  */
 export function buildRuntimeConfig(opts) {
-  const { dataDir, dshHome, dshPort, bridgePort, bridgeKey, controlKey, cordisSrc, depsRoot, readyMarker = READY_MARKER } = opts || {};
+  const { dataDir, dshHome, dshPort, bridgePort, bridgeKey, controlKey, depsRoot, fatalPath, readyMarker = READY_MARKER } = opts || {};
   if (typeof dataDir !== "string" || !dataDir) throw new Error("buildRuntimeConfig: dataDir 必填（App ctx.dataDir）");
   if (!Number.isInteger(dshPort) || dshPort < 1 || dshPort > 65535) throw new Error("buildRuntimeConfig: dshPort 必填（1..65535）");
   if (!Number.isInteger(bridgePort) || bridgePort < 1 || bridgePort > 65535) throw new Error("buildRuntimeConfig: bridgePort 必填（1..65535）");
@@ -188,14 +189,21 @@ export function buildRuntimeConfig(opts) {
   if (typeof controlKey !== "string" || controlKey.length < 16) throw new Error("buildRuntimeConfig: controlKey 必填（≥16 字符）");
   const config: RuntimeConfig = { dataDir, dshPort, bridgePort, bridgeKey, controlKey, readyMarker };
   if (typeof dshHome === "string" && dshHome) config.dshHome = dshHome;
-  if (typeof cordisSrc === "string" && cordisSrc) config.cordisSrc = cordisSrc;
   if (typeof depsRoot === "string" && depsRoot) config.depsRoot = depsRoot;
+  if (typeof fatalPath === "string" && fatalPath) config.fatalPath = fatalPath;
   return config;
 }
 
-/** 写私有运行时配置文件（dataDir/integration/，0600），返回绝对路径。 */
+/**
+ * 一次性交付文件（私有运行时配置、预检结果）的落点：宿主给本 App 的临时目录
+ * `dataDir/.runtime-tmp`。它由宿主建好、在沙箱写白名单内，受管 runtime 子进程直接读得到，
+ * 活几毫秒就被删；不另开目录，系统临时目录也不在沙箱白名单里。
+ */
+export const RUNTIME_HANDOFF_DIR = ".runtime-tmp";
+
+/** 写私有运行时配置文件（`dataDir/.runtime-tmp/`，0600），返回绝对路径。 */
 export function writeRuntimeConfigFile(dataDir, config) {
-  const dir = join(dataDir, "integration");
+  const dir = join(dataDir, RUNTIME_HANDOFF_DIR);
   mkdirSync(dir, { recursive: true });
   const filename = join(dir, `runtime-${randomBytes(9).toString("hex")}.json`);
   writeFileSync(filename, JSON.stringify(config), { mode: 0o600 });
@@ -234,6 +242,20 @@ export function classifyRuntimeFailure(info) {
   return { kind: "unknown", userText: START_ERROR_HINTS.unknown };
 }
 
+/**
+ * 读取并删除子进程写下的结构化失败报告（若存在）：读不到/形状不符返回 null，调用方
+ * 回落到退出码归类。报告一次性（读出即删），免得下次启动读到陈旧成因。
+ */
+function readFatalReport(fatalPath) {
+  try {
+    const raw = readFileSync(fatalPath, "utf8");
+    rmSync(fatalPath, { force: true });
+    return parseRuntimeFatal(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
 function logApp(level, ...args) {
   const logger = appLogger();
   if (logger && typeof logger[level] === "function") {
@@ -246,9 +268,9 @@ function logApp(level, ...args) {
 }
 
 /**
- * 启动 + 等到就绪（single-flight 单例）。opts: { taskId?, cordisSrc?, depsRoot? }。
+ * 启动 + 等到就绪（single-flight 单例）。opts: { taskId?, depsRoot? }。
  * 成功返回 { runtimeId, info }（state=ready）；失败抛 Error（message 含归类与用户指引），
- * 单例清空以便下次调用重试。首次调用 = profile 种子化 + DSH boot（日志可见）。
+ * 单例清空以便下次调用重试。首次调用 = DSH boot（profile 由 DSH 自建，日志可见）。
  */
 /** 等 runtime 到终态（停业确认）；超时或查询失败返回 null。 */
 async function waitTerminal(ctx, runtimeId, timeoutMs = 15000) {
@@ -264,7 +286,7 @@ async function waitTerminal(ctx, runtimeId, timeoutMs = 15000) {
 
 /**
  * 就绪探活：宿主 runtime.get 到 ready 才算仍活着。子进程崩溃/被回收后 state 变终态 →
- * 返回 null（调用方转重起），不再拿陈旧缓存冒充 ready。查询本身失败时保守视为仍就绪
+ * 返回 null（调用方转重起），不拿陈旧缓存冒充 ready。查询本身失败时保守视为仍就绪
  * （避免宿主查询抖动引起不必要的重起/双 runtime）。
  */
 async function probeLiveRuntime() {
@@ -305,13 +327,13 @@ async function reapFailedRuntime(ctx) {
 }
 
 /**
- * 启动 + 等到就绪（single-flight 单例）。opts: { taskId?, cordisSrc?, depsRoot? }。
+ * 启动 + 等到就绪（single-flight 单例）。opts: { taskId?, depsRoot? }。
  * 成功返回 { runtimeId, info }（state=ready）；失败抛 Error（message 含归类与用户指引），
- * 单例清空以便下次调用重试。首次调用 = profile 种子化 + DSH boot（日志可见）。
+ * 单例清空以便下次调用重试。首次调用 = DSH boot（profile 由 DSH 自建，日志可见）。
  */
 
 // ---- 失败后的自动重试 ----
-// 首次安装时“能力/权限尚未授予”是常态：apply 自动链的第一次 ensure 必然失败。既然页面不再提供
+// 首次安装时“能力/权限尚未授予”是常态：apply 自动链的第一次 ensure 必然失败。页面没有
 // 手动「启动 / 重启」按钮（无交互设计），这条链就得自己回来——失败即按退避重试，直到成功、
 // 被手动停止（stopManagedRuntime 冻结）或 App 卸载（dispose 走 stop）。任何显式启动请求
 // （apply 自动链 / dshana 首调 / /dshana/start）都会重新武装。
@@ -352,7 +374,7 @@ function scheduleRuntimeAutoRetry(reason) {
   );
 }
 
-/** 预检超时：只做依赖就位 + 定位 DSH + profile 种子化，不 boot DSH，给 60s 足够。 */
+/** 预检超时：只做依赖就位 + 定位 DSH + 产物在位，不 boot DSH，给 60s 足够。 */
 export const PREFLIGHT_TIMEOUT_MS = 60000;
 const PREFLIGHT_POLL_MS = 200;
 
@@ -360,7 +382,7 @@ const PREFLIGHT_POLL_MS = 200;
  * 新数据源可用性预检（切换链第 2 步，D-m）。
  *
  * 用同一个 runtime entry 另起一个子进程，配置带 preflight:true + resultPath：子进程只跑到
- * 「依赖就位 + 定位 DSH + profile 种子化」就写结果并退出，**不 boot DSH、不动现有 runtime**。
+ * 「依赖就位 + 定位 DSH + 产物在位」就写结果并退出，**不 boot DSH、不动现有 runtime**。
  * 父侧等结果文件或子进程终态；失败与超时都归 preflight 类错误（有界，不无限等）。
  *
  * 返回 { ok, error?, dshHome? }；不抛（除调用契约错误），失败是链上的一步可预期结果。
@@ -371,7 +393,7 @@ export async function preflightSource({ dataDir, dshHome, profile }) {
   if (!ctx || !ctx.runtime || typeof ctx.runtime.start !== "function") {
     return { ok: false, error: "宿主 runtime 不可用，无法预检新数据源" };
   }
-  const resultPath = join(dataDir, "integration", "preflight-" + randomBytes(9).toString("hex") + ".json");
+  const resultPath = join(dataDir, RUNTIME_HANDOFF_DIR, "preflight-" + randomBytes(9).toString("hex") + ".json");
   // 预检形态不需要端口/凭据：只给目标 home 与结果路径（见 src/runtime/options.ts 的 preflight 支）
   const configPath = writeRuntimeConfigFile(dataDir, { dataDir, dshHome, profile, preflight: true, resultPath });
   const cleanup = () => {
@@ -501,6 +523,10 @@ async function doStartManaged(opts, attempt = 1) {
   const bridgeKey = randomBytes(24).toString("base64url");
   const controlKey = randomBytes(24).toString("base64url");
   const readyMarker = makeReadyMarker();
+  // 启动失败报告文件：子进程在任一致命路径退出前写下 { ok:false, kind, message, causes }，
+  // 本侧失败时读回并把真实成因（含嵌套层）折叠进用户可见诊断（见 src/lib/runtime-error.ts）。
+  // 每次启动一份随机名，失败后即删；成功路径不起作用（子进程只在致命时写）。
+  const fatalPath = join(dataDir, "runtime-fatal-" + randomBytes(9).toString("hex") + ".json");
   const config = buildRuntimeConfig({
     dataDir,
     dshHome: source.home,
@@ -509,6 +535,7 @@ async function doStartManaged(opts, attempt = 1) {
     bridgeKey,
     controlKey,
     readyMarker,
+    fatalPath,
     cordisSrc: typeof opts.cordisSrc === "string" && opts.cordisSrc ? opts.cordisSrc : undefined,
     depsRoot: typeof opts.depsRoot === "string" && opts.depsRoot ? opts.depsRoot : undefined,
   });
@@ -534,6 +561,7 @@ async function doStartManaged(opts, attempt = 1) {
   } catch (e) {
     // 启动失败：配置文件中含 bridgeKey，立即删除（不残留凭据）
     try { rmSync(configPath, { force: true }); } catch { /* 忽略 */ }
+    try { rmSync(fatalPath, { force: true }); } catch { /* 子进程未写也无妨 */ }
     // 宿主侧 start 拒绝（能力/授权/校验失败）：归类上报
     const text = errText(e);
     logApp("error", "[managed-runtime] ctx.runtime.start 被宿主拒绝：" + text);
@@ -570,13 +598,29 @@ async function doStartManaged(opts, attempt = 1) {
     if (state === "failed" || state === "exited" || state === "stopped") {
       const cls = classifyRuntimeFailure(cur);
       managed.lastInfo = cur;
+      // 读回子进程的结构化失败报告（若有）：把真实成因折叠进用户可见诊断，而不是只报归类提示。
+      const fatal = readFatalReport(fatalPath);
       logApp("error", "[managed-runtime] DSH runtime 终态异常：" + state + " exit=" + (cur && cur.exitCode));
-      throw codedError(cls.userText + "（runtime state=" + state + " exitCode=" + (cur && cur.exitCode) + "）", cls.kind);
+      const detail = fatal ? "（" + fatalReportText(fatal) + "）" : "";
+      throw codedError(
+        cls.userText + detail + "（runtime state=" + state + " exitCode=" + (cur && cur.exitCode) + "）",
+        cls.kind,
+      );
     }
     if (Date.now() >= deadline) {
+      // 超时但已留下失败报告：子进程其实判了失败（只是没及时退出）。按报告归类，别把真实成因吞掉。
+      const fatal = readFatalReport(fatalPath);
+      if (fatal) {
+        const code = Object.prototype.hasOwnProperty.call(START_ERROR_HINTS, fatal.kind) ? fatal.kind : "timeout";
+        throw codedError(
+          fatalReportText(fatal) + "（runtime 未在 " + Math.round(READY_TIMEOUT_MS / 1000) + "s 内就绪）",
+          code,
+        );
+      }
+      try { rmSync(fatalPath, { force: true }); } catch { /* 忽略 */ }
       throw codedError(
         "DSH 受管 runtime 启动超时（" + Math.round(READY_TIMEOUT_MS / 1000) + "s 内未就绪）。" +
-          "首次启动含 profile 种子化与 DSH boot，若仍在进行请稍候；查看 App 日志/runtime 日志。",
+          "首次启动含 DSH boot，若仍在进行请稍候；查看 App 日志/runtime 日志。",
         "timeout",
       );
     }

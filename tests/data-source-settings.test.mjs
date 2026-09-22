@@ -58,7 +58,7 @@ test("store: 两个超时随设置一起落盘并与 revision 同步", async () 
     assert.equal(first.settings.approvalTimeoutSec, 45);
     assert.equal(first.settings.defaultTimeoutSec, 900);
 
-    const onDisk = JSON.parse(readFileSync(join(dir, "integration", "settings.json"), "utf8"));
+    const onDisk = JSON.parse(readFileSync(join(dir, "settings.json"), "utf8"));
     assert.equal(onDisk.settings.approvalTimeoutSec, 45);
 
     const reread = await createDataSourceStore({ dataDir: dir }).read();
@@ -84,7 +84,7 @@ test("存量兼容：旧位置只在缺键时当初始值，且不写回旧位�
     assert.equal(fresh.settings.defaultTimeoutSec, 1234);
     assert.equal(fresh.revision, 0, "读不制造 revision");
     assert.throws(
-      () => readFileSync(join(dir, "integration", "settings.json"), "utf8"),
+      () => readFileSync(join(dir, "settings.json"), "utf8"),
       /ENOENT/,
       "只读不该落盘",
     );

@@ -9,9 +9,9 @@
 // 壳页桥（经 __DSHANA__.clipboardWrite → 宿主 capability clipboard.writeText，在宿主主窗口
 // 上下文执行，不受插件 iframe 权限链限制）。
 //
-// 为什么放在 client 半：同文档注入之后
-// 前端与壳页共用一个 window，__DSHANA__ 直接可调，原来那套 postMessage + MessageChannel +
-// 超时 + 回执校验的握手协议整套不再需要；注入点、index 改写、独立桥脚本一并删除。
+// 为什么放在 client 半：同文档注入之后前端与壳页共用一个 window，__DSHANA__ 直接可调——
+// 不需要 postMessage + MessageChannel + 超时 + 回执校验那套握手，也不需要注入点、index 改写、
+// 独立桥脚本。
 //
 // 本半（service 半）**无运行时行为**：构建按包扫 index.js（src-cordis/build.ts 的逐包
 // rspack），故显式留一个空实现并在注释里记明，不做多余的事（不注册路由、不注入 index）。

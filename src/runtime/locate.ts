@@ -44,30 +44,38 @@ export async function locateDsh({ depsRoot, log = (..._args) => {} }) {
     );
   }
   const libDir = join(dshPkg, "lib");
-  // ① profile-boot：枚举 lib 下 profile-boot-*.js，逐个 import 试 runProfile（v1 同款）
+  // ① profile-boot：优先稳定入口 profile-boot.js——哈希产物 profile-boot-<hash>.js 的导出名
+  //    会被压缩成单字母，公开名（runProfile 等）只挂在稳定入口上；回退枚举 profile-boot-*.js
+  //    试 runProfile，兼容只有哈希产物、导出名未压缩的旧包。
   let profileBoot = null;
   let bootEntry: string | null = null;
   let tried = 0;
+  const candidates: string[] = [];
+  const stableEntry = join(libDir, "profile-boot.js");
+  if (existsSync(stableEntry)) candidates.push(stableEntry);
   try {
     for (const f of readdirSync(libDir)) {
       if (!f.startsWith("profile-boot-") || !f.endsWith(".js")) continue;
-      tried += 1;
-      try {
-        const m = await import(/* webpackIgnore: true */ pathToFileURL(join(libDir, f)).href);
-        if (typeof m.runProfile === "function") {
-          profileBoot = m;
-          bootEntry = join(libDir, f);
-          break;
-        }
-      } catch {
-        /* 单个候选加载失败：继续（dsh 版本演进产物名变化） */
-      }
+      candidates.push(join(libDir, f));
     }
   } catch (e) {
     throw new Error(`无法枚举 dsh profile-boot 模块（${libDir}）：${errText(e)}`);
   }
+  for (const candidate of candidates) {
+    tried += 1;
+    try {
+      const m = await import(/* webpackIgnore: true */ pathToFileURL(candidate).href);
+      if (typeof m.runProfile === "function") {
+        profileBoot = m;
+        bootEntry = candidate;
+        break;
+      }
+    } catch {
+      /* 单个候选加载失败：继续（dsh 版本演进产物名变化） */
+    }
+  }
   if (!profileBoot) {
-    throw new Error(`dsh 包无可用 profile-boot 模块（lib 下已检查 ${tried} 个 profile-boot-*.js）`);
+    throw new Error(`dsh 包无可用 profile-boot 模块（lib 下已检查 ${tried} 个候选：稳定入口与 profile-boot-*.js）`);
   }
   // ② app-boot 定位（双保险：createRequire 沿 dsh 包 → .pnpm 枚举）
   let appBootEntry: string | null = null;

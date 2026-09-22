@@ -1,15 +1,15 @@
 {
   "package": "@deepseek-ai/dsh-client-ui-layout",
-  "upstreamVersion": "0.1.6-alpha.2",
+  "upstreamVersion": "0.1.7-alpha.1",
   "upstreamDir": "packages/client/ui-layout",
   "files": [
     {
       "path": "src/client/AppFrame.tsx",
-      "upstreamSha256": "98abc310aaf2a764fae01235278c4e363ae042102806d752f15a9f68b840675e"
+      "upstreamSha256": "1716bbb1f45cd76f0e1dfc593dfdb9d921ac232b09f84f3a476e160958ea7462"
     },
     {
       "path": "src/client/AppFrame.module.css",
-      "upstreamSha256": "d3ecfc590ff09208e9f939c2a43faaa0de1bb41ba329d79725cbe6f98790d9f8"
+      "upstreamSha256": "ccb235bf98e933f7d78f4fe2d835c991bb986ddb598f60f8a8ffeb3f5e533640"
     }
   ],
   "notes": [
@@ -23,8 +23,8 @@
     "  拆窗 standalone  ：侧栏 + 中列 + 右列，带拖柄",
     "轨道模板固定三条、列各自认领 grid-column（CSS overlay），不看渲染集拼模板——按渲染集拼轨曾把",
     "centerCol 落进 56px 侧栏轨（真机 56px 挤压）。",
-    "columns.ts 不再进 overlay：0.1.6 给 computeColumns 加了第四参 collapsedWidth（0 = 把列整条藏掉，",
-    "否则是收起宽度），与当初我们那份 sidebarPresent 同槽位、语义更宽；上游吸收后本地 delta 归零，",
+    "columns.ts 不进 overlay：0.1.6 的 computeColumns 有第四参 collapsedWidth（0 = 把列整条藏掉，",
+    "否则是收起宽度），与 sidebarPresent 同槽位、语义更宽，本地 delta 归零；",
     "改由 AppFrame 传「本面有轨就上游值、无轨就 0」。",
     "收起状态按上游语义算，只在有轨的 standalone 面上生效：宽幅看 sidebar === 0，窄幅看 narrowExpanded；",
     "收起后的轨道宽走上游的 collapsedWidth（桌面平台 0，其余 56px 图标轨），所以「本面无侧栏」与「用户收起」两件事互不污染。",

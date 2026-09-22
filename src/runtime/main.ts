@@ -14,15 +14,16 @@
 //      操作报错 + 退出码 3，绝不假装能跑；
 //   3. 设本进程自有 env（DSH_HOME / DSHANA_*，不污染宿主进程环境）；
 //   4. 依赖就位（随包物化在 <installRoot>/node_modules，无运行时安装）；
-//   5. profile 种子化（profiles/dshana → 安装目录 cordis scope 链接，seed.js）；
-//   6. 子进程内 boot DSH（locateDsh → appBoot.loadLayeredEnv → profileBoot.runProfile），
-//      webserver 监听配置中的 dshPort；
+//   5. 产物在位（@dshana 子插件在 <installRoot>/node_modules/@dshana，roster patch 在
+//      <installRoot>/cordis.patch.yml——profile 不归我们：官方 web 模板由 DSH 首次加载时自建）；
+//   6. 子进程内 boot DSH（locateDsh → appBoot.loadLayeredEnv → profileBoot.runProfile，
+//      profile = 官方 web + patchFiles = roster patch），webserver 监听配置中的 dshPort；
 //   7. 真实监听成功（webServer 服务端口 === 期望端口 + HTTP 探测）才向 stdout 打印约定
 //      readyMarker（独占一行、无前缀）——任何失败路径绝不打印 READY；
 //   8. SIGTERM/SIGINT/父进程 disconnect → 优雅释放：先关 DSH fiber（含 webserver），再
 //      hana.close()。顺序纪律：拿到流式 Response 后不能立刻 close()——hana.close() 只在退出前
 //      调用；接活动流后需先结束/取消流再关闭。
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
@@ -30,6 +31,7 @@ import http from "node:http";
 import { parseRuntimeConfig, UsageError, USAGE } from "#/runtime/options.ts";
 import { startDshBridge } from "#/runtime/bridge.ts";
 import { info, warn, err } from "#/runtime/log.ts";
+import { runtimeErrorState } from "#/lib/runtime-error.ts";
 // @hana/app-sdk 为 devDependencies（file:vendor/hana-app-sdk/hana-app-sdk.tgz，版本随宿主
 // 0.946.2 App 契约）；connectAppRuntime 运行时实现经 rspack 构建时静态内联进本 bundle（只
 // 依赖 node:crypto，无运行时包解析——见 rspack.config.mts 打包纪律注释）。升级 = 换 vendor
@@ -38,9 +40,9 @@ import { connectAppRuntime } from "@hana/app-sdk";
 import { startTaskBridge } from "#/runtime/task-bridge.ts"; // DSH 事件 → Hana task 回投
 import { startApprovalBridge } from "#/runtime/approval-bridge.ts"; // DSH 审批 → Hana requestApproval / watch 对账
 import { createTaskBindingIndex, publishTaskBindingIndex } from "#/lib/task-binding.ts"; // 绑定事实源 = 宿主任务记录
+import { recordIsTerminal, TERMINAL_STATUSES } from "#/lib/watch-sse.ts"; // 闸门判据：宿主任务终态
+import { PROVIDER_RELOAD_GLOBAL_KEY } from "#/lib/provider-hooks.ts"; // 目录重载钩子键（provider 插件装）
 import { resolveInstallRoot, locateDsh } from "#/runtime/locate.ts";
-// 依赖随包物化在安装目录 node_modules（无运行时 ensure）。
-import { seedDshanaProfile } from "#/runtime/seed.ts";
 
 /** 退出码约定（App 主进程 managed-runtime.js classify 读 exitCode 归类；勿随意改）。 */
 export const EXIT = {
@@ -59,7 +61,7 @@ export const EXIT = {
 export const READY_TIMEOUT_MS = 60000;
 /** 优雅释放时 ctx.fiber.dispose 的最长等待（超时强退；dsh 自身 shutdown 5s 兜底）。 */
 const DISPOSE_TIMEOUT_MS = 4000;
-const PROFILE_NAME = "dshana";
+const PROFILE_NAME = "web";
 
 /** 取错误的可读文本。catch 到的值类型未知，字段访问一律经这里。 */
 const errText = (e: unknown): string => ((e as any)?.message as string) || String(e);
@@ -194,31 +196,40 @@ function makeShutdown(state, exitCodeLog) {
 }
 
 /**
- * 预检模式（数据源切换探针）：只验证「依赖就位 → 定位 DSH → profile 种子化」能否在
- * 目标 DSH_HOME 上成立，不连宿主 IPC、不 boot DSH、不起中继。
- * 结果写 resultPath（{ok:true} 或 {ok:false,error}，0600）后立即退出——父侧等终态读结果。
- * 退出码对齐 classify：0 = 预检通过；4 = deps/locate；5 = profile 种子化未完成。
+ * 产物在位检查（fail-closed）：@dshana 子插件与我们的 roster patch 都得在。
+ * 缺了就在这里报清楚，而不是等 DSH 自己把「bundle/插件找不到」抛上来。
+ * @returns 缺失项（空数组 = 齐备）。
  */
-async function runPreflight({ opts, dataDir, dshHome, depsRoot, cordisSrc }): Promise<never> {
+function missingArtifacts(depsRoot: string, rosterPatch: string): string[] {
+  const missing: string[] = [];
+  for (const name of ["provider", "theme", "clipboard"]) {
+    const dir = join(depsRoot, "@dshana", name);
+    if (!existsSync(join(dir, "index.js"))) missing.push(dir);
+  }
+  if (!existsSync(rosterPatch)) missing.push(rosterPatch);
+  return missing;
+}
+
+/**
+ * 预检模式（数据源切换探针）：只验证「依赖就位 → 定位 DSH → 产物在位」能否在目标 DSH_HOME 上
+ * 成立，不连宿主 IPC、不 boot DSH、不起中继，也不往目标 home 写任何东西（profile 由 DSH 自己在
+ * 首次加载时按随附模板建）。结果写 resultPath（{ok:true} 或 {ok:false,error}，0600）后立即退出。
+ * 退出码对齐 classify：0 = 预检通过；4 = deps/locate；5 = 产物缺失。
+ */
+async function runPreflight({ opts, dataDir, dshHome, depsRoot, rosterPatch }): Promise<never> {
   const write = (payload) => writeFileSync(opts.resultPath, JSON.stringify(payload), { mode: 0o600 });
   try {
     process.env.DSH_HOME = dshHome;
     process.env.DSHANA_HOME = dataDir;
-    mkdirSync(dshHome, { recursive: true });
     info(`预检开始：dshHome=${dshHome} depsRoot=${depsRoot}`);
-    const located = await locateDsh({ depsRoot, log: (s) => info("locate", s) });
-    const outcome = await seedDshanaProfile({
-      dshHome,
-      cordisSrc,
-      appBoot: located.appBoot,
-      log: (s) => info("seed", s),
-    });
-    if (outcome === "missing-source" || outcome === "refused" || outcome === "failed" || outcome === "init-failed") {
-      err("preflight", `profile 种子化未完成（outcome=${outcome}）：cordisSrc=${cordisSrc}`);
-      write({ ok: false, error: `目标数据目录不可用：profile 种子化 ${outcome}（详情见 runtime 日志）` });
+    await locateDsh({ depsRoot, log: (s) => info("locate", s) });
+    const missing = missingArtifacts(depsRoot, rosterPatch);
+    if (missing.length > 0) {
+      err("preflight", "产物不在位：" + missing.join("、"));
+      write({ ok: false, error: `目标环境缺产物（先跑 pnpm run build 再打包）：${missing.join("、")}` });
       process.exit(EXIT.SEED);
     }
-    info(`预检通过（seed=${outcome}）`);
+    info("预检通过（deps + locate + 产物在位；未写目标 home）");
     write({ ok: true, dshHome });
     process.exit(EXIT.OK);
   } catch (e) {
@@ -252,6 +263,21 @@ export async function main(argv: string[]): Promise<number> {
     process.stdout.write(USAGE);
     return EXIT.OK;
   }
+  /**
+   * 致命路径统一出口：先把结构化失败报告写到 opts.fatalPath（App 据此把真实成因呈现给
+   * 用户，而不是只报退出码（含嵌套 AggregateError 的每一层）），再由各分支继续 err/退出。
+   * 报告写失败不影响退出。
+   */
+  const reportFatal = (kind, error) => {
+    if (!opts.fatalPath) return;
+    try {
+      const message = runtimeErrorState(error).message || String(error);
+      const causes = error instanceof AggregateError ? error.errors.map((e) => runtimeErrorState(e).message) : [];
+      writeFileSync(opts.fatalPath, JSON.stringify({ ok: false, kind, message, causes, at: new Date().toISOString() }), { mode: 0o600 });
+    } catch (e) {
+      warn("fatal-report", "写失败报告失败（忽略）：" + errText(e));
+    }
+  };
   info(opts.preflight
     ? `dsh-host 启动（preflight 预检）：dshHome=${opts.dshHome} dataDir=${opts.dataDir}`
     : `dsh-host 启动（managed node runtime entry）：dshPort=${opts.dshPort} bridgePort=${opts.bridgePort} dataDir=${opts.dataDir}`);
@@ -262,16 +288,19 @@ export async function main(argv: string[]): Promise<number> {
     installRoot = resolveInstallRoot(entryFile);
   } catch (e) {
     err("install-root", errText(e));
+    reportFatal("install-root", e);
     return EXIT.INTERNAL;
   }
   const dataDir = resolve(opts.dataDir);
   // 依赖根默认指向 App 安装目录（随包物化的 node_modules）；--deps-root 可覆盖（调试）。
+  // @dshana 插件与 @deepseek-ai/* 同锚点住在这里（运行时解析模式从安装树算解析代，不建链接），
+  // 我们的 roster patch 随包放在安装根（与 manifest.json 并排，经 patchFiles 作启动期 overlay）。
   const depsRoot = resolve(opts.depsRoot || join(installRoot, "node_modules"));
-  const cordisSrc = resolve(opts.cordisSrc || join(installRoot, "cordis"));
+  const rosterPatch = join(installRoot, "cordis.patch.yml");
   const dshHome = opts.dshHome ? resolve(opts.dshHome) : join(dataDir, ".dsh");
-  // ---- 0) 预检模式（数据源切换探针）：不连宿主 IPC、不起服务，只验证目标 home 可用性 ----
+  // ---- 0) 预检模式（数据源切换探针）：不连宿主 IPC、不起服务，只验证目标环境可用性 ----
   if (opts.preflight) {
-    return await runPreflight({ opts, dataDir, dshHome, depsRoot, cordisSrc });
+    return await runPreflight({ opts, dataDir, dshHome, depsRoot, rosterPatch });
   }
   const state: {
     hana: any;
@@ -295,6 +324,7 @@ export async function main(argv: string[]): Promise<number> {
       " Node 进程时经父进程 IPC fd 注入受管通道。直接 node 运行无父 IPC，无法" +
       " 连接宿主 tasks/models/network，退出。",
     );
+    reportFatal("ipc", e);
     return EXIT.IPC_UNAVAILABLE;
   }
   state.hana = hana;
@@ -325,44 +355,35 @@ export async function main(argv: string[]): Promise<number> {
   // ---- 3) 依赖就位（自包含打包：依赖随包在 <installRoot>/node_modules，无运行时安装）----
   info(`依赖区：${depsRoot}（随包物化，无 ensure）`);
 
-  // ---- 4) 定位 DSH + 种子化 profile（runProfile 前必须就位，否则 loadProfile 抛）----
+  // ---- 4) 定位 DSH + 产物在位检查 ----
+  // profile 不归我们：官方随附模板 `web` 由 DSH 首次加载时自建自维护（loadProfile 的
+  // template 分支），我们不写 DSH_HOME 里的任何东西（不种子化、不链接、不归一清单）。
   let located;
   try {
     located = await locateDsh({ depsRoot, log: (s) => info("locate", s) });
   } catch (e) {
     err("locate", errText(e));
     err("exit", "exit=" + EXIT.DEPS + " kind=locate");
+    reportFatal("deps", e);
     return EXIT.DEPS;
   }
-  let seedOutcome;
-  try {
-    seedOutcome = await seedDshanaProfile({
-      dshHome,
-      cordisSrc,
-      appBoot: located.appBoot,
-      log: (s) => info("seed", s),
-    });
-    info(`profile 种子化结果：${seedOutcome}（${cordisSrc}）`);
-  } catch (e) {
-    err("seed", "profile 种子化异常：" + errText(e));
-    err("exit", "exit=" + EXIT.SEED + " kind=seed-error");
-    return EXIT.SEED;
-  }
-  if (seedOutcome === "missing-source" || seedOutcome === "refused" || seedOutcome === "failed" || seedOutcome === "init-failed") {
-    err("seed", `profile 种子化未完成（outcome=${seedOutcome}）：cordisSrc=${cordisSrc} 缺失或迁移被拒（见日志）`);
-    err("exit", "exit=" + EXIT.SEED + " kind=seed-" + seedOutcome);
+  const missing = missingArtifacts(depsRoot, rosterPatch);
+  if (missing.length > 0) {
+    err("artifacts", "产物不在位（先跑 pnpm run build 再打包/运行）：" + missing.join("、"));
+    err("exit", "exit=" + EXIT.SEED + " kind=artifacts-missing");
+    reportFatal("seed", new Error("产物不在位：" + missing.join("、")));
     return EXIT.SEED;
   }
 
-  // ---- 5) 子进程内 boot DSH（profile dshana；显式端口；--no-open）----
+  // ---- 5) 子进程内 boot DSH（官方 web profile + 我们的 roster 作启动期 overlay；显式端口）----
   const environment = located.appBoot.loadLayeredEnv("dsh");
-  info(`runProfile({ profile: ${PROFILE_NAME}, port: ${opts.dshPort} }) …`);
+  info(`runProfile({ profile: ${PROFILE_NAME}, patchFiles: [${rosterPatch}], port: ${opts.dshPort} }) …`);
   let boot;
   try {
     boot = await located.profileBoot.runProfile({
       environment,
       profile: PROFILE_NAME,
-      patchFiles: [],
+      patchFiles: [rosterPatch],
       args: ["--port", String(opts.dshPort), "--no-open"],
     });
   } catch (e) {
@@ -370,6 +391,7 @@ export async function main(argv: string[]): Promise<number> {
     const kind = /EADDRINUSE|address already in use/i.test(text) ? "port-busy" : "boot-failed";
     err("boot", `runProfile 失败（${kind}）：${text}`);
     err("exit", "exit=" + EXIT.PORT + " kind=" + kind);
+    reportFatal(kind, e);
     return EXIT.PORT;
   }
   state.ctx = boot.ctx;
@@ -383,6 +405,7 @@ export async function main(argv: string[]): Promise<number> {
     const kind = /未在期望端口/.test(text) ? "port-unreachable" : "boot-failed";
     err("ready", `就绪等待失败（${kind}）：${text}`);
     err("exit", "exit=" + EXIT.PORT + " kind=" + kind);
+    reportFatal(kind, e);
     await shutdown("ready-failed", EXIT.PORT);
     return EXIT.PORT;
   }
@@ -414,9 +437,28 @@ export async function main(argv: string[]): Promise<number> {
   } catch (e) {
     err("auth", "DSH 凭据交换失败（中继无法通过 DSH 鉴权）：" + errText(e));
     err("exit", "exit=" + EXIT.PORT + " kind=auth-exchange");
+    reportFatal("auth-exchange", e);
     await shutdown("auth-failed", EXIT.PORT);
     return EXIT.PORT;
   }
+  // 绑定事实源 = 宿主任务记录的 metadata.dsh：中继闸门与两桥共用同一个索引（各自进程内短 TTL
+  // 缓存，模型请求热路径不至于每请求往返宿主）。读取失败在各自读点显式处理（fail-closed）。
+  const bindings = createTaskBindingIndex(hana.tasks);
+
+  // 闸门（卡的流）：带票（dshanaSid / dshanaTask）的 WS 只在对应宿主任务还活跃时放行/留活——
+  // 任务失活就断开并拒建（中继侧执行，见 bridge.ts）。无票不闸（主卡 / FP / 直开页）；读不出
+  // 记录按放行（宁多活一条流，不误杀在用会话）。
+  const streamGate = async (ticket: { sessionId: string; taskId: string }): Promise<boolean> => {
+    try {
+      if (ticket.taskId) return !recordIsTerminal(await hana.tasks.get(ticket.taskId));
+      const entry = await bindings.bySession(ticket.sessionId, { fresh: true });
+      if (!entry) return true; // 无绑定（用户在 DSH UI 里自建的会话）：没有 task 可判，不闸
+      return !TERMINAL_STATUSES.includes(String(entry.status));
+    } catch (e) {
+      info("stream-gate", "闸门判定失败（放行）：" + errText(e));
+      return true;
+    }
+  };
   try {
     state.bridge = await startDshBridge({
       port: opts.bridgePort,
@@ -424,6 +466,7 @@ export async function main(argv: string[]): Promise<number> {
       controlKey: opts.controlKey,
       upstreamOrigin,
       upstreamCookie: dshCookie,
+      gate: streamGate,
       // 控制面：App 工具（controller.invoke）经宿主 ctx.runtime.fetch(runtimeId, "/_control") 到达
       // 这里，由本进程带 cookie 转发到 DSH /api（App 侧不直接摸 DSH HTTP，也不需 network 到中继）。
       // 参数 = 客户端信封本身（buildClientRequest 产物，含 rpcId/method/payload）。
@@ -450,6 +493,20 @@ export async function main(argv: string[]): Promise<number> {
           info("switch-gate：无在途工作，允许切换数据源（prepare-switch）");
           return { ready: true };
         }
+        if (action === "models-refresh") {
+          // 宿主模型/提供商变更：App 侧（lib/model-sync.js）订阅 app_event/models-changed 后
+          // 打进来，让 provider 子插件重拉目录并按差异重注册路由。两个 bundle 同进程不能互相
+          // import，约定键名见 lib/provider-hooks.ts；插件不在场（未激活/已退场）就是空操作。
+          const g = globalThis as unknown as Record<string, unknown>;
+          const reload = g[PROVIDER_RELOAD_GLOBAL_KEY];
+          if (typeof reload !== "function") {
+            info("models-refresh：provider 未装重载钩子（未激活），跳过");
+            return { changed: false };
+          }
+          const changed = await (reload as () => Promise<boolean>)();
+          info("models-refresh：changed=" + String(changed === true));
+          return { changed: changed === true };
+        }
         if (action !== "rpc") throw new Error("未知控制动作：" + String(action));
         const body = args && args.body;
         if (!body || typeof body !== "object" || typeof body.method !== "string") {
@@ -472,14 +529,12 @@ export async function main(argv: string[]): Promise<number> {
   } catch (e) {
     err("dshbridge", "中继启动失败：" + errText(e));
     err("exit", "exit=" + EXIT.PORT + " kind=bridge-bind");
+    reportFatal("bridge-bind", e);
     await shutdown("bridge-failed", EXIT.PORT);
     return EXIT.PORT;
   }
-  // 反向 session.cancel 经中继（带 bridgeKey）；不再直连免鉴权 DSH 端口。
+  // 反向 session.cancel 经中继（带 bridgeKey），不走免鉴权的 DSH 端口。
   const serviceBaseUrl = "http://127.0.0.1:" + opts.bridgePort;
-  // 绑定事实源 = 宿主任务记录的 metadata.dsh：两桥共用同一个索引（各自进程内短 TTL 缓存，
-  // 模型请求热路径不至于每请求往返宿主）。读取失败在各自读点显式处理（fail-closed）。
-  const bindings = createTaskBindingIndex(hana.tasks);
   // provider 是 cordis 子插件 bundle，与本 runtime bundle 同进程但不能互相 import：
   // 绑定索引经 globalThis 约定交付（键名见 lib/task-binding.ts），供模型请求的身份判定读取。
   state.stopBindings = publishTaskBindingIndex(bindings);
@@ -519,14 +574,21 @@ export async function main(argv: string[]): Promise<number> {
 
 // ---- bundle 自执行：受管 runtime 进程加载即跑（宿主只等 stdout readyMarker / 进程退出）----
 const rawArgv = process.argv.slice(2);
+/**
+ * 失败必须**真正结束进程**：宿主父进程的 IPC 通道会保持事件循环活着，只设 process.exitCode
+ * 不会退出——宿主侧就一直停在 starting，App 侧只能等到超时（真实成因也随之后置）。
+ * 断开 IPC 通道再 exit，宿主按退出码归类，失败报告（reportFatal）已落盘。
+ * 成功就绪（OK）不走这里：进程由信号/断连驱动 shutdown() 退出。
+ */
+const exitWith = (code) => {
+  try { process.disconnect?.(); } catch { /* 无 IPC 通道（如直接 node 运行） */ }
+  process.exit(code);
+};
 main(rawArgv).then((code) => {
-  // main 正常返回只发生在：usage/help/失败退出（已 return code）或成功就绪后（OK）。
-  // 成功就绪后进程由信号/断连驱动 shutdown()（其内部 process.exit），此处不退出。
-  if (code !== EXIT.OK) {
-    try {
-      process.exitCode = code;
-    } catch {
-      process.exit(code);
-    }
-  }
+  if (code !== EXIT.OK) exitWith(code);
+}).catch((e) => {
+  // main 自身抛出的意外错误（未被上述分支拦住的）：同样走 stderr + 退出码，不让它静默。
+  err("fatal", "未预期的致命错误：" + errText(e));
+  err("exit", "exit=" + EXIT.INTERNAL + " kind=internal");
+  exitWith(EXIT.INTERNAL);
 });

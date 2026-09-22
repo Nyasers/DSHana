@@ -11,7 +11,8 @@
 <!-- src/ui/stream.html — dshana App v2 的 stream 面（只读会话流）。
      两种进入方式，同一页：
        · 工具出卡的会话流卡（open/reply 的 details.card 指向本页，查询串带 sid=<DSH session id>）：
-         会话被钉住，app-shell 在顶部再挂一行跟踪态（取一次 /dshana/card-state）；
+         会话被钉住，app-shell 在顶部再挂一行跟踪态（非终态看慢轮询；会话终结后停手并
+         断掉消息流——陈旧卡不再吃连接，也不再接更新）；
        · 直接开页（不带 sid）：跟随跨面共用的当前 DSH 会话，不钉住。
      与 main / default 同一副自举台面（./face-stage.css），ready 后把整幅让给注入的 DSH
      Web UI，由 ui-layout 覆盖层按 surface=stream 只画中列、并由 CSS 摘掉 [data-composer-card]（输入卡）；

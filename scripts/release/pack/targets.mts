@@ -64,9 +64,11 @@ export function supportedTargetNames() {
 const PT_START = "# >>> pack-targets";
 const PT_END = "# <<< pack-targets";
 
-/** 生成该目标的 pnpm-workspace.yaml（只替换标记块内的 supportedArchitectures）。 */
+/** 生成该目标的 pnpm-workspace.yaml（只替换标记块内的 supportedArchitectures）。
+ * 源是**交付面**那份（packaging/pnpm-workspace.yaml）：工位只吃交付面的配置（allowBuilds 等），
+ * 与仓库根那份（服务本地开发安装）分开。 */
 export function stagingWorkspaceYaml(spec) {
-  const repoWs = fs.readFileSync(join(ROOT, "pnpm-workspace.yaml"), "utf8");
+  const repoWs = fs.readFileSync(join(ROOT, "packaging", "pnpm-workspace.yaml"), "utf8");
   const block = [
     "supportedArchitectures:",
     "  os:",

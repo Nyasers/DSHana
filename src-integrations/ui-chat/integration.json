@@ -1,21 +1,21 @@
 {
   "package": "@deepseek-ai/dsh-client-ui-chat",
-  "upstreamVersion": "0.1.6-alpha.2",
+  "upstreamVersion": "0.1.7-alpha.1",
   "upstreamDir": "packages/client/ui-chat",
   "files": [
     {
-      "path": "src/client/chat/ChatView.tsx",
-      "upstreamSha256": "b4b825c086cd84a76917822018984bae9a788498db246e798f24cdae92773cc0"
+      "path": "src/client/chat/use-chat-scroll.ts",
+      "upstreamSha256": "791c8344abf5969139c71a7b5b2dabb9bff402561695d82819fd834094aee24c"
     }
   ],
   "notes": [
     "滚到顶自动续页：上游只给了「加载更早」按钮（chat.loadOlder），长会话回翻要一直去够那个按钮。",
-    "缝选在这里：ChatView 独占滚动处理——onScrollRef.current 是读者输入的唯一入口（每次渲染重写，",
-    "闭包里就有当前渲染的 loadOlderAnchored），并且已经用 movedByReader 把「读者输入」与「程序化写入」",
-    "分开了。delta 只是在它末尾加一句：读者自己滚到顶（scrollTop ≤ 32px）时调 loadOlderAnchored()。",
-    "三个边界写进代码注释：只认读者输入（续页后的锚定补偿不连轴触发）；贴顶才算（正常阅读不误触）；",
-    "loadOlder() 自身对「未打开 / 没有更多 / 正在加载」短路，重复触发无害。",
-    "为什么不在外层做运行时钩子：与「贴上游 + 构建期闸、不做运行时 shim」的路线相悖；而且按钮入口",
-    "自带锚定补偿，外部直接调 session.loadOlder() 会让续页后阅读位跳动。"
+    "0.1.7 把滚动与翻页逻辑从 ChatView 抽成 use-chat-scroll / use-chat-reading / use-chat-navigation",
+    "三个模块，缝随之落在 use-chat-scroll：它手握 viewport.connect 的读者输入入口（scroll 回调带",
+    "movedByReader）与 navigation.loadEarlier（与按钮同一个入口）。delta 只在 scroll 回调里加一句：",
+    "读者自己滚到顶（top ≤ 32px）且还有更早的页、当前没在加载时调 navigation.loadEarlier()。",
+    "锚定补偿归 viewport.beginPaging/preserve，续下的页不会把阅读位顶跑；三个边界（只认读者输入、",
+    "贴顶才算、hasMore && !loadingOlder 守卫）都写进代码注释。",
+    "为什么不在外层做运行时钩子：与「贴上游 + 构建期闸、不做运行时 shim」的路线相悖。"
   ]
 }

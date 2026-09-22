@@ -6,8 +6,8 @@
 //   - 单入口 src/index.js → 单产物 dist/index.js（生命周期 + dshana 工具 + lib + 路由全部收敛）
 //   - 输出 ESM module（纯 ESM 无原生模块，不需要 CJS+loadBundle 沙箱；宿主直接 import）
 //   - library.type=module：入口具名导出（apply）真 emit 成 ESM export，宿主直接 import
-//   - src/assets 只剩 icon.png（App 图标，由 build.ts 原样 copy，不进 bundle）；v1 的 jinja2
-//     模板与 card.js/css 已随 W6 清理删除，本配置不再需要 asset 规则
+//   - src/assets 只有 icon.png（App 图标，由 build.ts 原样 copy，不进 bundle），本配置不需要
+//     asset 规则
 //   - externalsPresets.node：node 内置模块保持外部 import（零运行时依赖）
 // rspack 解析路径走 src/build.ts 的 resolveRspackEntry（RSPACK_ENV 或本地 node_modules）
 import path from "node:path";

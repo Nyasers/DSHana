@@ -8,7 +8,7 @@
 // bus/resources/network、web host 启动器、自动链状态机……），那是宿主把 DSH 拉进主进程、
 // 各独立加载单元（index.js / routes / tools bundle）之间跨单元共享的产物。App v2 里
 // apply(ctx) 与工具 execute 同处一个隔离 App 进程、同一个 ESM 模块图（rspack 单 bundle），
-// 不再需要 globalThis 跨单元通信；ctx 成员（dataDir/config/logger/……）由 apply 捕获进
+// 没有 globalThis 跨单元通信的必要；ctx 成员（dataDir/config/logger/……）由 apply 捕获进
 // 模块级运行包，工具执行时经本模块读取即可。生命周期纪律见 src/index.ts 头注释。
 //
 // 本模块是叶子：只做「存/取运行包」+ 少量无状态取值助手，不 import 任何业务模块。

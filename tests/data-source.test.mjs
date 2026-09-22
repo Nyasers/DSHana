@@ -7,7 +7,7 @@
 // 注：期望值一律经 path.normalize 生成，测试在 win32/darwin/linux 下同义。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, normalize } from "node:path";
 import {
@@ -36,6 +36,13 @@ const withTempDir = async (fn) => {
 const P = (p) => normalize(p);
 // 两个超时的默认值（钉住数字：与 config.ts 的 APP_SETTING_DEFAULTS 一致，也是存储的缺省）
 const TIMEOUT_DEFAULTS = { approvalTimeoutSec: 30, defaultTimeoutSec: 1800 };
+// 会话模型缺省：复用调用方（caller），自定义那条留空
+const SESSION_DEFAULTS = {
+  sessionModelMode: "caller",
+  sessionModelProvider: "",
+  sessionModelModel: "",
+  sessionModelReasoningEffort: "",
+};
 
 test("validateSettings: private 默认落位，profile 被强制为内置名", () => {
   assert.deepEqual(validateSettings({ mode: "private", path: null, profile: "whatever" }), {
@@ -43,14 +50,22 @@ test("validateSettings: private 默认落位，profile 被强制为内置名", (
     path: null,
     profile: PRIVATE_PROFILE,
     ...TIMEOUT_DEFAULTS,
+    ...SESSION_DEFAULTS,
   });
   assert.deepEqual(validateSettings({ mode: "private" }), {
     mode: "private",
     path: null,
     profile: PRIVATE_PROFILE,
     ...TIMEOUT_DEFAULTS,
+    ...SESSION_DEFAULTS,
   });
-  assert.deepEqual(DEFAULT_SETTINGS, { mode: "private", path: null, profile: PRIVATE_PROFILE, ...TIMEOUT_DEFAULTS });
+  assert.deepEqual(DEFAULT_SETTINGS, {
+    mode: "private",
+    path: null,
+    profile: PRIVATE_PROFILE,
+    ...TIMEOUT_DEFAULTS,
+    ...SESSION_DEFAULTS,
+  });
 });
 
 test("validateSettings: 拒绝未知键 / 非法模式 / 非绝对 shared 路径 / NUL / 畸形 profile", () => {
@@ -73,6 +88,43 @@ test("validateSettings: shared 路径做 normalize，profile 原样保留", () =
   assert.equal(s.mode, "shared");
   assert.equal(s.profile, "web-2");
   assert.equal(s.path, P("/data/dsh/"));
+});
+
+test("validateSettings: 会话模型模式限定两种，custom 要求 provider/model 都填", () => {
+  const caller = validateSettings({ mode: "private" });
+  assert.equal(caller.sessionModelMode, "caller");
+  assert.equal(caller.sessionModelProvider, "");
+  assert.equal(caller.sessionModelModel, "");
+  // caller 模式下那两个值原样保留（来回切不丢用户选过的那条）
+  const kept = validateSettings({ mode: "private", sessionModelMode: "caller", sessionModelProvider: "deepseek", sessionModelModel: "deepseek-flash" });
+  assert.equal(kept.sessionModelMode, "caller");
+  assert.equal(kept.sessionModelProvider, "deepseek");
+  const custom = validateSettings({
+    mode: "private",
+    sessionModelMode: "custom",
+    sessionModelProvider: " agnes ",
+    sessionModelModel: " agnes-3.0-flash ",
+    sessionModelReasoningEffort: " high ",
+  });
+  assert.deepEqual(
+    {
+      mode: custom.sessionModelMode,
+      provider: custom.sessionModelProvider,
+      model: custom.sessionModelModel,
+      effort: custom.sessionModelReasoningEffort,
+    },
+    { mode: "custom", provider: "agnes", model: "agnes-3.0-flash", effort: "high" },
+  );
+  // 推理强度是可选一侧：不填不报错，落空串（= 不指定，由 DSH 决定）
+  assert.equal(
+    validateSettings({ mode: "private", sessionModelMode: "custom", sessionModelProvider: "a", sessionModelModel: "b" })
+      .sessionModelReasoningEffort,
+    "",
+  );
+  assert.throws(() => validateSettings({ mode: "private", sessionModelMode: "fixed" }), /caller 或 custom/);
+  assert.throws(() => validateSettings({ mode: "private", sessionModelMode: "custom" }), /provider 与 model/);
+  assert.throws(() => validateSettings({ mode: "private", sessionModelMode: "custom", sessionModelProvider: "deepseek" }), /provider 与 model/);
+  assert.throws(() => validateSettings({ mode: "private", sessionModelProvider: 7 }), /sessionModelProvider/);
 });
 
 test("normalizeHomeForId: 斜杠与尾斜杠归一；win32 额外小写", () => {
@@ -130,10 +182,10 @@ test("store.write: 原子落盘 + revision 递增 + lastShared 记录（不留 .
     assert.equal(first.revision, 1);
     assert.deepEqual(first.lastShared, { path: P(dir), profile: "web" });
 
-    const onDisk = JSON.parse(readFileSync(join(dir, "integration", "settings.json"), "utf8"));
+    const onDisk = JSON.parse(readFileSync(join(dir, "settings.json"), "utf8"));
     assert.equal(onDisk.revision, 1);
     assert.equal(onDisk.version, SETTINGS_VERSION);
-    assert.deepEqual(readdirSync(join(dir, "integration")), ["settings.json"], "原子写不留 .pending 残片");
+    assert.deepEqual(readdirSync(dir), ["settings.json"], "原子写不留 .pending 残片");
 
     const second = await store.write({ mode: "private" });
     assert.equal(second.revision, 2);
@@ -147,14 +199,14 @@ test("store.write: 原子落盘 + revision 递增 + lastShared 记录（不留 .
       path: null,
       profile: PRIVATE_PROFILE,
       ...TIMEOUT_DEFAULTS,
+      ...SESSION_DEFAULTS,
     });
   });
 });
 
 test("store.read: 损坏 JSON / 版本不符 / revision 非法都明确抛错（不静默回落）", async () => {
   await withTempDir(async (dir) => {
-    const file = join(dir, "integration", "settings.json");
-    mkdirSync(join(dir, "integration"), { recursive: true });
+    const file = join(dir, "settings.json");
     writeFileSync(file, "{not json");
     await assert.rejects(() => createDataSourceStore({ dataDir: dir }).read(), /不是合法 JSON/);
     writeFileSync(file, JSON.stringify({ version: 99, revision: 0, settings: DEFAULT_SETTINGS }));

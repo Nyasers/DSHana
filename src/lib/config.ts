@@ -15,7 +15,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 // 读 DSH_HOME/settings.yaml 的 agent-default-model（行级解析，零依赖）——
-// dsh 默认模型：dsh models 页设置后写回 settings.yaml（selectModel 同源）。
+// dsh 默认模型：**用户手设过**才有这一格（DSH 自带的模型页随两个官方 LLM adapter 一起停掉，
+// 推理路由一律由宿主提供，所以这格要么是用户手设的、要么是 model-default-guard 对账写回的可服务
+// 路由）。工具建的会话不依赖它：模型随会话请求带上，由 App 按调用方算。
 // 返回 { provider, model } 或 null。
 export function readDshDefaultModel(dshHome: string): { provider: string; model?: string } | null {
   try {
@@ -70,7 +72,7 @@ export function readDshDefaultPreset(dshHome) {
   }
 }
 
-// reasoningEffort 解析（全局配置已移除，只接受工具显式参数，无配置回退；
+// reasoningEffort 解析（没有全局配置，只接受工具显式参数，无配置回退；
 // 不传时由 dsh 默认处理）。返回显式值或 null。
 export function resolveReasoningEffort(explicit) {
   const v = String(explicit ?? "").trim();
@@ -80,10 +82,19 @@ export function resolveReasoningEffort(explicit) {
 // 毫秒 → 秒 换算（旧键兜底共用）：0=禁用语义保留（0 → 0）；正数取整到秒
 // （Math.round；极端 <500ms 的正数钳到 1s，保留「正数 = 启用」语义，避免 0 被误判禁用）。
 // 应用设置的缺省值（单位：秒）：由代码持有。
-// 背景：设置页改成 App 自己的页（contributes.settings.ui.route），manifest 不再声明 schema，
-// 于是运行时缺省的来源从“配置快照”变成这里——值沿用原 schema 里的 default（30 / 1800），
-// 行为不变；设置页读写经 App 后端路由直接落 dataDir/config.json 的 global.*。
-export const APP_SETTING_DEFAULTS = { approvalTimeoutSec: 30, defaultTimeoutSec: 1800 };
+// 设置页是 App 自己的页（contributes.settings.ui.route），manifest 不声明 schema，运行时缺省
+// 就取这里（30 / 1800）；设置页读写经 App 后端路由直接落 dataDir/settings.json。
+export const APP_SETTING_DEFAULTS = {
+  approvalTimeoutSec: 30,
+  defaultTimeoutSec: 1800,
+  // 会话模型（工具建的会话用哪个模型）：caller = 复用调用方角色卡配的（缺省），
+  // custom = 用下面固定的 provider/model（reasoningEffort 空串 = 不指定，由 DSH 决定）。
+  // 见 lib/caller-model.ts。
+  sessionModelMode: "caller",
+  sessionModelProvider: "",
+  sessionModelModel: "",
+  sessionModelReasoningEffort: "",
+};
 
 function msToSec(ms) {
   if (!Number.isFinite(ms)) return null;
@@ -123,7 +134,7 @@ export function resolveApprovalTimeoutSec(cfg) {
 // defaultTimeoutSec 解析（单次任务超时，单位：秒）：优先直读 dataDir/config.json 的
 // global.defaultTimeoutSec（设置界面改动即时生效）：新键为合法数字即权威——正数采用，
 // 0/负数与缺失同义，一并回落 APP_SETTING_DEFAULTS.defaultTimeoutSec（缺省与兜底单点同源，
-// 不再有第二个落点）；新键缺失/非数字回退配置快照 cfg.defaultTimeoutSec。旧键兼容：
+// 只有这一个落点）；新键缺失/非数字回退配置快照 cfg.defaultTimeoutSec。旧键兼容：
 // 新键不可用时旧毫秒键存在则按毫秒换算（迁移未跑时的兜底，保证升级不丢用户配置）。
 export function resolveDefaultTimeoutSec(cfg) {
   try {
@@ -148,22 +159,4 @@ export function resolveDefaultTimeoutSec(cfg) {
 // dshTag 解析（DSH 更新基线 dist-tag，vX 起）：优先直读 dataDir/config.json 的
 // global.dshTag（设置界面改动即时生效；Agent 直改文件同样生效），缺失/非字符串回退
 // 配置快照 cfg.dshTag（manifest 默认 "latest"），再缺失回退 "latest"。返回恒为 tag
-// 返回 dsh profile 名（spawn --profile 用）。vX：dshana profile 路线——插件以自己的
-// profile（DSH_HOME/profiles/dshana，无官方 web-app）启动 dsh；web profile 保留作回退。
-// 优先读 config.json global.profileName，缺省 "dshana"。
-export function resolveProfileName(cfg) {
-  try {
-    const cf = join(cfg.dataDir, "config.json");
-    if (existsSync(cf)) {
-      const j = JSON.parse(readFileSync(cf, "utf8"));
-      const p = j?.global?.profileName;
-      if (typeof p === "string" && p.trim()) return p.trim();
-    }
-  } catch {
-    /* 读配置失败忽略 */
-  }
-  const p = cfg?.profileName;
-  if (typeof p === "string" && p.trim()) return p.trim();
-  return "dshana";
-}
 

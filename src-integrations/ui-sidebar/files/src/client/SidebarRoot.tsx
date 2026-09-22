@@ -19,7 +19,7 @@
 import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
-  FishLogo, IconNewChatOutline16, IconPanelLeftOutline16, isDarwinDesktop, Tooltip,
+  FishLogo, IconNewChatOutlineMedium, IconNewChatOutlineRegular, IconPanelLeftOutlineRegular, isDarwinDesktop, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {
@@ -80,6 +80,32 @@ function PanelRow({ id, label, wide, usePanelInfo, selectPanel, renderSlot }: Pa
   )
 }
 
+/** 跨面桥面里本插件用到的那一格（只有面板选中；缺失即不参与）。 */
+type PanelSelectionBridge = {
+  writePanelView?: (panelId: string | null) => Promise<void>
+}
+
+/**
+ * 把本面（FP）选中的主面板宣告给主卡。
+ *
+ * FP 整面只有一个侧栏、没有中列，而面板页落在中列：0.1.6 起侧栏多了「插件」这一行，
+ * 那一页只能由主卡打开。所以 FP 只发射选中的面板 id，主卡把它交给自己的 layout。
+ * 首个观察值也发射：FP 起手就是「面板未打开」，把这个事实说出去两面才一致。
+ * @param usePanelInfo - 布局的选中面读取钩子。
+ * @param enabled - 只在 navigation 面发射（其它面自己就有中列）。
+ */
+function usePanelPublisher(usePanelInfo: PropsRuntime<'sidebar'>['usePanelInfo'], enabled: boolean): void {
+  const activePanelId = usePanelInfo(info => info.activePanelId)
+  const last = useRef<string | null | undefined>(undefined)
+  useEffect(() => {
+    if (!enabled) return
+    if (last.current === activePanelId) return
+    last.current = activePanelId
+    const bridge = (window as { __DSHANA__?: PanelSelectionBridge }).__DSHANA__
+    void bridge?.writePanelView?.(activePanelId ?? null)
+  }, [activePanelId, enabled])
+}
+
 /**
  * Render the sidebar column shell.
  * @param props - composed slot props (runtime share + injected callbacks, contract/slots.ts).
@@ -107,6 +133,10 @@ export function SidebarRoot({
   }, [collapsed])
   const windowsTitlebar = document.documentElement.hasAttribute('data-windows-titlebar')
   const wide = windowsTitlebar ? !collapsed : !collapsed || !settled
+  // The Windows caption menus occupy the strip to the right of these controls
+  // (that is what --dsh-windows-menu-start reserves), so a right-side bubble
+  // lands under their text. Below the caption is the only clear side.
+  const captionTooltipSide = windowsTitlebar ? 'bottom' : 'right'
 
   // Freeze the content at its expanded width while it fades out (collapsed
   // && wide): the sliding column then clips it instead of reflowing it. The
@@ -171,15 +201,17 @@ export function SidebarRoot({
   // 认面必须在所有 hook 之后（React 规则），正好落在 buildVersion 处。
   const surfaceRole = (window as { __DSHANA__?: { role?: string } }).__DSHANA__?.role
   const showChrome = surfaceRole !== 'navigation'
+  usePanelPublisher(usePanelInfo, surfaceRole === 'navigation')
   if (surfaceRole === 'settings' || surfaceRole === 'workspace') {
     return <div className={css.surfaceSettings}>{renderSlot('sidebar.settings', { wide: true })}</div>
   }
+
   const darwinDesktop = isDarwinDesktop()
   // Rail resting state is the whale mark; hovering swaps in the panel icon
   // (the expand affordance, figma sidebar-hover flow). Expanded it is a plain
   // panel icon.
   const toggle = (
-    <Tooltip label={collapsed ? t('toggle.open') : t('toggle.collapse')} delayMs={500}>
+    <Tooltip label={collapsed ? t('toggle.open') : t('toggle.collapse')} delayMs={500} side={captionTooltipSide}>
       <button
         type="button"
         className={clsx(css.iconButton, css.toggle)}
@@ -192,7 +224,7 @@ export function SidebarRoot({
           </span>
         )}
         {/* Rail icons render at 18 (figma rail spec); expanded keeps the glyph-native sizes. */}
-        <IconPanelLeftOutline16 className={css.panelIcon} size={wide || windowsTitlebar ? 16 : 18} />
+        <IconPanelLeftOutlineRegular className={css.panelIcon} size={wide || windowsTitlebar ? 16 : 18} />
         {!wide && renderSlot('sidebar.toggle.badge', {})}
       </button>
     </Tooltip>
@@ -217,15 +249,12 @@ export function SidebarRoot({
       {showChrome && darwinDesktop && <div className={css.topStrip}>{toggle}</div>}
       {showChrome && (
       <div className={css.logoRow}>
-        {/* Expanded, the brand doubles as a New Session shortcut; the
-            collapsed rail's logo is the expand toggle below instead. */}
-        {wide && (
-          <button
-            type="button"
-            className={clsx(css.brand, css.wide)}
-            aria-label={t('session.new.label')}
-            onClick={() => { startSession() }}
-          >
+        {/* Expanded, the brand doubles as a New Session shortcut — except on
+            macOS, where it stays part of the logo row's window-drag surface
+            (a button would subtract itself through the global no-drag rule);
+            the collapsed rail's logo is the expand toggle below instead. */}
+        {wide && (() => {
+          const identity = (
             <span className={css.brandIdentity} aria-hidden="true">
               <span className={css.brandMark}>
                 {renderSlot('sidebar.brand.mark', { size: 24 }, { fallback: <FishLogo size={24} /> })}
@@ -243,21 +272,37 @@ export function SidebarRoot({
                 })}
               </span>
             </span>
-          </button>
-        )}
+          )
+          return darwinDesktop
+            ? <span className={clsx(css.brand, css.wide)}>{identity}</span>
+            : (
+              <button
+                type="button"
+                className={clsx(css.brand, css.wide)}
+                aria-label={t('session.new.label')}
+                onClick={() => { startSession() }}
+              >
+                {identity}
+              </button>
+            )
+        })()}
         {!darwinDesktop && toggle}
       </div>
       )}
 
       {/* Expanded, the button carries its own label — tooltip only on the rail. */}
-      <Tooltip label={t('session.new.label')} delayMs={500} disabled={wide}>
+      <Tooltip label={t('session.new.label')} delayMs={500} disabled={wide} side={captionTooltipSide}>
         <button
           type="button"
           className={css.newSession}
           aria-label={t('session.new.label')}
           onClick={() => { startSession() }}
         >
-          <IconNewChatOutline16 size={wide ? 14 : windowsTitlebar ? 16 : 18} />
+          {/* The rail draws Regular: Medium's 1.3px stroke scaled to the rail's
+              larger glyph reads visibly heavier than the neighboring 1px icons. */}
+          {wide
+            ? <IconNewChatOutlineMedium size={14} />
+            : <IconNewChatOutlineRegular size={windowsTitlebar ? 16 : 18} />}
           {wide && <span className={clsx(css.newSessionLabel, css.wide)}>{t('session.new')}</span>}
         </button>
       </Tooltip>
