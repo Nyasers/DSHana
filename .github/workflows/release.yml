@@ -69,9 +69,10 @@ jobs:
   # 便于一次看到全部失败面。
   package:
     needs: create-release
-    # create-release 仅在 tag 场景运行，dispatch 场景会被 skip；被 needs 的 job skip 会让下游
-    # 默认 if(success()) 一起 skip → 这里显式放行「非 failure」结果（success/skipped 都继续）。
-    if: ${{ needs.create-release.result != 'failure' }}
+    # create-release 仅在 tag 场景运行，dispatch 场景会被 skip。job 的 if 里不带状态函数时，
+    # GitHub 会隐式前置 success()，而 success() 在上游被 skip 时为假 —— 单写 result 判断够不着。
+    # 用 !cancelled() 顶掉那个隐式前置：流水线被取消时不启动，其余情况按「上游非 failure」放行。
+    if: ${{ !cancelled() && needs.create-release.result != 'failure' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
