@@ -16,11 +16,11 @@ const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ROOT_MODULE = join(REPO, "scripts", "shared", "root.mts");
 
 test("satisfiesNodeRange：本仓范围的边界", () => {
-  const range = "^22.18.0 || >=23.6.0";
-  for (const ok of ["22.18.0", "22.20.1", "23.6.0", "24.0.0", "26.8.1"]) {
+  const range = "^22.22.2 || ^24.15.0 || ^26.8.1";
+  for (const ok of ["22.22.2", "22.30.0", "24.15.0", "24.20.1", "26.8.1", "26.9.0"]) {
     assert.equal(satisfiesNodeRange(range, ok), true, `应满足：${ok}`);
   }
-  for (const bad of ["20.19.0", "22.17.0", "23.0.0", "23.5.9"]) {
+  for (const bad of ["20.19.0", "22.21.0", "23.0.0", "24.14.9", "25.0.0", "27.0.0"]) {
     assert.equal(satisfiesNodeRange(range, bad), false, `应拒绝：${bad}`);
   }
 });

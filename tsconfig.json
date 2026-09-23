@@ -4,7 +4,7 @@
   // 第三方无类型包报隐式 any）。这份配置让编辑器看到与构建一致的口径。
   //
   // 与逐域配置的关系：**判定仍以 tsconfig.{src,cordis,scripts}.json 为准**（那是
-  // scripts/check/typecheck.mts 的口径，决定拦不拦）；本文件只负责让编辑器少报假红，不参与
+  // scripts/check/type.mts 的口径，决定拦不拦）；本文件只负责让编辑器少报假红，不参与
   // 构建，也不改变任何域的实际检查范围。
   "compilerOptions": {
     "noEmit": true,
