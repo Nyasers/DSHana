@@ -28,8 +28,8 @@ const targets = supportedTargetNames().map((name) => {
 });
 
 /**
- * 一行的键名：锁里包条目写作 `<名>@<版本>:`、依赖引用写作 `<名>: <版本>`；scoped 名带引号，
- * 非 scoped 名不带。统一的取法是抹掉引号后按第一个分隔符截断，scoped 名跳过开头的 `@`。
+ * 锁里一个包的解析条目键名：`packages:` 段每条写作 `<名>@<版本>:`；scoped 名带引号，非 scoped 名
+ * 不带。取法是抹掉引号后截到版本号那一节（scoped 名开头的 `@` 不算分隔符）。
  */
 function lockKey(line) {
   const cleaned = line.replace(/'/g, "").trim();
@@ -39,9 +39,31 @@ function lockKey(line) {
   return cut < 0 ? cleaned : cleaned.slice(0, cut);
 }
 
-const lockKeys = new Set(LOCK_LINES.map(lockKey));
+/**
+ * 已解析包的名字集合：只取 `packages:` 段里 2 空格缩进的条目。
+ * `importers:` / `snapshots:` 里那些 `<名>: <版本>` 是依赖引用，包被移除时引用可能还留着，
+ * 只认解析条目才算「这个包真能装出来」。
+ */
+function resolvedPackageKeys(lines) {
+  const keys = new Set();
+  let inPackages = false;
+  for (const line of lines) {
+    if (line === "packages:") {
+      inPackages = true;
+      continue;
+    }
+    if (inPackages && (line === "snapshots:" || line === "---")) {
+      inPackages = false;
+      continue;
+    }
+    if (inPackages && /^ {2}\S.*:\s*$/.test(line)) keys.add(lockKey(line));
+  }
+  return keys;
+}
 
-/** 锁里是否有这个包的条目。 */
+const lockKeys = resolvedPackageKeys(LOCK_LINES);
+
+/** 锁里是否有这个包的解析条目。 */
 const inLock = (name) => lockKeys.has(name);
 
 test("每个目标的资产清单内部无重复", () => {
