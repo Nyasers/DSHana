@@ -6,8 +6,9 @@
 #   create-release：先建 draft pre-release（已存在则跳过）——保证后续上传目标必然存在
 #   package：矩阵并发，每目标一个 runner（公开仓库分钟数免费，用并发换时间）。每 job 自包含
 #            （安装 + 构建 + 出包），产物名带目标后缀，zip + sha256 上传为 artifact。
-#   publish：needs package。下载全部 artifact → **单点上传**（--clobber；多 job 并发写同一
-#            release 有互相覆盖的窗口，宿主 workflow 特意注明过）→ 硬校验必需资产（缺一即
+#   publish：needs package。下载全部 artifact → **单点上传**（写 release 的只有一个作业：多作业
+#            并发写同一 release 有互相覆盖的窗口，宿主 workflow 特意注明过；件与件之间互不相干，
+#            作业内按 -P 8 并发传，--clobber 幂等）→ 硬校验必需资产（缺一即
 #            fail，release 留 draft 供人工检查）→ **全部成功才去掉 draft、保留 prerelease**
 #            （不自动标 latest，稳定版由人工标记）。
 #
@@ -197,20 +198,20 @@ jobs:
         with:
           path: artifacts
 
-      # 单点上传：把 5 个 zip + 5 个 sha256 一起传上去（--clobber 幂等，补传不报错）
-      - name: Upload release assets (single writer)
+      # 单点上传：写 release 的只有本作业（多作业并发写同一 release 有互相覆盖的窗口），
+      # 件与件互不相干，所以作业内并发传（-P 8）；--clobber 幂等，补传不报错。
+      # 先落一份列表文件再数件数：0 件要在上传前就 fail，而不是让空列表静默通过。
+      - name: Upload release assets (single writer, parallel transfers)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: |
           set -e
-          found=0
-          while IFS= read -r -d '' f; do
-            echo "  uploading $f"
-            gh release upload "$TAG" "$f" --clobber
-            found=$((found+1))
-          done < <(find artifacts -type f \( -name '*.zip' -o -name '*.zip.sha256' -o -name 'index.v2.json' \) -print0)
-          [ "$found" -gt 0 ] || { echo "::error::no package assets found in artifacts/"; exit 1; }
+          find artifacts -type f \( -name '*.zip' -o -name '*.zip.sha256' -o -name 'index.v2.json' \) -print0 > assets.list
+          count=$(tr -cd '\0' < assets.list | wc -c)
+          [ "$count" -gt 0 ] || { echo "::error::no package assets found in artifacts/"; exit 1; }
+          echo "uploading $count assets (-P 8)"
+          xargs -0 -t -P 8 -I{} gh release upload "$TAG" {} --clobber < assets.list
 
       # 硬校验：必需资产缺一个就 fail，release 停在 draft 供人工检查（不出现"残缺发布"）
       - name: Verify required assets
