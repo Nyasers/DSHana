@@ -144,7 +144,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 | 主题没跟随宿主 | DSH 主题偏好是 light/dark 而非 system | 在 DSH 外观里选「跟随宿主」（偏好值 system） |
 | DSH 设置里找不到「模型」页 | 该页（`ui-settings-models`）随两个官方 LLM adapter 一起停掉——它只编辑那两行的 settings 段 | 不是故障：工具建会话用的模型在 App 设置页的「会话模型」里配，模型候选列的是宿主目录；DSH 侧会话在 DSH 自己的模型选择器里选 |
 | 选工作区目录时弹一个错误 | 目录弹窗落到了 DSH 宿主进程的 OS chooser（要在沙箱里 spawn 子进程开 `IFileOpenDialog`），而本形态的 runtime 是后台子进程 | 正常路径不该走到那里：壳页注入的目录桥让弹窗由宿主出（`hana.resources.pick`）。若仍报错，确认桥装上了（`__DSH_DIRECTORY_PICKER__`）且宿主授予了资源选择 |
-| bash 报 `E_ACCESSDENIED` | DSH bash 沙箱 Windows 限制 | 改用文件系统工具（write/read/edit） |
+| 命令执行里找不到 `bash` 工具 | shell 行按平台互斥挂载：win32 停 `bash` / `bash-sandbox`，只挂 `pwsh` / `pwsh-sandbox` | 用 `pwsh` 工具跑命令（PowerShell）；读写文件仍走文件系统工具 |
 | `reply` 连续 30 秒超时（`RPC callback.tools.execute`）/ 该会话后续提交全失败 | 上一轮的审批没能在回合边界被应答，宿主工具回调超时，会话卡住 | 不要原地重试：换新会话（`open`）；旧会话用 `close` 收敛（回执只说已请求取消，升级标记随后台落定） |
 | `close` 回执只说「已请求取消」/ 会话流卡在会话结束后不再更新 | 正常语义：取消确认不进工具回调（后台结算）；流卡在会话终结后断消息流并拒绝重开（陈旧卡冻结） | 不用处理；要确认结局看 `get` 或任务通知 |
 | 会话流卡停在「历史加载失败」/ `gateway/internal` | 该卡对应的宿主任务已终结，中继按闸门拒了它的流（正常：陈旧卡不再建流） | 不用处理；要看会话内容去主卡或 `get` |
