@@ -126,13 +126,18 @@ export async function buildServerBundle({ id, pkgDir, outDir, entry = "src/index
     externalsType: "module",
     externals: [(ctx, cb) => (isBare(ctx.request) ? cb(null, ctx.request) : cb())],
     module: {
-      // import.meta 的路径元数据必须留给运行时求值：解析器按「模块自身的源码路径」静态求值
-      // （默认行为），冻进产物就成了构建机暂存树的路径——运行期拿它当锚点解析依赖，本机恰好还有
-      // 那棵树时是 MODULE_NOT_FOUND，别的机器上锚点根本不存在。上游发布产物保留 import.meta.url，
-      // 这里对齐（`false` = 不静态替换，交给运行时）。
       parser: {
         javascript: {
-          importMeta: { url: false, dirname: false, filename: false },
+          // import.meta 的元数据一律留给运行时求值。静态求值的代价在服务半是真金白银的故障：
+          //   · `import.meta.url` 按「模块自身的源码路径」求值 → 构建机路径被冻进产物，运行期从
+          //     那里解析依赖（本机恰好还有那棵暂存树时是 MODULE_NOT_FOUND，别的机器上锚点不存在）；
+          //   · 静态处理 `import.meta.resolve` → 包内子入口（如 …/runner）被换成模块 id，运行期解析落空。
+          // 上游发布产物三处元数据都保留运行时形态（import.meta.url / import.meta.resolve /
+          // new URL(…, import.meta.url)），这里对齐。
+          importMeta: false,
+          // `new URL(字面量, import.meta.url)` 不当作构建期资源引用：node 服务半没有资源图，上游这处
+          // 指的是包外的 tsconfig——构建期解析必然失败。见 module-parser 的 javascript.url。
+          url: false,
         },
       },
       rules: [
