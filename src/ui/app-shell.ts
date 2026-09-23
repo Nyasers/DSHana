@@ -25,6 +25,7 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
   var POLL_FAST_MS = 1500;   // 非就绪：较快轮询（starting 日志滚动）
   var POLL_MID_MS = 3000;    // idle/error：中速
   var POLL_SLOW_MS = 6000;   // 就绪：慢轮询（发现运行态漂移）
+  var POLL_FALLBACK_MS = 30000; // FP 就绪后：只兜底（状态变化走事件，这里管「键没了/订阅断了」的恢复）
   var pollTimer: ReturnType<typeof setTimeout> | null = null;
   var shell: any = null;          // 根元素（data-dshana-shell）
   var isSidebar = false;
@@ -570,7 +571,8 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
       if (logEl) logEl.hidden = true;
       if (btnStop) btnStop.hidden = true;
       ensureInjection(s);
-      schedulePoll(POLL_SLOW_MS);
+      // 整块已让给注入的 DSH 侧栏，本面只剩兜底：慢一拍看不出来。
+      schedulePoll(POLL_FALLBACK_MS);
       return;
     }
     if (btnStop) btnStop.hidden = true;
@@ -637,11 +639,15 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
   }
   // ---- 轮询去重：一份状态只让一个 owner 去取 ----
   // 事实只有一个（App 侧 boot-state），但主卡与 FP 是两份文档、各有一个定时器——两路轮询同一份
-  // 状态是重复劳动。定为：**主卡是 owner**，取回快照后写进跨面共享存储；
-  // FP 只订阅 + 读快照，不主动取；只有当快照不存在/被标记下线/老得离谱（owner 悄悄没了）时
-  // FP 才自己取。通道复用设置视图与会话选中那条（hana.storage.global + onChanged），不新开协议。
-  // 代价如实记：owner 非正常消失（没跑到 pagehide）时，FP 最多陈旧 STALE_MS。
-  var BOOT_STATE_STALE_MS = 5 * 60 * 1000;
+  // 状态是重复劳动。定为：**主卡是 owner**，取回快照后写进跨面共享存储；FP 只订阅 + 读快照。
+  // 判据只有一条：**快照在不在**。在就渲染，内容对不对由 owner 负责——owner 只在状态变化时写
+  // （见 publishBootState），一变就推 onChanged，FP 立刻跟随；不在才自取，那是 FP 先于 owner
+  // 挂载、或 owner 已下线（pagehide 里删键）。
+  // 不拿「写入时刻够不够新」当判据：状态不变正是健康时的常态，按时刻判会让 FP 在稳态里一直
+  // 误判成过期，自己再打一路 HTTP——去重反而比不去重多一路。
+  // 代价如实记：owner 非正常消失（没跑到 pagehide）时键会留下，FP 停在最后一份快照上，直到自己
+  // 的兜底节拍 POLL_FALLBACK_MS 再读一次。
+  // 通道复用设置视图与会话选中那条（hana.storage.global + onChanged），不新开协议。
   var lastPublishedSig: string | null = null;
   function bootSig(s) {
     if (!s) return "";
@@ -656,7 +662,7 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
     var sig = bootSig(s);
     if (sig === lastPublishedSig) return; // 状态没变就不写，免存储抖动
     lastPublishedSig = sig;
-    writeShared("boot-state", { at: Date.now(), state: s })
+    writeShared("boot-state", { state: s })
       .catch(function () { /* 拿不到共享面就当没有，本面照常自取 */ });
   }
   function fetchOwnState() {
@@ -671,8 +677,7 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
   function poll(force = false) {
     if (!isSidebar) { fetchOwnState(); return; }
     readShared("boot-state").then(function (v) {
-      var fresh = v && typeof v.at === "number" && v.at > 0 && Date.now() - v.at < BOOT_STATE_STALE_MS;
-      if (!force && fresh && v.state) { applySnapshot(v.state); return; }
+      if (!force && v && v.state) { applySnapshot(v.state); return; }
       fetchOwnState();
     }, function () { fetchOwnState(); });
   }
