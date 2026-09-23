@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0-rc.19+dsh-0.1.7-alpha.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.18%2Bdsh-0.1.7-alpha.2...v1.0.0-rc.19%2Bdsh-0.1.7-alpha.2) (2026-09-23)
+
+### Bug Fixes
+
+* **release:** dispatch 场景下 package 不再被隐式 success() 挡下 ([8c43455](https://github.com/Nyasers/DSHana/commit/8c43455372602192950e661eba219c2b14d65cc3))
+* **release:** market-index 顶掉沿 needs 链传染的隐式 success() ([bd13733](https://github.com/Nyasers/DSHana/commit/bd1373306dfb47e2f0b03ef0bfbe2a9d3eddc211))
+
 ## [1.0.0-rc.18+dsh-0.1.7-alpha.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.17%2Bdsh-0.1.6-alpha.2...v1.0.0-rc.18%2Bdsh-0.1.7-alpha.2) (2026-09-22)
 
 ### Features
@@ -533,6 +540,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
