@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0-rc.24+dsh-0.1.7-rc.1](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.23%2Bdsh-0.1.7-rc.1...v1.0.0-rc.24%2Bdsh-0.1.7-rc.1) (2026-09-23)
+
+### Bug Fixes
+
+* **open:** cwd 的存在性改由受管 runtime 判，并停止吞 errno ([5730827](https://github.com/Nyasers/DSHana/commit/5730827744dd104d26cebf371546c65dcb95acf7))
+* **open:** cwd-check 改异步 stat，测试路径按平台取 ([077a1e0](https://github.com/Nyasers/DSHana/commit/077a1e0f36a76cb0cf19208bc9c4bd5fbd014efe))
+
 ## [1.0.0-rc.23+dsh-0.1.7-rc.1](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.22%2Bdsh-0.1.7-rc.1...v1.0.0-rc.23%2Bdsh-0.1.7-rc.1) (2026-09-23)
 
 ### Bug Fixes
@@ -577,6 +584,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
