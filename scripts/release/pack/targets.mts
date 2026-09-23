@@ -6,8 +6,8 @@
 // assets 是出包前的 fail-closed 闸：物化完依赖树后逐个断言这些包在树里（缺一个即拒包）。
 // 覆盖三族预编译依赖（koffi / node-addon-require-builtin / sharp）与 LibreOffice 转换栈。
 //
-// 目标集对着**宿主支持矩阵**写，不对着「我们顺带能装出来的东西」写：macOS arm64 / macOS x64 /
-// Windows x64 / Linux x86_64（glibc），外加通用兜底包。另有若干不进 CI 主线、只能点名的目标。
+// 目标集 = 六个 os × cpu 组合：macOS arm64 / macOS x64 / Windows x64 / Windows arm64 /
+// Linux x86_64（glibc）/ Linux arm64（glibc），外加通用兜底包。
 import fs from "fs-extra";
 import { join } from "node:path";
 
@@ -37,43 +37,38 @@ function libreOfficeAssets(kit: "wasm" | "darwin-arm64" | "darwin-x64" | "win32-
   return [LO_KIT, `${LO_KIT}-${kit}`];
 }
 
-const HOST_TARGETS: TargetSpec[] = [
-  // 注：darwin / linux 的 libvips 单独分包（@img/sharp-libvips-*），Windows 则内联在
-  // @img/sharp-win32-x64 里、无独立 libvips 包——断言清单按平台实际形态写（实测得出）。
+// 各平台目标：六个 os × cpu 组合都进发布矩阵，CI 按这份表并发出包。
+// 注：darwin / linux 的 libvips 单独分包（@img/sharp-libvips-*），Windows 则内联在
+// @img/sharp-win32-x64 里、无独立 libvips 包——断言清单按平台实际形态写（实测得出）。
+const PLATFORM_TARGETS: TargetSpec[] = [
   { name: "darwin-arm64", os: ["darwin"], cpu: ["arm64"], assets: ["@koromix/koffi-darwin-arm64", "node-addon-require-builtin-darwin-arm64", "@img/sharp-darwin-arm64", "@img/sharp-libvips-darwin-arm64", ...libreOfficeAssets("darwin-arm64")] },
   { name: "darwin-x64", os: ["darwin"], cpu: ["x64"], assets: ["@koromix/koffi-darwin-x64", "node-addon-require-builtin-darwin-x64", "@img/sharp-darwin-x64", "@img/sharp-libvips-darwin-x64", ...libreOfficeAssets("darwin-x64")] },
   { name: "linux-x64", os: ["linux"], cpu: ["x64"], libc: ["glibc"], assets: ["@koromix/koffi-linux-x64", "node-addon-require-builtin-linux-x64-gnu", "@img/sharp-linux-x64", "@img/sharp-libvips-linux-x64", ...libreOfficeAssets("wasm")] },
   { name: "win32-x64", os: ["win32"], cpu: ["x64"], assets: ["@koromix/koffi-win32-x64", "node-addon-require-builtin-win32-x64-msvc", "@img/sharp-win32-x64", ...libreOfficeAssets("win32-x64")] },
-];
-
-// 非宿主矩阵、**仅手动编译**的目标（不进 CI 主线）：宿主未承诺这些平台，但预编译资产实测存在，
-// 需要时点名出包（`package:<os>:<cpu>` 别名已备）。资产清单同样按实测形态写。
-// 注：这些目标不进 `--targets=all`，只能点名；否则 CI 会产出宿主不支持的包。
-const EXTRA_TARGETS: TargetSpec[] = [
   { name: "linux-arm64", os: ["linux"], cpu: ["arm64"], libc: ["glibc"], assets: ["@koromix/koffi-linux-arm64", "node-addon-require-builtin-linux-arm64-gnu", "@img/sharp-linux-arm64", "@img/sharp-libvips-linux-arm64", ...libreOfficeAssets("wasm")] },
   { name: "win32-arm64", os: ["win32"], cpu: ["arm64"], assets: ["@koromix/koffi-win32-arm64", "node-addon-require-builtin-win32-arm64-msvc", "@img/sharp-win32-arm64", ...libreOfficeAssets("win32-arm64")] },
 ];
 
-// 通用兜底包：os × cpu 全叉乘（比宿主矩阵多出 win32-arm64 / linux-arm64 等）；体量更大，
-// 用于兜底（用户在宿主矩阵外也能跑，代价是下载大）。断言清单要盖住它声明的全部 os×cpu，
-// 所以 HOST 与 EXTRA 的资产都在内（缺哪个 arm64 资产就该当场拒包，而不是静默通过）。
-// 去重：跨目标重复的条目在这里只留一份（wrapper 每个目标都点，wasm 那条两个 linux 目标都点）。
+// 通用兜底包：os × cpu 全叉乘。命名与平台包同源（无目标后缀），覆盖面比上面六个更宽，
+// 代价是体量更大。断言清单要盖住它声明的全部 os×cpu，所以各平台目标的资产都在内（缺哪个
+// 资产就该当场拒包，而不是静默通过）。去重：跨目标重复的条目在这里只留一份（wrapper 每个
+// 目标都点，wasm 那条两个 linux 目标都点）。
 const UNIVERSAL_TARGET: TargetSpec = {
   name: "universal",
   os: ["win32", "darwin", "linux"],
   cpu: ["x64", "arm64"],
-  assets: [...new Set([...HOST_TARGETS, ...EXTRA_TARGETS].flatMap((t) => t.assets))],
+  assets: [...new Set(PLATFORM_TARGETS.flatMap((t) => t.assets))],
 };
 
 /** 目标名 → 目标描述（未知名返回 null）。 */
 export function targetSpec(name: string): TargetSpec | null {
   if (name === "universal") return UNIVERSAL_TARGET;
-  return HOST_TARGETS.find((t) => t.name === name) || EXTRA_TARGETS.find((t) => t.name === name) || null;
+  return PLATFORM_TARGETS.find((t) => t.name === name) || null;
 }
 
 /** 支持的目标名全集（用法提示与校验共用）。 */
 export function supportedTargetNames() {
-  return ["universal", ...HOST_TARGETS.map((t) => t.name), ...EXTRA_TARGETS.map((t) => t.name)];
+  return ["universal", ...PLATFORM_TARGETS.map((t) => t.name)];
 }
 
 // 仓库 pnpm-workspace.yaml 中的 supportedArchitectures 由本脚本按目标替换（标记块内）

@@ -1,4 +1,4 @@
-# Release — 并发矩阵出包（4 平台 + 通用兜底）+ 单点发布
+# Release — 并发矩阵出包（6 平台 + 通用兜底）+ 单点发布
 #
 # 触发：push tag v*（发版）/ workflow_dispatch（手动，仅出 artifact 不建 release）
 #
@@ -17,8 +17,8 @@
 #     预编译依赖，各平台包都能在 ubuntu 上产出，矩阵不必跨 OS。
 #   - 宿主单建 renderer box 再分发给各平台（解决 tar mtime 导致"内容相同、字节不同"）；我们的包
 #     本就逐目标不同，不适用，故每 job 自包含，省掉 artifact 分发的接线。
-#   - 目标集对着宿主支持矩阵写：macOS arm64/x64、Windows x64、Linux x86_64（glibc）；
-#     另有 universal 兜底包（os × cpu 全叉乘）。宿主矩阵外的平台（linux-arm64 / win32-arm64）
+#   - 目标集 = 六个 os × cpu 组合（macOS arm64/x64、Windows x64/arm64、Linux x64/arm64 glibc）
+#     外加 universal 兜底包（os × cpu 全叉乘，给不在六种组合里的部署）。宿主矩阵外的平台（linux-arm64 / win32-arm64）
 #     不进矩阵，需要时本地点名 `pnpm run package --target=<名字>`（见 package.json 的 package:* 别名）。
 #
 # 产物命名与单一事实源：`dshana-v<version>[-<target>].zip`；version 取自 package.json，
@@ -80,7 +80,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [linux-x64, darwin-arm64, darwin-x64, win32-x64, universal]
+        target: [linux-x64, darwin-arm64, darwin-x64, win32-x64, linux-arm64, win32-arm64, universal]
 
     steps:
       - uses: actions/checkout@v7
@@ -225,7 +225,7 @@ jobs:
           echo "=== release assets ==="; echo "$ASSETS"; echo ""
 
           REQUIRED=""
-          for t in linux-x64 darwin-arm64 darwin-x64 win32-x64; do
+          for t in linux-x64 darwin-arm64 darwin-x64 win32-x64 linux-arm64 win32-arm64; do
             REQUIRED="$REQUIRED dshana-v${VER}-${t}.zip dshana-v${VER}-${t}.zip.sha256"
           done
           REQUIRED="$REQUIRED dshana-v${VER}.zip dshana-v${VER}.zip.sha256"
