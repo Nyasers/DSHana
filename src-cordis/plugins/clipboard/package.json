@@ -1,6 +1,6 @@
 {
   "name": "@dshana/clipboard",
-  "version": "1.0.0-rc.19+dsh-0.1.7-alpha.2",
+  "version": "1.0.0-rc.20+dsh-0.1.7-rc.1",
   "private": true,
   "type": "module",
   "main": "index.js",
