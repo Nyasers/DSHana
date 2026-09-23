@@ -75,6 +75,31 @@ export function assertParseableModule(file, label = basename(file)) {
 }
 
 /**
+ * 产物闸：服务半产物里不得出现构建机的源码路径（暂存树路径）。
+ *
+ * 为什么非得在构建期拦：路径元数据（import.meta.url 一类）被静态求值后，产物会把构建机的
+ * 暂存树路径冻进去，运行期从那里解析依赖；这个错误只在真机、只在走到那条引用路径时才现形，
+ * 构建期不拦就等于赌「用户机器上恰好没有这棵树」。
+ * @param file - 产物路径
+ * @param pkgDir - 该包的源码树根（暂存树），泄漏点必然是它
+ * @param label - 报错里指代它的名字
+ */
+export function assertNoSourcePathLeak(file, pkgDir, label = basename(file)) {
+  const text = fs.readFileSync(file, "utf8");
+  const normalized = String(pkgDir).replace(/\\/g, "/");
+  // 三种形态都查：URL 形态（file:///…）、正斜杠、本机分隔符。产物里的路径字面通常前两种。
+  for (const probe of [...new Set([pathToFileURL(pkgDir).href, normalized, String(pkgDir)])]) {
+    const at = text.indexOf(probe);
+    if (at < 0) continue;
+    const snippet = text.slice(Math.max(0, at - 60), at + probe.length + 60).replace(/\s+/g, " ").trim();
+    throw new Error(
+      `产物含构建机源码路径（${label}）：${probe}\n  现场：…${snippet}…\n` +
+        "  路径元数据（import.meta.url 等）应保留给运行时求值（见本文件 module.parser.javascript.importMeta）。",
+    );
+  }
+}
+
+/**
  * 打一个包的 server 半（单文件 ESM bundle）。
  * @param opts - { id, pkgDir, outDir, entry, outFile }：id = 包名；pkgDir = 源码树根
  *   （stage 树，entry 相对它）；outDir = lib 目标目录；entry 缺省 src/index.ts；
@@ -101,6 +126,15 @@ export async function buildServerBundle({ id, pkgDir, outDir, entry = "src/index
     externalsType: "module",
     externals: [(ctx, cb) => (isBare(ctx.request) ? cb(null, ctx.request) : cb())],
     module: {
+      // import.meta 的路径元数据必须留给运行时求值：解析器按「模块自身的源码路径」静态求值
+      // （默认行为），冻进产物就成了构建机暂存树的路径——运行期拿它当锚点解析依赖，本机恰好还有
+      // 那棵树时是 MODULE_NOT_FOUND，别的机器上锚点根本不存在。上游发布产物保留 import.meta.url，
+      // 这里对齐（`false` = 不静态替换，交给运行时）。
+      parser: {
+        javascript: {
+          importMeta: { url: false, dirname: false, filename: false },
+        },
+      },
       rules: [
         {
           test: /\.tsx?$/,
@@ -136,5 +170,6 @@ export async function buildServerBundle({ id, pkgDir, outDir, entry = "src/index
     });
   });
   assertParseableModule(out, `${id} 的 server 半（${outFile}）`);
+  assertNoSourcePathLeak(out, pkgDir, `${id} 的 server 半（${outFile}）`);
   return { id, out };
 }
