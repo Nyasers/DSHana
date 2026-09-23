@@ -217,7 +217,8 @@ jobs:
           node -e '
             const fs = require("node:fs");
             const merged = {};
-            for (const dir of fs.readdirSync("facts")) Object.assign(merged, fs.readJsonSync("facts/" + dir + "/package-facts.json"));
+            const files = fs.readdirSync("facts", { recursive: true }).map(String).filter((f) => f.endsWith("package-facts.json"));
+            for (const f of files) Object.assign(merged, JSON.parse(fs.readFileSync("facts/" + f, "utf8")));
             if (Object.keys(merged).length === 0) { console.error("::error::没有可用的产物事实"); process.exit(1); }
             fs.writeFileSync("facts.json", JSON.stringify(merged, null, 2));
             console.log("facts:", Object.keys(merged).join(", "));
