@@ -254,3 +254,29 @@ test("侧栏面的加载底色与注入后同源（同一对规则 + 页面取�
     "侧栏页底色要按「DSH token → 同一个宿主变量 → 纸张」逐级兜底，才能在注入前后不跳色",
   );
 });
+
+test("TOKEN_MAP：差异语义色接宿主绿红（文件对比与代码块用同一套读法）", () => {
+  const map = new Map(TOKEN_MAP);
+  // 上游这两族的值是硬编码调色板 tint（浅色 rgb(230,244,231)、深色 rgb(31,49,36)），不随主题走——
+  // 不接的话同一张界面上会同时出现宿主的绿与 dsh 的绿。接法分两层：底与行号区是“绿/红掺进页面底”
+  // 的淡色，标记 / 代码块差异底是饱和语义色。两族的档位关系不同（代码块差异底直接铺在页面上，
+  // 没有代码块那一层垫底），所以不在同一个偏移量上。
+  const expect = {
+    "--dsw-alias-file-diff-added-bg": { of: "--bg", shift: 12, with: "--green" },
+    "--dsw-alias-file-diff-added-gutter": { of: "--bg", shift: 6, with: "--green" },
+    "--dsw-alias-file-diff-added-marker": "--green",
+    "--dsw-alias-file-diff-deleted-bg": { of: "--bg", shift: 12, with: "--danger" },
+    "--dsw-alias-file-diff-deleted-gutter": { of: "--bg", shift: 6, with: "--danger" },
+    "--dsw-alias-file-diff-deleted-marker": "--danger",
+    "--dsw-alias-code-diff-added": { of: "--bg", shift: 10, with: "--green" },
+    "--dsw-alias-code-diff-deleted": { of: "--bg", shift: 10, with: "--danger" },
+  };
+  for (const [k, v] of Object.entries(expect)) {
+    assert.deepEqual(map.get(k), v, k + " 规则缺失或改变");
+  }
+  // 掺色方向必须是绿/红本身，不能落到默认对比色（--text）上：那会把差异底染成灰调带子。
+  for (const [k, v] of Object.entries(expect)) {
+    if (typeof v !== "object") continue;
+    assert.equal(typeof v.with, "string", k + " 的偏移没写定向掺色变量");
+  }
+});

@@ -139,6 +139,23 @@ export const TOKEN_MAP: ReadonlyArray<AdapterRule> = [
   // idle 点是“连接空闲”态的着色（ui-primitives 的 StateDot），上游取中性灰（neutral-300 / 600）。
   // 宿主没有 idle 语义位，取最近的中性弱文字色，与 label-dimmed / label-caption 同源。
   ["--dsw-alias-state-idle-primary", "--text-muted"],
+  // 差异语义色（绿=新增、红=删除）：两处消费方同属一族。
+  //   · 文件对比（ui-deliverables 的 FileDiff.module.css）：--dsw-alias-file-diff-* 三档——
+  //     代码区底、行号区底、行首标记；
+  //   · 代码块内的行差异（ui-primitives 的 DiffBlock.module.css）：--dsw-alias-code-diff-*。
+  // 上游给的是硬编码调色板 tint（浅色 rgb(230,244,231) 一族，深色 rgb(31,49,36) 一族），不跟主题
+  // 走——不接的话同一张界面上会同时出现宿主的绿与 dsh 的绿。
+  // 接法：底与行号区是“绿/红掺进页面底”的淡色（shift 定向掺 with，不用 --text 的对比方向），
+  // 标记与代码块底是饱和语义色直连 --green / --danger。两套明暗自动成立，不必分写。
+  // 档位关系对应上游：代码区底最浓、行号区更淡（上游那两个值也只有一点点差）。
+  ["--dsw-alias-file-diff-added-bg", { of: "--bg", shift: 12, with: "--green" }],
+  ["--dsw-alias-file-diff-added-gutter", { of: "--bg", shift: 6, with: "--green" }],
+  ["--dsw-alias-file-diff-added-marker", "--green"],
+  ["--dsw-alias-file-diff-deleted-bg", { of: "--bg", shift: 12, with: "--danger" }],
+  ["--dsw-alias-file-diff-deleted-gutter", { of: "--bg", shift: 6, with: "--danger" }],
+  ["--dsw-alias-file-diff-deleted-marker", "--danger"],
+  ["--dsw-alias-code-diff-added", { of: "--bg", shift: 10, with: "--green" }],
+  ["--dsw-alias-code-diff-deleted", { of: "--bg", shift: 10, with: "--danger" }],
   // ---- alias 层补漏 ----
   // 办法：从引擎自带的 DSH 前端 CSS/JS 反推全部 --dsw-* 用量，与规则表做差集。
   // 结论：font*、static-*（除下面单列的四个层次位）、elevation-/shadow-/mask、corner-shape

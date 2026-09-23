@@ -1,6 +1,6 @@
 {
   "package": "@deepseek-ai/dsh-api-session-controller",
-  "upstreamVersion": "0.1.7-alpha.2",
+  "upstreamVersion": "0.1.7-rc.1",
   "upstreamDir": "packages/api/session-controller",
   "halves": {
     "client": false,
