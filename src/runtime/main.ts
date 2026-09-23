@@ -30,6 +30,7 @@ import { randomUUID } from "node:crypto";
 import http from "node:http";
 import { parseRuntimeConfig, UsageError, USAGE } from "#/runtime/options.ts";
 import { startDshBridge } from "#/runtime/bridge.ts";
+import { checkCwd } from "#/runtime/cwd-check.ts";
 import { info, warn, err } from "#/runtime/log.ts";
 import { runtimeErrorState } from "#/lib/runtime-error.ts";
 // @hana/app-sdk 为 devDependencies（file:vendor/hana-app-sdk/hana-app-sdk.tgz，版本随宿主
@@ -492,6 +493,15 @@ export async function main(argv: string[]): Promise<number> {
           if (busy) throw new Error("DSH 仍有运行中/排队中的任务，先结束或停止它们再切换数据源。");
           info("switch-gate：无在途工作，允许切换数据源（prepare-switch）");
           return { ready: true };
+        }
+        if (action === "cwd-check") {
+          // App 侧（lib/session-run.js）在 create 之前问一次：cwd 是给本进程及其子进程用的，
+          // 判定必须出自看得见用户路径的这一侧（宿主半的 fs 只覆盖应用自己的目录）。
+          const result = await checkCwd(args && args.cwd);
+          const target = String((args && args.cwd) || "");
+          if (result.ok) info("cwd-check：可用 " + target);
+          else info("cwd-check：不可用 code=" + String(result.code) + "（" + String(result.message) + "）：" + target);
+          return result;
         }
         if (action === "models-refresh") {
           // 宿主模型/提供商变更：App 侧（lib/model-sync.js）订阅 app_event/models-changed 后

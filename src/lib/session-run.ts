@@ -26,7 +26,6 @@
 // create/send 描述「新建会话 / 续已有会话」这两个动作，映射在 tools/actions/open.ts 与
 // tools/actions/reply.ts 的 submit 调用处完成。
 import { isAbsolute, join } from "node:path";
-import { statSync, type Stats } from "node:fs";
 import { appCtx, appDataDir } from "#/lib/app-runtime.ts";
 import { currentDshHome } from "#/lib/data-source.ts";
 import { ensureManagedRuntime } from "#/lib/managed-runtime.ts";
@@ -36,7 +35,7 @@ import { withSessionTurn, enterSessionTurn } from "#/lib/session-serialize.ts";
 import { readDshDefaultModel } from "#/lib/config.ts";
 import { callerPlanDeps, resolveCallerPlan } from "#/lib/caller-model.ts";
 import { serviceBase } from "#/lib/service-base.ts";
-import { rpcViaControl } from "#/lib/controller.ts";
+import { rpcViaControl, invokeControl } from "#/lib/controller.ts";
 import { resolveTaskTimeoutSec, resolveApprovalTimeoutMs, cancelSessionWork } from "#/lib/cancel-chain.ts";
 
 /** 取错误的可读文本。catch 到的值类型未知，字段访问一律经这里。 */
@@ -230,7 +229,7 @@ function logLine(log, msg) {
 /**
  * create/send 提交入口（tools/actions/open.ts / tools/actions/reply.ts 调用）。返回 { promise, ready }：
  *   ready  —— prompt 被 DSH 接受后 resolve loc { action, sessionId, rpcId, taskId, cwd }；
- *             提交阶段失败（runtime 起不来/会话建立失败/模型不可用/prompt 拒绝）
+ *             提交阶段失败（runtime 起不来 / cwd 不可用 / 会话建立失败 / 模型不可用 / prompt 拒绝）
  *             时 reject（任务已 fail 标记，错误直接抛给 execute）。
  *   promise —— 后台继续等到 Hana task 终态并释放同会话串行化锁（fire-and-forget；
  *             终态结果由宿主投递到来源会话）。调用方 catch 记录即可，不 await。
@@ -270,33 +269,46 @@ export interface DshSubmitInput {
   log?: { info?: (msg: string) => void; warn?: (msg: string) => void; error?: (msg: string) => void };
 }
 /**
- * open 的 cwd 必须是「绝对路径 + 已存在的目录」。
+ * open 的 cwd 契约：绝对路径 + 已存在的目录。
  *
- * 三条各管一件事：
- *   · 绝对——App 与受管 runtime 是两个进程，相对路径在两侧会解析出不同基准（校验在这里、使用在
- *     那边），先要求绝对就不存在这个歧义；
- *   · 存在——cwd 会被记进会话头，之后每一次 spawn（bash 工具、终端）都从它出发，目录不在等于
- *     整条会话的每个命令都起不来；
- *   · 是目录——指向文件时各平台的失败方式同样没有指向。
+ * 为什么拆成两段：
+ *   · 「绝对」在这里判就行，纯字符串判断，两条进程（App / 受管 runtime）的解析基准不同，先说清楚
+ *     要求绝对就不存在这个歧义；
+ *   · 「存在 / 是目录」**不能**在这里判——宿主半的 node:fs 只覆盖应用自己的目录（应用包 + dataDir），
+ *     用户侧路径 stat 不到，而那个失败与「目录不存在」在 errno 上分不开，于是每个合法 cwd 都会被
+ *     判成不存在。它改由受管 runtime 判（控制面 cwd-check），那是真正 spawn 命令、也真正用这个
+ *     cwd 的进程。
+ *
  * 在提交前拒掉，比生出一条「每个命令都死」的会话便宜：会话一旦建立，cwd 就是记录值。
  */
-export function requireUsableSessionCwd(cwd: string): void {
+export function assertAbsoluteSessionCwd(cwd: string): void {
   if (!isAbsolute(cwd)) {
     throw new Error("open 的 cwd 必须是绝对路径（相对路径在 App 与受管 runtime 两侧解析基准不同）：" + cwd);
   }
-  let stats: Stats;
-  try {
-    stats = statSync(cwd);
-  } catch {
-    throw new Error("open 的 cwd 不存在（会话的每次 spawn 都从它出发，先建好目录再开）：" + cwd);
+}
+
+/** runtime 的 cwd-check 回执 → 拒绝理由；可用时返回 null。纯函数，错误文案在这里定稿。 */
+export function sessionCwdRejection(check: unknown, cwd: string): Error | null {
+  const r = (check || {}) as { ok?: unknown; isDirectory?: unknown; code?: unknown; message?: unknown };
+  if (r.ok === true) {
+    return r.isDirectory === false ? new Error("open 的 cwd 不是目录：" + cwd) : null;
   }
-  if (!stats.isDirectory()) throw new Error("open 的 cwd 不是目录：" + cwd);
+  const code = typeof r.code === "string" ? r.code : "";
+  if (code === "ENOENT") {
+    return new Error("open 的 cwd 不存在（会话的每次 spawn 都从它出发，先建好目录再开）：" + cwd);
+  }
+  if (code === "ENOTDIR") return new Error("open 的 cwd 不是目录：" + cwd);
+  // 「有但用不了」不许伪装成「不存在」：errno 与原始原因都要带出来，否则排查只能靠猜。
+  const reason = code
+    ? code + (typeof r.message === "string" && r.message ? "：" + r.message : "")
+    : String(r.message || "未知原因");
+  return new Error("open 的 cwd 不可用（" + reason + "）：" + cwd);
 }
 
 export function submitDshTask({ action, input, callToken, log }: DshSubmitInput): DshSubmitHandle {
   const parsed = normalizeCreateSend({ action, input });
   // 只验 create：send 的 cwd 沿用会话已有值，而那一刻的目录在建立会话时已经验过
-  if (parsed.action === "create") requireUsableSessionCwd(parsed.cwd);
+  if (parsed.action === "create") assertAbsoluteSessionCwd(parsed.cwd);
   const ctx = appCtx();
   const dataDir = appDataDir();
   if (!ctx || !dataDir) {
@@ -365,6 +377,20 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
         throw e;
       }
       const base = serviceBase();
+
+      // ②′ cwd 可用性：runtime 起来了才问得到（create 才需要；send 沿用会话已有值）。
+      // 查得失败不拦——控制面犯浑不该把合法 cwd 一起拒掉，真有问题由 provider 级守卫（spawn
+      // 时的工作目录检查）与命令自身的报错兜住。
+      if (parsed.action === "create") {
+        let check: unknown = null;
+        try {
+          check = await invokeControl(ctx, "cwd-check", { cwd: parsed.cwd }, { timeoutMs: 10000 });
+        } catch (e) {
+          logLine(log, "[dsh-session][warn] cwd 可用性查询失败（继续）：" + errText(e));
+        }
+        const rejected = check === null ? null : sessionCwdRejection(check, parsed.cwd);
+        if (rejected) throw rejected;
+      }
 
       // ③ 会话模型：显式入参 > 用户设的默认（DSH 自己生效，不用我们动手）> 调用方角色卡（create 才补）
       // 它随 create / prompt 的请求一起下传（集成层给这两个请求加了可选 model）：会话就地装上，
