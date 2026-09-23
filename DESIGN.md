@@ -22,20 +22,26 @@
 
 ## 工具链前提
 
-Node 版本下界是 `^22.18.0 || >=23.6.0`，四件事各管一职：
+Node 版本下界是 `^22.22.2 || ^24.15.0 || ^26.8.1`，五件事各管一职：
 
-- `.nvmrc`（26.8.1）是实际使用的版本；
+- `.nvmrc`（26.8.1）是实际使用的版本，也是宿主（Hana 宿主进程）的 Node 版本，26 线的下界即取它；
 - `package.json` 的 `engines.node` 是唯一真源（机器可读声明）；
 - `scripts/shared/root.mts` 加载时**从 `engines.node` 读范围**并断言版本，不满足即抛出可读错误，
   退出码 1（环境前提不满足，与“用户输入错误”的 2 分开）；主要入口都 import 它，这是真正拦得住的
   那一处（pnpm 对**根项目**的 engines 不做强制，实测即便 `--engine-strict` 也照常安装）；
+- `scripts/check/engines.cjs`（`pnpm run check:engines`）扫依赖树报出各包的 `engines.node` 约束与
+  多版本包，用来核对下界该取到哪：下界不得低于工具链自身声明的约束；
 - `tests/node-version.test.mjs` 枚举 `package.json` 里所有以 TypeScript 直跑的入口，断言它们的
   import 闭包都触达 `shared/root.mts`——“新增入口忘了 import”这条只能靠它抦住。
 
-下界的依据：`scripts/**/*.mts` 与 `src/build.ts` / `src-cordis/build.ts` 都以 `node <file>` 直跑
-（`package.json` 的 scripts 都这么调），靠 Node 原生类型剥离（22.18 / 23.6 起默认启用，此前需要
-`--experimental-strip-types`）；低于下界时这批脚本在运行期才炸，而 `scripts/check/typecheck.mts`
-只做静态检查、管不到运行期。
+下界的依据：三条线就是本仓已知的三条大版本，每条的下界不得低于依赖树里最严的那条约束。当前最严的
+是 pnpm 自带包管理器引导层 `corepack` 的 `^22.22.2 || ^24.15.0 || >=26.0.0`——22 / 24 两线照抄它
+的下界，26 线取 `.nvmrc` 的实际版本（`^26.8.1`，与宿主同步；`^` 不跨大版本，等于只承诺这三条线，
+不预支 27+）。
+类型剥离本身只要求 22.18 / 23.6（此前需要 `--experimental-strip-types`），低于依赖约束、不构成下界：
+`scripts/**/*.mts` 与 `src/build.ts` / `src-cordis/build.ts` 都以 `node <file>` 直跑（`package.json`
+的 scripts 都这么调），低于下界时这批脚本在运行期才炸，而 `scripts/check/type.mts` 只做静态检查、
+管不到运行期。
 
 范围的写法限定为 `^x.y.z` / `>=x.y.z` / `x.y.z` 并用 `||` 连接（见 `satisfiesNodeRange`）；
 遇到别的写法它当场抛错、不静默放行，也不引入 semver 依赖（这条字符串是本仓自己维护的，为一个
