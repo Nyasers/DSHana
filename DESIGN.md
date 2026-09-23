@@ -139,7 +139,7 @@ DSH 的 workspace 选择对话框来自 `directory-picker` seam（宿主半列�
 ## 已知限制
 
 - **升级 DSH = 装新 App 包 + 重启宿主**：宿主进程内的模块缓存无法从插件侧豁免。
-- **bash 工具在 Windows 上可能 `E_ACCESSDENIED`**（dsh-bash-sandbox 的环境限制）。文件系统工具正常，Windows 上优先用文件系统工具。
+- **Windows 上的命令执行是 `pwsh`**：base 组合按平台互斥挂载 shell 行（`tool-bash` / `bash-sandbox` 在 win32 停，`tool-pwsh` / `pwsh-sandbox` 只在 win32 开），派给子代理的命令按 PowerShell 写；文件读写仍走文件系统工具。
 - **主题仅在 DSH 偏好为 system 时跟随宿主**（见上，有意为之）。
 - 越界权限请求默认走审批：deferred 通知 → `dshana(action="approve")` 应答；无人应答按 `approvalTimeoutSec` 自动拒绝。
 
