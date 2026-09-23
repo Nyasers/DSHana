@@ -31,7 +31,7 @@ Node 版本下界是 `^22.22.2 || ^24.15.0 || ^26.8.1`，五件事各管一职�
   那一处（pnpm 对**根项目**的 engines 不做强制，实测即便 `--engine-strict` 也照常安装）；
 - `scripts/check/engines.cjs`（`pnpm run check:engines`）扫依赖树报出各包的 `engines.node` 约束与
   多版本包，用来核对下界该取到哪：下界不得低于工具链自身声明的约束；
-- `tests/node-version.test.mjs` 枚举 `package.json` 里所有以 TypeScript 直跑的入口，断言它们的
+- `tests/build/node-version.test.mjs` 枚举 `package.json` 里所有以 TypeScript 直跑的入口，断言它们的
   import 闭包都触达 `shared/root.mts`——“新增入口忘了 import”这条只能靠它抦住。
 
 下界的依据：三条线就是本仓已知的三条大版本，每条的下界不得低于依赖树里最严的那条约束。当前最严的
@@ -162,7 +162,7 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 - App 侧封装 `src/lib/managed-runtime.ts`：`ensureManagedRuntime()`（单例 single-flight：**一个 App runtime 服务多个 DSH 会话**，首次 create 触发启动——设计见模块头注释与 tools/actions 的提交链）父进程随机选取中继端口与 DSH 内部端口（区间 38000..52000，见 `choosePort`/`pickPorts`；宿主 service 端口契约只收确定整数，故不能交给宿主分配）→ `ctx.runtime.start({ runtime:"node", entry:"runtime/dsh-host.mjs", profile:"local-machine", network:"external", cwd:dataDir, service:{ port:中继端口, readyMarker:带随机 opaque }, args:[私有配置文件路径] })`（契约禁止 readRoots/writeRoots/callToken/taskId，故一律不带） → `ctx.runtime.get` 轮询到 ready（不能把 runtimeId 当就绪；端口占用 port-busy 自动换随机端口重试，上限 3 次）→ 失败归类（`err.code`：port-busy/deps/seed/boot-failed/not-authorized/timeout/unknown，message 带用户指引）+ runtime watch 日志尽力镜像（src=dsht 进 App 会话日志）；每次命中 ready 缓存先经 runtime.get 探活，子进程崩溃/被宿主回收则清单例并重起；失败路径把端口与两把 key 归零（`bridgeAccess()` 不再放出死端口）；`disposeManagedRuntime()`/`stopManagedRuntime()`（App 卸载/更新前停 runtime，Windows .node 锁纪律）；`choosePort`/`pickPorts`/`makeReadyMarker`/`classifyRuntimeFailure` 纯函数可单测。
 - `src/tools/actions/*.ts` 接 `src/lib/session-run.ts`（open/reply 提交链）、`src/lib/cancel-chain.ts`（close 取消链）与 `src/lib/approve-respond.ts`（approve 应答）；`get`/`list` 离线可读。`src/index.ts` disposer 接 disposeManagedRuntime。
 - `src/build.ts` 增 runtime bundle 编译（先主 bundle 清 dist，再追加 runtime/，再做 URL 回写/terser/断言）。
-- 单测 `tests/*.test.mjs`（node --test）：child options parse、managed-runtime 端口/参数/错误归类、readyMarker 构造。本地验证：`node src/build.ts` 通过；`node dist/runtime/dsh-host.mjs` 直跑给出清晰报错（无父 IPC / 缺参）。真机 AppHost 验收仍待装包（边界清单见本节末）。
+- 单测 `tests/**/*.test.mjs`（node --test，分组见 tests/README.md）：child options parse、managed-runtime 端口/参数/错误归类、readyMarker 构造。本地验证：`node src/build.ts` 通过；`node dist/runtime/dsh-host.mjs` 直跑给出清晰报错（无父 IPC / 缺参）。真机 AppHost 验收仍待装包（边界清单见本节末）。
 
 **依赖部署：随包物化（自包含打包）**
 
