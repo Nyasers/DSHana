@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.0-rc.20+dsh-0.1.7-rc.1](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.19%2Bdsh-0.1.7-alpha.2...v1.0.0-rc.20%2Bdsh-0.1.7-rc.1) (2026-09-23)
+
+### Features
+
+* **dsh:** pin 0.1.7-alpha.2 → 0.1.7-rc.1 ([1ebc349](https://github.com/Nyasers/DSHana/commit/1ebc349f018eb66c942d8fdde27bf99f0e8e4108))
+* **theme:** 差异语义色接宿主绿红（file-diff 六条 + code-diff 两条） ([92a7c47](https://github.com/Nyasers/DSHana/commit/92a7c47e7ef6f33b8815b12f019c92712559d2be))
+
+### Bug Fixes
+
+* **shell:** 补回 owner 失联时的兜底自取，发布签名带上 logTail 内容 ([bd58e75](https://github.com/Nyasers/DSHana/commit/bd58e75047dc470571d614da8420e45116bf8c71)), references [#161](https://github.com/Nyasers/DSHana/issues/161)
+
+### Performance Improvements
+
+* **shell:** boot-state 去重判据改成「快照在不在」 ([ed5d16c](https://github.com/Nyasers/DSHana/commit/ed5d16c869b0fae6712ee82ef0a511ede77d4dd1))
+
 ## [1.0.0-rc.19+dsh-0.1.7-alpha.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.18%2Bdsh-0.1.7-alpha.2...v1.0.0-rc.19%2Bdsh-0.1.7-alpha.2) (2026-09-23)
 
 ### Bug Fixes
@@ -540,6 +555,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
