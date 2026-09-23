@@ -1,25 +1,27 @@
-# Release — 并发矩阵出包（4 平台 + 通用兜底）+ 单点发布
+# Release — 并发矩阵出包（6 平台 + 通用兜底）+ 单点发布
 #
 # 触发：push tag v*（发版）/ workflow_dispatch（手动，仅出 artifact 不建 release）
 #
-# 三段式（骨架对齐宿主 openhanako build.yml，按本项目交付物裁剪）：
+# 四段式（骨架对齐宿主 openhanako build.yml，按本项目交付物裁剪）：
 #   create-release：先建 draft pre-release（已存在则跳过）——保证后续上传目标必然存在
 #   package：矩阵并发，每目标一个 runner（公开仓库分钟数免费，用并发换时间）。每 job 自包含
-#            （安装 + 构建 + 出包），产物名带目标后缀，zip + sha256 上传为 artifact。
-#   publish：needs package。下载全部 artifact → **单点上传**（写 release 的只有一个作业：多作业
-#            并发写同一 release 有互相覆盖的窗口，宿主 workflow 特意注明过；件与件之间互不相干，
-#            作业内按 -P 8 并发传，--clobber 幂等）→ 硬校验必需资产（缺一即
-#            fail，release 留 draft 供人工检查）→ **全部成功才去掉 draft、保留 prerelease**
-#            （不自动标 latest，稳定版由人工标记）。
+#            （安装 + 构建 + 出包），tag 场景把本目标那两份件直传 release；分支上的 dispatch
+#            只产 artifact，「单跑打包」靠这条成立。
+#   market-index：从各 target 随 artifact 走的事实（包名 / 字节数 / sha256）派生 entry、拼出
+#            index.v2.json，tag 场景直传 release。事实是几百字节的东西，不为它下整包。
+#   publish：needs package + market-index。只做硬校验（必需资产缺一即 fail，release 留 draft
+#            供人工检查）与去 draft、保留 prerelease（不自动标 latest，稳定版由人工标记）。
+# 上传者从单点改成各作业自负：每个上传者只写自己那几个文件名，件与件互不相干（宿主 workflow
+# 提示的覆盖窗口指的是同名件或 release 元数据的并发改写），--clobber 幂等。
 #
 # 与宿主 workflow 的关键差异：
 #   - 宿主需要 mac/win/linux 三平台 runner（要编译原生 helper、签名、公证）；本项目交付物是纯 JS +
 #     预编译依赖，各平台包都能在 ubuntu 上产出，矩阵不必跨 OS。
 #   - 宿主单建 renderer box 再分发给各平台（解决 tar mtime 导致"内容相同、字节不同"）；我们的包
 #     本就逐目标不同，不适用，故每 job 自包含，省掉 artifact 分发的接线。
-#   - 目标集对着宿主支持矩阵写：macOS arm64/x64、Windows x64、Linux x86_64（glibc）；
-#     另有 universal 兜底包（os × cpu 全叉乘）。宿主矩阵外的平台（linux-arm64 / win32-arm64）
-#     不进矩阵，需要时本地点名 `pnpm run package --target=<名字>`（见 package.json 的 package:* 别名）。
+#   - 目标集 = 六个 os × cpu 组合（macOS arm64/x64、Windows x64/arm64、Linux x64/arm64 glibc）
+#     外加 universal 兜底包（os × cpu 全叉乘，给不在六种组合里的部署）；本地点名
+#     `pnpm run package --target=<名字>` 也照样出包（见 package.json 的 package:* 别名）。
 #
 # 产物命名与单一事实源：`dshana-v<version>[-<target>].zip`；version 取自 package.json，
 # pack.mts 会断言 manifest 与 cordis 包版本一致，不一致直接拒包（fail-closed）。
@@ -75,12 +77,13 @@ jobs:
     # 用 !cancelled() 顶掉那个隐式前置：流水线被取消时不启动，其余情况按「上游非 failure」放行。
     if: ${{ !cancelled() && needs.create-release.result != 'failure' }}
     runs-on: ubuntu-24.04
+    # 写权限是为了 tag 场景直传自己那两份件；分支上的 dispatch 不碰 release。
     permissions:
-      contents: read
+      contents: write
     strategy:
       fail-fast: false
       matrix:
-        target: [linux-x64, darwin-arm64, darwin-x64, win32-x64, universal]
+        target: [linux-x64, darwin-arm64, darwin-x64, win32-x64, linux-arm64, win32-arm64, universal]
 
     steps:
       - uses: actions/checkout@v7
@@ -104,7 +107,38 @@ jobs:
       - name: Package ${{ matrix.target }}
         run: pnpm run package --target=${{ matrix.target }}
 
+      # 事实（包名 / 字节数 / sha256）随 artifact 走：清单作业只取这几百字节，不必为 size 下整包。
+      # artifact 归档自身的 size 是外层 zip 的大小，与包的字节数不是一回事，所以这里自己记。
+      - name: Record package facts
+        run: |
+          set -e
+          node -e '
+            const fs = require("node:fs");
+            const facts = {};
+            for (const f of fs.readdirSync("releases")) {
+              if (!f.endsWith(".zip")) continue;
+              facts[f] = {
+                size: fs.statSync("releases/" + f).size,
+                sha256: fs.readFileSync("releases/" + f + ".sha256", "utf8").trim().split(/\s+/)[0],
+              };
+            }
+            if (Object.keys(facts).length === 0) { console.error("::error::releases/ 里没有 zip"); process.exit(1); }
+            fs.writeFileSync("package-facts.json", JSON.stringify(facts, null, 2));
+            console.log("facts:", Object.keys(facts).join(", "));
+          '
+
+      - name: Upload package facts
+        uses: actions/upload-artifact@v7
+        with:
+          name: pkg-facts-${{ matrix.target }}
+          retention-days: 3
+          path: package-facts.json
+          if-no-files-found: error
+
+      # 分支上的 dispatch 没有 release 可写，产物以 artifact 形式留 3 天供人工取用；
+      # tag 场景走下一步直传 release，不必再占一份 artifact 存储。
       - name: Upload package artifacts
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         uses: actions/upload-artifact@v7
         with:
           name: pkg-${{ matrix.target }}
@@ -113,6 +147,23 @@ jobs:
             releases/*.zip
             releases/*.zip.sha256
           if-no-files-found: error
+
+      # 直传 release：本作业只写自己那两个文件名，件与件互不相干。
+      - name: Upload release assets
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -e
+          count=0
+          for f in releases/*.zip releases/*.zip.sha256; do
+            [ -f "$f" ] || continue
+            echo "  uploading $f"
+            gh release upload "$TAG" "$f" --clobber
+            count=$((count + 1))
+          done
+          [ "$count" -gt 0 ] || { echo "::error::no package assets to upload"; exit 1; }
 
   # 市场清单：从各 target 的产物派生 entry，并拼出 index.v2.json。
   # 索引模型是「每版本一个归档位」（item 只有 archive.url，没有平台维度），所以只放 universal，
@@ -124,8 +175,9 @@ jobs:
     # 所以 !cancelled() 必须与显式的 needs 判断成对出现：单加状态函数会把“上游必须成功”这层一并顶掉。
     if: ${{ !cancelled() && needs.package.result == 'success' }}
     runs-on: ubuntu-24.04
+    # 写权限是为了 tag 场景直传清单。
     permissions:
-      contents: read
+      contents: write
     steps:
       - uses: actions/checkout@v7
 
@@ -147,10 +199,12 @@ jobs:
       - name: Derive manifest
         run: pnpm run derive:manifest
 
-      - name: Download package artifacts
+      # 事实来自各 package 作业留下的小 artifact（几百字节），与 tag / dispatch 无关，只一条路径。
+      - name: Download package facts
         uses: actions/download-artifact@v8
         with:
-          path: artifacts
+          pattern: pkg-facts-*
+          path: facts
 
       - name: Derive market index
         env:
@@ -160,26 +214,43 @@ jobs:
         run: |
           set -e
           mkdir -p releases
-          find artifacts -name '*.zip' -exec cp {} releases/ \;
-          find artifacts -name '*.zip.sha256' -exec cp {} releases/ \;
+          node -e '
+            const fs = require("node:fs");
+            const merged = {};
+            for (const dir of fs.readdirSync("facts")) Object.assign(merged, fs.readJsonSync("facts/" + dir + "/package-facts.json"));
+            if (Object.keys(merged).length === 0) { console.error("::error::没有可用的产物事实"); process.exit(1); }
+            fs.writeFileSync("facts.json", JSON.stringify(merged, null, 2));
+            console.log("facts:", Object.keys(merged).join(", "));
+          '
           pnpm run index -- \
             --target universal \
             --base-url "https://github.com/${REPO}/releases/download/${TAG}" \
             --publisher "${OWNER}" \
             --source-id "dshana" \
             --name "DSHana" \
-            --out index.v2.json
+            --out index.v2.json \
+            --facts facts.json
           echo "--- index.v2.json (head) ---"
           head -c 400 index.v2.json
 
       - uses: actions/upload-artifact@v7
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         with:
           name: market-index
           retention-days: 3
           path: index.v2.json
           if-no-files-found: error
 
-  # 单点发布：所有出包成功后才跑到这里；任一出包失败则本 job 不执行，release 留在 draft。
+      # 清单自己传（tag 场景）：它必须在全部平台件落位之后，所以排在矩阵下游这一环。
+      - name: Upload index to release
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: gh release upload "$TAG" index.v2.json --clobber
+
+  # 收口：矩阵（打包 + 直传）与清单（派生 + 直传）都成功后才跑到这里；任一环失败则本 job 不执行，
+  # release 留在 draft。本作业不写任何资产，只做必需资产的硬校验与去 draft。
   publish:
     needs: [package, market-index]
     if: startsWith(github.ref, 'refs/tags/v')
@@ -188,31 +259,6 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Download all package artifacts
-        uses: actions/download-artifact@v8
-        with:
-          path: artifacts
-
-      # 单点上传：写 release 的只有本作业（多作业并发写同一 release 有互相覆盖的窗口），
-      # 件与件互不相干，所以作业内并发传（-P 8）；--clobber 幂等，补传不报错。
-      # 先落一份列表文件再数件数：0 件要在上传前就 fail，而不是让空列表静默通过。
-      - name: Upload release assets (single writer, parallel transfers)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
-        run: |
-          set -e
-          find artifacts -type f \( -name '*.zip' -o -name '*.zip.sha256' -o -name 'index.v2.json' \) -print0 > assets.list
-          count=$(tr -cd '\0' < assets.list | wc -c)
-          [ "$count" -gt 0 ] || { echo "::error::no package assets found in artifacts/"; exit 1; }
-          echo "uploading $count assets (-P 8)"
-          xargs -0 -t -P 8 -I{} gh release upload "$TAG" {} --clobber < assets.list
-
       # 硬校验：必需资产缺一个就 fail，release 停在 draft 供人工检查（不出现"残缺发布"）
       - name: Verify required assets
         env:
@@ -225,7 +271,7 @@ jobs:
           echo "=== release assets ==="; echo "$ASSETS"; echo ""
 
           REQUIRED=""
-          for t in linux-x64 darwin-arm64 darwin-x64 win32-x64; do
+          for t in linux-x64 darwin-arm64 darwin-x64 win32-x64 linux-arm64 win32-arm64; do
             REQUIRED="$REQUIRED dshana-v${VER}-${t}.zip dshana-v${VER}-${t}.zip.sha256"
           done
           REQUIRED="$REQUIRED dshana-v${VER}.zip dshana-v${VER}.zip.sha256"
@@ -243,7 +289,7 @@ jobs:
             echo "release 保持 draft 供人工检查"
             exit 1
           fi
-          echo "✓ 全部必需资产齐备（4 平台包 + 通用包，各带 sha256，外加市场清单 index.v2.json）"
+          echo "✓ 全部必需资产齐备（6 平台包 + 通用包，各带 sha256，外加市场清单 index.v2.json）"
 
       # 全部构建成功且资产齐备 → 去掉 draft、保留 prerelease（稳定版由人工标 latest）
       - name: Un-draft (keep prerelease)

@@ -108,3 +108,27 @@ test("LibreOffice 转换栈按平台声明：linux 走 wasm，其余各带本平
     assert.deepEqual(lo, [LO_KIT, `${LO_KIT}-${platform}`], `${name} 的转换栈应是原生 ${platform}`);
   }
 });
+
+/** 发布流水线里与目标表重复的两份清单：矩阵目标名、必需资产循环里的目标名。 */
+test("release.yml 的发布矩阵与必需资产清单跟目标表一致", () => {
+  const workflow = readFileSync(join(ROOT, ".github", "workflows", "release.yml"), "utf8");
+  const names = supportedTargetNames();
+  const platforms = names.filter((name) => name !== "universal");
+
+  const matrix = /target: \[([^\]]+)\]/.exec(workflow);
+  assert.ok(matrix, "release.yml 里找不到 package 矩阵的 target 列表");
+  assert.deepEqual(
+    matrix[1].split(",").map((name) => name.trim()).sort(),
+    [...names].sort(),
+    "发布矩阵的目标集与 supportedTargetNames() 不一致（顺序不算契约）",
+  );
+
+  const loop = /for t in ([^;]+); do/.exec(workflow);
+  assert.ok(loop, "release.yml 里找不到必需资产的 target 循环");
+  assert.deepEqual(
+    loop[1].trim().split(/\s+/).sort(),
+    [...platforms].sort(),
+    "必需资产的目标集与平台目标表不一致",
+  );
+  assert.match(workflow, /REQUIRED="\$REQUIRED dshana-v\$\{VER\}\.zip dshana-v\$\{VER\}\.zip\.sha256"/, "通用包与市场清单的必需资产行缺失");
+});
