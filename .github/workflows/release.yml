@@ -10,6 +10,8 @@
 #            release 有互相覆盖的窗口，宿主 workflow 特意注明过）→ 硬校验必需资产（缺一即
 #            fail，release 留 draft 供人工检查）→ **全部成功才去掉 draft、保留 prerelease**
 #            （不自动标 latest，稳定版由人工标记）。
+#   package-extra：宿主矩阵之外的两个平台单独一个手动作业（dispatch 且勾选才跑），只产
+#            artifact、不进 release——发版面因此钉死在宿主支持矩阵内。
 #
 # 与宿主 workflow 的关键差异：
 #   - 宿主需要 mac/win/linux 三平台 runner（要编译原生 helper、签名、公证）；本项目交付物是纯 JS +
@@ -18,7 +20,8 @@
 #     本就逐目标不同，不适用，故每 job 自包含，省掉 artifact 分发的接线。
 #   - 目标集对着宿主支持矩阵写：macOS arm64/x64、Windows x64、Linux x86_64（glibc）；
 #     另有 universal 兜底包（os × cpu 全叉乘）。宿主矩阵外的平台（linux-arm64 / win32-arm64）
-#     不进矩阵，需要时本地点名 `pnpm run package --target=<名字>`（见 package.json 的 package:* 别名）。
+#     走 `package-extra` 那个手动门远程出包，或本地点名 `pnpm run package --target=<名字>`
+#     （见 package.json 的 package:* 别名）。
 #
 # 产物命名与单一事实源：`dshana-v<version>[-<target>].zip`；version 取自 package.json，
 # pack.mts 会断言 manifest 与 cordis 包版本一致，不一致直接拒包（fail-closed）。
@@ -31,6 +34,11 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      extra_platforms:
+        description: 额外出 linux-arm64 / win32-arm64 两个平台件（只产 artifact，不进 release）
+        type: boolean
+        default: true
 
 jobs:
   # 先建 release（仅 tag 场景）：package/publish 都 needs 它，保证上传时 release 必已存在。
@@ -100,6 +108,49 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # prepackage 钩子自动前置 derive + build；pack 按目标做干净安装并断言该平台的预编译资产
+      - name: Package ${{ matrix.target }}
+        run: pnpm run package --target=${{ matrix.target }}
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: pkg-${{ matrix.target }}
+          retention-days: 3
+          path: |
+            releases/*.zip
+            releases/*.zip.sha256
+          if-no-files-found: error
+
+  # 宿主矩阵之外的两个平台：只在手动门里出包，默认不进 release。
+  # 与 package 分开成一个作业，是为了让发版面的资产集合可预测（tag 触发的运行里这个作业
+  # 根本不启动），也让这两个平台出包失败影响不到发布链路。
+  package-extra:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.extra_platforms }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [linux-arm64, win32-arm64]
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # package 链会跑 prepackage（derive + build），同样要读 submodule 的 tag。
+          submodules: recursive
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Package ${{ matrix.target }}
         run: pnpm run package --target=${{ matrix.target }}
 
