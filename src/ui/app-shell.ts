@@ -645,9 +645,12 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
   // 挂载、或 owner 已下线（pagehide 里删键）。
   // 不拿「写入时刻够不够新」当判据：状态不变正是健康时的常态，按时刻判会让 FP 在稳态里一直
   // 误判成过期，自己再打一路 HTTP——去重反而比不去重多一路。
-  // 代价如实记：owner 非正常消失（没跑到 pagehide）时键会留下，FP 停在最后一份快照上，直到自己
-  // 的兜底节拍 POLL_FALLBACK_MS 再读一次。
+  // owner 没打招呼就走（没跑到 pagehide）时键会留下，FP 会停在最后一份快照上：靠 POLL_REVERIFY_MS
+  // 这一条封顶——本面自己取到过状态后，每 POLL_REVERIFY_MS 再直取一次真值。判据挂在「距上次
+  // 自取多久」上，是随 now 推进的量，不会像快照时间戳那样在稳态里恒真。
   // 通道复用设置视图与会话选中那条（hana.storage.global + onChanged），不新开协议。
+  var POLL_REVERIFY_MS = 5 * 60 * 1000;
+  var lastOwnFetchAt = 0;
   var lastPublishedSig: string | null = null;
   function bootSig(s) {
     if (!s) return "";
@@ -655,7 +658,7 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
     return [
       s.phase || "", s.ready ? 1 : 0, s.runtimeId || "",
       (s.service && s.service.port) || "", e.code || "", e.userText || "", s.note || "",
-      Array.isArray(s.logTail) ? s.logTail.length : 0,
+      Array.isArray(s.logTail) ? s.logTail.join("\n") : "",
     ].join("|");
   }
   function publishBootState(s) {
@@ -667,6 +670,7 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
   }
   function fetchOwnState() {
     fetchState().then(function (s) {
+      lastOwnFetchAt = Date.now();
       if (!isSidebar) publishBootState(s);
       applySnapshot(s);
     }).catch(function (err) {
@@ -677,7 +681,10 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
   function poll(force = false) {
     if (!isSidebar) { fetchOwnState(); return; }
     readShared("boot-state").then(function (v) {
-      if (!force && v && v.state) { applySnapshot(v.state); return; }
+      if (!force && v && v.state && Date.now() - lastOwnFetchAt < POLL_REVERIFY_MS) {
+        applySnapshot(v.state);
+        return;
+      }
       fetchOwnState();
     }, function () { fetchOwnState(); });
   }
