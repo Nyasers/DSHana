@@ -1,6 +1,6 @@
 {
   "name": "dshana",
-  "version": "1.0.0-rc.22+dsh-0.1.7-rc.1",
+  "version": "1.0.0-rc.23+dsh-0.1.7-rc.1",
   "type": "module",
   "dependencies": {
     "@deepseek-ai/dsh": "0.1.7-rc.1"

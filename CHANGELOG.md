@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0-rc.23+dsh-0.1.7-rc.1](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.22%2Bdsh-0.1.7-rc.1...v1.0.0-rc.23%2Bdsh-0.1.7-rc.1) (2026-09-23)
+
+### Bug Fixes
+
+* **pack:** 出包断言清单补上 LibreOffice 转换栈，并加交付锁一致性闸 ([8a252fb](https://github.com/Nyasers/DSHana/commit/8a252fba24d1978318acfdaaf3d42ccf67186c28))
+* **release:** 清单作业合并事实改用 node:fs 的读法 ([a650e98](https://github.com/Nyasers/DSHana/commit/a650e984051ce0ad15bb39e0fcc08e6ed028f10e))
+
 ## [1.0.0-rc.22+dsh-0.1.7-rc.1](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.21%2Bdsh-0.1.7-rc.1...v1.0.0-rc.22%2Bdsh-0.1.7-rc.1) (2026-09-23)
 
 ### Bug Fixes
@@ -570,6 +577,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
