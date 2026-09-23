@@ -19,7 +19,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 - **默认模型**：DSH 自己的 `agent-default-model`（`DSH_HOME/settings.yaml`）——用户层为空时回落到 base 层那份官方路由。界面里直接开的会话在 DSH 自己的模型选择器里选一条，候选就是宿主目录那几条；App 设置页只列候选给「会话模型」用，不经手这格。
 - **目录选择器**：DSH 的 workspace 选择对话框由 `directory-picker` seam 提供，官方 web-app 层挂的 `directory-picker-auto` 在 win32 + loopback 下挑 native；native 的客户端半优先读页面里的 `__DSH_DIRECTORY_PICKER__`（官方桌面壳由 preload 注入、弹 Electron 对话框），没桥才叫宿主进程的 OS chooser——后者要在宿主进程里 spawn 一个子进程跑 `IFileOpenDialog`（koffi 走 COM，还先合成一次 Alt 抢前台），上游写明它只适合「操作者坐在宿主屏幕前」，而本形态的受管 runtime 是沙箱里的后台子进程，开不出来。壳页在注入 DSH index 前把桥装上（`src/ui/dsh-inject.ts` 的 `installDirectoryPickerBridge`），弹窗改由宿主出：`hana.resources.pick`，`mode=directory`。用户看到的是自己机器上的系统弹窗，选择器不经沙箱。
 - **数据目录**：固定用 App 内置独立目录（App 数据目录下的 `.dsh`），开箱即用；共享已有目录 / 切换数据源暂不提供。
-- `dshana(action="open")` 每次调用**必须显式传 `cwd`**；它必须是**已存在的绝对目录**（App 在提交前校验：相对路径 / 不存在 / 不是目录一律拒掉）。会话一旦建立，cwd 就是记录值，之后每次 spawn（命令、终端）都从它出发——别拿一次性 scratch 目录当会话根。
+- `dshana(action="open")` 每次调用**必须显式传 `cwd`**；它必须是**已存在的绝对目录**（提交前校验，分两段：相对路径在 App 侧直接拒掉；「存在 / 是目录」由受管 runtime 的控制面动作 `cwd-check` 判——App 宿主半的 `node:fs` 只覆盖应用自己的目录，用它 stat 用户路径会一律失败，而那个失败与「目录不存在」分不开）。会话一旦建立，cwd 就是记录值，之后每次 spawn（命令、终端）都从它出发——别拿一次性 scratch 目录当会话根。
 
 ## DSHana 卡三态
 
