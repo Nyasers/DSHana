@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0-rc.21+dsh-0.1.7-rc.1](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.20%2Bdsh-0.1.7-rc.1...v1.0.0-rc.21%2Bdsh-0.1.7-rc.1) (2026-09-23)
+
+### Bug Fixes
+
+* **build:** server 半产物不再冻入构建机路径（import.meta 交给运行时） ([47e18f3](https://github.com/Nyasers/DSHana/commit/47e18f3b4b9f2f49fa1c982d859dc457ecc5c59a))
+* **terminal:** 会话工作目录不可用时显式拒绝，不再落到裸退出码 ([e855155](https://github.com/Nyasers/DSHana/commit/e8551559736e5d63ce1c340c4a73ae4045007039))
+
 ## [1.0.0-rc.20+dsh-0.1.7-rc.1](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.19%2Bdsh-0.1.7-alpha.2...v1.0.0-rc.20%2Bdsh-0.1.7-rc.1) (2026-09-23)
 
 ### Features
@@ -555,6 +562,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
