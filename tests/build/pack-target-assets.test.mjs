@@ -143,3 +143,22 @@ test("release.yml 不内联脚本，事实两步走仓库里的入口", () => {
   assert.match(workflow, /run: pnpm run facts:record/, "出包作业没调 facts:record");
   assert.match(workflow, /--facts-dir facts\b/, "清单作业没从事实目录取数");
 });
+
+/**
+ * gh 默认靠工作树里的 .git 认仓库。收口作业不 checkout（它不碰工作树），所以它的每个 gh 调用都必须
+ * 用 -R 显式给出仓库 —— 漏一个就是「failed to run git: not a git repository」，而且只到真发版才暴露。
+ */
+test("不 checkout 的作业里，每个 gh 调用都显式给出仓库", () => {
+  const workflow = readFileSync(join(ROOT, ".github", "workflows", "release.yml"), "utf8");
+  const from = workflow.indexOf("\n  publish:");
+  assert.ok(from > 0, "找不到 publish 作业");
+  const to = workflow.indexOf("\n# 注入防护", from);
+  const publish = workflow.slice(from, to > 0 ? to : workflow.length);
+
+  assert.ok(!publish.includes("actions/checkout"), "publish 不应再引入 checkout（它只跑 gh）");
+  const calls = publish.split("\n").filter((line) => /\bgh release (view|edit|upload|download)\b/.test(line));
+  assert.ok(calls.length >= 2, `publish 里的 gh 调用只剩 ${calls.length} 处，闸失去意义`);
+  for (const line of calls) {
+    assert.match(line, /-R "\$REPO"/, `publish 的 gh 调用缺 -R "$REPO"：${line.trim()}`);
+  }
+});

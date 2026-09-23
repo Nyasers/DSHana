@@ -227,7 +227,8 @@ jobs:
         run: gh release upload "$TAG" index.v2.json --clobber
 
   # 收口：矩阵（打包 + 直传）与清单（派生 + 直传）都成功后才跑到这里；任一环失败则本 job 不执行，
-  # release 留在 draft。本作业不写任何资产，只做必需资产的硬校验与去 draft。
+  # release 留在 draft。本作业不写任何资产，只做必需资产的硬校验与去 draft；它也没有 checkout，
+  # 因此每个 gh 调用都得用 -R 显式给出仓库（否则 gh 会去读 .git 而直接失败）。
   publish:
     needs: [package, market-index]
     if: startsWith(github.ref, 'refs/tags/v')
@@ -241,10 +242,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
         run: |
           set -e
           VER="${TAG#v}"
-          ASSETS=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+          ASSETS=$(gh release view "$TAG" -R "$REPO" --json assets --jq '.assets[].name')
           echo "=== release assets ==="; echo "$ASSETS"; echo ""
 
           REQUIRED=""
@@ -273,7 +275,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
-        run: gh release edit "$TAG" --prerelease --draft=false
+          REPO: ${{ github.repository }}
+        run: gh release edit "$TAG" -R "$REPO" --prerelease --draft=false
 
 # 注入防护：run 块内不裸插值 ${{ github.* }}。GitHub 在 Bash 解析**之前**展开表达式，
 # tag 里一个 " 加 ; 就能越出引号执行命令（CWE-78）。约定：凡进 shell 的 github 上下文字段
