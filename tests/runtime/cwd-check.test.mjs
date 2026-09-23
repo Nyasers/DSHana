@@ -13,10 +13,10 @@ import { join } from "node:path";
 
 import { checkCwd } from "../../src/runtime/cwd-check.ts";
 
-test("存在的目录 → ok + isDirectory=true", () => {
+test("存在的目录 → ok + isDirectory=true", async () => {
   const dir = mkdtempSync(join(tmpdir(), "dshana-cwd-check-"));
   try {
-    const r = checkCwd(dir);
+    const r = await checkCwd(dir);
     assert.equal(r.ok, true);
     assert.equal(r.isDirectory, true);
   } finally {
@@ -24,20 +24,20 @@ test("存在的目录 → ok + isDirectory=true", () => {
   }
 });
 
-test("不存在的路径 → ok=false，code=ENOENT", () => {
+test("不存在的路径 → ok=false，code=ENOENT", async () => {
   const missing = join(tmpdir(), "dshana-cwd-check-gone-" + Date.now());
-  const r = checkCwd(missing);
+  const r = await checkCwd(missing);
   assert.equal(r.ok, false);
   assert.equal(r.code, "ENOENT");
   assert.ok(r.message && r.message.length > 0);
 });
 
-test("指向文件 → ok=true 但 isDirectory=false（怎么措辞由调用方定）", () => {
+test("指向文件 → ok=true 但 isDirectory=false（怎么措辞由调用方定）", async () => {
   const dir = mkdtempSync(join(tmpdir(), "dshana-cwd-check-"));
   const file = join(dir, "not-a-dir.txt");
   try {
     writeFileSync(file, "x");
-    const r = checkCwd(file);
+    const r = await checkCwd(file);
     assert.equal(r.ok, true);
     assert.equal(r.isDirectory, false);
   } finally {
@@ -45,9 +45,9 @@ test("指向文件 → ok=true 但 isDirectory=false（怎么措辞由调用方�
   }
 });
 
-test("空 / 非字符串 → ok=false，code=EINVAL，不抛错", () => {
+test("空 / 非字符串 → ok=false，code=EINVAL，不抛错", async () => {
   for (const v of ["", "   ", null, undefined, 42, {}]) {
-    const r = checkCwd(v);
+    const r = await checkCwd(v);
     assert.equal(r.ok, false);
     assert.equal(r.code, "EINVAL");
   }

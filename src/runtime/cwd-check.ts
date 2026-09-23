@@ -7,8 +7,11 @@
 // 路径 stat 不到，而且失败原因与「目录不存在」在 errno 上分不开——两者混为一谈会把每一个合法
 // cwd 都判成不存在。runtime 是真正 spawn 命令的进程，cwd 也交给它用，所以结论由它出。
 //
+// 为什么用异步 stat：本进程同时在服务中继与 DSH 请求，同步 API 会把事件循环一起按住——网络盘或
+// 挂载点上的一次卡顿就是整条控制面卡顿，App 侧的请求超时也救不回来。
+//
 // 结果结构化返回、不抛错：调用方要区分「确实没有」与「有但用不了」，两者的处置不同。
-import { statSync } from "node:fs";
+import { stat } from "node:fs/promises";
 
 export interface CwdCheckResult {
   ok: boolean;
@@ -21,11 +24,11 @@ export interface CwdCheckResult {
 }
 
 /** 判一个路径能否当会话工作目录用。只读一次 stat：不创建、不修改、不 chdir。 */
-export function checkCwd(cwd: unknown): CwdCheckResult {
+export async function checkCwd(cwd: unknown): Promise<CwdCheckResult> {
   const path = typeof cwd === "string" ? cwd.trim() : "";
   if (!path) return { ok: false, code: "EINVAL", message: "cwd 不能为空" };
   try {
-    return { ok: true, isDirectory: statSync(path).isDirectory() };
+    return { ok: true, isDirectory: (await stat(path)).isDirectory() };
   } catch (e) {
     const err = e as { code?: unknown; message?: unknown };
     const code = err && typeof err.code === "string" ? err.code : null;

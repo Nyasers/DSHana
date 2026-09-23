@@ -497,7 +497,7 @@ export async function main(argv: string[]): Promise<number> {
         if (action === "cwd-check") {
           // App 侧（lib/session-run.js）在 create 之前问一次：cwd 是给本进程及其子进程用的，
           // 判定必须出自看得见用户路径的这一侧（宿主半的 fs 只覆盖应用自己的目录）。
-          const result = checkCwd(args && args.cwd);
+          const result = await checkCwd(args && args.cwd);
           const target = String((args && args.cwd) || "");
           if (result.ok) info("cwd-check：可用 " + target);
           else info("cwd-check：不可用 code=" + String(result.code) + "（" + String(result.message) + "）：" + target);
