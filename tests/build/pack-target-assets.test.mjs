@@ -132,3 +132,14 @@ test("release.yml 的发布矩阵与必需资产清单跟目标表一致", () =>
   );
   assert.match(workflow, /REQUIRED="\$REQUIRED dshana-v\$\{VER\}\.zip dshana-v\$\{VER\}\.zip\.sha256"/, "通用包与市场清单的必需资产行缺失");
 });
+
+/**
+ * 内联在 workflow 里的脚本没有任何静态检查（字符串，typecheck 与测试都碰不到）——已经因此有过一次
+ * 只在 CI 上才暴露的错误。所以这里守着「脚本外置」这条口径。
+ */
+test("release.yml 不内联脚本，事实两步走仓库里的入口", () => {
+  const workflow = readFileSync(join(ROOT, ".github", "workflows", "release.yml"), "utf8");
+  assert.ok(!workflow.includes("node -e"), "workflow 里又出现内联 node 脚本：外置才能进 typecheck 与测试");
+  assert.match(workflow, /run: pnpm run facts:record/, "出包作业没调 facts:record");
+  assert.match(workflow, /--facts-dir facts\b/, "清单作业没从事实目录取数");
+});

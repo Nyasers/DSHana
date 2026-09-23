@@ -32,6 +32,7 @@
     "sync:vendor:sdk": "node scripts/vendor/sdk.mts",
     "sync:vendor:dsh": "node scripts/vendor/dsh.mts",
     "changelog": "node scripts/release/changelog.mts",
+    "facts:record": "node scripts/release/package-facts.mts",
     "prepackage": "pnpm run derive && pnpm run build",
     "package": "node scripts/release/pack/index.mts",
     "postpackage": "node scripts/release/clean-tmp.mts",
