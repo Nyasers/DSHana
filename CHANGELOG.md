@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.0-rc.22+dsh-0.1.7-rc.1](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.21%2Bdsh-0.1.7-rc.1...v1.0.0-rc.22%2Bdsh-0.1.7-rc.1) (2026-09-23)
+
+### Bug Fixes
+
+* **build:** server 半把 import.meta 整族交给运行时（url/resolve 一并保留） ([3e9b971](https://github.com/Nyasers/DSHana/commit/3e9b971605072996c2a41b3157e2945475868b20))
+* **open:** 提交前校验 cwd 是已存在的绝对目录 ([5190be8](https://github.com/Nyasers/DSHana/commit/5190be83d2fb2317e324a3298f03d7e0d0fa6903))
+* **subprocess:** spawn 的工作目录不可用时显式拒绝（新增 subprocess-local 集成） ([f225870](https://github.com/Nyasers/DSHana/commit/f22587004aa8a80be6cc10b4748ff8a30991e9ae))
+
 ## [1.0.0-rc.21+dsh-0.1.7-rc.1](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.20%2Bdsh-0.1.7-rc.1...v1.0.0-rc.21%2Bdsh-0.1.7-rc.1) (2026-09-23)
 
 ### Bug Fixes
@@ -562,6 +570,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
