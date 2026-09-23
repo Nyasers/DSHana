@@ -25,7 +25,8 @@
 // 词汇映射：工具面动作是 open/reply（见 tools/actions/open.ts、tools/actions/reply.ts），本模块内部沿用
 // create/send 描述「新建会话 / 续已有会话」这两个动作，映射在 tools/actions/open.ts 与
 // tools/actions/reply.ts 的 submit 调用处完成。
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
+import { statSync, type Stats } from "node:fs";
 import { appCtx, appDataDir } from "#/lib/app-runtime.ts";
 import { currentDshHome } from "#/lib/data-source.ts";
 import { ensureManagedRuntime } from "#/lib/managed-runtime.ts";
@@ -268,8 +269,34 @@ export interface DshSubmitInput {
   callToken?: string;
   log?: { info?: (msg: string) => void; warn?: (msg: string) => void; error?: (msg: string) => void };
 }
+/**
+ * open 的 cwd 必须是「绝对路径 + 已存在的目录」。
+ *
+ * 三条各管一件事：
+ *   · 绝对——App 与受管 runtime 是两个进程，相对路径在两侧会解析出不同基准（校验在这里、使用在
+ *     那边），先要求绝对就不存在这个歧义；
+ *   · 存在——cwd 会被记进会话头，之后每一次 spawn（bash 工具、终端）都从它出发，目录不在等于
+ *     整条会话的每个命令都起不来；
+ *   · 是目录——指向文件时各平台的失败方式同样没有指向。
+ * 在提交前拒掉，比生出一条「每个命令都死」的会话便宜：会话一旦建立，cwd 就是记录值。
+ */
+export function requireUsableSessionCwd(cwd: string): void {
+  if (!isAbsolute(cwd)) {
+    throw new Error("open 的 cwd 必须是绝对路径（相对路径在 App 与受管 runtime 两侧解析基准不同）：" + cwd);
+  }
+  let stats: Stats;
+  try {
+    stats = statSync(cwd);
+  } catch {
+    throw new Error("open 的 cwd 不存在（会话的每次 spawn 都从它出发，先建好目录再开）：" + cwd);
+  }
+  if (!stats.isDirectory()) throw new Error("open 的 cwd 不是目录：" + cwd);
+}
+
 export function submitDshTask({ action, input, callToken, log }: DshSubmitInput): DshSubmitHandle {
   const parsed = normalizeCreateSend({ action, input });
+  // 只验 create：send 的 cwd 沿用会话已有值，而那一刻的目录在建立会话时已经验过
+  if (parsed.action === "create") requireUsableSessionCwd(parsed.cwd);
   const ctx = appCtx();
   const dataDir = appDataDir();
   if (!ctx || !dataDir) {
