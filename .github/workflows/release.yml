@@ -108,24 +108,9 @@ jobs:
         run: pnpm run package --target=${{ matrix.target }}
 
       # 事实（包名 / 字节数 / sha256）随 artifact 走：清单作业只取这几百字节，不必为 size 下整包。
-      # artifact 归档自身的 size 是外层 zip 的大小，与包的字节数不是一回事，所以这里自己记。
+      # 记录逻辑在 scripts/release/facts.mts（进 typecheck 与测试），这里只调它。
       - name: Record package facts
-        run: |
-          set -e
-          node -e '
-            const fs = require("node:fs");
-            const facts = {};
-            for (const f of fs.readdirSync("releases")) {
-              if (!f.endsWith(".zip")) continue;
-              facts[f] = {
-                size: fs.statSync("releases/" + f).size,
-                sha256: fs.readFileSync("releases/" + f + ".sha256", "utf8").trim().split(/\s+/)[0],
-              };
-            }
-            if (Object.keys(facts).length === 0) { console.error("::error::releases/ 里没有 zip"); process.exit(1); }
-            fs.writeFileSync("package-facts.json", JSON.stringify(facts, null, 2));
-            console.log("facts:", Object.keys(facts).join(", "));
-          '
+        run: pnpm run facts:record
 
       - name: Upload package facts
         uses: actions/upload-artifact@v7
@@ -214,15 +199,6 @@ jobs:
         run: |
           set -e
           mkdir -p releases
-          node -e '
-            const fs = require("node:fs");
-            const merged = {};
-            const files = fs.readdirSync("facts", { recursive: true }).map(String).filter((f) => f.endsWith("package-facts.json"));
-            for (const f of files) Object.assign(merged, JSON.parse(fs.readFileSync("facts/" + f, "utf8")));
-            if (Object.keys(merged).length === 0) { console.error("::error::没有可用的产物事实"); process.exit(1); }
-            fs.writeFileSync("facts.json", JSON.stringify(merged, null, 2));
-            console.log("facts:", Object.keys(merged).join(", "));
-          '
           pnpm run index -- \
             --target universal \
             --base-url "https://github.com/${REPO}/releases/download/${TAG}" \
@@ -230,7 +206,7 @@ jobs:
             --source-id "dshana" \
             --name "DSHana" \
             --out index.v2.json \
-            --facts facts.json
+            --facts-dir facts
           echo "--- index.v2.json (head) ---"
           head -c 400 index.v2.json
 

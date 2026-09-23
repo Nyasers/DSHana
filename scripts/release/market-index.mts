@@ -10,9 +10,8 @@
 //
 // 流程：读 src/manifest.json + package.json → 收本版本各 zip 的事实（字节数 + sha256）→ 写
 //   <zip>.entry.json（索引构建器的输入）→ 用官方 extension-index-build.mjs 拼 index.v2.json。
-//   事实默认从 releases/ 里那份 zip 与它的 .sha256 取；`--facts <文件>` 时改读一个
-//   `{ "<zip 文件名>": { size, sha256 } }` 的 JSON —— CI 里清单与出包是两个作业，事实来自
-//   release（size 走元数据、sha256 早已随件发布），zip 不必再落到本地一遍。
+//   事实默认从 releases/ 里那份 zip 与它的 .sha256 取；`--facts-dir <目录>` 时改从该目录下所有
+//   `package-facts.json` 合并出的表取（CI 里事实由出包作业记好、当 artifact 带过来）。
 //
 // ⚠ 索引模型的限制（与 githana 一致）：index.v2.json 的条目只有 `archive.url` 一个地址，
 //   **没有平台维度**，构建器按 `kind:id` 分组，多平台 zip 不可能各占一条。故默认只把
@@ -22,12 +21,13 @@
 //   node scripts/release/market-index.mts                                  # 当前版本 + universal
 //   node scripts/release/market-index.mts --target win32-x64 --base-url https://…/download/v1.0.0
 //   node scripts/release/market-index.mts --publisher Nyasers --out releases/index.v2.json
-//   node scripts/release/market-index.mts --facts facts.json             # 事实来自 JSON（CI tag 场景）
+//   node scripts/release/market-index.mts --facts-dir facts            # 事实从目录下的小票合并（CI 场景）
 import fs from "fs-extra";
 import { basename, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 
 import { ROOT } from "../shared/root.mts";
+import { mergeFacts, type PackageFacts } from "./facts.mts";
 const HANA_HOME = process.env.HANA_HOME || join(process.env.USERPROFILE || process.env.HOME || "", ".hanako");
 const RELEASES = join(ROOT, "releases");
 
@@ -119,11 +119,12 @@ function defaultBaseUrl(version: string): string | null {
 }
 
 /**
- * 产物事实的来源：默认本地读产物；`--facts <文件>` 给的是 `{ "<zip 文件名>": { size, sha256 } }`。
+ * 产物事实的来源：默认本地读产物（releases/ 里那份 zip 与它的 .sha256）；`--facts-dir <目录>`
+ * 时改从该目录下（含子目录）所有 `package-facts.json` 合并出的表取 —— CI 里清单与出包是两个
+ * 作业，事实由出包作业记好当 artifact 带过来，zip 不必再落到本地一遍。
  */
-const factsPath = arg("--facts");
-const injectedFacts: Record<string, { size: number; sha256: string }> | null =
-  factsPath === null ? null : fs.readJsonSync(factsPath);
+const factsDir = arg("--facts-dir");
+const injectedFacts: PackageFacts | null = factsDir === null ? null : mergeFacts(factsDir);
 
 /** 该 zip 是否有可用事实（注入表里有，或本地那份 .sha256 在）。 */
 function hasFacts(zipName: string): boolean {
@@ -199,7 +200,7 @@ function main(): void {
       .readdirSync(RELEASES)
       .filter((f: string) => f.startsWith(`${manifest.id}-v${version}`) && f.endsWith(".zip") && !f.endsWith(".sha256"));
   if (all.length === 0) {
-    console.error(`[market-index] 没有 ${manifest.id}-v${version}-*.zip 的事实来源（releases/ 或 --facts）—— 先出包：pnpm run package --target ${target}`);
+    console.error(`[market-index] 没有 ${manifest.id}-v${version}-*.zip 的事实来源（releases/ 或 --facts-dir）—— 先出包：pnpm run package --target ${target}`);
     process.exit(1);
   }
 
