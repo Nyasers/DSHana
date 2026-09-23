@@ -8,8 +8,11 @@
 //   身上；市场元数据是**对已出产物的派生**，放这里可以按需重跑、可以只对某个 target 生成，
 //   也不必让 pack 知道市场的事（单一职责：产物是产物，市场是市场）。
 //
-// 流程：读 src/manifest.json + package.json → 扫描 releases/ 里本版本的 zip（配对 .sha256）
-//   → 写 <zip>.entry.json（索引构建器的输入）→ 用官方 extension-index-build.mjs 拼 index.v2.json。
+// 流程：读 src/manifest.json + package.json → 收本版本各 zip 的事实（字节数 + sha256）→ 写
+//   <zip>.entry.json（索引构建器的输入）→ 用官方 extension-index-build.mjs 拼 index.v2.json。
+//   事实默认从 releases/ 里那份 zip 与它的 .sha256 取；`--facts <文件>` 时改读一个
+//   `{ "<zip 文件名>": { size, sha256 } }` 的 JSON —— CI 里清单与出包是两个作业，事实来自
+//   release（size 走元数据、sha256 早已随件发布），zip 不必再落到本地一遍。
 //
 // ⚠ 索引模型的限制（与 githana 一致）：index.v2.json 的条目只有 `archive.url` 一个地址，
 //   **没有平台维度**，构建器按 `kind:id` 分组，多平台 zip 不可能各占一条。故默认只把
@@ -19,6 +22,7 @@
 //   node scripts/release/market-index.mts                                  # 当前版本 + universal
 //   node scripts/release/market-index.mts --target win32-x64 --base-url https://…/download/v1.0.0
 //   node scripts/release/market-index.mts --publisher Nyasers --out releases/index.v2.json
+//   node scripts/release/market-index.mts --facts facts.json             # 事实来自 JSON（CI tag 场景）
 import fs from "fs-extra";
 import { basename, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -114,8 +118,22 @@ function defaultBaseUrl(version: string): string | null {
   return null;
 }
 
+/**
+ * 产物事实的来源：默认本地读产物；`--facts <文件>` 给的是 `{ "<zip 文件名>": { size, sha256 } }`。
+ */
+const factsPath = arg("--facts");
+const injectedFacts: Record<string, { size: number; sha256: string }> | null =
+  factsPath === null ? null : fs.readJsonSync(factsPath);
+
+/** 该 zip 是否有可用事实（注入表里有，或本地那份 .sha256 在）。 */
+function hasFacts(zipName: string): boolean {
+  return injectedFacts !== null ? Object.hasOwn(injectedFacts, zipName) : fs.existsSync(join(RELEASES, `${zipName}.sha256`));
+}
+
 /** 产物事实：字节数 + .sha256（归一成小写）。 */
 function zipFacts(zipName: string): { size: number; sha256: string } {
+  const injected = injectedFacts?.[zipName];
+  if (injected) return { size: injected.size, sha256: String(injected.sha256).trim().toLowerCase() };
   const size = fs.statSync(join(RELEASES, zipName)).size;
   const sha256 = fs.readFileSync(join(RELEASES, `${zipName}.sha256`), "utf8").trim().split(/\s+/)[0].toLowerCase();
   return { size, sha256 };
@@ -133,19 +151,18 @@ function buildTargets(zips: string[], version: string, baseUrl: string): Record<
   const prefix = `${manifest.id}-v${version}`;
   const out: Record<string, Archive> = {};
   for (const zipName of zips) {
-    if (!fs.existsSync(join(RELEASES, `${zipName}.sha256`))) continue;
+    if (!hasFacts(zipName)) continue;
     const { size, sha256 } = zipFacts(zipName);
     out[targetOf(zipName, prefix)] = { url: `${baseUrl}/${zipName}`, sha256, size, format: "zip" };
   }
   return out;
 }
 
-function buildEntry(zipName: string, sha256File: string, targets: Record<string, Archive>): Entry {
+function buildEntry(zipName: string, targets: Record<string, Archive>): Entry {
   const manifest = fs.readJsonSync(join(ROOT, "src", "manifest.json"));
   const pkg = fs.readJsonSync(join(ROOT, "package.json"));
-  const size = fs.statSync(join(RELEASES, zipName)).size;
   // scripts/release/pack/index.mts 写的 .sha256 是「纯大写哈希」（不带文件名）——取第一个空白段再归一成小写
-  const sha256 = fs.readFileSync(sha256File, "utf8").trim().split(/\s+/)[0].toLowerCase();
+  const { size, sha256 } = zipFacts(zipName);
   const entry: Entry = {
     kind: "app",
     id: manifest.id,
@@ -176,11 +193,13 @@ function main(): void {
     );
   }
 
-  const all = fs
-    .readdirSync(RELEASES)
-    .filter((f: string) => f.startsWith(`${manifest.id}-v${version}`) && f.endsWith(".zip") && !f.endsWith(".sha256"));
+  const all = injectedFacts !== null
+    ? Object.keys(injectedFacts).filter((f: string) => f.startsWith(`${manifest.id}-v${version}`) && f.endsWith(".zip"))
+    : fs
+      .readdirSync(RELEASES)
+      .filter((f: string) => f.startsWith(`${manifest.id}-v${version}`) && f.endsWith(".zip") && !f.endsWith(".sha256"));
   if (all.length === 0) {
-    console.error(`[market-index] releases/ 里没有 ${manifest.id}-v${version}-*.zip —— 先出包：pnpm run package --target ${target}`);
+    console.error(`[market-index] 没有 ${manifest.id}-v${version}-*.zip 的事实来源（releases/ 或 --facts）—— 先出包：pnpm run package --target ${target}`);
     process.exit(1);
   }
 
@@ -207,13 +226,12 @@ function main(): void {
   // 1) 为所有本版本产物写 entry（多目标各一份，便于以后按平台取用）
   const entries: string[] = [];
   for (const zip of all) {
-    const sha256File = join(RELEASES, `${zip}.sha256`);
-    if (!fs.existsSync(sha256File)) {
-      console.warn(`[market-index] 跳过 ${zip}：缺 ${basename(sha256File)}`);
+    if (!hasFacts(zip)) {
+      console.warn(`[market-index] 跳过 ${zip}：没有事实来源（releases/${zip}.sha256 或 --facts 里都没有）`);
       continue;
     }
     const entryPath = join(RELEASES, `${zip.replace(/\.zip$/, "")}.entry.json`);
-    fs.writeFileSync(entryPath, `${JSON.stringify(buildEntry(zip, sha256File, targets), null, 2)}\n`, "utf8");
+    fs.writeFileSync(entryPath, `${JSON.stringify(buildEntry(zip, targets), null, 2)}\n`, "utf8");
     entries.push(entryPath);
   }
 
