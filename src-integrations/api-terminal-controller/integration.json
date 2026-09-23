@@ -1,0 +1,32 @@
+{
+  "package": "@deepseek-ai/dsh-api-terminal-controller",
+  "upstreamVersion": "0.1.7-rc.1",
+  "upstreamDir": "packages/api/terminal-controller",
+  "halves": {
+    "client": false,
+    "server": {
+      "entry": "src/index.ts",
+      "out": "lib/index.js"
+    }
+  },
+  "files": [
+    {
+      "path": "src/index.ts",
+      "upstreamSha256": "414150966ac9bd69eb4222ad2c453f653bd009e6d8194802c43aa6d304e316c5"
+    }
+  ],
+  "notes": [
+    "批次：终端的会话工作目录前提（终端的 cwd 取会话头里的记录值，而那个目录可能在会话建立之后消失）。",
+    "缝选在这里：terminal-controller 是「会话 → 终端工作目录」的唯一出口——Web 侧边栏终端的 cwd 就是",
+    "environment() 交出去的那个值。判定放在 spawn() 里、provider 分配之前，只挡真正要落地的那一刻：",
+    "list/retain/read 这类对既有终端的操作不受影响。",
+    "为什么是显式失败而不是回落到一个活目录：终端的存在意义就是在会话工作区里跑命令，工作区不在时换一",
+    "个目录开壳是静默的错误答案；而且 DSH 里没有可回落的活目录——sandboxPolicy.workspaceRoot 本身等于",
+    "session.header.cwd（sandbox-policy 按会话头解析根），两条路指向同一个已消失的路径。报错带上绝对路",
+    "径，用户能直接去修；错误码 terminal/cwd-unavailable 由本包在 RemoteErrorDetailsMap 上局部声明。",
+    "跨平台：这条前提三平台同源，只是失败的样子不同——win32 上 ConPTY 把 CreateProcess 的",
+    "ERROR_DIRECTORY(267) 收成一个子进程退出码（客户端显示成「进程已退出（267）」），POSIX 上 fork 出",
+    "来的子进程 chdir 失败后立刻退出。两次都是没有指向的退出，所以在 provider 之前把前提点破。",
+    "客户端不映射这个码到 issue：model.ts 的 fail() 对未映射的码直接显示 message，因此不需要动 client 半。"
+  ]
+}
