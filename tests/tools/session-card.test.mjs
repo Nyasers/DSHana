@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/tools/session-card.test.mjs — dshana open/reply 返回值里的会话流卡字面量。
+// tests/tools/session-card.test.mjs — 会话卡字面量（src/tools/shared/card.ts）与工具回执的形状。
 //
-// 卡是新增字段：details.dsh 的形状必须原样（SKILL 与句柄契约都读它），只有 delivery 一档是
-// 从提交链的投递档位照抄下来的（档位由 session-run 的 TASK_DELIVERY 定，工具面只陈述不另选）。提交链用
-// deps.submitDshTask 注入 fake，不触真 runtime、不碰宿主任务面。
+// 工具面不挂流内卡：open / reply 的 details 只有 dsh 坐标（句柄契约），没有 card。会话的可见入口
+// 统一交给对话底部的任务 chip（lib/session-run.ts 的 chipVisibility）。
+// 卡字面量本身仍要正确——字段规则由宿主定：pluginId 必填且等于归属 App id、route 走 ui/ 静态树、
+// aspectRatio 是 "宽:高" 字符串。提交链用 deps.submitDshTask 注入 fake，不触真 runtime、不碰宿主任务面。
 // 工具面动作是 open/reply；提交链内部 action 词汇仍是 create/send（映射在 tools 侧）。
-// 卡页 = ui/stream.html（只读会话流面）：查询串里的 sid 把注入的 DSH UI 钉在这段会话上。
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
@@ -52,7 +52,7 @@ test("卡页存在：SESSION_CARD_ROUTE 指向 ui/ 里真实存在的页面", ()
   );
 });
 
-test("open：返回值带 card.route（ui 静态树路径 + ?ts= 快照），details.dsh 形状不变", async () => {
+test("open：回执不带 card，details.dsh 形状不变", async () => {
   const cwd = "E:\\Hanako\\workspace";
   const loc = { action: "create", sessionId: SID, rpcId: "rpc-1", taskId: "task-1", delivery: "next-step", cwd };
   const { out, fake } = await run("open", loc, { task: "干活", cwd, context: { callToken: "tok" } });
@@ -65,30 +65,14 @@ test("open：返回值带 card.route（ui 静态树路径 + ?ts= 快照），det
     status: "running",
     delivery: "next-step",
     cwd,
-  }, "dsh 是句柄契约的形状，卡片只加不改；delivery 陈述本任务实际的投递档位");
+  }, "dsh 是句柄契约的形状；delivery 陈述本任务实际的投递档位");
   assert.match(out.content[0].text, /next-step/, "回执要写出档位，模型不必猜结果什么时候回来");
   assert.equal(fake.calls.length, 1, "提交链仍被调一次");
   assert.equal(fake.calls[0].action, "create", "工具面是 open，提交链内部仍是 create");
-
-  const card = out.details.card;
-  assert.equal(card.pluginId, "dshana", "宿主要求 pluginId 等于工具归属 App id，缺了或不等一律丢卡");
-  assert.match(card.aspectRatio, /^\d+:\d+$/, "aspectRatio 是 \"宽:高\" 字符串；给数字会被渲染端当非法值");
-  assert.match(card.title, /子代理已开启/);
-  assert.match(card.description, /task-1/, "taskId 在卡面描述里（卡体让给会话流）");
-
-  const q = cardQuery(card);
-  assert.ok(Number(q.get("ts")) > 0, "?ts= 防缓存");
-  assert.ok(Number(q.get("at")) > 0);
-  assert.equal(q.get("sid"), SID, "sid 是卡页钉住哪一段 DSH 会话的唯一依据");
-  assert.equal(q.get("cwd"), cwd);
+  assert.equal(out.details.card, undefined, "工具面不挂流内卡，可见入口归对话底部的任务 chip");
 });
 
-test("sessionCard：没有 cwd 就不塞这一格（卡页只认有值的那几个）", () => {
-  const q = cardQuery(sessionCard({ action: "open", sessionId: SID, taskId: "task-3" }));
-  assert.equal(q.get("cwd"), null);
-});
-
-test("reply：缺省档位（open-only）下不挂卡；卡面字面量单验", async () => {
+test("reply：回执不带 card，details.dsh 形状不变", async () => {
   const loc = { action: "send", sessionId: SID, rpcId: "rpc-2", taskId: "task-2", delivery: "next-step" };
   const { out, fake } = await run("reply", loc, { task: "接着跑", sessionId: SID });
 
@@ -103,16 +87,23 @@ test("reply：缺省档位（open-only）下不挂卡；卡面字面量单验", 
   });
   assert.match(out.content[0].text, /next-step/);
   assert.equal(fake.calls[0].action, "send", "工具面是 reply，提交链内部仍是 send");
-  // 档位缺省是 open-only（lib/card-display.ts）：reply 不再叠卡——卡页按 sid 跟整段会话，
-  // open 那一张已经跟到这一轮了，再发一张只是多一个 iframe。要在流里继续看到回复的卡，
-  // 把档位改成 all。
-  assert.equal(out.details.card, undefined, "open-only 档位下 reply 不该挂卡");
+  assert.equal(out.details.card, undefined, "工具面不挂流内卡");
+});
 
-  // 卡面字面量本身仍然要正确（档位选 all 时走的就是它）：没有 cwd 就不塞这一格。
-  const card = sessionCard({ action: "reply", sessionId: SID, taskId: "task-2", delivery: "next-step" });
-  assert.equal(card.pluginId, "dshana");
-  assert.match(card.title, /续发消息/);
+test("卡字面量：字段规则（pluginId / route / aspectRatio / 查询串快照）", () => {
+  const cwd = "E:\\Hanako\\workspace";
+  const card = sessionCard({ action: "open", sessionId: SID, taskId: "task-1", delivery: "next-step", cwd });
+  assert.equal(card.pluginId, "dshana", "宿主要求 pluginId 等于工具归属 App id，缺了或不等一律丢卡");
+  assert.match(card.aspectRatio, /^\d+:\d+$/, "aspectRatio 是 \"宽:高\" 字符串；给数字会被渲染端当非法值");
+  assert.match(card.title, /子代理已开启/);
+  assert.match(card.description, /task-1/, "taskId 在卡面描述里");
+
   const q = cardQuery(card);
-  assert.equal(q.get("sid"), SID);
-  assert.equal(q.get("cwd"), null, "reply 没有 cwd 就不塞这一格");
+  assert.ok(Number(q.get("ts")) > 0, "?ts= 防缓存");
+  assert.ok(Number(q.get("at")) > 0);
+  assert.equal(q.get("sid"), SID, "sid 是卡页钉住哪一段 DSH 会话的唯一依据");
+  assert.equal(q.get("cwd"), cwd);
+
+  const noCwd = sessionCard({ action: "reply", sessionId: SID, taskId: "task-3" });
+  assert.equal(cardQuery(noCwd).get("cwd"), null, "没有 cwd 就不塞这一格");
 });
