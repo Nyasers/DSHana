@@ -143,13 +143,13 @@ DSH 的 workspace 选择对话框来自 `directory-picker` seam（宿主半列�
 - **主题仅在 DSH 偏好为 system 时跟随宿主**（见上，有意为之）。
 - 越界权限请求默认走审批：deferred 通知 → `dshana(action="approve")` 应答；无人应答按 `approvalTimeoutSec` 自动拒绝。
 
-## 架构决策与落地（接口基线 Hana 0.1013.0）
+## 架构决策与落地（接口基线 Hana 0.1023.1）
 
 DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 宿主插件（宿主进程内 boot DSH）迁移而来；上方架构总览与本节描述的都是当前形态。
 
 **manifest / apply 入口 / 设置 / 工具注册（迁移步骤 1）：**
 
-- `src/manifest.json` 是 App v2 契约：`version` 由 derive 取主 `package.json`，`minAppVersion` 取随包 SDK 快照（现 `0.1013.0`）；capabilities 十一项（tools / tasks / session / models / agents.read / resources / runtime 三项 / ui 两项，清单见文件）。v1 专属字段（`author`、`trust`、`activationEvents`、`ui.hostCapabilities`、`network` 白名单）不在清单里。
+- `src/manifest.json` 是 App v2 契约：`version` 由 derive 取主 `package.json`，`minAppVersion` 取随包 SDK 快照（现 `0.1023.1`）；capabilities 十一项（tools / tasks / session / models / agents.read / resources / runtime 三项 / ui 两项，清单见文件）。v1 专属字段（`author`、`trust`、`activationEvents`、`ui.hostCapabilities`、`network` 白名单）不在清单里。
 - `src/index.ts` 导出 `apply(ctx)`（兼导出 `default { apply }`）；apply 注册完即返回。统一日志只走宿主 `ctx.logger`；globalThis 宿主单例退役 → `src/lib/app-runtime.ts` module-scope 运行包。
 - 工具注册：`ctx.tools.register`，工具名 `dshana`（一个插件一个同名工具 + subcommand；v2 不自动加 `pluginId_` 前缀、重名被宿主当场拒）。动作五个：`open`/`reply`/`get`/`close`/`approve`，装配见 `src/tools/index.ts`、手册见 `src/skills/dshana/SKILL.md`。
 - 设置：`contributes.settings` 的 UI 由 App 自绘设置页承担（`ui.route: /settings.html`，宿主设置区渲染）；键与缺省以 `src/lib/config.ts` 为准，读写落 `dataDir/settings.json`（旧 `config.json` 只在两键缺位时作读侧兼容）。

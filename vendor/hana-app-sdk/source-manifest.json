@@ -1,6 +1,6 @@
 {
   "generatedBy": "npm run pack:plugin-sdk",
-  "packedVersion": "0.1013.0",
+  "packedVersion": "0.1023.1",
   "packages": {
     "@hana/plugin-protocol": {
       "dir": "packages/plugin-protocol",
@@ -112,7 +112,7 @@
         "bundle/desktop/src/react/chalkboard/chalkboard.module.css": "66603aefdf585753cc6ee01dd1584826cfc2a4c5af2d742cb6adb45a0efb6eee",
         "bundle/desktop/src/react/chalkboard/content-host-core.tsx": "4b86c74644f19977f135fa1a4bfd3230be9376b63ab056f729c5914d536921e8",
         "bundle/desktop/src/react/chalkboard/detached-preview-raise.ts": "aa980d7dedef5c02077e5946dd05249fb841d5847f1692c39ac6362d78715851",
-        "bundle/desktop/src/react/chalkboard/detached/child-window.ts": "2e242951076ffc2bd62ba150daf52f2f90de20b66b460cfa4d611004af18b4bd",
+        "bundle/desktop/src/react/chalkboard/detached/child-window.ts": "a8142f547cdb60972fa7abaf72998407c4b692178898a3910d13c166cecffc86",
         "bundle/desktop/src/react/chalkboard/detached/spawn-memory.ts": "ec6fd37942c3e0ea390d9b16eb6fe22c41c53de50d63ba03ab0c8e3a879df9b7",
         "bundle/desktop/src/react/chalkboard/detached/spawn-placement.ts": "ecfce0e4c440c2f0278007fc4efb37baa91c6acc9d56fb06037eaffdc775cff7",
         "bundle/desktop/src/react/chalkboard/drag/flip.ts": "95ab8c84c7639c0c1a7f2af5a2b41f78999da6205c383876acad957517c2743f",
@@ -194,7 +194,7 @@
         "bundle/desktop/src/react/plugin-ui/plugin-card-ui-actions.ts": "62b2ecc5abc6774ef0e245938b14557765a749ff62c3904605a19ad2abf856df",
         "bundle/desktop/src/react/plugin-ui/plugin-storage-actions.ts": "238033704c82791c781b2307b45bb491299383ae72ba14beea52b5a10cc378c4",
         "bundle/desktop/src/react/plugin-ui/plugin-ui-host-controller.ts": "c60c50d8c496930f574db97babd54a8a5f36f2d8764fcff44096934342876bae",
-        "bundle/desktop/src/react/services/app-event-actions.ts": "1eb042e4c2b6208449c85d396848d19fd1888dffa4e10954bee5467e4f45dd2b",
+        "bundle/desktop/src/react/services/app-event-actions.ts": "b31373aeeb753e1875417a9521f7b8f1456f035854bfcf14077c969541b5ac62",
         "bundle/desktop/src/react/services/font-runtime.ts": "b6171e854da9f4e4b84e6d8c5637e23e2a0fd45206d8c7b8a2a730029493dc6b",
         "bundle/desktop/src/react/services/open-preview-resource.tsx": "3faa6e47cc59af5e76ae695f1c7f15ee5de0952ec692de2f601f68476594d9b6",
         "bundle/desktop/src/react/services/previewer-catalog.ts": "6af0ec0bee5389f17b82e5daf8c633113def7750195e0bae8b3629330c316c31",
@@ -233,7 +233,7 @@
         "bundle/desktop/src/react/stores/channel-slice.ts": "e248e3c58aab40fe7d24dbc10007f97e1d5cbf78e28cf1497ad13427df609aa9",
         "bundle/desktop/src/react/stores/chat-find-slice.ts": "7f0a8039466c9f973e24a570f6c9611cf3fc3bf8500ca7c01e833d88b2046ea7",
         "bundle/desktop/src/react/stores/chat-slice.ts": "744afb728692f6b77cfdb94344f1f303623bf805bcb5fb473d20afb4f0cee310",
-        "bundle/desktop/src/react/stores/chat-view-slice.ts": "a95fd6403644882fe7a077a7982e7aca765219e27c12da291b590f52fe0793dd",
+        "bundle/desktop/src/react/stores/chat-view-slice.ts": "9e912cbe7fc4e3cc77d66f945b736611815f81d635620ccb72f6953b49345787",
         "bundle/desktop/src/react/stores/computer-overlay-slice.ts": "72ae13c0eddb640417ee7d6055a8b97efe1bf2631a75727a112697c133073169",
         "bundle/desktop/src/react/stores/connection-slice.ts": "349fa785e640abf6d22f8f975284e5a51a9dc04714aff0618cc9edede464ca2d",
         "bundle/desktop/src/react/stores/context-slice.ts": "5b5a763ae28bcbdc5dec02c4cf2c99c3ea802363797c2ab076ef56a54bed2fd2",
@@ -272,9 +272,10 @@
         "bundle/desktop/src/react/stores/screenshot-slice.ts": "caf11d1c54f6e802180984a95fdb55c9e3f332b1884899d33f380017c393d7a9",
         "bundle/desktop/src/react/stores/selection-actions.ts": "964e3edd4b5bd9ccb84584484203b2225339b1d0e85a7001e9825fca4a7bea58",
         "bundle/desktop/src/react/stores/selection-slice.ts": "64de49a91dbdccf6b3c49cb87e50626b32152a011b47f092351b1d2b1a592ebf",
-        "bundle/desktop/src/react/stores/selectors/file-refs.ts": "a038306e65f859bd2040a753797d880a731169342576a4dcc41686f57d666480",
+        "bundle/desktop/src/react/stores/selectors/chat-ui-prefs.ts": "99ccf115ad9f67f3759ce98a077cd4e093af622706645417f0efe23bcc75b436",
+        "bundle/desktop/src/react/stores/selectors/file-refs.ts": "1db009446c79b94897d73959eef9d5cc4b13c58d8cab4d55304771b3d8b26d55",
         "bundle/desktop/src/react/stores/selectors/media-sequence.ts": "5383826069de95a8715b98f7195c5b9e1781b123267ede8628b2f3c3fd376f92",
-        "bundle/desktop/src/react/stores/selectors/session-status.ts": "1870c9b666ce2557170eb15da3c14b3db7438c82a0569309e8f695b56642f330",
+        "bundle/desktop/src/react/stores/selectors/session-status.ts": "2a5750acd14255fc6306ea06de1c227f5f72537435ff8e1ab058c2ffc96fd483",
         "bundle/desktop/src/react/stores/selectors/visible-surface.ts": "1403af59c02ed1b79fea623742adc00a82a13fa87f691d90da98b7e8b23e2964",
         "bundle/desktop/src/react/stores/session-actions.ts": "25578f0cc4d6d7132be4a8671aeb914c7dc88a96d223df4dd6b226dc2594d96f",
         "bundle/desktop/src/react/stores/session-background-task-actions.ts": "9cb1a88dfedd39bf1627cbaa29f67704880fb724f64b98413d1f10c31b905ad8",
@@ -288,6 +289,7 @@
         "bundle/desktop/src/react/stores/streaming-slice.ts": "724430ec7065825dea8e5e9d2c0a6d3b6aa46fe8458fe1eb74873ddbed35ae00",
         "bundle/desktop/src/react/stores/sub-conversation-slice.ts": "576c34168c3496dfee4c4b5f619f1d08ed6aac1e9b74415c72141e24fe231596",
         "bundle/desktop/src/react/stores/subagent-preview-slice.ts": "156d53c7de63249286806f7042cea7f250aad7c70621d8537468d828ba758faf",
+        "bundle/desktop/src/react/stores/task-chip-preference-actions.ts": "51e9c4dfa1bff9b84c2f994147328494f62d39082355328d2c2ff47b0f6fe778",
         "bundle/desktop/src/react/stores/terminal-process-slice.ts": "4699f831c797000b05e439fed2fd7667019d95f2f054233b7e88ab6499b6012f",
         "bundle/desktop/src/react/stores/toast-slice.ts": "a4bba424e59fc4f20cedaa6dcbfd3daffc10571ea32d7ed269ec052e582ce30f",
         "bundle/desktop/src/react/stores/ui-slice.ts": "27a22cd1254650fb6a0c9092aaeee0dd914178a76eec4fdf4e3a77061902bf46",
@@ -382,7 +384,7 @@
         "bundle/desktop/src/react/utils/resolve-plugin-title.ts": "c3c4bea9f429467b6630f3427f9dba2bad96c85318322e88f3ee0aecc86ceaea",
         "bundle/desktop/src/react/utils/session-file-sort.ts": "e707310a6d217ccbc56b0bee11132d256a58110b8b3bdd1604ebfc312a088a1c",
         "bundle/desktop/src/react/utils/session-resource-lookup.ts": "364fa3e46b629b1bd03fa8a8a162c39035285cd7298b524f70131fbb8f4951b9",
-        "bundle/desktop/src/react/utils/session-status-aggregation.ts": "c6ef2bc21cb2ca0aa33bde7fda474fbe3ea9f15f1006e17a95e3be554613b325",
+        "bundle/desktop/src/react/utils/session-status-aggregation.ts": "6fe37a59441aac1bcff216b20a7ca511699e148e6e1bb0fb445987971936c98a",
         "bundle/desktop/src/react/utils/todo-compat.ts": "6db190b6ed3abf248d7f031ecd924df02b5a8ff3847ef1fd655f6b67c1a7dc1b",
         "bundle/desktop/src/react/utils/todo-constants.ts": "31f0164ded7989513f60dbbe9219e22191284fa3e87d3b502d5c45091e70bd8b",
         "bundle/desktop/src/react/utils/tool-call-identity.ts": "aba2e7d26bab9e74fe9d97f01d991be4f37fd638404104a1cc6ab01c7cc4a3ca",
@@ -397,11 +399,12 @@
         "bundle/desktop/src/shared/ui-surface-mode.ts": "73bef4653879d5c69c92c002f841c64945f45ff1bcdb597ed362238d8817dea5",
         "bundle/desktop/src/shared/window-titlebar-preference.ts": "699e14fd04da7b28d7377bbc03e4f9def851f650952e40f22f7ed1e51256aa9e",
         "bundle/lib/app-ui-manifest-route.ts": "e33ede779c0990e39ff158667307a24d3115627e9924375a22f0e45276509546",
-        "bundle/lib/cards/card-document-format.ts": "f1fe310bb3ed34b26fee4d3e8ecfa245f7a35c48f0cc031b46104d92bc6ca3c5",
-        "bundle/lib/cards/card-document.ts": "e540a280eb108b01ed4c49189c5dea760b078e0c01f85cd1de89cb25a96f5bde",
+        "bundle/lib/cards/card-document-format.ts": "36c007a7fa09d563f4170c61febfad3c88f7b082da5d786f62753f71cc84e763",
+        "bundle/lib/cards/card-document.ts": "2dfec8565638de3b47b3d473f0984ca7a42a8220bb5c83186a78980665864374",
         "bundle/lib/cards/card-emit-route.ts": "3d3d520b953b0c4c57798d9f0e22725f1d86e27a4034684b8a39c4798cab9b78",
         "bundle/lib/cards/card-grant-identity.ts": "9eabd74f49c4f008f19fa8ff96c612d83731398ffbe1414ccbb27f1eb43e143c",
-        "bundle/lib/cards/card-manifest-read.ts": "a14d2ad80577fbc57e929e93e6961edf82cf7ef30af369f70860cd547f6332bf",
+        "bundle/lib/cards/card-html-metadata.ts": "495e2807c89d3bfccebe9e9f6e60e7945cfeaff3919bca88133348d9e8e5dcd8",
+        "bundle/lib/cards/card-manifest-read.ts": "5d36042532e619c71b84d235b5e53d6194a31a0ccbafe1032b45fa557d9187c4",
         "bundle/lib/cards/card-schema.ts": "eac6d0e562d27431dbac56ae8f34c24aa5b5cbd69a99a91fd8d167d6f6f669dc",
         "bundle/lib/cards/host-envelope.ts": "eca21c12d2aab1f251f118d4c0bd45e22ae5ce5d2e4819507873808384bf4050",
         "bundle/lib/cards/pinned-card-identity.ts": "a27c6fd41bf0df7fa7391f2461cbfad42cb3a9813d1da21145b4e19b01dda31e",
@@ -430,7 +433,7 @@
         "bundle/shared/chalkboard-layout/layout-document-factory.ts": "bde4dfc7b6526b61ad29b72cc5cb7648569b07208bc7f461edd1afcd6812840f",
         "bundle/shared/chalkboard-layout/layout-document-reducer.ts": "adb403937bf8b4d8a5222ad957ad5e533f5f85f013f4be6171a1278858ec8ad6",
         "bundle/shared/chalkboard-layout/layout-errors.ts": "6f43673b0bf49bac9f9c3a42ff3fa74658cc8e761d7709c70d4c6b7be662499b",
-        "bundle/shared/chat-ui-state.ts": "bc59e0febc96dc502e9ca6ba0e6d65a22c081e645fd5e3b749b3cc3fa235f4b3",
+        "bundle/shared/chat-ui-state.ts": "deb2738cebce71a7d1b5a65187bdd73a22517193f3a9b7ab2d25734da7856368",
         "bundle/shared/client-layout-profile.ts": "f8df71afca876bc81465001cb02aaa7fc6d54cd5eb6c864383aaf4c6bab0dbff",
         "bundle/shared/contract-versions.json": "0ce12a4786f45caffa01741c49ab97f568bbeda37402a34890f9618595363015",
         "bundle/shared/contract-versions.ts": "308039f62bfbcb712ab52dd400fec761ee911f5f01af5f9dbd048d32b8fcb6fe",
@@ -523,6 +526,7 @@
         "dependency/node_modules/compute-scroll-into-view": "a2c2b408c991011ae891e2af14ad50e40ee078b627f640efa45055e7c092b24e",
         "dependency/node_modules/dayjs": "c5fdad0c2f4b1a553de00da793c2e02514ab5be1d1d922fdfacc454cf653464d",
         "dependency/node_modules/entities": "ce2e648ddaaaa2d5ffe1208b2a4f8f49431288d7a819f926db28c7eaf8201879",
+        "dependency/node_modules/parse5/node_modules/entities": "994ec38b0f57591ab71f3f40f8b9395a227f943dabae4f00cc03d9c85bb596a5",
         "dependency/node_modules/framer-motion": "9315b7871a7079d27e57da16d4b806e5a275d0ffb4fab5f247a16155debe480e",
         "dependency/node_modules/is-mobile": "c78a305a20671671a1c8d9e927c1f4789011bb6dc8bad949290828e8d7ef47d7",
         "dependency/node_modules/js-yaml": "3561e41d0f24c14df2dbca7422068a5e4e5b1479dc9db03672426e8a1ff5e223",
@@ -535,6 +539,7 @@
         "dependency/node_modules/motion": "38e763b365fb1f6a98fafd432e892f013603d066e1e59b50941179eca9bd8f3a",
         "dependency/node_modules/motion-dom": "bc689db898a176a69062bcf63b4953293a1519d903edd59d59ee492c809249d9",
         "dependency/node_modules/motion-utils": "2b4b86185e38e29ae9a73085f98e8839ad7c2f3ac8bf526400af4102f7c5cc0b",
+        "dependency/node_modules/parse5": "6f53349dbfaf15443374d880be50100a65b19aded4910379242aca31b95be0b2",
         "dependency/node_modules/punycode.js": "53cc80ba1935e7a62a3f9d941e2a9971ddf58d47708a3bbf464c3a29258458c4",
         "dependency/node_modules/@rc-component/util/node_modules/react-is": "45ff057e40418884677a4521aa7b1089aa864c8a595287c91ed6f9529ac8607d",
         "dependency/node_modules/reselect": "ae687795295629632b0f93d8a22a982ff7ea17fa3e5785133b0b92e48021c664",
@@ -804,7 +809,7 @@
               },
               {
                 "path": "desktop/src/react/chalkboard/detached/child-window.ts",
-                "bytes": 16871
+                "bytes": 17287
               },
               {
                 "path": "desktop/src/react/chalkboard/detached/spawn-memory.ts",
@@ -1132,7 +1137,7 @@
               },
               {
                 "path": "desktop/src/react/services/app-event-actions.ts",
-                "bytes": 20924
+                "bytes": 21251
               },
               {
                 "path": "desktop/src/react/services/font-runtime.ts",
@@ -1288,7 +1293,7 @@
               },
               {
                 "path": "desktop/src/react/stores/chat-view-slice.ts",
-                "bytes": 5048
+                "bytes": 9568
               },
               {
                 "path": "desktop/src/react/stores/computer-overlay-slice.ts",
@@ -1443,8 +1448,12 @@
                 "bytes": 2461
               },
               {
+                "path": "desktop/src/react/stores/selectors/chat-ui-prefs.ts",
+                "bytes": 1983
+              },
+              {
                 "path": "desktop/src/react/stores/selectors/file-refs.ts",
-                "bytes": 14836
+                "bytes": 14859
               },
               {
                 "path": "desktop/src/react/stores/selectors/media-sequence.ts",
@@ -1452,7 +1461,7 @@
               },
               {
                 "path": "desktop/src/react/stores/selectors/session-status.ts",
-                "bytes": 6450
+                "bytes": 7744
               },
               {
                 "path": "desktop/src/react/stores/selectors/visible-surface.ts",
@@ -1505,6 +1514,10 @@
               {
                 "path": "desktop/src/react/stores/subagent-preview-slice.ts",
                 "bytes": 2196
+              },
+              {
+                "path": "desktop/src/react/stores/task-chip-preference-actions.ts",
+                "bytes": 5959
               },
               {
                 "path": "desktop/src/react/stores/terminal-process-slice.ts",
@@ -2024,7 +2037,7 @@
               },
               {
                 "path": "desktop/src/react/utils/session-status-aggregation.ts",
-                "bytes": 8595
+                "bytes": 10774
               },
               {
                 "path": "desktop/src/react/utils/todo-compat.ts",
@@ -2100,11 +2113,11 @@
               },
               {
                 "path": "lib/cards/card-document-format.ts",
-                "bytes": 1595
+                "bytes": 2349
               },
               {
                 "path": "lib/cards/card-document.ts",
-                "bytes": 95994
+                "bytes": 110660
               },
               {
                 "path": "lib/cards/card-emit-route.ts",
@@ -2115,8 +2128,12 @@
                 "bytes": 4585
               },
               {
+                "path": "lib/cards/card-html-metadata.ts",
+                "bytes": 3739
+              },
+              {
                 "path": "lib/cards/card-manifest-read.ts",
-                "bytes": 3930
+                "bytes": 8721
               },
               {
                 "path": "lib/cards/card-schema.ts",
@@ -2236,7 +2253,7 @@
               },
               {
                 "path": "shared/chat-ui-state.ts",
-                "bytes": 1380
+                "bytes": 6768
               },
               {
                 "path": "shared/client-layout-profile.ts",
@@ -2741,6 +2758,12 @@
             "integrity": "sha512-V0hjH4dGPh9Ao5p0MoRY6BVqtwCjhz6vI5LT8AJ55H+4g9/4vbHx1I54fS0XuclLhDHArPQCiMjDxjaL8fPxhw=="
           },
           {
+            "path": "node_modules/parse5/node_modules/entities",
+            "name": "entities",
+            "version": "8.0.0",
+            "integrity": "sha512-zwfzJecQ/Uej6tusMqwAqU/6KL2XaB2VZ2Jg54Je6ahNBGNH6Ek6g3jjNCF0fG9EWQKGZNddNjU5F1ZQn/sBnA=="
+          },
+          {
             "path": "node_modules/framer-motion",
             "name": "framer-motion",
             "version": "12.40.0",
@@ -2811,6 +2834,12 @@
             "name": "motion-utils",
             "version": "12.39.0",
             "integrity": "sha512-8nadJAJjTtqRkmRF36FoJTrywK9nnFmnPwnSMyxaOCU7GDjN9RTMJIxx9De8ErM+vpPhMccr/6fo5WciyQLnMQ=="
+          },
+          {
+            "path": "node_modules/parse5",
+            "name": "parse5",
+            "version": "8.0.1",
+            "integrity": "sha512-z1e/HMG90obSGeidlli3hj7cbocou0/wa5HacvI3ASx34PecNjNQeaHNo5WIZpWofN9kgkqV1q5YvXe3F0FoPw=="
           },
           {
             "path": "node_modules/punycode.js",
@@ -2916,10 +2945,10 @@
         "sessions.ts": "e54b5142f34f0789c63a15726853c3d9a77f59a26620da072d51383ae2acd3c0",
         "settings.ts": "7734cfc20bf97034ed2628e1f62a50bddcc6a0268d93df0be8107cde51821147",
         "surfaces.ts": "7df92e8b480ae53d39cf2d2e13ddf865e77b3423faed9f29012f5d79ccdf9b65",
-        "tasks.ts": "553ac74e3f944de41b53ee77b2864c460d80155f3e54b39e20b332b5d20b5127",
+        "tasks.ts": "e40fbf317fe3e1f037e3c152bc2fbafacb7afa0eb78fd9cc9bf2d4c1c1156cda",
         "windows.ts": "3a832f4947637eccd4ff326aaaee6435f10ee2818baa144f50ed0c2e4f8233bc",
         "workspace.ts": "425426afc12dad6357712ecbf3361de4250b9420f0e8d1c16f8b81b57f6203a0",
-        "package.json": "81c2f2ac74cd741d4c5b44d8787a157e044e228b557226c1096af40ed702ba8a",
+        "package.json": "e5df7c44c7c549d35388666c132f2823d961a05c52caf8b9e41443f623f3eba0",
         "bundle/desktop/src/assets/textures/rice-paper.png": "a09b093b715fc9e8fd0f91ac02fcdc68636e825fa9555820ef8d6b8b7889d64b",
         "bundle/desktop/src/react/ui/ActionFeedbackIcons.tsx": "4bff0cd2c5de939dee7610b23986be040e9cb821a9eeea2db435fac5b408f19f",
         "bundle/desktop/src/react/ui/AntButton.module.css": "68b63e9aaee03a8beb0b71257ecd907e1744e540389b28f787e97f2672434191",
@@ -2979,7 +3008,7 @@
         "bundle/desktop/src/react/chalkboard/chalkboard.module.css": "66603aefdf585753cc6ee01dd1584826cfc2a4c5af2d742cb6adb45a0efb6eee",
         "bundle/desktop/src/react/chalkboard/content-host-core.tsx": "4b86c74644f19977f135fa1a4bfd3230be9376b63ab056f729c5914d536921e8",
         "bundle/desktop/src/react/chalkboard/detached-preview-raise.ts": "aa980d7dedef5c02077e5946dd05249fb841d5847f1692c39ac6362d78715851",
-        "bundle/desktop/src/react/chalkboard/detached/child-window.ts": "2e242951076ffc2bd62ba150daf52f2f90de20b66b460cfa4d611004af18b4bd",
+        "bundle/desktop/src/react/chalkboard/detached/child-window.ts": "a8142f547cdb60972fa7abaf72998407c4b692178898a3910d13c166cecffc86",
         "bundle/desktop/src/react/chalkboard/detached/spawn-memory.ts": "ec6fd37942c3e0ea390d9b16eb6fe22c41c53de50d63ba03ab0c8e3a879df9b7",
         "bundle/desktop/src/react/chalkboard/detached/spawn-placement.ts": "ecfce0e4c440c2f0278007fc4efb37baa91c6acc9d56fb06037eaffdc775cff7",
         "bundle/desktop/src/react/chalkboard/drag/flip.ts": "95ab8c84c7639c0c1a7f2af5a2b41f78999da6205c383876acad957517c2743f",
@@ -3061,7 +3090,7 @@
         "bundle/desktop/src/react/plugin-ui/plugin-card-ui-actions.ts": "62b2ecc5abc6774ef0e245938b14557765a749ff62c3904605a19ad2abf856df",
         "bundle/desktop/src/react/plugin-ui/plugin-storage-actions.ts": "238033704c82791c781b2307b45bb491299383ae72ba14beea52b5a10cc378c4",
         "bundle/desktop/src/react/plugin-ui/plugin-ui-host-controller.ts": "c60c50d8c496930f574db97babd54a8a5f36f2d8764fcff44096934342876bae",
-        "bundle/desktop/src/react/services/app-event-actions.ts": "1eb042e4c2b6208449c85d396848d19fd1888dffa4e10954bee5467e4f45dd2b",
+        "bundle/desktop/src/react/services/app-event-actions.ts": "b31373aeeb753e1875417a9521f7b8f1456f035854bfcf14077c969541b5ac62",
         "bundle/desktop/src/react/services/font-runtime.ts": "b6171e854da9f4e4b84e6d8c5637e23e2a0fd45206d8c7b8a2a730029493dc6b",
         "bundle/desktop/src/react/services/open-preview-resource.tsx": "3faa6e47cc59af5e76ae695f1c7f15ee5de0952ec692de2f601f68476594d9b6",
         "bundle/desktop/src/react/services/previewer-catalog.ts": "6af0ec0bee5389f17b82e5daf8c633113def7750195e0bae8b3629330c316c31",
@@ -3100,7 +3129,7 @@
         "bundle/desktop/src/react/stores/channel-slice.ts": "e248e3c58aab40fe7d24dbc10007f97e1d5cbf78e28cf1497ad13427df609aa9",
         "bundle/desktop/src/react/stores/chat-find-slice.ts": "7f0a8039466c9f973e24a570f6c9611cf3fc3bf8500ca7c01e833d88b2046ea7",
         "bundle/desktop/src/react/stores/chat-slice.ts": "744afb728692f6b77cfdb94344f1f303623bf805bcb5fb473d20afb4f0cee310",
-        "bundle/desktop/src/react/stores/chat-view-slice.ts": "a95fd6403644882fe7a077a7982e7aca765219e27c12da291b590f52fe0793dd",
+        "bundle/desktop/src/react/stores/chat-view-slice.ts": "9e912cbe7fc4e3cc77d66f945b736611815f81d635620ccb72f6953b49345787",
         "bundle/desktop/src/react/stores/computer-overlay-slice.ts": "72ae13c0eddb640417ee7d6055a8b97efe1bf2631a75727a112697c133073169",
         "bundle/desktop/src/react/stores/connection-slice.ts": "349fa785e640abf6d22f8f975284e5a51a9dc04714aff0618cc9edede464ca2d",
         "bundle/desktop/src/react/stores/context-slice.ts": "5b5a763ae28bcbdc5dec02c4cf2c99c3ea802363797c2ab076ef56a54bed2fd2",
@@ -3139,9 +3168,10 @@
         "bundle/desktop/src/react/stores/screenshot-slice.ts": "caf11d1c54f6e802180984a95fdb55c9e3f332b1884899d33f380017c393d7a9",
         "bundle/desktop/src/react/stores/selection-actions.ts": "964e3edd4b5bd9ccb84584484203b2225339b1d0e85a7001e9825fca4a7bea58",
         "bundle/desktop/src/react/stores/selection-slice.ts": "64de49a91dbdccf6b3c49cb87e50626b32152a011b47f092351b1d2b1a592ebf",
-        "bundle/desktop/src/react/stores/selectors/file-refs.ts": "a038306e65f859bd2040a753797d880a731169342576a4dcc41686f57d666480",
+        "bundle/desktop/src/react/stores/selectors/chat-ui-prefs.ts": "99ccf115ad9f67f3759ce98a077cd4e093af622706645417f0efe23bcc75b436",
+        "bundle/desktop/src/react/stores/selectors/file-refs.ts": "1db009446c79b94897d73959eef9d5cc4b13c58d8cab4d55304771b3d8b26d55",
         "bundle/desktop/src/react/stores/selectors/media-sequence.ts": "5383826069de95a8715b98f7195c5b9e1781b123267ede8628b2f3c3fd376f92",
-        "bundle/desktop/src/react/stores/selectors/session-status.ts": "1870c9b666ce2557170eb15da3c14b3db7438c82a0569309e8f695b56642f330",
+        "bundle/desktop/src/react/stores/selectors/session-status.ts": "2a5750acd14255fc6306ea06de1c227f5f72537435ff8e1ab058c2ffc96fd483",
         "bundle/desktop/src/react/stores/selectors/visible-surface.ts": "1403af59c02ed1b79fea623742adc00a82a13fa87f691d90da98b7e8b23e2964",
         "bundle/desktop/src/react/stores/session-actions.ts": "25578f0cc4d6d7132be4a8671aeb914c7dc88a96d223df4dd6b226dc2594d96f",
         "bundle/desktop/src/react/stores/session-background-task-actions.ts": "9cb1a88dfedd39bf1627cbaa29f67704880fb724f64b98413d1f10c31b905ad8",
@@ -3155,6 +3185,7 @@
         "bundle/desktop/src/react/stores/streaming-slice.ts": "724430ec7065825dea8e5e9d2c0a6d3b6aa46fe8458fe1eb74873ddbed35ae00",
         "bundle/desktop/src/react/stores/sub-conversation-slice.ts": "576c34168c3496dfee4c4b5f619f1d08ed6aac1e9b74415c72141e24fe231596",
         "bundle/desktop/src/react/stores/subagent-preview-slice.ts": "156d53c7de63249286806f7042cea7f250aad7c70621d8537468d828ba758faf",
+        "bundle/desktop/src/react/stores/task-chip-preference-actions.ts": "51e9c4dfa1bff9b84c2f994147328494f62d39082355328d2c2ff47b0f6fe778",
         "bundle/desktop/src/react/stores/terminal-process-slice.ts": "4699f831c797000b05e439fed2fd7667019d95f2f054233b7e88ab6499b6012f",
         "bundle/desktop/src/react/stores/toast-slice.ts": "a4bba424e59fc4f20cedaa6dcbfd3daffc10571ea32d7ed269ec052e582ce30f",
         "bundle/desktop/src/react/stores/ui-slice.ts": "27a22cd1254650fb6a0c9092aaeee0dd914178a76eec4fdf4e3a77061902bf46",
@@ -3249,7 +3280,7 @@
         "bundle/desktop/src/react/utils/resolve-plugin-title.ts": "c3c4bea9f429467b6630f3427f9dba2bad96c85318322e88f3ee0aecc86ceaea",
         "bundle/desktop/src/react/utils/session-file-sort.ts": "e707310a6d217ccbc56b0bee11132d256a58110b8b3bdd1604ebfc312a088a1c",
         "bundle/desktop/src/react/utils/session-resource-lookup.ts": "364fa3e46b629b1bd03fa8a8a162c39035285cd7298b524f70131fbb8f4951b9",
-        "bundle/desktop/src/react/utils/session-status-aggregation.ts": "c6ef2bc21cb2ca0aa33bde7fda474fbe3ea9f15f1006e17a95e3be554613b325",
+        "bundle/desktop/src/react/utils/session-status-aggregation.ts": "6fe37a59441aac1bcff216b20a7ca511699e148e6e1bb0fb445987971936c98a",
         "bundle/desktop/src/react/utils/todo-compat.ts": "6db190b6ed3abf248d7f031ecd924df02b5a8ff3847ef1fd655f6b67c1a7dc1b",
         "bundle/desktop/src/react/utils/todo-constants.ts": "31f0164ded7989513f60dbbe9219e22191284fa3e87d3b502d5c45091e70bd8b",
         "bundle/desktop/src/react/utils/tool-call-identity.ts": "aba2e7d26bab9e74fe9d97f01d991be4f37fd638404104a1cc6ab01c7cc4a3ca",
@@ -3264,11 +3295,12 @@
         "bundle/desktop/src/shared/ui-surface-mode.ts": "73bef4653879d5c69c92c002f841c64945f45ff1bcdb597ed362238d8817dea5",
         "bundle/desktop/src/shared/window-titlebar-preference.ts": "699e14fd04da7b28d7377bbc03e4f9def851f650952e40f22f7ed1e51256aa9e",
         "bundle/lib/app-ui-manifest-route.ts": "e33ede779c0990e39ff158667307a24d3115627e9924375a22f0e45276509546",
-        "bundle/lib/cards/card-document-format.ts": "f1fe310bb3ed34b26fee4d3e8ecfa245f7a35c48f0cc031b46104d92bc6ca3c5",
-        "bundle/lib/cards/card-document.ts": "e540a280eb108b01ed4c49189c5dea760b078e0c01f85cd1de89cb25a96f5bde",
+        "bundle/lib/cards/card-document-format.ts": "36c007a7fa09d563f4170c61febfad3c88f7b082da5d786f62753f71cc84e763",
+        "bundle/lib/cards/card-document.ts": "2dfec8565638de3b47b3d473f0984ca7a42a8220bb5c83186a78980665864374",
         "bundle/lib/cards/card-emit-route.ts": "3d3d520b953b0c4c57798d9f0e22725f1d86e27a4034684b8a39c4798cab9b78",
         "bundle/lib/cards/card-grant-identity.ts": "9eabd74f49c4f008f19fa8ff96c612d83731398ffbe1414ccbb27f1eb43e143c",
-        "bundle/lib/cards/card-manifest-read.ts": "a14d2ad80577fbc57e929e93e6961edf82cf7ef30af369f70860cd547f6332bf",
+        "bundle/lib/cards/card-html-metadata.ts": "495e2807c89d3bfccebe9e9f6e60e7945cfeaff3919bca88133348d9e8e5dcd8",
+        "bundle/lib/cards/card-manifest-read.ts": "5d36042532e619c71b84d235b5e53d6194a31a0ccbafe1032b45fa557d9187c4",
         "bundle/lib/cards/card-schema.ts": "eac6d0e562d27431dbac56ae8f34c24aa5b5cbd69a99a91fd8d167d6f6f669dc",
         "bundle/lib/cards/host-envelope.ts": "eca21c12d2aab1f251f118d4c0bd45e22ae5ce5d2e4819507873808384bf4050",
         "bundle/lib/cards/pinned-card-identity.ts": "a27c6fd41bf0df7fa7391f2461cbfad42cb3a9813d1da21145b4e19b01dda31e",
@@ -3297,7 +3329,7 @@
         "bundle/shared/chalkboard-layout/layout-document-factory.ts": "bde4dfc7b6526b61ad29b72cc5cb7648569b07208bc7f461edd1afcd6812840f",
         "bundle/shared/chalkboard-layout/layout-document-reducer.ts": "adb403937bf8b4d8a5222ad957ad5e533f5f85f013f4be6171a1278858ec8ad6",
         "bundle/shared/chalkboard-layout/layout-errors.ts": "6f43673b0bf49bac9f9c3a42ff3fa74658cc8e761d7709c70d4c6b7be662499b",
-        "bundle/shared/chat-ui-state.ts": "bc59e0febc96dc502e9ca6ba0e6d65a22c081e645fd5e3b749b3cc3fa235f4b3",
+        "bundle/shared/chat-ui-state.ts": "deb2738cebce71a7d1b5a65187bdd73a22517193f3a9b7ab2d25734da7856368",
         "bundle/shared/client-layout-profile.ts": "f8df71afca876bc81465001cb02aaa7fc6d54cd5eb6c864383aaf4c6bab0dbff",
         "bundle/shared/contract-versions.json": "0ce12a4786f45caffa01741c49ab97f568bbeda37402a34890f9618595363015",
         "bundle/shared/contract-versions.ts": "308039f62bfbcb712ab52dd400fec761ee911f5f01af5f9dbd048d32b8fcb6fe",
@@ -3390,6 +3422,7 @@
         "dependency/node_modules/compute-scroll-into-view": "a2c2b408c991011ae891e2af14ad50e40ee078b627f640efa45055e7c092b24e",
         "dependency/node_modules/dayjs": "c5fdad0c2f4b1a553de00da793c2e02514ab5be1d1d922fdfacc454cf653464d",
         "dependency/node_modules/entities": "ce2e648ddaaaa2d5ffe1208b2a4f8f49431288d7a819f926db28c7eaf8201879",
+        "dependency/node_modules/parse5/node_modules/entities": "994ec38b0f57591ab71f3f40f8b9395a227f943dabae4f00cc03d9c85bb596a5",
         "dependency/node_modules/framer-motion": "9315b7871a7079d27e57da16d4b806e5a275d0ffb4fab5f247a16155debe480e",
         "dependency/node_modules/is-mobile": "c78a305a20671671a1c8d9e927c1f4789011bb6dc8bad949290828e8d7ef47d7",
         "dependency/node_modules/js-yaml": "3561e41d0f24c14df2dbca7422068a5e4e5b1479dc9db03672426e8a1ff5e223",
@@ -3402,6 +3435,7 @@
         "dependency/node_modules/motion": "38e763b365fb1f6a98fafd432e892f013603d066e1e59b50941179eca9bd8f3a",
         "dependency/node_modules/motion-dom": "bc689db898a176a69062bcf63b4953293a1519d903edd59d59ee492c809249d9",
         "dependency/node_modules/motion-utils": "2b4b86185e38e29ae9a73085f98e8839ad7c2f3ac8bf526400af4102f7c5cc0b",
+        "dependency/node_modules/parse5": "6f53349dbfaf15443374d880be50100a65b19aded4910379242aca31b95be0b2",
         "dependency/node_modules/punycode.js": "53cc80ba1935e7a62a3f9d941e2a9971ddf58d47708a3bbf464c3a29258458c4",
         "dependency/node_modules/@rc-component/util/node_modules/react-is": "45ff057e40418884677a4521aa7b1089aa864c8a595287c91ed6f9529ac8607d",
         "dependency/node_modules/reselect": "ae687795295629632b0f93d8a22a982ff7ea17fa3e5785133b0b92e48021c664",
@@ -3453,7 +3487,7 @@
         "shared/app-contract/sessions.ts": "e54b5142f34f0789c63a15726853c3d9a77f59a26620da072d51383ae2acd3c0",
         "shared/app-contract/settings.ts": "7734cfc20bf97034ed2628e1f62a50bddcc6a0268d93df0be8107cde51821147",
         "shared/app-contract/surfaces.ts": "7df92e8b480ae53d39cf2d2e13ddf865e77b3423faed9f29012f5d79ccdf9b65",
-        "shared/app-contract/tasks.ts": "553ac74e3f944de41b53ee77b2864c460d80155f3e54b39e20b332b5d20b5127",
+        "shared/app-contract/tasks.ts": "e40fbf317fe3e1f037e3c152bc2fbafacb7afa0eb78fd9cc9bf2d4c1c1156cda",
         "shared/app-contract/windows.ts": "3a832f4947637eccd4ff326aaaee6435f10ee2818baa144f50ed0c2e4f8233bc",
         "shared/app-contract/workspace.ts": "425426afc12dad6357712ecbf3361de4250b9420f0e8d1c16f8b81b57f6203a0",
         "shared/app-entity-capabilities.ts": "9b872f0a6a0c04ed75c40e9c0fb09413d2547a2ef3282159f07c960d8b78133f",
