@@ -22,8 +22,8 @@ import { ROOT } from "../shared/root.mts";
 
 /** 锁文件相对仓库根的路径（交付面清单的同层）。 */
 export const SHIP_LOCK_REL = "packaging/pnpm-lock.yaml";
-/** 派生工位（_tmp 下，跑完即清；与 pack 的 pkg-root 分开，互不干扰）。 */
-const WORK_DIR = join(ROOT, "_tmp", "pkg-lock");
+/** 派生工位（.tmp 下，跑完即清；与 pack 的 pkg-root 分开，互不干扰）。 */
+const WORK_DIR = join(ROOT, ".tmp", "pkg-lock");
 
 /** 一句话说明源 → 目标（日志与 --check 报告用）。 */
 export const ABOUT = "packaging/package.json + 仓库锁文件的解析 → packaging/pnpm-lock.yaml";

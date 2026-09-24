@@ -5,17 +5,17 @@
 // 交付物 = 代码 bundle（dist/）+ cordis 插件 + ui/ 静态树 + **物化后的生产依赖树**
 // （含 win32/darwin/linux × x64/arm64 预编译资产），安装即用、无需 npm install。
 // 依赖物化形态对齐样例 hana-dsh：hoisted 布局（顶层真实目录、无软链接——软链进 zip 跨机
-// 解压即断）。物化在 _tmp/pkg-root/ 隔离进行，不触碰仓库 node_modules。
+// 解压即断）。物化在 .tmp/pkg-root/ 隔离进行，不触碰仓库 node_modules。
 // 流程：复制交付清单（prepackage 钩子已先行 build）→ 物化生产依赖 → 断言多平台资产 → zip → SHA256。
 // 用法：pnpm run package --target <名字>（prepackage 自动前置 build；单独 node scripts/release/pack/index.mts 要求 dist/ 已构建）
 // 产出：releases/dshana-v<version>[-<target>].zip + .sha256。**zip 根 = 包根**：manifest.json、
 //   index.js、node_modules/、ui/ 等全部在 zip 根级，不得套一层目录（宿主安装时在包根读 manifest.json）。
-// 两个临时目录的分工（都在 _tmp/ 下，起手清残留、用完即清、收尾由 postpackage 钩子清）：
-//   · _tmp/pkg-root/<target>：依赖物化**工位**。要跑一次真 install，就得有个像独立项目的目录——
+// 两个临时目录的分工（都在 .tmp/ 下，起手清残留、用完即清、收尾由 postpackage 钩子清）：
+//   · .tmp/pkg-root/<target>：依赖物化**工位**。要跑一次真 install，就得有个像独立项目的目录——
 //     交付面自带的三件（packaging/package.json + packaging/pnpm-lock.yaml + 按目标替换过
 //     supportedArchitectures 的 pnpm-workspace.yaml）落进去跑 `pnpm install --prod --frozen-lockfile`。
-//     隔离在 _tmp 下，仓库自身的 node_modules 与锁文件不被污染。
-//   · _tmp/pkg：交付**组装台**。只放要进包的东西（dist/ + 物化依赖树 + cordis + ui + manifest），
+//     隔离在 .tmp 下，仓库自身的 node_modules 与锁文件不被污染。
+//   · .tmp/pkg：交付**组装台**。只放要进包的东西（dist/ + 物化依赖树 + cordis + ui + manifest），
 //     不带 pnpm 的中间物（lockfile、workspace yaml、.modules.yaml 这些是构建输入，不是交付物）。
 //     把「工位」与「组装台」分开，就是不让构建输入混进安装包；组装出包后立即删。
 //
@@ -129,7 +129,7 @@ fs.ensureDirSync(relDir);
 //   · 用完即清（暂存树 + 铺平目录）；
 //   · 收尾全清由 package.json 的 postpackage 钩子承担（scripts/release/clean-tmp.mts），CI 里也可单独调。
 // 中间原料与暂存树都可再生，真正的产物只有 releases/ 下的 zip + sha256。
-const pkgRoot = join(ROOT, "_tmp", "pkg");
+const pkgRoot = join(ROOT, ".tmp", "pkg");
 for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
 {
   const modules = materializeProdDeps(spec);

@@ -162,7 +162,7 @@ test("extractRequires：无 factory banner 时不炸、空输入得空表", () =
   assert.deepEqual(extractRequires(null), []);
 });
 
-test("stage：把 overlay 落进 _tmp/integrations/<短名>/ 并保内容", () => {
+test("stage：把 overlay 落进 .tmp/integrations/<短名>/ 并保内容", () => {
   const root = mkdtempSync(join(tmpdir(), "hana-int-"));
   try {
     const itRoot = join(root, "integrations", "demo");
@@ -170,8 +170,8 @@ test("stage：把 overlay 落进 _tmp/integrations/<短名>/ 并保内容", () =
     writeFileSync(join(itRoot, "files", "src", "x.ts"), "delta\n");
     const integrations = [{ dir: "demo", package: "p", upstreamDir: "d", root: itRoot, files: [{ path: "src/x.ts", upstreamSha256: sha256("d") }] }];
     const staged = stageIntegrations(integrations, root);
-    assert.deepEqual(staged, [join("_tmp", "integrations", "demo", "src", "x.ts")]);
-    const dst = join(root, "_tmp", "integrations", "demo", "src", "x.ts");
+    assert.deepEqual(staged, [join(".tmp", "integrations", "demo", "src", "x.ts")]);
+    const dst = join(root, ".tmp", "integrations", "demo", "src", "x.ts");
     assert.ok(existsSync(dst));
     assert.equal(readFileSync(dst, "utf8"), "delta\n");
   } finally {
@@ -204,15 +204,15 @@ test("cssScopeOf：包身份进命名空间，且现有集成两两不同", () =
 
 test("scopedClassName：同包内两个模块的同一个 local 名不撞，且与构建机路径无关", () => {
   const id = "@deepseek-ai/dsh-client-ui-chat";
-  const a = scopedClassName(id, "/m1/repo/_tmp/integrations-src/ui-chat/src/client/chat/ChatView.module.css", "root");
-  const b = scopedClassName(id, "/m1/repo/_tmp/integrations-src/ui-chat/src/client/chat/StatsPills.module.css", "root");
+  const a = scopedClassName(id, "/m1/repo/.tmp/integrations-src/ui-chat/src/client/chat/ChatView.module.css", "root");
+  const b = scopedClassName(id, "/m1/repo/.tmp/integrations-src/ui-chat/src/client/chat/StatsPills.module.css", "root");
   assert.notEqual(a, b);
   // 同一个模块在另一台机器（前缀不同）上仍得到同一个名字
-  const aElsewhere = scopedClassName(id, "D:/build/_tmp/integrations-src/ui-chat/src/client/chat/ChatView.module.css", "root");
+  const aElsewhere = scopedClassName(id, "D:/build/.tmp/integrations-src/ui-chat/src/client/chat/ChatView.module.css", "root");
   assert.equal(a, aElsewhere);
   assert.match(a, /^dv_chat_[0-9a-f]{6}_root$/);
   // 跨包同一模块相对路径也不撞
-  assert.notEqual(a, scopedClassName("@deepseek-ai/dsh-client-ui-layout", "/m1/repo/_tmp/integrations-src/ui-layout/src/client/chat/ChatView.module.css", "root"));
+  assert.notEqual(a, scopedClassName("@deepseek-ai/dsh-client-ui-layout", "/m1/repo/.tmp/integrations-src/ui-layout/src/client/chat/ChatView.module.css", "root"));
 });
 
 test("scopedClassName：无 /src/ 时按 pkgDir 取相对路径，不同子树的同名模块不共享身份", () => {

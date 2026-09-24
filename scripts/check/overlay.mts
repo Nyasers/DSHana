@@ -55,7 +55,7 @@ export function overlayTsconfig(repoRoot, mirrorDir) {
       noImplicitAny: false,
       noUnusedLocals: false,
       noUnusedParameters: false,
-      // 暂存树在 _tmp/ 下，解析会一路走到仓库根 node_modules；pnpm 只在那里放了直接
+      // 暂存树在 .tmp/ 下，解析会一路走到仓库根 node_modules；pnpm 只在那里放了直接
       // 依赖的软链，react / @types/node / DSH 自己那批包都住在 .pnpm/node_modules。
       // 用 paths 通配兜住它们，避免把“本仓没装这个包”误报成我们的文件出错。
       // （不用 baseUrl：TS 7 已移除该选项，会直接报 TS5102。）

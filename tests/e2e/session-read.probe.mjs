@@ -36,7 +36,7 @@ const promptArg = (() => {
   const i = process.argv.indexOf("--prompt");
   return i >= 0 ? String(process.argv[i + 1] || "").trim() : "";
 })();
-const dataDir = resolve(process.env.DSH_DATA_DIR || join(REPO, "_tmp", "probe-data"));
+const dataDir = resolve(process.env.DSH_DATA_DIR || join(REPO, ".tmp", "probe-data"));
 const depsRoot = resolve(process.env.DSH_DEPS_ROOT || join(REPO, "node_modules"));
 const entry = join(REPO, "dist", "runtime", "dsh-host.mjs");
 const READY_TIMEOUT_MS = Number(process.env.DSH_PROBE_TIMEOUT_MS || 240000);

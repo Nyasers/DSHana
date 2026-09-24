@@ -67,7 +67,7 @@ test("路径泄漏闸：冻进产物的源码路径被拒，运行期形态放�
     assert.equal(assertNoSourcePathLeak(clean, stage), undefined);
     // 只有相对路径片段（打包器的 CONCATENATED MODULE 注释）不算泄漏：绝对路径才算
     const relative = join(dir, "relative.js");
-    writeFileSync(relative, "// CONCATENATED MODULE: ./_tmp/integrations-src/pkg/src/x.ts\n", "utf8");
+    writeFileSync(relative, "// CONCATENATED MODULE: ./.tmp/integrations-src/pkg/src/x.ts\n", "utf8");
     assert.equal(assertNoSourcePathLeak(relative, stage), undefined);
   } finally {
     rmSync(dir, { recursive: true, force: true });

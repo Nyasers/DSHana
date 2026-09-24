@@ -1,4 +1,4 @@
-# 交付面的 pnpm 配置：出包工位（_tmp/pkg-root/<target>）与锁文件派生（scripts/derive/package-lock.mts）
+# 交付面的 pnpm 配置：出包工位（.tmp/pkg-root/<target>）与锁文件派生（scripts/derive/package-lock.mts）
 # 都用这一份。工位因此是一个自足的项目：package.json + pnpm-lock.yaml + 本文件，不需要仓库根那份
 # 构建面配置。
 #

@@ -4,8 +4,8 @@ node_modules/
 dist/
 releases/
 
-# 临时文件（pack 中间原料 _tmp/pkg、测试产物 _tmp/tests 等）
-_tmp/
+# 临时文件（pack 中间原料 .tmp/pkg、测试产物 .tmp/tests 等）
+.tmp/
 
 # 系统杂项
 *.log

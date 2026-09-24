@@ -3,7 +3,7 @@
 //
 // scripts/integrations/build.mts — 编译集成进包（摊源 → 覆盖 overlay → 编译 → 装包 + 版本戳）。
 //
-// 每个集成的产物落在 _tmp/integrations-built/<短名>/：以**原版包为模板**（lib/index.js、
+// 每个集成的产物落在 .tmp/integrations-built/<短名>/：以**原版包为模板**（lib/index.js、
 // lib/types、package.json 原样），只把 lib/client.js 换成我们编译的那份，版本戳为
 // <上游版本>+dshana-<我们的干净版本>。
 //
@@ -152,7 +152,7 @@ export function templatePackageDir(pkgName, repoRoot = REPO_ROOT) {
 /**
  * 把「待内联的非相对 specifier」解析成绝对文件的 alias 表。
  *
- * 为何需要（本质是幽灵依赖）：集成的 stage 树（_tmp/integrations-src/<短名>）只有 src/ 与 lib/，
+ * 为何需要（本质是幽灵依赖）：集成的 stage 树（.tmp/integrations-src/<短名>）只有 src/ 与 lib/，
  * 既没有自己的 package.json 也没有 node_modules——它里面每一条非相对导入都只能向上走到**本仓**
  * 的依赖树去解，也就是在靠 hoisting 碰运气。上游没有这个问题：它的这些包是 monorepo 的
  * workspace 兄弟，打包器直接从工作区解。
@@ -196,9 +196,9 @@ interface BuildIntegrationsOptions {
 }
 
 /**
- * 编译一个集成：把上游 src 摊到 _tmp/integrations-src/<短名>/，覆盖 overlay，
+ * 编译一个集成：把上游 src 摊到 .tmp/integrations-src/<短名>/，覆盖 overlay，
  * 用我们的 client preset 编译出 lib/client.js，再以原版包为模板组装成
- * _tmp/integrations-built/<短名>/（版本戳 <上游>+dshana-<干净版本>）。
+ * .tmp/integrations-built/<短名>/（版本戳 <上游>+dshana-<干净版本>）。
  */
 export async function buildIntegrations(integrations, { tag, mirrorDir = MIRROR, repoRoot = REPO_ROOT, log = (_msg) => {} }: BuildIntegrationsOptions) {
   const { buildClientBundle } = await import("../../src-cordis/build/client-config.mts");
@@ -212,7 +212,7 @@ export async function buildIntegrations(integrations, { tag, mirrorDir = MIRROR,
     if (!existsSync(template)) throw new Error(`integration ${short}: 本机依赖树找不到原版包 ${template}`);
 
     // 1) 摊源（上游 src 全量，保留相对路径——entry 就是上游的 src/client/index.ts）
-    const stage = join(repoRoot, "_tmp", "integrations-src", short);
+    const stage = join(repoRoot, ".tmp", "integrations-src", short);
     rmSync(stage, { recursive: true, force: true });
     const files = listMirrorFiles(tag, `${upstreamDir}/src`, mirrorDir);
     if (files.length === 0) throw new Error(`integration ${short}: 镜像 ${tag} 下没有 ${upstreamDir}/src`);
@@ -317,7 +317,7 @@ export async function buildIntegrations(integrations, { tag, mirrorDir = MIRROR,
     }
 
     // 5) 以原版包为模板组装（lib/index.js、lib/types、package.json 等原样；被我们重打的那半替换）
-    const out = join(repoRoot, "_tmp", "integrations-built", short);
+    const out = join(repoRoot, ".tmp", "integrations-built", short);
     rmSync(out, { recursive: true, force: true });
     mkdirSync(out, { recursive: true });
     cpSync(join(template, "lib"), join(out, "lib"), { recursive: true });
