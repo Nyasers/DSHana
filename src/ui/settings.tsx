@@ -272,7 +272,7 @@ function App() {
         body: JSON.stringify({ sessionId: s.sessionId, taskId: s.taskId, title: sessionLabel(s) }),
       });
       if (!res.ok || !data || data.ok !== true) throw new Error((data && data.error) || "HTTP " + res.status);
-      setSessionsHint("已在新窗口打开：" + sessionLabel(s));
+      setSessionsHint("已请求打开：" + sessionLabel(s));
     } catch (e) {
       setSessionsWarn(true);
       setSessionsHint("打开失败：" + errText(e));

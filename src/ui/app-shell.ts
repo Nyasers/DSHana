@@ -397,8 +397,6 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
       bridge: SURFACE_API,
       // 目录桥要的宿主 SDK：它是本文件头顶那个 import（不在 globalThis 上，DSH 侧自己也拿不到）。
       sdk: hana,
-      // 闸门票面：带票的页面在 mux URL 上带 sid/tid，中继按「任务还活跃」放行或拒建。
-      gate: cardTicket(),
     });
     // 取 index：privatePrefix 已是完整代理路径（含 _surface 票据，宿主路由直认），用原生同源
     // fetch——hana.api.fetch 的入参是「App 路由相对路径」（会再拼 /api/apps/<id>/routes/），
@@ -422,19 +420,14 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
       .catch(function (err) { showInjectionError(err); });
   }
 
-  // ---- 卡状态条：URL 带 sid 的面（工具出卡时钉住的那一段 DSH 会话）在顶部挂一行跟踪态 ----
+  // ---- 卡状态条：URL 带 sid 的面（钉住某一段 DSH 会话的页面）在顶部挂一行跟踪态 ----
   // 片段与卡页同源：App 后端 /dshana/card-state 返回的就是可直接换进 DOM 的状态行。
-  // 状态跟踪 + 陈旧卡冻结（会话终结后不再占消息流）：
-  //   · 非终态（tracked / cancelling）期间慢轮询，终态即停手——陈旧卡不再打任何请求；
-  //   · 终态（ended）后断消息流并拒绝重开（transport.freezeStreams）。DSH 的 $events 是长命
-  //     订阅（断了会重连），不拒重开就冻不住；多张这样的卡叠在会话里就是宿主卡顿的来源。
-  //   · unknown（无绑定/读不到）不冻：无从判断，宁可不冻。
-  // 冻结前先等一次静默（无在途流）——首屏/历史正走流的时候收线会得半截。
+  // 状态跟踪：非终态（tracked / cancelling）期间慢轮询，终态即停手——页面不再打任何请求。
+  // 终态之后**不断流**：这段会话多半是用户主动打开来翻看的历史会话，断掉或拒绝重开就等于看不了
+  //（旧的「陈旧卡冻结」是给聊天流里的流内卡补的，那种卡已经不挂了）。
   // 取不到状态就整条撤掉，不占版面。行内样式：这条只属于带 sid 的面，不为它往四个页面的
   // CSS 里各拄一份（片段里的 .state/.dot/.detail 由页面提供）。
   var CARD_POLL_MS = 4000;
-  var CARD_FREEZE_GRACE_MS = 5000;
-  var CARD_FREEZE_MAX_MS = 20000;
   function mountCardStrip() {
     const ticket = cardTicket();
     const sid = ticket ? ticket.sessionId : "";
@@ -451,27 +444,7 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
       if (strip.parentNode !== null) strip.parentNode.removeChild(strip);
     };
     let timer: ReturnType<typeof setTimeout> | null = null;
-    let frozen = false;
-    let terminalSeenAt = 0;
     const stop = (): void => { if (timer !== null) { clearTimeout(timer); timer = null; } };
-    const freeze = (): void => {
-      if (frozen) return;
-      frozen = true;
-      stop();
-      try { if (injected.transport) injected.transport.freezeStreams(); } catch (e) { /* 忽略 */ }
-    };
-    const scheduleFreeze = (): void => {
-      if (frozen || terminalSeenAt !== 0) return;
-      terminalSeenAt = Date.now();
-      const tick = (): void => {
-        const waited = Date.now() - terminalSeenAt;
-        let busy = false;
-        try { busy = !!(injected.transport && injected.transport.hasActiveStreams()); } catch (e) { busy = false; }
-        if ((waited >= CARD_FREEZE_GRACE_MS && !busy) || waited >= CARD_FREEZE_MAX_MS) { freeze(); return; }
-        timer = setTimeout(tick, 1000);
-      };
-      timer = setTimeout(tick, 1000);
-    };
     const read = (): Promise<string> =>
       hana.api.fetch("dshana/card-state?sessionId=" + encodeURIComponent(sid), {
         method: "GET", cache: "no-store", headers: { Accept: "text/html" }
@@ -486,8 +459,7 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
       });
     const loop = (): void => {
       read().then((state: string) => {
-        if (frozen) return;
-        if (state === "ended") { scheduleFreeze(); return; }
+        if (state === "ended") return; // 终态：停手（页面留着翻看，不轮询也不断流）
         // tracked / cancelling 才继续问；其余（unknown / gone / 无状态）停手：卡成快照。
         if (state !== "tracked" && state !== "cancelling") return;
         timer = setTimeout(loop, CARD_POLL_MS);

@@ -57,7 +57,7 @@ openBtn?.addEventListener("click", () => {
       });
       const data = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !data || data.ok !== true) throw new Error(data?.error || "HTTP " + res.status);
-      setPhase("opened", "已在新窗口打开");
+      setPhase("opened", "已请求打开（窗口由宿主创建）");
       openBtn.textContent = "已打开";
       // 留住按钮：再点一次是"再开一个窗口"，宿主负责去重与聚焦。
       openBtn.disabled = false;

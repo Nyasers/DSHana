@@ -20,8 +20,6 @@ import {
   ChunkAssembler,
   MUX_CHUNK_QUERY,
   MUX_CHUNK_QUERY_VALUE,
-  MUX_GATE_SID_QUERY,
-  MUX_GATE_TASK_QUERY,
   decodeMuxControlFrame,
   decodeUtf8,
   encodeAck,
@@ -309,22 +307,15 @@ class Inbox {
 export function createStreamMux(
   privateBase: any,
   WebSocketCtor: any = window.WebSocket,
-  gate: { sessionId?: string; taskId?: string } | null = null,
 ) {
   const wsUrl = new URL("api/remote.mux", privateBase);
   wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
   // 声明本页支持承载面分片：中继据此把超限帧按尺寸切开（宿主的 1 MiB 上游帧上限）。
   // 不声明就走原样透传（约定见 lib/mux-chunks.ts）。
   wsUrl.searchParams.set(MUX_CHUNK_QUERY, MUX_CHUNK_QUERY_VALUE);
-  // 闸门票面：卡页带上「钉住的会话 + 对应的宿主任务」，中继据此只让活跃任务的流建起来
-  // （任务失活即拒建并断开活流，见 src/runtime/bridge.ts 的闸门段）。无票页面（主卡 / FP）不带。
-  if (gate && gate.sessionId) wsUrl.searchParams.set(MUX_GATE_SID_QUERY, String(gate.sessionId));
-  if (gate && gate.taskId) wsUrl.searchParams.set(MUX_GATE_TASK_QUERY, String(gate.taskId));
   let socket: WebSocket | null = null;
   const streams = new Map<string, any>();
   let nextId = 0;
-  /** 冻结标志：终态卡不再接受新流（DSH 的 $events 会自己重连，不拒就是没冻住）。 */
-  let frozen = false;
   /** 分片重组：一条消息的分片在同一载体上连续到达，换载体即作废。 */
   const assembler = new ChunkAssembler();
 
@@ -407,7 +398,6 @@ export function createStreamMux(
 
   /** 发一帧。返回 false = 这条载体当场不可用（调用方按载体失败收场，不在死载体上空等）。 */
   const send = (frame): boolean => {
-    if (frozen) return false; // 冻结后不再开载体（cancel 帧也不必补发：会话已终结）
     const s = connect();
     const data = JSON.stringify(frame);
     if (s.readyState === WebSocketCtor.OPEN) {
@@ -426,23 +416,7 @@ export function createStreamMux(
 
   return {
     url: wsUrl.toString(),
-    /** 主载体上还有在途流？调用方用它在冻结前等一次静默。 */
-    hasActiveStreams: () => streams.size > 0,
-    /**
-     * 冻结（会话已终结的卡）：断开当前载体、让在途流以终态收场（不是载体丢失），
-     * 并拒绝之后的 openStream。DSH 的事件订阅断了会重连，不拒就冻不住。
-     */
-    freeze: () => {
-      frozen = true;
-      const s = socket;
-      socket = null;
-      assembler.reset();
-      // 同 dispose 的取向：页面主动收线不属于载体故障，按终态处理（内核客户端 close() 同语义）。
-      failAll(new Error("DSH stream carrier frozen"));
-      try { if (s) s.close(1000, "frozen"); } catch { /* 忽略 */ }
-    },
     async *openStream(endpoint, payload, signal) {
-      if (frozen) throw new Error("DSH stream carrier frozen（会话已终结，本卡不再订阅）");
       if (signal && signal.aborted) throw signal.reason || new DOMException("Aborted", "AbortError");
       if (streams.size >= MAX_STREAMS) throw new Error("Too many DSH remote streams");
       const streamId = "hana-" + (++nextId);
@@ -637,21 +611,17 @@ export function installDirectoryPickerBridge(sdk) {
  * 客户端的 opt-in 通道，语义不变（它对外部 origin 抛错，接管层则原样放行）。
  */
 export interface DshTransport {
-  /** 会话已终结的卡：断消息流并拒绝重开（陈旧卡不再吃连接与渲染）。 */
-  freezeStreams(): void;
-  /** 主载体上还有在途流？（冻结前的静默判断用它。） */
-  hasActiveStreams(): boolean;
   /** 整页收尾（pagehide）：还原全部接管 + 断流。 */
   dispose(): void;
 }
 
 export function installTransport(
   privateBase: URL,
-  { role, bridge, sdk, gate }: { role?: string; bridge?: Record<string, unknown>; sdk?: any; gate?: { sessionId?: string; taskId?: string } | null } = {},
+  { role, bridge, sdk }: { role?: string; bridge?: Record<string, unknown>; sdk?: any } = {},
 ): DshTransport {
   // 请求接管先装：它必须早于任何 DSH 侧代码执行（注入 index 前调用本函数）。
   const restoreTakeover = installRequestTakeover(privateBase);
-  const mux = createStreamMux(privateBase, undefined, gate || null);
+  const mux = createStreamMux(privateBase, undefined);
   const runtimeFetch = createRuntimeFetch(privateBase);
   window.__DSH_TRANSPORT__ = {
     fetch: runtimeFetch,
@@ -681,12 +651,6 @@ export function installTransport(
   // 它是模块作用域的导入，不在 globalThis 上。
   const restoreDirectoryPicker = installDirectoryPickerBridge(sdk);
   return {
-    freezeStreams() {
-      mux.freeze();
-    },
-    hasActiveStreams() {
-      return mux.hasActiveStreams();
-    },
     dispose() {
       try { restoreDirectoryPicker(); } catch { /* 忽略 */ }
       try { restoreClipboard(); } catch { /* 忽略 */ }

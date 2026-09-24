@@ -59,6 +59,15 @@ test("summarizeSessions: 按最近活动降序，缺 updatedAt 用 createdAt", (
   assert.deepEqual(out.map((s) => s.taskId), ["new", "mid", "old"]);
 });
 
+test("summarizeSessions: 同一会话只留最近一条（reply 会给同一个 sessionId 不断建记录）", () => {
+  const out = summarizeSessions([
+    rec("t1", "s-same", { updatedAt: 100 }),
+    rec("t2", "s-same", { updatedAt: 300 }),
+    rec("t3", "s-other", { updatedAt: 200 }),
+  ]);
+  assert.deepEqual(out.map((s) => s.taskId), ["t2", "t3"], "同一 sessionId 只留最近活动的那条");
+});
+
 test("summarizeSessions: 截断到上限，保留最新的那批", () => {
   const many = Array.from({ length: SESSION_LIST_LIMIT + 5 }, (_, i) =>
     rec("t" + String(i).padStart(3, "0"), "s" + i, { updatedAt: i }),

@@ -176,7 +176,10 @@ export function defaultDshanaRouteDeps(ctx) {
       }
       const params: string[] = [];
       if (sessionId) params.push("sid=" + encodeURIComponent(sessionId));
-      if (taskId) params.push("tid=" + encodeURIComponent(taskId));
+      // 不把 tid 带进窗口：卡页拿 tid 当「流票面」，而中继的闸门判的是「宿主任务还活跃」
+      // （终态即失活、拒建流），于是打开一段已终结的会话就等于看不了。窗口是用户主动打开的
+      // 视图，走无票的流（与主卡 / FP 同侧，不闸）。taskId 仍留在 data 里备查。
+      //
       // 把这次请求的 surface 凭据带进窗口页面的 URL：窗口里的卡页用的是同一套 client，
       // hana.api.fetch 与受管服务的票据面都从 URL 的 appSurfaceSession 读
       // （@hana/plugin-sdk 的 pluginApiFetch / pluginApiUrl）。没有票时不拼，窗口页会明确
