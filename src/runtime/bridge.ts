@@ -16,10 +16,6 @@
 //   · cookie 注入：转发时统一补 `cookie: <DSH cookie>`，剥离客户端自带的 cookie/authorization。
 //   · 上游重定向重写：只放行同源 Location，其余 502（防 DSH 被当成开放代理）。
 //   · WS 升级：`/api/remote.mux` 等事件流按原始 socket 双向透传（不解析帧，握手响应原样回写）。
-//   · 闸门（带票的流）：升级 URL 带 `dshanaSid` / `dshanaTask` 票面时，先问 `gate(ticket)`——
-//     对应宿主任务还活跃才放行；失活即拒建，并对已升级的活流定期复查、失活就断开（1008），
-//     外部也可主动调 closeGated。无票的流（主卡 / FP / 直开页）不闸：没有 task 就不拿它当判据。
-//     票面参数在本层取走，不往上游 DSH 转。
 //   · 数据源切换冻结：控制面 `prepare-switch` 置冻结（有在途调用则拒绝），冻结期间普通请求
 //     503、已升级 WS 收到 1013 关闭帧、新 WS 升级直接断开；`resume` 或守门失败时解除。
 //     语义面（DSH 是否真忙）由 onControl 守门；中继只管冻结标志与在途调用计数（对齐样例
@@ -31,33 +27,12 @@ import { createServer, type IncomingHttpHeaders } from "node:http";
 import { connect as netConnect } from "node:net";
 import { timingSafeEqual } from "node:crypto";
 import { errText } from "#/lib/err-text.ts";
-import { MUX_CHUNK_QUERY, MUX_CHUNK_QUERY_VALUE, MUX_GATE_SID_QUERY, MUX_GATE_TASK_QUERY } from "#/lib/mux-chunks.ts";
+import { MUX_CHUNK_QUERY, MUX_CHUNK_QUERY_VALUE } from "#/lib/mux-chunks.ts";
 import { startFrameRelay } from "#/runtime/mux-relay.ts";
 
 const MAX_WS_BUFFER = 1024 * 1024;
 const FREEZE_CLOSE_CODE = 1013; // 数据源切换中：请稍后重连
 const FREEZE_CLOSE_REASON = "DSH data source is changing";
-const GATE_CLOSE_CODE = 1008; // 宿主任务已失活：不再建流 / 断开活流（策略关闭）
-const GATE_CLOSE_REASON = "dshana task is no longer active";
-const GATE_RECHECK_MS = 3000; // 活流复查间隔（只对带票的流；无票不查）
-/**
- * 取闸门票面（从升级 URL 的查询串里取走自己的两个参数，不往上游转）。
- * 无票返回 null——主卡 / FP / 直接开页没有任务可束。
- */
-export function readGateTicket(params: { get(k: string): string | null; delete(k: string): unknown }): { sessionId: string; taskId: string } | null {
-  const sessionId = String(params.get(MUX_GATE_SID_QUERY) || "").trim();
-  const taskId = String(params.get(MUX_GATE_TASK_QUERY) || "").trim();
-  params.delete(MUX_GATE_SID_QUERY);
-  params.delete(MUX_GATE_TASK_QUERY);
-  if (!sessionId && !taskId) return null;
-  return { sessionId, taskId };
-}
-
-/** 票面 → 闸门令牌：同一个任务/会话的一批流共用一条令牌。 */
-export function gateToken(ticket: { sessionId?: string; taskId?: string } | null): string {
-  if (!ticket) return "";
-  return String(ticket.taskId || ticket.sessionId || "");
-}
 
 const HOP_BY_HOP = new Set([
   "connection", "upgrade", "keep-alive", "proxy-authenticate", "proxy-authorization",
@@ -195,30 +170,20 @@ export interface DshBridgeOptions {
   upstreamOrigin: string;
   upstreamCookie?: string;
   onControl?: (action: string, args: any) => Promise<any>;
-  /**
-   * 闸门判据（带票的流）：对应宿主任务还活跃才返回 true。
-   * 缺省不接线 = 不闸（带票的流也照旧放行，用于无宿主环境的单测）。
-   */
-  gate?: (ticket: { sessionId: string; taskId: string }) => boolean | Promise<boolean>;
-  /** 活流复查间隔（毫秒；缺省 GATE_RECHECK_MS）。单测注入毫秒级值。 */
-  gateRecheckMs?: number;
   log?: (s: string) => void;
 }
 
 /** startDshBridge 的返回：实际监听端口 + 幂等关闭。 */
 export interface DshBridgeHandle {
   port: number;
-  /** 断开某条票（任务/会话）的活流；返回是否动过手。 */
-  closeGated: (token: string, reason?: string) => boolean;
   close: () => Promise<void>;
 }
 
 /** 起中继（监听 127.0.0.1:port）。 */
 export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeHandle> {
   const {
-    port, bridgeKey, controlKey, upstreamOrigin, upstreamCookie = "", onControl, gate, gateRecheckMs, log = () => {},
+    port, bridgeKey, controlKey, upstreamOrigin, upstreamCookie = "", onControl, log = () => {},
   } = opts || {};
-  const gateRecheckInterval = Number(gateRecheckMs) > 0 ? Number(gateRecheckMs) : GATE_RECHECK_MS;
   const upstream = new URL(upstreamOrigin);
   if (upstream.protocol !== "http:" || upstream.hostname !== "127.0.0.1") {
     throw new Error("dshana bridge：上游必须是 127.0.0.1 的 loopback HTTP 源");
@@ -230,59 +195,6 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
   const clientSockets = new Set<any>(); // 已升级的浏览器 WS 客户端（冻结时发 1013 关闭帧）
   let frozen = false; // 数据源切换冻结态（prepare-switch 置位，resume/守门失败解除）
   let activeCalls = 0; // 在途普通调用数（冻结前须归零；控制面调用不计）
-
-  // ---- 闸门（带票的流）----
-  // 卡页在 mux URL 上带 `dshanaSid` / `dshanaTask` 票面；这里按票问「对应宿主任务还活跃吗」：
-  // 活 = 放行并按 GATE_RECHECK_MS 复查，失活就断开（1008）；无票的流（主卡 / FP / 直开页）不管。
-  // 判据由外部注入（runtime 侧读宿主任务记录），本层只做开关与时序。
-  const gateSockets = new Map<any, { sessionId: string; taskId: string }>();
-  let gateTimer: ReturnType<typeof setInterval> | null = null;
-
-  /** 问一次闸门；判定失败按放行（宁多活一条流，不误杀在用会话）。 */
-  async function gateAllows(ticket: { sessionId: string; taskId: string }): Promise<boolean> {
-    if (typeof gate !== "function") return true;
-    try {
-      return (await gate(ticket)) !== false;
-    } catch (e) {
-      log("闸门判定失败，放行：" + errText(e));
-      return true;
-    }
-  }
-
-  /** 断开某条票的全部活流（任务失活 / 外部通知）。返回是否动过手。 */
-  function closeGated(token: string, reason = GATE_CLOSE_REASON): boolean {
-    if (!token) return false;
-    const frame = wsCloseFrame(GATE_CLOSE_CODE, reason);
-    let hit = false;
-    for (const [socket, t] of gateSockets) {
-      if (gateToken(t) !== token) continue;
-      hit = true;
-      try { socket.write(frame); } catch { /* 已断 */ }
-      socket.end();
-    }
-    if (hit) log("闸门：断开 " + token + " 的活流（" + reason + "）");
-    return hit;
-  }
-
-  function stopGateRecheck(): void {
-    if (gateTimer) { clearInterval(gateTimer); gateTimer = null; }
-  }
-
-  /** 活流复查：一批票一起问，失活的当场断开。无带票流时不挂定时器。 */
-  async function recheckGates(): Promise<void> {
-    const tokens = new Map<string, { sessionId: string; taskId: string }>();
-    for (const t of gateSockets.values()) tokens.set(gateToken(t), t);
-    for (const [token, t] of tokens) {
-      if (await gateAllows(t)) continue;
-      closeGated(token);
-    }
-  }
-
-  function ensureGateRecheck(): void {
-    if (gateTimer || gateSockets.size === 0 || typeof gate !== "function") return;
-    gateTimer = setInterval(() => { void recheckGates(); }, gateRecheckInterval);
-    if (typeof gateTimer.unref === "function") gateTimer.unref();
-  }
 
   function rejectJson(res, status, message) {
     if (res.headersSent) return;
@@ -441,33 +353,19 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
     requested.searchParams.delete("dshBridge");
     const chunked = requested.searchParams.get(MUX_CHUNK_QUERY) === MUX_CHUNK_QUERY_VALUE;
     requested.searchParams.delete(MUX_CHUNK_QUERY);
-    // 闸门票面：带票的流先判「对应宿主任务还活跃吗」，失活即拒建。票面参数留在本层，不上上游。
-    const ticket = readGateTicket(requested.searchParams);
     const authorized = authorizeBridgeRequest(`${requested.pathname}${requested.search}`, queryKey, bridgeKey);
     if (!authorized || frozen) {
       clientSocket.destroy();
       return;
     }
-    void (async () => {
-      if (ticket && !(await gateAllows(ticket))) {
-        log("闸门：任务已失活，拒建流（" + gateToken(ticket) + "）");
-        clientSocket.destroy();
-        return;
-      }
-      upgradeToUpstream(clientSocket, head, authorized, chunked, ticket, req.headers);
-    })().catch(() => { try { clientSocket.destroy(); } catch { /* 已断 */ } });
+    upgradeToUpstream(clientSocket, head, authorized, chunked, req.headers);
   });
 
-  /** 闸门放行后的升级本体：登记活流（带票的进闸管）、连上游、接管两端。 */
-  function upgradeToUpstream(clientSocket, head, authorized, chunked, ticket, reqHeaders): void {
+  /** 升级本体：登记活流、连上游、接管两端。 */
+  function upgradeToUpstream(clientSocket, head, authorized, chunked, reqHeaders): void {
     clientSockets.add(clientSocket);
-    if (ticket) {
-      gateSockets.set(clientSocket, ticket);
-      ensureGateRecheck();
-    }
     clientSocket.once("close", () => {
       clientSockets.delete(clientSocket);
-      if (gateSockets.delete(clientSocket) && gateSockets.size === 0) stopGateRecheck();
     });
     const headers = upgradeRequestHeaders(reqHeaders, upstream, upstreamCookie);
     const upstreamSocket = netConnect(Number(upstream.port), upstream.hostname, () => {
@@ -520,11 +418,8 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
 
   return {
     port: listenedPort(),
-    /** 断开某条票（任务/会话）的活流；任务失活时外部（App / task-bridge）可主动调。 */
-    closeGated,
     close: () =>
       new Promise((resolve) => {
-        stopGateRecheck();
         for (const controller of activeRequests) controller.abort();
         for (const socket of upstreamSockets) socket.destroy();
         for (const socket of clientSockets) socket.destroy();

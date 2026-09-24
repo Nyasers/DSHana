@@ -42,6 +42,7 @@ import {
   isTerminalTaskStatus,
   type TaskBinding,
 } from "#/lib/task-binding.ts";
+import { summarizeSessions } from "#/lib/session-list.ts";
 export const DASHANA_ROUTE_PREFIX = "/dshana";
 
 // ---- 应用设置（GET/POST /dshana/settings）----
@@ -158,6 +159,39 @@ export function defaultDshanaRouteDeps(ctx) {
         return { state: "cancelling", label: "已请求取消", detail: "reason " + String(binding.cancel.reason || "user") };
       }
       return { state: "tracked", label: "运行中", detail: "App 侧仍在跟踪（rpcId " + String(binding.rpcId || "") + "）" };
+    },
+    // 会话面：列「可打开的 DSH 会话」（坐标来自宿主任务记录）并开窗口。
+    // 不依赖 App 自己的会话索引：任务记录的 metadata.dsh 就是事实源（见 lib/session-list.ts）。
+    listSessions: async () => {
+      const api = ctx && ctx.tasks;
+      if (!api || typeof api.list !== "function") {
+        throw new Error("ctx.tasks.list 不可用（manifest 未声明 app/tasks.manage 或未授权）");
+      }
+      return summarizeSessions(await api.list());
+    },
+    openSessionWindow: async ({ sessionId, taskId, title, surfaceSession }) => {
+      const w = ctx && ctx.windows;
+      if (!w || typeof w.create !== "function") {
+        throw new Error("ctx.windows 不可用（manifest 未声明 app/windows.manage 或未授权）");
+      }
+      const params: string[] = [];
+      if (sessionId) params.push("sid=" + encodeURIComponent(sessionId));
+      // 不把 tid 带进窗口：卡页拿 tid 当「流票面」，而中继的闸门判的是「宿主任务还活跃」
+      // （终态即失活、拒建流），于是打开一段已终结的会话就等于看不了。窗口是用户主动打开的
+      // 视图，走无票的流（与主卡 / FP 同侧，不闸）。taskId 仍留在 data 里备查。
+      //
+      // 把这次请求的 surface 凭据带进窗口页面的 URL：窗口里的卡页用的是同一套 client，
+      // hana.api.fetch 与受管服务的票据面都从 URL 的 appSurfaceSession 读
+      // （@hana/plugin-sdk 的 pluginApiFetch / pluginApiUrl）。没有票时不拼，窗口页会明确
+      // 报缺凭据，而不是装作能跑。
+      if (surfaceSession) params.push("appSurfaceSession=" + encodeURIComponent(surfaceSession));
+      const entry = "/stream.html" + (params.length ? "?" + params.join("&") : "");
+      const win = await w.create({
+        entry,
+        title: typeof title === "string" && title ? title : "DSH 会话",
+        data: { sessionId: sessionId || null, taskId: taskId || null },
+      });
+      return { windowId: (win && win.windowId) || "", entry };
     },
     readSettings: () => readSettingsView(ctx, dataDir),
     // 模型候选只认宿主目录（ctx.models.list）：它是「这条路走不走得通」的唯一事实源，
@@ -367,6 +401,45 @@ export function registerDshanaRoutes(app, deps) {
       }
     });
 
+    // ---- GET /dshana/sessions：可打开的 DSH 会话清单（设置页的「会话」区块）----
+    // 坐标来自宿主任务记录（metadata.dsh.sessionId），不依赖受管 runtime 是否起来。
+    app.get(DASHANA_ROUTE_PREFIX + "/sessions", async (c) => {
+      try {
+        const sessions = await deps.listSessions();
+        return json(c, 200, { ok: true, sessions });
+      } catch (e) {
+        log("warn", "/dshana/sessions 读取失败：" + errText(e));
+        return json(c, 500, { ok: false, error: errText(e) });
+      }
+    });
+
+    // ---- POST /dshana/sessions/open：把一段会话开成一个原生窗口 ----
+    // 形状：{ sessionId?, taskId? }（至少一个）。窗口加载 ui/stream.html 并带同一对参数，
+    // 卡页按 sid 钉住那段会话；这是当前唯一不依赖宿主入口的「打开」路径。
+    app.post(DASHANA_ROUTE_PREFIX + "/sessions/open", async (c) => {
+      try {
+        const body = c && c.req && typeof c.req.json === "function" ? await c.req.json() : null;
+        const sessionId = typeof body?.sessionId === "string" ? body.sessionId.trim() : "";
+        const taskId = typeof body?.taskId === "string" ? body.taskId.trim() : "";
+        if (!sessionId && !taskId) return json(c, 400, { ok: false, error: "需要 sessionId 或 taskId（至少一个）" });
+        // 调用方的 surface 凭据：轻卡经 hana.api.fetch 请求，SDK 会把它放在这个头上。
+        // 透传给窗口页面，窗口里的卡页才能用同一套 client 连受管服务。
+        const surfaceSession =
+          c && c.req && typeof c.req.header === "function" ? String(c.req.header("X-Hana-App-Surface-Session") || "") : "";
+        const out = await deps.openSessionWindow({
+          sessionId,
+          taskId,
+          title: typeof body?.title === "string" ? body.title : "",
+          surfaceSession,
+        });
+        return json(c, 200, { ok: true, ...out });
+      } catch (e) {
+        const msg = errText(e);
+        log("warn", "/dshana/sessions/open 失败：" + msg);
+        return json(c, 500, { ok: false, error: msg });
+      }
+    });
+
     // ---- POST /dshana/settings/restart：数据源切换（入口暂撤）----
     // 切换链（lib/source-switch.ts）还没跑通：停旧、起新、失败回滚这条链没有在真机上验证过，
     // 而它第一步就会停掉正在跑的 runtime。为避免半成品被误触发，这里先只回一句明确的
@@ -391,9 +464,11 @@ export function dshanaRoutesTable() {
     ["GET", DASHANA_ROUTE_PREFIX + "/settings"],
     ["GET", DASHANA_ROUTE_PREFIX + "/models"],
     ["GET", DASHANA_ROUTE_PREFIX + "/card-state"],
+    ["GET", DASHANA_ROUTE_PREFIX + "/sessions"],
     ["POST", DASHANA_ROUTE_PREFIX + "/start"],
     ["POST", DASHANA_ROUTE_PREFIX + "/stop"],
     ["POST", DASHANA_ROUTE_PREFIX + "/settings"],
+    ["POST", DASHANA_ROUTE_PREFIX + "/sessions/open"],
     ["POST", DASHANA_ROUTE_PREFIX + "/settings/restart"],
   ];
 }

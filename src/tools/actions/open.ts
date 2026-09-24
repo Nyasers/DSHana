@@ -10,6 +10,7 @@
 // 模块契约（六个 action 模块共用，见 tools/index.ts）：导出 command / summary / fields /
 // required / readOnly / run；run(input, ctx, deps) 中 deps 仅单测注入提交链。
 import { submitDshTask } from "#/lib/session-run.ts";
+import { sessionCard } from "#/tools/shared/card.ts";
 import type { ToolCtx } from "#/types/host.ts";
 import type { ToolInputBase, ToolResult } from "#/tools/shared/types.ts";
 
@@ -68,8 +69,8 @@ export async function run(input: OpenInput, ctx: ToolCtx, deps?: SubmitDeps): Pr
     (loc.cwd ? "，cwd " + loc.cwd : "") +
     "。任务在后台执行，完成/失败按 " + loc.delivery + " 档投递回本会话（下一个输入点自动贴回，不必为等结果结束回合）；要看执行过程或最终结论用 dshana action=get（taskId " +
     loc.taskId + "）。";
-  // 不挂流内卡：会话的可见入口统一交给对话底部的任务 chip（chipVisibility 在 lib/session-run.ts
-  // 显式声明）。回执里只有文本与 dsh 坐标，不再出 details.card。
+  // 入口卡：一个会话一张把手（reply 不挂，避免叠）。卡上是一行坐标与一颗「在新窗口打开」的
+  // 按钮，点了才在原生窗口里开出 DSH 现场——聊天流里因此不放注入的 iframe。
   return {
     content: [{ type: "text", text }],
     details: {
@@ -82,6 +83,7 @@ export async function run(input: OpenInput, ctx: ToolCtx, deps?: SubmitDeps): Pr
         delivery: loc.delivery,
         cwd: loc.cwd || undefined,
       },
+      card: sessionCard({ action: "open", sessionId: sid, taskId: loc.taskId, delivery: loc.delivery, cwd: loc.cwd }),
     },
   };
 }

@@ -1,17 +1,10 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/tools/shared/card.ts — 会话卡字面量（宿主 plugin_card 块的形状）
+// src/tools/shared/card.ts — 会话入口卡字面量（工具返回值 details.card）
 //
-// 当前无挂载点：工具面不挂流内卡（open / reply 的回执只有 dsh 坐标），宿主任务 chip 的点击目标
-// 也还不由 App 决定。这份字面量与卡页 ui/stream.html 是这张卡的完整定义，留给 chip 打开卡片
-// 的那条路取用。
-//
-// 卡页 = ui/stream.html（只读会话流面）：把这张 DSH 会话的 id 写进查询串，
-// 页面据此把注入的 DSH UI 钉在那一段上（面 = stream，输入位收起）。任务回执本身不另画页面：
-// 会话/目录/taskId 在卡的 title / description 里，实时跟踪态由卡页向 App 后端取
-// /dshana/card-state 补在顶部一行：非终态（tracked / cancelling）期间慢轮询，会话终结后
-// 停手并断掉消息流（陈旧卡冻结，见 ui/app-shell.ts 的 mountCardStrip）。
+// 卡页 = ui/entry.html：一行坐标 + 一个「在新窗口打开」的按钮。它不是 DSH 现场（那个在
+// ui/stream.html，由按钮开出的原生窗口加载），所以不带票据、不注入、会话终结也不冻结。
 //
 // 宿主契约（server 0.951.4 bundle 实证，见 APPS.md「形式归属」）：工具结果的 details.card
 // 被运行时透传成流内 plugin_card 块，随后由卡 iframe 加载 route。三条硬要求：
@@ -23,15 +16,15 @@
 import { APP_ID } from "#/lib/boot-state.ts";
 
 /** 卡页文件名（App ui/ 静态树内）。 */
-export const SESSION_CARD_ROUTE = "/stream.html";
+export const SESSION_CARD_ROUTE = "/entry.html";
 
-/** 卡面比例（"宽:高"；渲染端按冒号拆，数字会被当非法值丢掉）。 */
-const CARD_ASPECT_RATIO = "16:9";
+/** 卡面比例（"宽:高"；渲染端按冒号拆，数字会被当非法值丢掉）。入口卡只有一行，压扁。 */
+const CARD_ASPECT_RATIO = "8:1";
 
-/** 会话流卡的动作面（与 ui/card.html 的 WHAT 表一致）。 */
+/** 会话入口卡的动作面（title 的措辞随它变）。 */
 export type SessionCardAction = "open" | "reply";
 
-/** 动作 → 卡面文案（与 ui/card.html 的 WHAT 表保持一致）。 */
+/** 动作 → 卡面文案。 */
 const WHAT: Record<SessionCardAction, string> = { open: "子代理已开启", reply: "续发消息已提交" };
 
 /** sessionCard 的入参：提交成功后拿到的定位信息。 */
@@ -53,14 +46,14 @@ export interface SessionCard {
   aspectRatio: string;
 }
 
-/** 会话流卡字面量。 */
+/** 会话入口卡字面量。 */
 export function sessionCard({ action, sessionId, taskId, delivery, cwd }: SessionCardInput): SessionCard {
   const now = Date.now();
   const params = [
     "ts=" + now,
     "at=" + now,
     "sid=" + encodeURIComponent(sessionId),
-    // 闸门票面：卡页把宿主任务一并带到查询串，转给 mux URL 供中继按「任务是否活跃」放行。
+    // tid 只给「打开」用：入口卡把它回传给 /dshana/sessions/open，窗口那边再拿去绑票据面。
     "tid=" + encodeURIComponent(taskId),
   ];
   if (cwd) params.push("cwd=" + encodeURIComponent(cwd));

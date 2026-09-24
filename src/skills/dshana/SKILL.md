@@ -15,7 +15,8 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 
 - **无需装依赖、无需配 Node**：DSH 及其依赖树随包分发在安装目录 `node_modules`，我们的子插件也落在那里（`node_modules/@dshana`）；启动只做 DSH boot + 服务监听，不写数据目录里的任何东西。
 - **无需配 API Key / 模型**：推理经受管 runtime 内 `hana.models` 发起，provider 凭据留在宿主。DSH 自带的两个 LLM adapter 行（`llm-deepseek` / `llm-pi-ai`）在我们的 roster patch 里停掉，llm 路由只剩宿主目录那几条（那两行要凭据库里的 key，而凭据在宿主手里，它们只会摆出选到就报 `no API key` 的路由）；设置里那页「模型」也一并停掉（它只编辑这两行的 settings 段，停掉后没可编辑对象，只剩空壳）。会话的模型跟着「谁开的」走：工具建的会话按**调用方那张角色卡配的模型**开（`agents/<id>/config.yaml` 的 `models.chat`，经 `agent:list` / `agent:config` 读，见 `app/agents.read`）；App 设置页的「会话模型」可以改成「自定义模型」固定一条（`sessionModelProvider` / `sessionModelModel`，可选该模型支持的推理强度 `sessionModelReasoningEffort`；缺省是「复用调用方」）；DSH 自己那格默认模型（`agent-default-model`）本页不经手：你手设过、而已不在宿主目录里时，就地对账换一条可服务的（优先留在原 provider 里换，再退角色卡模型、目录第一条；日志有「默认模型对账」，见 `src/lib/model-default-guard.ts`）。
-- **不挂流内卡**：`open` / `reply` 的回执只回句柄坐标，聊天流里不放注入 DSH 的 iframe。会话的常驻可见入口是宿主对话底部的任务 chip（宿主从任务记录派生标题/状态/进度，App 侧在 `ctx.tasks.create` 时显式声明 `chipVisibility: "show"`）；要看会话内容用 `get`，或在 DSHana 主卡里看。
+- **入口卡取代流内卡**：`open` 的回执带一张 `details.card`，落点是 `ui/entry.html`——一行坐标加一颗「在新窗口打开」的按钮。卡本身不注入 DSH、不带票据，所以不会叠也不会冻结；点了才经 `POST /dshana/sessions/open` 开一个原生窗口，那里才是 DSH 现场（`ui/stream.html`）。`reply` 不挂卡（一个会话一张把手）。对话底部的任务 chip 仍由宿主派生（`chipVisibility: "show"` 显式声明）。
+- **会话清单与打开**（App 设置页「会话」）：列出本 App 提交过的 DSH 会话（坐标取自宿主任务记录 `metadata.dsh.sessionId`，见 `GET /dshana/sessions`），每条可在**新窗口**里打开（`POST /dshana/sessions/open` → `ctx.windows.create`，manifest 能力 `app/windows.manage`）。窗口加载 `ui/stream.html` 并按 `sid` 钉住那段会话。这是当前唯一不依赖宿主入口的「打开」路径：聊天流底部那个任务 chip 点开去哪由宿主决定，App 控制不了。
 - **默认模型**：DSH 自己的 `agent-default-model`（`DSH_HOME/settings.yaml`）——用户层为空时回落到 base 层那份官方路由。界面里直接开的会话在 DSH 自己的模型选择器里选一条，候选就是宿主目录那几条；App 设置页只列候选给「会话模型」用，不经手这格。
 - **目录选择器**：DSH 的 workspace 选择对话框由 `directory-picker` seam 提供，官方 web-app 层挂的 `directory-picker-auto` 在 win32 + loopback 下挑 native；native 的客户端半优先读页面里的 `__DSH_DIRECTORY_PICKER__`（官方桌面壳由 preload 注入、弹 Electron 对话框），没桥才叫宿主进程的 OS chooser——后者要在宿主进程里 spawn 一个子进程跑 `IFileOpenDialog`（koffi 走 COM，还先合成一次 Alt 抢前台），上游写明它只适合「操作者坐在宿主屏幕前」，而本形态的受管 runtime 是沙箱里的后台子进程，开不出来。壳页在注入 DSH index 前把桥装上（`src/ui/dsh-inject.ts` 的 `installDirectoryPickerBridge`），弹窗改由宿主出：`hana.resources.pick`，`mode=directory`。用户看到的是自己机器上的系统弹窗，选择器不经沙箱。
 - **数据目录**：固定用 App 内置独立目录（App 数据目录下的 `.dsh`），开箱即用；共享已有目录 / 切换数据源暂不提供。
@@ -146,8 +147,8 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 | 选工作区目录时弹一个错误 | 目录弹窗落到了 DSH 宿主进程的 OS chooser（要在沙箱里 spawn 子进程开 `IFileOpenDialog`），而本形态的 runtime 是后台子进程 | 正常路径不该走到那里：壳页注入的目录桥让弹窗由宿主出（`hana.resources.pick`）。若仍报错，确认桥装上了（`__DSH_DIRECTORY_PICKER__`）且宿主授予了资源选择 |
 | 命令执行里找不到 `bash` 工具 | shell 行按平台互斥挂载：win32 停 `bash` / `bash-sandbox`，只挂 `pwsh` / `pwsh-sandbox` | 用 `pwsh` 工具跑命令（PowerShell）；读写文件仍走文件系统工具 |
 | `reply` 连续 30 秒超时（`RPC callback.tools.execute`）/ 该会话后续提交全失败 | 上一轮的审批没能在回合边界被应答，宿主工具回调超时，会话卡住 | 不要原地重试：换新会话（`open`）；旧会话用 `close` 收敛（回执只说已请求取消，升级标记随后台落定） |
-| `close` 回执只说「已请求取消」/ 会话流卡在会话结束后不再更新 | 正常语义：取消确认不进工具回调（后台结算）；流卡在会话终结后断消息流并拒绝重开（陈旧卡冻结） | 不用处理；要确认结局看 `get` 或任务通知 |
-| 会话流卡停在「历史加载失败」/ `gateway/internal` | 该卡对应的宿主任务已终结，中继按闸门拒了它的流（正常：陈旧卡不再建流） | 不用处理；要看会话内容去主卡或 `get` |
+| `close` 回执只说「已请求取消」 | 正常语义：取消确认不进工具回调（后台结算），升级标记随后台落定 | 不用处理；要确认结局看 `get` 或任务通知 |
+| 窗口（或卡）里的页停在「历史加载失败」/ `gateway/internal` | 该页绑的受管运行体已重建、中继前缀失效，或 surface 凭据缺失 | 重开该窗口；反复出现看 boot 状态与宿主日志 |
 
 ## 已知限制
 
@@ -157,5 +158,5 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 - **数据源固定为 App 内置独立目录**（`<dataDir>/.dsh`，即本形态的 `DSH_HOME`），不碰用户主目录的 `~/.dsh`；共享已有 DSH 目录 / 切换数据源的链未启用（`POST /dshana/settings/restart` 回 503）。
 - **会话↔任务的绑定不落 App 文件**：事实源是宿主任务记录（`metadata.dsh` 的 sessionId / rpcId / timeoutSec / approvalTimeoutMs / cancel），读取失败一律 fail-closed。DSH 未启动时 `list` / `get` 不可用。
 - **越界权限默认走审批，且只能在新回合被应答**：`open` / `reply` 提交后须结束本回合，审批通知（含 `approvalId`）下一回合才到；同回合内空等会撞上宿主工具回调的 30 秒上限，并可能卡住该会话。`approvalTimeoutSec` 内无人应答自动拒绝（缺省 30 秒；显式设 0 禁用）。DSH Web UI 里直接开的会话没有委派任务，审批请求没有应答者，按 fail-closed 处理。
-- **会话流卡在会话终结后冻结**：宿主任务进终态那一刻起，该卡的流按终态收场并拒绝重开（陈旧卡成快照）；中继侧另有一道闸门，带票的流只在宿主任务活跃期建/留。主卡与 FP 不带会话票，不参与冻结与闸门。
+- **会话流不再随任务终结而收线**：页面按 `?sid=` 钉住的那段会话，终态之后照旧可读（历史会话正是用户主动打开来翻看的）。按「任务是否活跃」判流的那一套闸门（中继侧）已随流内卡一起删除。
 - **模型分两条路**：工具建的会话按调用方角色卡配的模型开（App 设置可改成固定的自定义那条）；DSH Web UI 里直接开的会话用 DSH 自己的模型选择器选的那条，候选只来自宿主目录、且是启动快照——宿主改提供商后由 `models-changed` 订阅触发重拉，订阅面不可用时才需要重启 runtime。
