@@ -5,7 +5,7 @@
 //
 // 用法：
 //   node scripts/integrations/index.mts verify          # 镜像版本一致 + 每个 overlay 记录的上游哈希仍成立
-//   node scripts/integrations/index.mts stage           # verify 后把 overlay 落进 _tmp/integrations/<短名>/
+//   node scripts/integrations/index.mts stage           # verify 后把 overlay 落进 .tmp/integrations/<短名>/
 //   node scripts/integrations/index.mts hash <仓库相对路径>   # 打印上游该文件的 sha256（写清单时用）
 //   node scripts/integrations/index.mts list
 //
@@ -74,7 +74,7 @@ const COMMANDS = {
   },
   stage: async ({ tag, version }: CommandContext) => {
     const integrations = await gate(tag, version);
-    console.log(`[integrations] 已落盘 ${stageIntegrations(integrations).length} 个文件到 _tmp/integrations/`);
+    console.log(`[integrations] 已落盘 ${stageIntegrations(integrations).length} 个文件到 .tmp/integrations/`);
   },
   build: async ({ tag, version }: CommandContext) => {
     const integrations = await gate(tag, version);

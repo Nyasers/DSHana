@@ -42,7 +42,7 @@ const appDir = PACKED ? resolvePackedAppDir() : null;
 // 没有那份 bundle 依赖声明，只能留在仓库内、靠仓库树自己扮演安装树。
 const dataDir = resolve(
   process.env.DSH_DATA_DIR ||
-    (appDir ? join(tmpdir(), `dshana-smoke-${process.pid}`) : join(REPO, "_tmp", "smoke-data")),
+  (appDir ? join(tmpdir(), `dshana-smoke-${process.pid}`) : join(REPO, ".tmp", "smoke-data")),
 );
 const depsRoot = resolve(process.env.DSH_DEPS_ROOT || join(appDir || REPO, "node_modules"));
 const entry = appDir ? join(appDir, "runtime", "dsh-host.mjs") : join(REPO, "dist", "runtime", "dsh-host.mjs");

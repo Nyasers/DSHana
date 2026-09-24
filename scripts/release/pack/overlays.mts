@@ -4,7 +4,7 @@
 // scripts/release/pack/overlays.mts — 把集成层编译出的补丁包盖回物化树（单副本）。
 //
 // 机制见 src-integrations/README.md：每个集成是「上游某版文件的整文件拷贝 + 我们的 delta」，
-// 编译产物在 _tmp/integrations-built/<短名>/，这里按 integration.json 的 package 字段覆盖进
+// 编译产物在 .tmp/integrations-built/<短名>/，这里按 integration.json 的 package 字段覆盖进
 // 交付树的对应包目录。版本戳（<上游>+dshana-<干净版本>）由 integrations build 写进补丁包的
 // package.json，此处只原样覆盖。
 import fs from "fs-extra";
@@ -24,7 +24,7 @@ export function applyIntegrations(nodeModulesDir) {
   if (!fs.pathExistsSync(integrationsDir)) {
     throw new Error(`集成目录不存在：${integrationsDir}（预期 src-integrations/；拒绝产出未打补丁的包）`);
   }
-  const builtRoot = join(ROOT, "_tmp", "integrations-built");
+  const builtRoot = join(ROOT, ".tmp", "integrations-built");
   const pending: any[] = [];
   let applied = 0;
   for (const ent of fs.readdirSync(integrationsDir, { withFileTypes: true })) {

@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Nyasers
 //
 // tests/lib/legacy-migrate.test.mjs — src/lib/legacy-migrate.js 计划/验证/标记/建议单测
-// （纯逻辑 + repo _tmp 内的真实小样本模拟 apply；不触碰真实旧插件数据）
+// （纯逻辑 + repo .tmp 内的真实小样本模拟 apply；不触碰真实旧插件数据）
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, cpSync } from "node:fs";
@@ -23,8 +23,8 @@ import {
 } from "../../src/lib/legacy-migrate.ts";
 
 function makeFixture() {
-  // repo _tmp 下建样本（工作区可写；测试自清理）
-  const tmpRoot = join(process.cwd(), "_tmp");
+  // repo .tmp 下建样本（工作区可写；测试自清理）
+  const tmpRoot = join(process.cwd(), ".tmp");
   mkdirSync(tmpRoot, { recursive: true });
   const base = mkdtempSync(join(tmpRoot, "legacy-migrate-"));
   const legacyRoot = join(base, "plugin-data", "dsh-hanako");
@@ -50,7 +50,7 @@ function makeFixture() {
 }
 
 test("planLegacyMigration: no-source（源缺失）", () => {
-  const p = planLegacyMigration({ legacyRoot: join(process.cwd(), "_tmp", "no-such-legacy"), dataDir: join(process.cwd(), "_tmp", "tgt") });
+  const p = planLegacyMigration({ legacyRoot: join(process.cwd(), ".tmp", "no-such-legacy"), dataDir: join(process.cwd(), ".tmp", "tgt") });
   assert.equal(p.state, "no-source");
   assert.ok(p.reason);
 });

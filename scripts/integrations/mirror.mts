@@ -64,17 +64,17 @@ export function listMirrorFiles(tag, dir, mirrorDir = MIRROR) {
   return String(r.stdout || "").split("\n").map((s) => s.trim()).filter(Boolean);
 }
 
-/** 把 overlay 落进 _tmp/integrations/<短名>/（供后续编译步骤消费）。 */
+/** 把 overlay 落进 .tmp/integrations/<短名>/（供后续编译步骤消费）。 */
 export function stageIntegrations(integrations, rootDir = REPO_ROOT) {
   const staged: string[] = [];
   for (const it of integrations) {
     for (const f of Array.isArray(it.files) ? it.files : []) {
       const src = join(it.root, "files", f.path);
       if (!existsSync(src)) throw new Error(`integration ${it.dir}: overlay 文件缺失 ${src}`);
-      const dst = join(rootDir, "_tmp", "integrations", it.dir, f.path);
+      const dst = join(rootDir, ".tmp", "integrations", it.dir, f.path);
       mkdirSync(dirname(dst), { recursive: true });
       cpSync(src, dst);
-      staged.push(join("_tmp", "integrations", it.dir, f.path));
+      staged.push(join(".tmp", "integrations", it.dir, f.path));
     }
   }
   return staged;

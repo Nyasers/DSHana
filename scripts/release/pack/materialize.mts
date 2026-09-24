@@ -23,7 +23,7 @@ import { stagingWorkspaceYaml } from "./targets.mts";
 const require = createRequire(import.meta.url);
 
 /** 依赖物化工位根（起手清残留、用完即清）。 */
-export const STAGING_ROOT = join(ROOT, "_tmp", "pkg-root");
+export const STAGING_ROOT = join(ROOT, ".tmp", "pkg-root");
 
 /** 逐目标干净安装（各自暂存目录 + 各自 supportedArchitectures）；返回该目标的 node_modules 路径。 */
 export function materializeProdDeps(spec) {
@@ -36,7 +36,7 @@ export function materializeProdDeps(spec) {
   fs.copySync(join(ROOT, "packaging", "package.json"), join(dir, "package.json"));
   fs.copySync(join(ROOT, "packaging", "pnpm-lock.yaml"), join(dir, "pnpm-lock.yaml"));
   fs.writeFileSync(join(dir, "pnpm-workspace.yaml"), stagingWorkspaceYaml(spec), "utf8");
-  console.log(`[pack] 物化 ${spec.name}（干净安装，隔离目录 _tmp/pkg-root/${spec.name}）...`);
+  console.log(`[pack] 物化 ${spec.name}（干净安装，隔离目录 .tmp/pkg-root/${spec.name}）...`);
   const res = spawnSync("pnpm", ["install", "--prod", "--frozen-lockfile"], {
     cwd: dir,
     stdio: "inherit",
