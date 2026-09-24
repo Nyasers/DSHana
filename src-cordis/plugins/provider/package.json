@@ -1,6 +1,6 @@
 {
   "name": "@dshana/provider",
-  "version": "1.0.0-rc.26+dsh-0.1.7-rc.1",
+  "version": "1.0.0-rc.24+dsh-0.1.7-rc.1",
   "private": true,
   "type": "module",
   "main": "index.js",
