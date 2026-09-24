@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.0-rc.25+dsh-0.1.7-rc.1](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.24%2Bdsh-0.1.7-rc.1...v1.0.0-rc.25%2Bdsh-0.1.7-rc.1) (2026-09-24)
+
+### Features
+
+* **tools:** 会话入口卡与「在新窗口打开」 ([30133b5](https://github.com/Nyasers/DSHana/commit/30133b5f99666a151dd826ae2ca5e8d6605150fe))
+* **tools:** 统一不挂流内卡，会话可见入口交给宿主任务 chip ([54d9d08](https://github.com/Nyasers/DSHana/commit/54d9d085e9e25c32498282c84d6944d42fe425ae))
+
+### Bug Fixes
+
+* **ui:** 页面不再声明流票面、不再冻结——历史会话打得开了 ([1aa9620](https://github.com/Nyasers/DSHana/commit/1aa962033f7884f1dd5455414491a04eb84409c2))
+
+### Reverts
+
+* 撤掉随功能 PR 进来的两处版本 bump ([7865012](https://github.com/Nyasers/DSHana/commit/78650126a80bc4bebaa2d86943f6a84b7f2eccbf)), references [#183](https://github.com/Nyasers/DSHana/issues/183) [#184](https://github.com/Nyasers/DSHana/issues/184)
+
 ## [1.0.0-rc.24+dsh-0.1.7-rc.1](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.23%2Bdsh-0.1.7-rc.1...v1.0.0-rc.24%2Bdsh-0.1.7-rc.1) (2026-09-23)
 
 ### Bug Fixes
@@ -584,6 +599,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
