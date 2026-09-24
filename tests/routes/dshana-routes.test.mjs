@@ -452,6 +452,66 @@ test("GET /dshana/card-state: 宿主任务面读取失败 → unknown 并如实�
   }
 });
 
+// ---- 会话窗口：入口形态 + 坐标通道 ----
+// 宿主的 windows.create 只接受 ui/ 内的纯路径：entry 里带查询串、片段、反斜杠或百分号编码
+// 一律在宿主侧被拒（APP_WINDOW_ENTRY_INVALID），坐标因此只能走 data。窗口文档由宿主另发一份
+// 路径租约（/api/apps/<id>/ui/_surface/<lease>/<entry>），凭据就在那段路径里，后端不需要、
+// 也不该把任何票面拼进 entry。
+
+test("POST /dshana/sessions/open: 坐标原样交给 deps，入口形态由 deps 决定", async () => {
+  const seen = [];
+  const { app, routes } = makeFakeApp();
+  registerDshanaRoutes(app, makeFakeDeps({
+    openSessionWindow: async (args) => { seen.push(args); return { windowId: "win-1", entry: "/stream.html" }; },
+  }));
+  const handler = routes.find(([m, p]) => m === "POST" && p === DASHANA_ROUTE_PREFIX + "/sessions/open")[2];
+  const ctx = makeFakeCtx();
+  ctx.req = { json: async () => ({ sessionId: "sid-1", taskId: "tid-1", title: "T" }) };
+  const res = await handler(ctx);
+  assert.equal(res.status, 200);
+  assert.equal(res.body.ok, true);
+  assert.equal(res.body.windowId, "win-1");
+  assert.deepEqual(seen, [{ sessionId: "sid-1", taskId: "tid-1", title: "T" }]);
+});
+
+test("POST /dshana/sessions/open: 请求头里的 surface 票不进窗口（后端不转交凭据）", async () => {
+  const { app, routes } = makeFakeApp();
+  let args = null;
+  registerDshanaRoutes(app, makeFakeDeps({
+    openSessionWindow: async (a) => { args = a; return { windowId: "w", entry: "/stream.html" }; },
+  }));
+  const handler = routes.find(([m, p]) => m === "POST" && p === DASHANA_ROUTE_PREFIX + "/sessions/open")[2];
+  const ctx = makeFakeCtx();
+  ctx.req = {
+    json: async () => ({ sessionId: "sid-1" }),
+    header: (name) => (name === "X-Hana-App-Surface-Session" ? "surface-token" : undefined),
+  };
+  await handler(ctx);
+  assert.deepEqual(Object.keys(args).sort(), ["sessionId", "taskId", "title"], "deps 只收坐标，不收凭据");
+});
+
+test("openSessionWindow: entry 是宿主可接受的纯 ui 路径（无 ? # % \\），坐标走 data", async () => {
+  const created = [];
+  const deps = defaultDshanaRouteDeps({
+    appId: "dshana",
+    logger: { info() {} },
+    windows: { create: async (input) => { created.push(input); return { windowId: "win-1" }; } },
+  });
+  const out = await deps.openSessionWindow({ sessionId: "sid-1", taskId: "tid-1", title: "会话" });
+  assert.equal(created.length, 1);
+  const input = created[0];
+  assert.equal(input.entry, "/stream.html");
+  assert.doesNotMatch(input.entry, /[?#%\\]/, "entry 含查询串/片段/百分号/反斜杠会被宿主拒收");
+  assert.deepEqual(input.data, { sessionId: "sid-1", taskId: "tid-1" });
+  assert.equal(input.title, "会话");
+  assert.deepEqual(out, { windowId: "win-1", entry: "/stream.html" });
+});
+
+test("openSessionWindow: 缺窗口能力 → 明确抛（不静默返回空窗口）", async () => {
+  const deps = defaultDshanaRouteDeps({ appId: "dshana", logger: { info() {} } });
+  await assert.rejects(() => deps.openSessionWindow({ sessionId: "sid-1" }), /ctx\.windows 不可用/);
+});
+
 // ---- 真机 ctx 形状契约 ----
 // 坑：deps 按 ctx.config.dataDir 取数据目录会取空，而宿主（@hana/app-sdk）只在 ctx 顶层给
 // dataDir，ctx.config 是设置读写面。后果 = 读路径静默降级（卡状态恒 unknown），写设置恒 500。
