@@ -3,8 +3,8 @@
 //
 // src/ui/rspack.config.mts — 壳页脚本 bundle 构建配置（ui 域）
 // 产物：dist/ui/app-shell.js（壳页，ESM，`<script type="module" src="./app-shell.js">`）
-// 与 dist/ui/settings.js（App 自己的设置页脚本，同理），以及被 import 的样式
-// dist/ui/<name>.css（页面用 <link> 引入）。
+// 与 dist/ui/settings.js（App 自己的设置页脚本）与 dist/ui/entry.js（会话入口卡脚本），
+// 以及被 import 的样式 dist/ui/<name>.css（页面用 <link> 引入）。
 //
 // 打包纪律：
 //   - 浏览器 SDK @hana/plugin-sdk 与组件库 @hana/plugin-components 从 devDependencies 解析
@@ -30,6 +30,7 @@ export default {
   entry: {
     "app-shell": ui("app-shell.ts"),
     settings: ui("settings.tsx"),
+    entry: ui("entry.ts"),
   },
   output: {
     path: path.join(DIST_DIR, "ui"),

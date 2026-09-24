@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DSHana 会话</title>
+<!-- src/ui/entry.html — 会话入口卡（工具回执 details.card 的落点）。
+     它不是 DSH 的现场：一行标题、一行坐标、一个按钮。按钮经 App 后端
+     POST /dshana/sessions/open 开一个原生窗口，那里才是注入的 DSH UI。
+     为什么不直接挂 DSH 现场：那张卡要注入、要票据、会话终结后还会冻结，是聊天流里最贵的
+     可见物；这一张只是把手，无状态、无注入，卡多几张也无所谓。 -->
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; }
+  html { color-scheme: light dark; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: 13px;
+    color: var(--text, #2A2622);
+    background: var(--bg-card, #FBF7EE);
+  }
+  .entry {
+    box-sizing: border-box; height: 100%; padding: 10px 14px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--border, #8a93a3); }
+  .entry[data-phase="opened"] .dot { background: var(--green, #2e9e5b); }
+  .entry[data-phase="error"] .dot { background: var(--danger, #c0392b); }
+  .texts { min-width: 0; flex: 1; }
+  .label { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meta {
+    margin-top: 2px; font-size: 11.5px; color: var(--text-muted, #6B6158);
+    font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  button {
+    flex: none; font: inherit; font-size: 12.5px; padding: 5px 14px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--border, #D8CFBE); background: var(--bg-card, #FBF7EE); color: var(--text, #2A2622);
+  }
+  button.primary { background: var(--accent, #537D96); border-color: var(--accent, #537D96); color: #fff; }
+  button[disabled] { opacity: .55; cursor: default; }
+</style>
+</head>
+<body>
+  <div class="entry" data-dsh-entry data-phase="idle">
+    <span class="dot"></span>
+    <div class="texts">
+      <div class="label" data-dsh-entry-label>DSH 会话</div>
+      <div class="meta" data-dsh-entry-meta>正在读取坐标…</div>
+    </div>
+    <button type="button" class="primary" data-dsh-entry-open>在新窗口打开</button>
+  </div>
+  <script type="module" src="./entry.js"></script>
+</body>
+</html>
