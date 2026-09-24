@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/tools/shared/card.ts — 会话流卡字面量（工具返回值 details.card）
+// src/tools/shared/card.ts — 会话卡字面量（宿主 plugin_card 块的形状）
 //
-// 卡页 = ui/stream.html（只读会话流面）：工具出卡时把这张 DSH 会话的 id 写进查询串，
+// 当前无挂载点：工具面不挂流内卡（open / reply 的回执只有 dsh 坐标），宿主任务 chip 的点击目标
+// 也还不由 App 决定。这份字面量与卡页 ui/stream.html 是这张卡的完整定义，留给 chip 打开卡片
+// 的那条路取用。
+//
+// 卡页 = ui/stream.html（只读会话流面）：把这张 DSH 会话的 id 写进查询串，
 // 页面据此把注入的 DSH UI 钉在那一段上（面 = stream，输入位收起）。任务回执本身不另画页面：
 // 会话/目录/taskId 在卡的 title / description 里，实时跟踪态由卡页向 App 后端取
 // /dshana/card-state 补在顶部一行：非终态（tracked / cancelling）期间慢轮询，会话终结后

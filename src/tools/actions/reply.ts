@@ -6,10 +6,8 @@
 // 语义对齐 subagent_reply（用句柄续同一个实例）：task 必填；目标二选一——taskId 句柄
 // （open/reply 返回，工具自己解析会话并校验归属）或 sessionId 凭证（显式 = 我要跨对话）。
 // 同会话多次 reply 由 App 侧串行化（lib/session-serialize.ts），按提交顺序排队。
-import { shouldAttachSessionCard } from "#/lib/card-display.ts";
 import { submitDshTask } from "#/lib/session-run.ts";
 import { resolveTarget } from "#/tools/shared/target.ts";
-import { sessionCard } from "#/tools/shared/card.ts";
 import type { ToolCtx } from "#/types/host.ts";
 import type { ToolInputBase, ToolResult } from "#/tools/shared/types.ts";
 
@@ -72,11 +70,7 @@ export async function run(input: ReplyInput, ctx: ToolCtx, deps?: SubmitDeps): P
     (loc.cwd ? "，cwd " + loc.cwd : "") +
     "。任务在后台执行，完成/失败按 " + loc.delivery + " 档投递回本会话（下一个输入点自动贴回，不必为等结果结束回合）；要看执行过程或最终结论用 dshana action=get（taskId " +
     loc.taskId + "）。";
-  // 卡按 App 设置决定挂不挂（sessionCardDisplay，缺省 open-only）：reply 不叠卡——卡页按 sid
-  // 跟整段会话，open 那一张已经跟到这一轮了，再发一张只是多一个 iframe。
-  const card = shouldAttachSessionCard("reply")
-    ? { card: sessionCard({ action: "reply", sessionId: sid, taskId: loc.taskId, delivery: loc.delivery, cwd: loc.cwd }) }
-    : {};
+  // 不挂流内卡：与 open 同一口径，会话的可见入口统一交给对话底部的任务 chip。
   return {
     content: [{ type: "text", text }],
     details: {
@@ -89,7 +83,6 @@ export async function run(input: ReplyInput, ctx: ToolCtx, deps?: SubmitDeps): P
         delivery: loc.delivery,
         cwd: loc.cwd || undefined,
       },
-      ...card,
     },
   };
 }

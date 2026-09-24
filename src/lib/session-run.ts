@@ -352,6 +352,9 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
           // create 时 DSH 会话尚未诞生，sessionId 由建会话后的 update 回写。
           scope: "session",
           delivery: TASK_DELIVERY,
+          // 工具面不挂流内卡，对话底部的任务 chip 是这道会话唯一的常驻可见入口；
+          // 显式 show 与上面两档同理，不吃隐式默认。
+          chipVisibility: "show",
           metadata: {
             dsh: {
               action: parsed.action,

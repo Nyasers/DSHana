@@ -24,7 +24,6 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { isAbsolute, join, normalize } from "node:path";
 import { appDataDir, getAppRuntime } from "#/lib/app-runtime.ts";
 import { APP_SETTING_DEFAULTS, resolveApprovalTimeoutSec, resolveDefaultTimeoutSec } from "#/lib/config.ts";
-import { SESSION_CARD_DISPLAYS } from "#/lib/card-display-modes.ts";
 
 export const SETTINGS_VERSION = 1;
 export const SOURCE_MODES = Object.freeze(["private", "shared"]);
@@ -43,7 +42,6 @@ export const SETTINGS_KEYS = Object.freeze([
   "sessionModelProvider",
   "sessionModelModel",
   "sessionModelReasoningEffort",
-  "sessionCardDisplay",
 ]);
 export const DEFAULT_SETTINGS = Object.freeze({
   mode: "private",
@@ -55,7 +53,6 @@ export const DEFAULT_SETTINGS = Object.freeze({
   sessionModelProvider: APP_SETTING_DEFAULTS.sessionModelProvider,
   sessionModelModel: APP_SETTING_DEFAULTS.sessionModelModel,
   sessionModelReasoningEffort: APP_SETTING_DEFAULTS.sessionModelReasoningEffort,
-  sessionCardDisplay: APP_SETTING_DEFAULTS.sessionCardDisplay,
 });
 /** 会话模型模式：caller = 按调用方角色卡（缺省），custom = 用固定的一条。 */
 export const SESSION_MODEL_MODES = Object.freeze(["caller", "custom"]);
@@ -72,19 +69,6 @@ export const privateHomeOf = (dataDir) => join(dataDir, PRIVATE_HOME_NAME);
 export function normalizeHomeForId(home, platform = process.platform) {
   const p = String(home).replace(/\\/g, "/").replace(/\/+$/, "");
   return platform === "win32" ? p.toLowerCase() : p;
-}
-
-/**
- * 会话流卡的展示档位（工具回执里的 details.card）：三选一，缺省沿用 APP_SETTING_DEFAULTS。
- * 判定与词表在 lib/card-display.ts（那边的归一函数与本处同口径，本处多的是"写入口的拒绝"）。
- */
-function normalizeCardDisplay(input) {
-  const raw = input.sessionCardDisplay;
-  if (raw === undefined || raw === null) return { sessionCardDisplay: APP_SETTING_DEFAULTS.sessionCardDisplay };
-  if (!SESSION_CARD_DISPLAYS.includes(raw)) {
-    throw new Error("会话流卡档位只能是 " + SESSION_CARD_DISPLAYS.join(" / ") + "（收到 " + JSON.stringify(raw) + "）");
-  }
-  return { sessionCardDisplay: raw };
 }
 
 const PROFILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -169,9 +153,9 @@ export function validateSettings(input) {
       throw new Error("shared 模式必须给出 DSH 数据目录（非空字符串，不含 NUL）");
     }
     if (!isAbsolute(input.path)) throw new Error("shared 目录必须是绝对路径（收到 " + input.path + "）");
-    return { mode: "shared", path: normalize(input.path), profile, ...normalizeTimeouts(input), ...normalizeSessionModel(input), ...normalizeCardDisplay(input) };
+    return { mode: "shared", path: normalize(input.path), profile, ...normalizeTimeouts(input), ...normalizeSessionModel(input) };
   }
-  return { mode: "private", path: null, profile, ...normalizeTimeouts(input), ...normalizeSessionModel(input), ...normalizeCardDisplay(input) };
+  return { mode: "private", path: null, profile, ...normalizeTimeouts(input), ...normalizeSessionModel(input) };
 }
 
 /**
@@ -191,14 +175,16 @@ export function sourceOf(settings, dataDir) {
 }
 
 /**
- * 超时两键的读侧兼容：settings.json 缺这两个键时，从 <dataDir>/config.json 的 global.*
+ * 读侧兼容：settings.json 缺这两个键时，从 <dataDir>/config.json 的 global.*
  * 读一次当初始值（只在读路径生效，不当场落盘）；写设置时它们落进 settings.json，这条路
- * 只在缺键时用到。
+ * 只在缺键时用到。另丢弃已退役的键（会话流卡的展示档位）：它们没有对应行为了，留着只会撞上
+ * validateSettings 的未知键拒绝、把整份设置读成失败。
  */
-function withLegacyTimeouts(raw, dataDir) {
+function withReadCompat(raw, dataDir) {
   const out = raw && typeof raw === "object" && !Array.isArray(raw) ? { ...raw } : {};
   if (!("approvalTimeoutSec" in out)) out.approvalTimeoutSec = resolveApprovalTimeoutSec({ dataDir });
   if (!("defaultTimeoutSec" in out)) out.defaultTimeoutSec = resolveDefaultTimeoutSec({ dataDir });
+  delete out.sessionCardDisplay;
   // 其余键（mode/path/profile）缺省落位；顺序要紧：先补完那两个旧位置的超时，缺哪个补哪个，
   // 然后才铺默认，否则默认会先把键占住、那份兼容值就永远读不到了。
   return { ...DEFAULT_SETTINGS, ...out };
@@ -242,7 +228,7 @@ export function createDataSourceStore(ctx) {
           cached = {
             version: SETTINGS_VERSION,
             revision: 0,
-            settings: validateSettings(withLegacyTimeouts({}, ctx.dataDir)),
+            settings: validateSettings(withReadCompat({}, ctx.dataDir)),
           };
           return clone(cached);
         }
@@ -259,7 +245,7 @@ export function createDataSourceStore(ctx) {
       cached = {
         version: SETTINGS_VERSION,
         revision: stored.revision,
-        settings: validateSettings(withLegacyTimeouts(stored.settings, ctx.dataDir)),
+        settings: validateSettings(withReadCompat(stored.settings, ctx.dataDir)),
         ...(lastShared ? { lastShared } : {}),
       };
       return clone(cached);
@@ -351,7 +337,7 @@ export function readSettingsSync(dataDir) {
   try {
     stored = JSON.parse(readFileSync(filename, "utf8"));
   } catch (e) {
-    if ((e as any)?.code === "ENOENT") return validateSettings(withLegacyTimeouts({}, dataDir));
+    if ((e as any)?.code === "ENOENT") return validateSettings(withReadCompat({}, dataDir));
     if (e instanceof SyntaxError) throw new Error("DSH 数据来源设置文件不是合法 JSON：" + e.message);
     throw e;
   }
@@ -360,7 +346,7 @@ export function readSettingsSync(dataDir) {
       "DSH 数据来源设置文件版本不受支持（version=" + JSON.stringify(stored && stored.version) + "，本版 " + SETTINGS_VERSION + "）",
     );
   }
-  return validateSettings(withLegacyTimeouts(stored.settings, dataDir));
+  return validateSettings(withReadCompat(stored.settings, dataDir));
 }
 
 /** 当前数据源身份（读设置文件；文件损坏时抛错——不得静默切错源）。 */

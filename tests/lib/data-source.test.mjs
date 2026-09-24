@@ -43,10 +43,6 @@ const SESSION_DEFAULTS = {
   sessionModelModel: "",
   sessionModelReasoningEffort: "",
 };
-// 会话流卡档位缺省：open-only（一个会话一张）。词表与缺省的单一事实源在
-// lib/card-display-modes.ts，这里只把值钉住。
-const CARD_DEFAULTS = { sessionCardDisplay: "open-only" };
-
 test("validateSettings: private 默认落位，profile 被强制为内置名", () => {
   assert.deepEqual(validateSettings({ mode: "private", path: null, profile: "whatever" }), {
     mode: "private",
@@ -54,7 +50,6 @@ test("validateSettings: private 默认落位，profile 被强制为内置名", (
     profile: PRIVATE_PROFILE,
     ...TIMEOUT_DEFAULTS,
     ...SESSION_DEFAULTS,
-    ...CARD_DEFAULTS,
   });
   assert.deepEqual(validateSettings({ mode: "private" }), {
     mode: "private",
@@ -62,7 +57,6 @@ test("validateSettings: private 默认落位，profile 被强制为内置名", (
     profile: PRIVATE_PROFILE,
     ...TIMEOUT_DEFAULTS,
     ...SESSION_DEFAULTS,
-    ...CARD_DEFAULTS,
   });
   assert.deepEqual(DEFAULT_SETTINGS, {
     mode: "private",
@@ -70,7 +64,6 @@ test("validateSettings: private 默认落位，profile 被强制为内置名", (
     profile: PRIVATE_PROFILE,
     ...TIMEOUT_DEFAULTS,
     ...SESSION_DEFAULTS,
-    ...CARD_DEFAULTS,
   });
 });
 
@@ -206,7 +199,6 @@ test("store.write: 原子落盘 + revision 递增 + lastShared 记录（不留 .
       profile: PRIVATE_PROFILE,
       ...TIMEOUT_DEFAULTS,
       ...SESSION_DEFAULTS,
-      ...CARD_DEFAULTS,
     });
   });
 });
@@ -222,6 +214,19 @@ test("store.read: 损坏 JSON / 版本不符 / revision 非法都明确抛错（
     await assert.rejects(() => createDataSourceStore({ dataDir: dir }).read(), /revision 非法/);
     writeFileSync(file, JSON.stringify({ version: SETTINGS_VERSION, revision: 1, settings: { mode: "cloud" } }));
     await assert.rejects(() => createDataSourceStore({ dataDir: dir }).read(), /private 或 shared/);
+  });
+});
+
+test("store.read: 存量设置里的退役键（会话流卡档位）被丢弃，不撞未知键拒绝", async () => {
+  await withTempDir(async (dir) => {
+    writeFileSync(join(dir, "settings.json"), JSON.stringify({
+      version: SETTINGS_VERSION,
+      revision: 3,
+      settings: { ...DEFAULT_SETTINGS, sessionCardDisplay: "open-only" },
+    }));
+    const snap = await createDataSourceStore({ dataDir: dir }).read();
+    assert.equal("sessionCardDisplay" in snap.settings, false, "退役键在读侧丢掉，不留在快照里");
+    assert.equal(snap.revision, 3, "丢键不改 revision");
   });
 });
 
