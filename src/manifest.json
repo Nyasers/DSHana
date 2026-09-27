@@ -18,8 +18,7 @@
     "app/runtime.local-machine",
     "app/runtime.network",
     "app/ui.clipboard-write",
-    "app/ui.open-external",
-    "app/windows.manage"
+    "app/ui.open-external"
   ],
   "network": {
     "allowedHosts": [
@@ -52,6 +51,17 @@
         "detached": {
           "route": "/default.html"
         },
+        "cardForm": "flush",
+        "titlebar": "solid",
+        "face": {
+          "image": "assets/cover.png"
+        }
+      },
+      {
+        "id": "session",
+        "title": "DSH 会话",
+        "description": "把一段 DSH 会话放到黑板上；卡跟随当前选中的会话。",
+        "route": "/stream.html",
         "cardForm": "flush",
         "titlebar": "solid",
         "face": {

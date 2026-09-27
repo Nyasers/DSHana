@@ -4,17 +4,17 @@
 // src/ui/app-shell.ts — dshana App v2 壳页逻辑（main/sidebar 共用；浏览器 ESM）
 //
 // 相对资源纪律：经 <script type="module" src="./app-shell.js"> 相对引入，
-// 页面内不出现根路径绝对 URL。浏览器 SDK = @hana/app-sdk/ui（devDependencies，file:
-// vendor/hana-app-sdk/hana-app-sdk.tgz），构建期由 rspack 静态打进本文件（见 src/ui/
-// rspack.config.mts）——浏览器 ESM 不解析裸包名（宿主不注入 importmap），所以依赖由打包器
-// resolve、产物自包含，不在 dist/ui 另放 vendored 拷贝。选 ui 入口而不是 @hana/plugin-sdk：
-// 同一份 hana 既要驱动 App surface iframe，也要驱动本 App 的原生窗口（window.hanaAppWindow
-// 桥），后者只有 ui 入口认。到本 App 后端路由一律 apiFetch：显式带上 surface 会话头——宿主对
-// /api/apps/<id>/... 的凭据取自 header/query/cookie/路径票据四处，什么都不带会被拒
-// missing_credential（真机实测）。受管 runtime 代理首访透传同一张票，宿主按 surface 授权并种
-// hana_app_runtime cookie。视觉沿袭 v1 webui-shell 纸张风（CSS 变量 + fallback 纸张色），
-// 数据语义 v2 boot-state（phase idle/starting/ready/error/stopped）。
-import { hana } from "@hana/app-sdk/ui";
+// 页面内不出现根路径绝对 URL。浏览器 SDK = 官方 @hana/plugin-sdk（devDependencies，
+// file:vendor/hana-app-sdk/hana-plugin-sdk-0.0.0.tgz），构建期由 rspack 静态打进本文件（见
+// src/ui/rspack.config.mts）——浏览器 ESM 不解析裸包名（宿主不注入 importmap），所以依赖
+// 由打包器 resolve、产物自包含，不在 dist/ui 另放 vendored 拷贝。到本 App 后端路由一律
+// apiFetch：显式带上 surface 会话头——宿主对 /api/apps/<id>/... 的凭据取自
+// header/query/cookie/路径票据四处，什么都不带会被拒 missing_credential（真机实测）。
+// 受管 runtime 代理首访透传同一张票，宿主按 surface 授权并种 hana_app_runtime cookie。
+// 视觉沿袭 v1 webui-shell 纸张风（CSS 变量 + fallback 纸张色），数据语义 v2 boot-state
+// （phase idle/starting/ready/error/stopped）。
+import { hana } from "@hana/plugin-sdk";
+import { SHARED_KEY_PREFIX, selectionSharedValue } from "#/lib/shared-state.ts";
 import { injectDshIndex, installTransport, type DshTransport } from "#/ui/dsh-inject.ts";
 import { isFaceView, roleForView } from "#/lib/face-role.ts";
 import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPreference } from "#/lib/seed-tokens.ts";
@@ -39,11 +39,10 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
       .replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
-  // ---- 到 App 后端路由的取数面 ----
-  // 本页的凭据是 surface 会话票，只从 location 读：查询串（宿主给 App surface iframe 附
-  // appSurfaceSession）或路径票据（/_surface/<票>/ 段，宿主给 FP / 主卡 / 原生窗口发的都是这一形态）。
-  // SDK 的 hana.api.fetch 只认查询串，在原生窗口页会直接抛（窗口文档 URL 里没有查询串），
-  // 所以这里自己拼路由、显式带上票头——宿主对 /api/apps/<id>/... 的凭据解析认这个头。
+  // 到 App 后端路由的取数面：本页的凭据是 surface 会话票，只从 location 读——查询串
+  // （宿主给 App surface iframe 附 appSurfaceSession）或路径票据（/_surface/<票>/ 段）。
+  // 不经过 SDK 的 hana.api.fetch：它只读查询串，而凭据形态不止那一种。宿主对
+  // /api/apps/<id>/... 的凭据解析认显式头，所以这里自己拼路由、直接带上票头。
   function appIdFromPath() {
     try {
       var m = /^\/api\/apps\/([^\/]+)\//.exec(location.pathname || "");
@@ -131,34 +130,6 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
       + "DSH 运行时经宿主代理会被直接拒（missing_credential），状态面与内嵌视图都拿不到。\n"
       + "请从 Card Center 重新打开本卡。</pre>";
   }
-  // 原生窗口的坐标面：宿主给 App 自有窗口的 entry 只接受 ui/ 内的纯路径（查询串、片段、反斜杠、
-  // 百分号编码一律判违规），坐标因此经 windows.create 的 data 下发，页面用 hana.window.getContext()
-  // 读回。非窗口页没有这个桥，函数直接落地，不改变普通 iframe / 浏览器直开的行为。
-  var windowTicket: { sessionId: string; taskId: string } | null = null;
-  var windowTicketReady: Promise<void> | null = null;
-  function readWindowTicket(): Promise<void> {
-    if (windowTicketReady) return windowTicketReady;
-    var w: any = null;
-    try { w = (hana as any).window; } catch (e) { w = null; }
-    if (!w || typeof w.getContext !== "function") {
-      windowTicketReady = Promise.resolve();
-      return windowTicketReady;
-    }
-    // 官方窗口姿势：先 await hana.ready() 让宿主立起事件投递，再读上下文。
-    windowTicketReady = Promise.resolve()
-      .then(function () { return hana.ready(); })
-      .then(function () { return w.getContext(); })
-      .then(function (ctx: any) {
-        var d = ctx && ctx.data;
-        if (!d || typeof d !== "object") return;
-        var sessionId = typeof d.sessionId === "string" ? d.sessionId.trim() : "";
-        var taskId = typeof d.taskId === "string" ? d.taskId.trim() : "";
-        if (sessionId || taskId) windowTicket = { sessionId, taskId };
-      })
-      .catch(function () { /* 宿主未提供窗口上下文：按普通页面处理 */ });
-    return windowTicketReady;
-  }
-
   // ---- 视图判定（v2 phase → 壳视图）----
   function viewOf(s) {
     if (!s) return "idle";
@@ -272,7 +243,7 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
   // 区分度，键就是 `dshana.<kind>`（前缀与 lib/shared-state.ts 同源）。这批键的寿命是一次 App
   // 生命周期：加载时由 renewSharedState 清空，页面下线时由 dropShared 删。
   function sharedKey(kind) {
-    return "dshana." + kind;
+    return SHARED_KEY_PREFIX + kind;
   }
   // 本页可能写过的四种共享键（与下面各 readShared/writeShared 的 kind 同名）。
   var SHARED_KINDS = ["boot-state", "settings-view", "selection", "panel-view"];
@@ -343,10 +314,7 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
     });
   }
   function writeSelection(sessionId) {
-    return writeShared("selection", {
-      sessionId: typeof sessionId === "string" && sessionId ? sessionId : null,
-      at: Date.now(),
-    });
+    return writeShared("selection", selectionSharedValue(sessionId));
   }
 
   // 主面板选中：{ panelId }。DSH 侧栏的面板行（0.1.6 起多了「插件」那一行）在 FP 上没有中列可放，
@@ -363,10 +331,9 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
   }
 
   // 钉住的会话（只读会话流面用）：卡页带 sid 时钉住那一段，不跟随跨面切换。
-  // 坐标有两处来路：原生窗口取自窗口 data（见 readWindowTicket），iframe 取自 URL 的 ?sid=。
-  // 都没有时返回 null，表示「跟随跨面共用的当前会话」。
+  // 坐标来自 URL 的 ?sid=（工具出卡时写进 route 的查询串）；没有时返回 null，
+  // 表示「跟随跨面共用的当前选中」——黑板上的会话卡（/stream.html 不带 sid）走的就是这条。
   function readPinnedSession() {
-    if (windowTicket) return Promise.resolve(windowTicket.sessionId || null);
     try {
       var sid = new URLSearchParams(location.search).get("sid");
       return Promise.resolve(sid && sid.trim() ? sid.trim() : null);
@@ -420,11 +387,10 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
   }
   /**
    * 本面钉住的会话坐标（有坐标的面在顶部挂一行跟踪态，见 mountCardStrip）。
-   * 同一对值两处来路：原生窗口取自窗口 data，iframe 取自查询串 ?sid= / ?tid=。
-   * 都没有（主卡 / FP / 浏览器直开页）返回 null，那种面不钉会话、不挂跟踪行。
+   * 坐标来自查询串 ?sid= / ?tid=；没有（主卡 / FP / 黑板上的跟随卡）返回 null，
+   * 那种面不钉会话、不挂跟踪行。
    */
   function cardTicket(): { sessionId: string; taskId: string } | null {
-    if (windowTicket) return windowTicket;
     try {
       const q = new URLSearchParams(location.search);
       const sessionId = String(q.get("sid") || "").trim();
@@ -1064,25 +1030,20 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
       // 此后完全由 hana.theme.subscribe（hana.theme.changed）事件驱动。
       poll();
     }
-    // 窗口页先取回窗口坐标（卡片 / 主卡等 iframe 面这里立即落地）。
-    readWindowTicket().then(function () {
-      // 原生窗口：窗口没有 surface slot，坐标到手就是全部前提，直接起。
-      if (windowTicket) { begin(); return; }
-      // 等宿主交面（样例协议）：已有 context 立即开始；否则订一次变更事件，并留 1.5s 兜底
-      // （自己在浏览器里开页调试时宿主不会给 context）。
-      if (hostSlot() !== null) { begin(); return; }
-      try {
-        if (hana && hana.surface && typeof hana.surface.onContextChanged === "function") {
-          var off = hana.surface.onContextChanged(function (next) {
-            var slot = next && typeof next.slot === "string" ? next.slot : null;
-            if (!slot) return;
-            try { if (typeof off === "function") off(); } catch (e) { /* 忽略 */ }
-            begin();
-          });
-        }
-      } catch (e) { /* SDK 未提供则只走兜底 */ }
-      setTimeout(begin, 1500);
-    });
+    // 等宿主交面（样例协议）：已有 context 立即开始；否则订一次变更事件，并留 1.5s 兜底
+    // （自己在浏览器里开页调试时宿主不会给 context）。
+    if (hostSlot() !== null) { begin(); return; }
+    try {
+      if (hana && hana.surface && typeof hana.surface.onContextChanged === "function") {
+        var off = hana.surface.onContextChanged(function (next) {
+          var slot = next && typeof next.slot === "string" ? next.slot : null;
+          if (!slot) return;
+          try { if (typeof off === "function") off(); } catch (e) { /* 忽略 */ }
+          begin();
+        });
+      }
+    } catch (e) { /* SDK 未提供则只走兜底 */ }
+    setTimeout(begin, 1500);
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();

@@ -32,6 +32,7 @@ import {
 } from "@hana/plugin-components/settings";
 import type { SelectOption } from "@hana/plugin-components/settings";
 import "@hana/plugin-components/settings.css";
+import { placeSessionOnChalkboard } from "#/lib/chalkboard.ts";
 
 // ---- 主题跟随（与壳页同一姿势）----
 const THEME_STYLE_ATTR = "data-hana-theme-style";
@@ -198,7 +199,7 @@ function App() {
   const [sessionHint, setSessionHint] = useState("");
   const [sessionWarn, setSessionWarn] = useState(false);
   const [model, setModel] = useState<any>(null); // 最近一次读回的模型候选（{catalog:{groups}} 或 {error}）
-  // 会话清单（「会话」区块）：坐标来自宿主任务记录，列出即可在新窗口里打开。
+  // 会话清单（「会话」区块）：坐标来自宿主任务记录，列出即可把那段会话放到黑板上。
   const [sessions, setSessions] = useState<any[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionsHint, setSessionsHint] = useState("");
@@ -261,21 +262,18 @@ function App() {
     }
   }, []);
 
+  // 放到黑板：写共用选中 + 请宿主放置本 App 声明的那张会话卡（lib/chalkboard.ts）。
+  // 不经过 App 后端：卡片放置是宿主对 UI 面的能力，凭据也由宿主发。
   const openSession = async (s: any) => {
     setOpeningTask(s.taskId);
     setSessionsHint("");
     setSessionsWarn(false);
     try {
-      const { res, data } = await readJson("dshana/sessions/open", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ sessionId: s.sessionId, taskId: s.taskId, title: sessionLabel(s) }),
-      });
-      if (!res.ok || !data || data.ok !== true) throw new Error((data && data.error) || "HTTP " + res.status);
-      setSessionsHint("已请求打开：" + sessionLabel(s));
+      await placeSessionOnChalkboard(hana, s.sessionId);
+      setSessionsHint("已放到黑板：" + sessionLabel(s));
     } catch (e) {
       setSessionsWarn(true);
-      setSessionsHint("打开失败：" + errText(e));
+      setSessionsHint("放到黑板失败：" + errText(e));
     } finally {
       setOpeningTask("");
     }
@@ -497,7 +495,7 @@ function App() {
 
       <SettingsSection
         title="会话"
-        description="本 App 提交过的 DSH 会话（坐标取自宿主任务记录）。打开会在一个新窗口里显示那一段会话。"
+        description="本 App 提交过的 DSH 会话（坐标取自宿主任务记录）。放到黑板：那里出现那张会话卡（位置、外框与关闭都归宿主），卡跟随当前选中的会话。"
       >
         {sessions.map((s) => (
           <SettingRow
@@ -520,14 +518,14 @@ function App() {
                   cursor: openingTask === s.taskId ? "default" : "pointer",
                 }}
               >
-                {openingTask === s.taskId ? "打开中…" : "在新窗口打开"}
+                {openingTask === s.taskId ? "放置中…" : "放到黑板"}
               </button>
             }
           />
         ))}
         <SettingRow
           label=""
-          hint={sessionsHint || (sessions.length === 0 ? "还没有可打开的会话。" : undefined)}
+          hint={sessionsHint || (sessions.length === 0 ? "还没有可放到黑板的会话。" : undefined)}
           hintVariant={sessionsWarn ? "warn" : "default"}
           control={
             <button

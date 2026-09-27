@@ -3,8 +3,8 @@
 //
 // src/tools/shared/card.ts — 会话入口卡字面量（工具返回值 details.card）
 //
-// 卡页 = ui/entry.html：一行坐标 + 一个「在新窗口打开」的按钮。它不是 DSH 现场（那个在
-// ui/stream.html，由按钮开出的原生窗口加载），所以不带票据、不注入、会话终结也不冻结。
+// 卡页 = ui/entry.html：一行坐标 + 一个「放到黑板」的按钮。它不是 DSH 现场（那个是黑板上那张
+// 会话卡，manifest 声明、宿主放置、跟随跨面选中的会话），所以不带票据、不注入。
 //
 // 宿主契约（server 0.951.4 bundle 实证，见 APPS.md「形式归属」）：工具结果的 details.card
 // 被运行时透传成流内 plugin_card 块，随后由卡 iframe 加载 route。三条硬要求：
@@ -53,7 +53,7 @@ export function sessionCard({ action, sessionId, taskId, delivery, cwd }: Sessio
     "ts=" + now,
     "at=" + now,
     "sid=" + encodeURIComponent(sessionId),
-    // tid 只给「打开」用：入口卡把它回传给 /dshana/sessions/open，窗口那边再拿去绑票据面。
+    // tid 只作展示与备查：入口卡把它写在副行上，落到黑板的动作只用 sid（写进跨面共用选中）。
     "tid=" + encodeURIComponent(taskId),
   ];
   if (cwd) params.push("cwd=" + encodeURIComponent(cwd));

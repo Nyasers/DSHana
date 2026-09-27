@@ -7,7 +7,7 @@
 // 所以清单 = 本 App 的任务记录里带 sessionId 的那些，**按会话去重**（reply 会给同一个 sessionId 不断
 // 建新记录）、按最近活动排序、截断到上限。
 //
-// 消费方：GET /dshana/sessions（设置页的会话清单）与 POST /dshana/sessions/open（开窗口）。
+// 消费方：GET /dshana/sessions（设置页的会话清单与黑板卡）。
 // 纯函数：宿主记录的形状只在这里归一，路由层不碰字段。
 
 /** 会话清单里的一项（字段都归一到"缺就是 null"，页面不必再判 undefined）。 */

@@ -160,7 +160,7 @@ export function defaultDshanaRouteDeps(ctx) {
       }
       return { state: "tracked", label: "运行中", detail: "App 侧仍在跟踪（rpcId " + String(binding.rpcId || "") + "）" };
     },
-    // 会话面：列「可打开的 DSH 会话」（坐标来自宿主任务记录）并开窗口。
+    // 会话面：列本 App 提交过的 DSH 会话（坐标来自宿主任务记录），供设置页放到黑板上。
     // 不依赖 App 自己的会话索引：任务记录的 metadata.dsh 就是事实源（见 lib/session-list.ts）。
     listSessions: async () => {
       const api = ctx && ctx.tasks;
@@ -168,27 +168,6 @@ export function defaultDshanaRouteDeps(ctx) {
         throw new Error("ctx.tasks.list 不可用（manifest 未声明 app/tasks.manage 或未授权）");
       }
       return summarizeSessions(await api.list());
-    },
-    openSessionWindow: async ({ sessionId, taskId, title }) => {
-      const w = ctx && ctx.windows;
-      if (!w || typeof w.create !== "function") {
-        throw new Error("ctx.windows 不可用（manifest 未声明 app/windows.manage 或未授权）");
-      }
-      // entry 只接受本 App ui/ 内的纯路径：宿主的校验拒绝查询串、片段、反斜杠与百分号编码
-      // （encodeURIComponent 过的值同样判违规），坐标因此一律走 data，窗口页用
-      // hana.window.getContext() 读回。窗口文档也不是裸页：宿主给它发一份路径租约，真正加载的是
-      // /api/apps/<id>/ui/_surface/<lease>/<entry>，surface 凭据在路径里，窗口页自己取得到。
-      //
-      // taskId 只随 data 备查，不进任何 URL：卡页拿它当「流票面」，而中继只让活跃任务的流
-      // 建起来（终态即失活、拒建流），于是打开一段已终结的会话就等于看不了。窗口是用户主动
-      // 打开的视图，走无票的流（与主卡 / FP 同侧，不闸）。
-      const entry = "/stream.html";
-      const win = await w.create({
-        entry,
-        title: typeof title === "string" && title ? title : "DSH 会话",
-        data: { sessionId: sessionId || null, taskId: taskId || null },
-      });
-      return { windowId: (win && win.windowId) || "", entry };
     },
     readSettings: () => readSettingsView(ctx, dataDir),
     // 模型候选只认宿主目录（ctx.models.list）：它是「这条路走不走得通」的唯一事实源，
@@ -410,28 +389,6 @@ export function registerDshanaRoutes(app, deps) {
       }
     });
 
-    // ---- POST /dshana/sessions/open：把一段会话开成一个原生窗口 ----
-    // 形状：{ sessionId?, taskId? }（至少一个）。窗口 entry = ui/stream.html，坐标经窗口 data
-    // 下发，卡页按读回的 sid 钉住那段会话；这是当前唯一不依赖宿主入口的「打开」路径。
-    app.post(DASHANA_ROUTE_PREFIX + "/sessions/open", async (c) => {
-      try {
-        const body = c && c.req && typeof c.req.json === "function" ? await c.req.json() : null;
-        const sessionId = typeof body?.sessionId === "string" ? body.sessionId.trim() : "";
-        const taskId = typeof body?.taskId === "string" ? body.taskId.trim() : "";
-        if (!sessionId && !taskId) return json(c, 400, { ok: false, error: "需要 sessionId 或 taskId（至少一个）" });
-        const out = await deps.openSessionWindow({
-          sessionId,
-          taskId,
-          title: typeof body?.title === "string" ? body.title : "",
-        });
-        return json(c, 200, { ok: true, ...out });
-      } catch (e) {
-        const msg = errText(e);
-        log("warn", "/dshana/sessions/open 失败：" + msg);
-        return json(c, 500, { ok: false, error: msg });
-      }
-    });
-
     // ---- POST /dshana/settings/restart：数据源切换（入口暂撤）----
     // 切换链（lib/source-switch.ts）还没跑通：停旧、起新、失败回滚这条链没有在真机上验证过，
     // 而它第一步就会停掉正在跑的 runtime。为避免半成品被误触发，这里先只回一句明确的
@@ -460,7 +417,6 @@ export function dshanaRoutesTable() {
     ["POST", DASHANA_ROUTE_PREFIX + "/start"],
     ["POST", DASHANA_ROUTE_PREFIX + "/stop"],
     ["POST", DASHANA_ROUTE_PREFIX + "/settings"],
-    ["POST", DASHANA_ROUTE_PREFIX + "/sessions/open"],
     ["POST", DASHANA_ROUTE_PREFIX + "/settings/restart"],
   ];
 }
