@@ -10,6 +10,8 @@
 // 算出期望内容"，比较 / 写回 / 报告由框架统一做——不再各自发明 CLI 和 check。
 //
 // 一个任务 = 一类读者（再细就成"一个文件一个任务"，derive: 后面排长队反而难用）：
+//   version-metadata 交付面清单的 dsh 依赖    → package.json#version 的 +dsh- 段（状态型；
+//                                             排第一，因为它改的是后面几个任务的源）
 //   manifest     主 package.json#version + SDK 快照 packedVersion → src/manifest.json（宿主读的 App 契约）
 //   cordis       主 package.json#version         → src-cordis/**/package.json（profile loader 读的 bundle 层）
 //   product-package 主 package.json#version    → packaging/package.json（交付树的包根那份）
@@ -37,6 +39,7 @@ import { cordisPkgPaths, readPkg } from "../shared/version.mts";
 import { dshTask } from "../vendor/dsh.mts";
 import { packageLockTask } from "./package-lock.mts";
 import { packedVersion, thirdpartyTask } from "./thirdparty.mts";
+import { versionMetadataTask } from "./version-metadata.mts";
 
 export { ROOT };
 
@@ -172,8 +175,9 @@ const vendorTask: StateTask = dshTask;
  */
 const packageLockTaskRef: StateTask = packageLockTask;
 
-/** 全部任务（main 按名筛选用）。 */
-export const TASKS: DeriveTask[] = [manifestTask, cordisTask, productPackageTask, pathsTask, vendorTask, thirdpartyTask, packageLockTaskRef];
+/** 全部任务（main 按名筛选用；执行顺序即数组顺序——version-metadata 必须在所有读主版本的
+ * 任务之前）。 */
+export const TASKS: DeriveTask[] = [versionMetadataTask, manifestTask, cordisTask, productPackageTask, pathsTask, vendorTask, thirdpartyTask, packageLockTaskRef];
 
 /** 跑一个任务：比较期望内容与磁盘，写回或报漂。返回漂移文件数。 */
 export function runTask(task: DeriveTask, { checkOnly, log = console.log } = { checkOnly: false, log: console.log as (m: string) => void }): number {
