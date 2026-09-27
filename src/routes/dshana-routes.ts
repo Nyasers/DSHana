@@ -42,7 +42,6 @@ import {
   isTerminalTaskStatus,
   type TaskBinding,
 } from "#/lib/task-binding.ts";
-import { summarizeSessions } from "#/lib/session-list.ts";
 export const DASHANA_ROUTE_PREFIX = "/dshana";
 
 // ---- 应用设置（GET/POST /dshana/settings）----
@@ -159,15 +158,6 @@ export function defaultDshanaRouteDeps(ctx) {
         return { state: "cancelling", label: "已请求取消", detail: "reason " + String(binding.cancel.reason || "user") };
       }
       return { state: "tracked", label: "运行中", detail: "App 侧仍在跟踪（rpcId " + String(binding.rpcId || "") + "）" };
-    },
-    // 会话面：列本 App 提交过的 DSH 会话（坐标来自宿主任务记录），供设置页放到黑板上。
-    // 不依赖 App 自己的会话索引：任务记录的 metadata.dsh 就是事实源（见 lib/session-list.ts）。
-    listSessions: async () => {
-      const api = ctx && ctx.tasks;
-      if (!api || typeof api.list !== "function") {
-        throw new Error("ctx.tasks.list 不可用（manifest 未声明 app/tasks.manage 或未授权）");
-      }
-      return summarizeSessions(await api.list());
     },
     readSettings: () => readSettingsView(ctx, dataDir),
     // 模型候选只认宿主目录（ctx.models.list）：它是「这条路走不走得通」的唯一事实源，
@@ -377,18 +367,6 @@ export function registerDshanaRoutes(app, deps) {
       }
     });
 
-    // ---- GET /dshana/sessions：可打开的 DSH 会话清单（设置页的「会话」区块）----
-    // 坐标来自宿主任务记录（metadata.dsh.sessionId），不依赖受管 runtime 是否起来。
-    app.get(DASHANA_ROUTE_PREFIX + "/sessions", async (c) => {
-      try {
-        const sessions = await deps.listSessions();
-        return json(c, 200, { ok: true, sessions });
-      } catch (e) {
-        log("warn", "/dshana/sessions 读取失败：" + errText(e));
-        return json(c, 500, { ok: false, error: errText(e) });
-      }
-    });
-
     // ---- POST /dshana/settings/restart：数据源切换（入口暂撤）----
     // 切换链（lib/source-switch.ts）还没跑通：停旧、起新、失败回滚这条链没有在真机上验证过，
     // 而它第一步就会停掉正在跑的 runtime。为避免半成品被误触发，这里先只回一句明确的
@@ -413,7 +391,6 @@ export function dshanaRoutesTable() {
     ["GET", DASHANA_ROUTE_PREFIX + "/settings"],
     ["GET", DASHANA_ROUTE_PREFIX + "/models"],
     ["GET", DASHANA_ROUTE_PREFIX + "/card-state"],
-    ["GET", DASHANA_ROUTE_PREFIX + "/sessions"],
     ["POST", DASHANA_ROUTE_PREFIX + "/start"],
     ["POST", DASHANA_ROUTE_PREFIX + "/stop"],
     ["POST", DASHANA_ROUTE_PREFIX + "/settings"],
