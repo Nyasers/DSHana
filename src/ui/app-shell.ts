@@ -18,6 +18,7 @@ import { SHARED_KEY_PREFIX, selectionSharedValue } from "#/lib/shared-state.ts";
 import { injectDshIndex, installTransport, type DshTransport } from "#/ui/dsh-inject.ts";
 import { isFaceView, roleForView } from "#/lib/face-role.ts";
 import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPreference } from "#/lib/seed-tokens.ts";
+import { followHostTheme } from "#/ui/host-theme.ts";
 
 (function () {
   "use strict";
@@ -763,55 +764,10 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
   function pushThemeNow() {
     pushThemeToSelf();
   }
-  // 宿主主题（宿主的原生能力，取代我们自补的一切）：
-  //   宿主经 App surface iframe 的 URL 参数给 hana-theme / hana-css / hana-theme-appearance，
-  //   变更再经 hana.theme.changed 推同一组值（SDK hana.theme.subscribe 已有快照）。
-  //   契约：**App 自己把宿主主题贴进自己的文档**（官方样例 SDK 的 followHostTheme：
-  //   fetch cssUrl → <style data-hana-theme-style>），宿主不代劳。
-  //   所以本 App 必须先把宿主主题样式表贴进自己的文档，再读 getComputedStyle(documentElement)：
-  //   不贴就永远读到空值，页面一路吃 HTML 里的纸张 fallback（var(--bg, #F5EFE4)），连 loading
-  //   壳页也不跟随。贴好之后，壳页、注入的 DSH UI、以及主题桥读到的变量才是真实的 Hana 配色。
-  var THEME_STYLE_ATTR = "data-hana-theme-style";
-  var themeCssUrl: string | null = null;
-  // 注：dsh 自己的主题偏好（system/light/dark）**不由壳页判断**——它是 DSH 侧的事实
-  // （宿主主题 API 里也没有它）。现由 ui-layout 的 presenter 投影到
-  // html[data-dsh-theme-preference]，DSH 内的主题桥直接观察该属性决定是否跟随。
-  // 壳页在这里只负责一件事：维持宿主主题变量（样式表）。
-  function applyThemeCss(cssUrl) {
-    if (typeof cssUrl !== "string" || !cssUrl) return;
-    themeCssUrl = cssUrl;
-    fetch(cssUrl, { credentials: "same-origin", cache: "no-store" }).then(function (res) {
-      if (!res.ok) throw new Error("theme.css HTTP " + res.status);
-      return res.text();
-    }).then(function (css) {
-      if (themeCssUrl !== cssUrl) return; // 期间主题又变了，等新的那次落地
-      var el = document.querySelector("style[" + THEME_STYLE_ATTR + "]");
-      if (!el) {
-        el = document.createElement("style");
-        el.setAttribute(THEME_STYLE_ATTR, "");
-        (document.head || document.documentElement).appendChild(el);
-      }
-      if (el.textContent !== css) el.textContent = css;
-      // CSS 落地后立即再推一次：属性变化通知会早于样式表到位，桥那一刻读到的还是旧值。
-      try { pushThemeNow(); } catch (e) { /* 忽略 */ }
-    }).catch(function (err) {
-      // 主题拿不到不致命：页面仍用 HTML 里写好的纸张 fallback 色。
-      try { console.warn("[dshana] 宿主主题样式表加载失败", err && err.message ? err.message : err); } catch (e) { /* 忽略 */ }
-    });
-  }
-  function applyHostTheme(snap) {
-    if (!snap || typeof snap !== "object") return;
-    var themeId = typeof snap.theme === "string" && snap.theme ? snap.theme : null;
-    var appearance = snap.appearance === "light" || snap.appearance === "dark" ? snap.appearance : null;
-    try {
-      var root = document.documentElement;
-      if (themeId) root.setAttribute("data-theme", themeId);
-      if (appearance) root.setAttribute("data-appearance", appearance);
-      else root.removeAttribute("data-appearance");
-    } catch (e) { /* 忽略 */ }
-    applyThemeCss(snap.cssUrl);
-    seedDshTokens();
-  }
+  // 宿主主题：宿主经 App surface iframe 的 URL 参数给 hana-theme / hana-css /
+  // hana-theme-appearance，变更再经 hana.theme.changed 推同一组值。「贴样式表」那一步的
+  // 契约与实现见 src/ui/host-theme.ts（壳页 / 设置页 / 入口卡共用一份）；壳页只额外做面
+  // 相关的事：应用后垫 DSH 首帧底色 token，样式表落地后把主题推给内层桥。
 
   // ---- 注入前先垫上 DSW 自己的底色 token（见 src/lib/seed-tokens.ts）----
   // 写 body 的内联 style、不加 !important：赢过 DSH 的静态样式表，输给主题桥的 !important。
@@ -856,27 +812,12 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
       if (backdropValue) document.body.style.backgroundColor = backdropValue;
     }
   }
-  // 首屏主题：官方读法 hana.theme.getSnapshot()（宿主报过来的实况）；
-  // 拿不到再退 URL 参数（宿主白名单参数名）。
-  try {
-    var themeSnap = hana && hana.theme && typeof hana.theme.getSnapshot === "function" ? hana.theme.getSnapshot() : null;
-    if (themeSnap) applyHostTheme(themeSnap);
-  } catch (e) { /* 忽略 */ }
-  try {
-    var themeParams = new URLSearchParams(location.search);
-    if (themeParams.get("hana-css") || themeParams.get("hana-theme")) {
-      applyHostTheme({
-        theme: themeParams.get("hana-theme"),
-        cssUrl: themeParams.get("hana-css"),
-        appearance: themeParams.get("hana-theme-appearance"),
-      });
-    }
-  } catch (e) { /* 忽略 */ }
-  try {
-    if (hana && hana.theme && typeof hana.theme.subscribe === "function") {
-      hana.theme.subscribe(function (snap) { applyHostTheme(snap); pushThemeNow(); });
-    }
-  } catch (e) { /* SDK 主题订阅不可用则只靠首屏那一次 */ }
+  // 首屏跟随 + 订阅（共用 src/ui/host-theme.ts）。分面差异只在两个钩子：应用后垫 DSH 首帧
+  // 底色 token；样式表落地后推一次主题给内层桥。
+  followHostTheme(hana, {
+    onApplied: function () { seedDshTokens(); pushThemeNow(); },
+    onStylesApplied: function () { pushThemeNow(); },
+  });
 
   // ---- 认面：页面自己声明为准，宿主 slot 只作兜底 ----
   // 与样例 hana-dsh 同一姿势："我是哪个面"写在**页面自己身上**（样例用 <meta name="hana-dsh-role">，

@@ -9,6 +9,7 @@
 // 自己不注入 DSH、不连中继，所以没有票据与冻结的负担——那张黑板卡才是 DSH 现场。
 import { hana } from "@hana/plugin-sdk";
 import { placeSessionOnChalkboard } from "#/lib/chalkboard.ts";
+import { followHostTheme } from "#/ui/host-theme.ts";
 
 // 宿主握手（与壳页、设置页同一纪律）：页面挂载即 hana.ready()，宿主据此把本 surface 标成
 // 可信。没有这一步，稍后 hana.cards.open 会被宿主以 APP_CARD_SURFACE_NOT_READY 拒掉。
@@ -17,6 +18,10 @@ try {
 } catch {
   /* 宿主未提供则忽略 */
 }
+
+// 跟随宿主主题：首帧自己贴一次样式表，此后事件驱动。SDK 只在收到 hana.theme.changed 时才
+// 应用 cssUrl，页面不自己贴首帧就会一路吃 entry.html 里写死的纸张 fallback（见 host-theme.ts）。
+followHostTheme(hana);
 
 const params = new URLSearchParams(location.search);
 const sid = (params.get("sid") || "").trim();
@@ -28,8 +33,8 @@ const labelEl = document.querySelector<HTMLElement>("[data-dsh-entry-label]");
 const metaEl = document.querySelector<HTMLElement>("[data-dsh-entry-meta]");
 const openBtn = document.querySelector<HTMLButtonElement>("[data-dsh-entry-open]");
 
-/** 卡面标题：会话 id 的短串（够辨认，不占版面）。 */
-const title = sid ? "DSH 会话 " + sid.slice(0, 18) + "…" : "DSH 会话";
+/** 卡面标题：会话 id 全串（够辨认）；版面不够时由 .label 的 CSS 省略，不在这里硬截断。 */
+const title = sid ? "DSH 会话 " + sid : "DSH 会话";
 
 /** 副行：工作目录 + 任务 id 短串；两者都缺就说明这张卡没带坐标。 */
 function metaText(): string {

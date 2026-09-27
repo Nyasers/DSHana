@@ -33,41 +33,10 @@ import {
 import type { SelectOption } from "@hana/plugin-components/settings";
 import "@hana/plugin-components/settings.css";
 import { placeSessionOnChalkboard } from "#/lib/chalkboard.ts";
+import { followHostTheme } from "#/ui/host-theme.ts";
 
-// ---- 主题跟随（与壳页同一姿势）----
-const THEME_STYLE_ATTR = "data-hana-theme-style";
-let themeCssUrl: string | null = null;
-
-type ThemeSnap = { theme?: string; appearance?: string; cssUrl?: string };
-
-function applyTheme(snap: ThemeSnap | null | undefined) {
-  if (!snap || typeof snap !== "object") return;
-  const root = document.documentElement;
-  if (typeof snap.theme === "string" && snap.theme) root.setAttribute("data-theme", snap.theme);
-  if (typeof snap.appearance === "string" && snap.appearance) {
-    root.setAttribute("data-appearance", snap.appearance);
-    // 原生控件与滚动条跟着宿主明暗，而不是跟着系统（两者不一致时页面会半黑半白）。
-    root.style.colorScheme = snap.appearance === "dark" ? "dark" : "light";
-  }
-  const url = typeof snap.cssUrl === "string" ? snap.cssUrl : "";
-  if (!url) return;
-  themeCssUrl = url;
-  fetch(url, { credentials: "same-origin", cache: "no-store" })
-    .then((r) => (r.ok ? r.text() : ""))
-    .then((css) => {
-      if (themeCssUrl !== url || !css) return; // 期间主题又变了，等新的那次落地
-      let el = document.querySelector("style[" + THEME_STYLE_ATTR + "]");
-      if (!el) {
-        el = document.createElement("style");
-        el.setAttribute(THEME_STYLE_ATTR, "");
-        (document.head || document.documentElement).appendChild(el);
-      }
-      if (el.textContent !== css) el.textContent = css;
-    })
-    .catch(() => {
-      /* 拿不到主题不致命：交给宿主主题变量与组件库自带的兜底 */
-    });
-}
+// ---- 主题跟随（与壳页、入口卡同一姿势，实现在 src/ui/host-theme.ts）----
+// 本页要跟着宿主明暗改 color-scheme（原生控件与滚动条跟宿主，不跟系统），故传 syncColorScheme。
 
 // ---- 小工具 ----
 const MODEL_KEY_SEP = "\u0000"; // provider 与 model id 之间（见 modelOptions）
@@ -560,17 +529,7 @@ function App() {
   } catch {
     /* 宿主未提供则忽略 */
   }
-  try {
-    const snap = hana && hana.theme && typeof hana.theme.getSnapshot === "function" ? hana.theme.getSnapshot() : null;
-    if (snap) applyTheme(snap);
-  } catch {
-    /* 忽略 */
-  }
-  try {
-    if (hana && hana.theme && typeof hana.theme.subscribe === "function") hana.theme.subscribe(applyTheme);
-  } catch {
-    /* 忽略 */
-  }
+  followHostTheme(hana, { syncColorScheme: true });
   const host = document.getElementById("root");
   if (host) createRoot(host).render(<App />);
 })();
