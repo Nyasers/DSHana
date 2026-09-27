@@ -32,7 +32,6 @@ import {
 } from "@hana/plugin-components/settings";
 import type { SelectOption } from "@hana/plugin-components/settings";
 import "@hana/plugin-components/settings.css";
-import { placeSessionOnChalkboard } from "#/lib/chalkboard.ts";
 import { followHostTheme } from "#/ui/host-theme.ts";
 
 // ---- 主题跟随（与壳页、入口卡同一姿势，实现在 src/ui/host-theme.ts）----
@@ -133,25 +132,6 @@ function sessionOf(settings: any): { mode: string; picked: string; effort: strin
   };
 }
 
-/** 会话行的显示名：任务 label 优先，缺则按动作给默认前缀 + sessionId 短串。 */
-function sessionLabel(s: any): string {
-  const label = typeof s?.label === "string" && s.label ? s.label : "";
-  if (label) return label;
-  const head = s?.action === "send" ? "DSH 续会话" : "DSH 新任务";
-  const sid = typeof s?.sessionId === "string" ? s.sessionId.slice(0, 18) : "";
-  return head + (sid ? "：" + sid + "…" : "");
-}
-
-/** 会话行的副文案：状态 + 工作目录 + 最近活动时间。 */
-function sessionRowHint(s: any): string {
-  const parts: string[] = [];
-  if (typeof s?.status === "string" && s.status) parts.push(s.status);
-  if (typeof s?.cwd === "string" && s.cwd) parts.push(s.cwd);
-  const at = Number(s?.updatedAt || s?.createdAt || 0);
-  if (Number.isFinite(at) && at > 0) parts.push(new Date(at).toLocaleString());
-  return parts.join(" · ");
-}
-
 function App() {
   const [draft, setDraft] = useState<Record<string, string>>(() => stringifySettings(null));
   const [cfgHint, setCfgHint] = useState("");
@@ -168,12 +148,6 @@ function App() {
   const [sessionHint, setSessionHint] = useState("");
   const [sessionWarn, setSessionWarn] = useState(false);
   const [model, setModel] = useState<any>(null); // 最近一次读回的模型候选（{catalog:{groups}} 或 {error}）
-  // 会话清单（「会话」区块）：坐标来自宿主任务记录，列出即可把那段会话放到黑板上。
-  const [sessions, setSessions] = useState<any[]>([]);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
-  const [sessionsHint, setSessionsHint] = useState("");
-  const [sessionsWarn, setSessionsWarn] = useState(false);
-  const [openingTask, setOpeningTask] = useState("");
   const alive = useRef(true);
 
   useEffect(() => {
@@ -215,44 +189,10 @@ function App() {
     }
   }, []);
 
-  const loadSessions = useCallback(async () => {
-    setSessionsLoading(true);
-    setSessionsHint("");
-    setSessionsWarn(false);
-    try {
-      const { res, data } = await readJson("dshana/sessions");
-      if (!res.ok || !data || data.ok !== true) throw new Error((data && data.error) || "HTTP " + res.status);
-      setSessions(Array.isArray(data.sessions) ? data.sessions : []);
-    } catch (e) {
-      setSessionsWarn(true);
-      setSessionsHint("读取失败：" + errText(e));
-    } finally {
-      setSessionsLoading(false);
-    }
-  }, []);
-
-  // 放到黑板：写共用选中 + 请宿主放置本 App 声明的那张会话卡（lib/chalkboard.ts）。
-  // 不经过 App 后端：卡片放置是宿主对 UI 面的能力，凭据也由宿主发。
-  const openSession = async (s: any) => {
-    setOpeningTask(s.taskId);
-    setSessionsHint("");
-    setSessionsWarn(false);
-    try {
-      await placeSessionOnChalkboard(hana, s.sessionId);
-      setSessionsHint("已放到黑板：" + sessionLabel(s));
-    } catch (e) {
-      setSessionsWarn(true);
-      setSessionsHint("放到黑板失败：" + errText(e));
-    } finally {
-      setOpeningTask("");
-    }
-  };
-
   useEffect(() => {
     void loadConfig();
     void loadModel();
-    void loadSessions();
-  }, [loadConfig, loadModel, loadSessions]);
+  }, [loadConfig, loadModel]);
 
   // 设置变更广播的落地：宿主 App 存储只有 get/set、没有订阅口（已核 SDK 的 d.ts），
   // 所以本页在重新可见时重读一次——另一个窗口改过设置也不会拿着旧值继续操作。
@@ -458,62 +398,6 @@ function App() {
               onSavedFeedbackEnd={() => setSessionSaved(false)}
               onClick={() => void saveSession()}
             />
-          }
-        />
-      </SettingsSection>
-
-      <SettingsSection
-        title="会话"
-        description="本 App 提交过的 DSH 会话（坐标取自宿主任务记录）。放到黑板：那里出现那张会话卡（位置、外框与关闭都归宿主），卡跟随当前选中的会话。"
-      >
-        {sessions.map((s) => (
-          <SettingRow
-            key={s.taskId}
-            label={sessionLabel(s)}
-            hint={sessionRowHint(s)}
-            control={
-              <button
-                type="button"
-                disabled={openingTask === s.taskId}
-                onClick={() => void openSession(s)}
-                style={{
-                  font: "inherit",
-                  fontSize: 12.5,
-                  padding: "4px 12px",
-                  borderRadius: 6,
-                  border: "1px solid var(--border, #D8CFBE)",
-                  background: "var(--bg-card, #FBF7EE)",
-                  color: "var(--text, #2A2622)",
-                  cursor: openingTask === s.taskId ? "default" : "pointer",
-                }}
-              >
-                {openingTask === s.taskId ? "放置中…" : "放到黑板"}
-              </button>
-            }
-          />
-        ))}
-        <SettingRow
-          label=""
-          hint={sessionsHint || (sessions.length === 0 ? "还没有可放到黑板的会话。" : undefined)}
-          hintVariant={sessionsWarn ? "warn" : "default"}
-          control={
-            <button
-              type="button"
-              disabled={sessionsLoading}
-              onClick={() => void loadSessions()}
-              style={{
-                font: "inherit",
-                fontSize: 12.5,
-                padding: "4px 12px",
-                borderRadius: 6,
-                border: "1px solid var(--border, #D8CFBE)",
-                background: "var(--bg-card, #FBF7EE)",
-                color: "var(--text, #2A2622)",
-                cursor: sessionsLoading ? "default" : "pointer",
-              }}
-            >
-              {sessionsLoading ? "读取中…" : "刷新"}
-            </button>
           }
         />
       </SettingsSection>
