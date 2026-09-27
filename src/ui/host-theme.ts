@@ -85,6 +85,8 @@ export function applyHostTheme(
     if (options.syncColorScheme) root.style.colorScheme = snap.appearance;
   } else {
     root.removeAttribute("data-appearance");
+    // 明暗缺失/非法时也得把上一轮写的 color-scheme 收回去，否则原生控件停在旧明暗上。
+    if (options.syncColorScheme) root.style.colorScheme = "";
   }
   applyHostThemeStylesheet(snap.cssUrl, options.onStylesApplied);
   if (options.onApplied) {
