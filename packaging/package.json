@@ -3,6 +3,6 @@
   "version": "1.0.0-rc.26+dsh-0.1.7-rc.1",
   "type": "module",
   "dependencies": {
-    "@deepseek-ai/dsh": "0.1.7-rc.1"
+    "@deepseek-ai/dsh": "0.1.7-rc.2"
   }
 }
