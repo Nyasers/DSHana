@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.0-rc.26+dsh-0.1.7-rc.1](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.25%2Bdsh-0.1.7-rc.1...v1.0.0-rc.26%2Bdsh-0.1.7-rc.1) (2026-09-27)
+
+### Features
+
+* **dshana:** 会话入口改放到黑板，撤掉原生开窗 ([a287b52](https://github.com/Nyasers/DSHana/commit/a287b528c993785f428ec41f136700ec020d43ff))
+
+### Bug Fixes
+
+* **dshana:** 窗口入口改纯 ui 路径，坐标走窗口 data ([03401ae](https://github.com/Nyasers/DSHana/commit/03401ae43dc74e20fd734f5098090905b622af20)), references [#dshana-card-strip](https://github.com/Nyasers/DSHana/issues/dshana-card-strip) [#root](https://github.com/Nyasers/DSHana/issues/root)
+* **ui:** App 页面共用宿主主题跟随，入口卡补首帧 ([fd1cb61](https://github.com/Nyasers/DSHana/commit/fd1cb61ae8266185ec32829318b111fc6ebbb567))
+* **ui:** appearance 缺失时把 color-scheme 一并收回 ([91fef6f](https://github.com/Nyasers/DSHana/commit/91fef6fbbea8c73c8d576a137c05b3f6615fb756))
+
 ## [1.0.0-rc.25+dsh-0.1.7-rc.1](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.24%2Bdsh-0.1.7-rc.1...v1.0.0-rc.25%2Bdsh-0.1.7-rc.1) (2026-09-24)
 
 ### Features
@@ -599,6 +611,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
