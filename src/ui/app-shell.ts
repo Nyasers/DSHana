@@ -8,15 +8,17 @@
 // file:vendor/hana-app-sdk/hana-plugin-sdk-0.0.0.tgz），构建期由 rspack 静态打进本文件（见
 // src/ui/rspack.config.mts）——浏览器 ESM 不解析裸包名（宿主不注入 importmap），所以依赖
 // 由打包器 resolve、产物自包含，不在 dist/ui 另放 vendored 拷贝。到本 App 后端路由一律
-// hana.api.fetch：宿主在 App surface iframe URL 附 appSurfaceSession query，SDK 注入
-// X-Hana-App-Surface-Session header——裸 fetch 会被宿主网关 403 missing_credential
-// （真机实测）。受管 runtime iframe 首访透传 appSurfaceSession（宿主按 surface
-// 授权并种 hana_app_runtime cookie）。视觉沿袭 v1 webui-shell 纸张风（CSS 变量 +
-// fallback 纸张色），数据语义 v2 boot-state（phase idle/starting/ready/error/stopped）。
+// apiFetch：显式带上 surface 会话头——宿主对 /api/apps/<id>/... 的凭据取自
+// header/query/cookie/路径票据四处，什么都不带会被拒 missing_credential（真机实测）。
+// 受管 runtime 代理首访透传同一张票，宿主按 surface 授权并种 hana_app_runtime cookie。
+// 视觉沿袭 v1 webui-shell 纸张风（CSS 变量 + fallback 纸张色），数据语义 v2 boot-state
+// （phase idle/starting/ready/error/stopped）。
 import { hana } from "@hana/plugin-sdk";
+import { SHARED_KEY_PREFIX, selectionSharedValue } from "#/lib/shared-state.ts";
 import { injectDshIndex, installTransport, type DshTransport } from "#/ui/dsh-inject.ts";
 import { isFaceView, roleForView } from "#/lib/face-role.ts";
 import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPreference } from "#/lib/seed-tokens.ts";
+import { followHostTheme } from "#/ui/host-theme.ts";
 
 (function () {
   "use strict";
@@ -38,9 +40,28 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
       .replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
-  // ---- 状态面（hana.api.fetch，surface session 自动注入）----
+  // 到 App 后端路由的取数面：本页的凭据是 surface 会话票，只从 location 读——查询串
+  // （宿主给 App surface iframe 附 appSurfaceSession）或路径票据（/_surface/<票>/ 段）。
+  // 不经过 SDK 的 hana.api.fetch：它只读查询串，而凭据形态不止那一种。宿主对
+  // /api/apps/<id>/... 的凭据解析认显式头，所以这里自己拼路由、直接带上票头。
+  function appIdFromPath() {
+    try {
+      var m = /^\/api\/apps\/([^\/]+)\//.exec(location.pathname || "");
+      return m ? decodeURIComponent(m[1]) : null;
+    } catch (e) { return null; }
+  }
+  function apiFetch(path, init) {
+    var appId = appIdFromPath();
+    var ss = surfaceSession();
+    if (!appId || !ss) return Promise.reject(new Error("缺少 App surface 会话凭据（appSurfaceSession）"));
+    var headers = new Headers((init && init.headers) || {});
+    headers.set("X-Hana-App-Surface-Session", ss);
+    var opts: any = Object.assign({ credentials: "same-origin" }, init || {});
+    opts.headers = headers;
+    return fetch("/api/apps/" + encodeURIComponent(appId) + "/routes/" + path, opts);
+  }
   function fetchState() {
-    return hana.api.fetch("dshana/boot-state", {
+    return apiFetch("dshana/boot-state", {
       method: "GET", cache: "no-store", headers: { Accept: "application/json" }
     }).then(function (res) {
       if (!res.ok) throw new Error("boot-state HTTP " + res.status);
@@ -55,7 +76,7 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
       });
   }
   function postAction(action) {
-    return hana.api.fetch("dshana/" + action, { method: "POST", cache: "no-store" })
+    return apiFetch("dshana/" + action, { method: "POST", cache: "no-store" })
       .then(function (res) { return res.json().catch(function () { return {}; }); });
   }
 
@@ -110,7 +131,6 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
       + "DSH 运行时经宿主代理会被直接拒（missing_credential），状态面与内嵌视图都拿不到。\n"
       + "请从 Card Center 重新打开本卡。</pre>";
   }
-
   // ---- 视图判定（v2 phase → 壳视图）----
   function viewOf(s) {
     if (!s) return "idle";
@@ -224,7 +244,7 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
   // 区分度，键就是 `dshana.<kind>`（前缀与 lib/shared-state.ts 同源）。这批键的寿命是一次 App
   // 生命周期：加载时由 renewSharedState 清空，页面下线时由 dropShared 删。
   function sharedKey(kind) {
-    return "dshana." + kind;
+    return SHARED_KEY_PREFIX + kind;
   }
   // 本页可能写过的四种共享键（与下面各 readShared/writeShared 的 kind 同名）。
   var SHARED_KINDS = ["boot-state", "settings-view", "selection", "panel-view"];
@@ -295,10 +315,7 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
     });
   }
   function writeSelection(sessionId) {
-    return writeShared("selection", {
-      sessionId: typeof sessionId === "string" && sessionId ? sessionId : null,
-      at: Date.now(),
-    });
+    return writeShared("selection", selectionSharedValue(sessionId));
   }
 
   // 主面板选中：{ panelId }。DSH 侧栏的面板行（0.1.6 起多了「插件」那一行）在 FP 上没有中列可放，
@@ -314,8 +331,9 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
     });
   }
 
-  // 钉住的会话（只读会话流面用）：?sid=<DSH session id> 打开时钉住那一段，不跟随跨面切换；
-  // 没有这个参数时返回 null，表示「跟随跨面共用的当前会话」。
+  // 钉住的会话（只读会话流面用）：卡页带 sid 时钉住那一段，不跟随跨面切换。
+  // 坐标来自 URL 的 ?sid=（工具出卡时写进 route 的查询串）；没有时返回 null，
+  // 表示「跟随跨面共用的当前选中」——黑板上的会话卡（/stream.html 不带 sid）走的就是这条。
   function readPinnedSession() {
     try {
       var sid = new URLSearchParams(location.search).get("sid");
@@ -369,9 +387,9 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
     startInjection(s.proxyPrefix, s.runtimeId);
   }
   /**
-   * 卡页的闸门票面（工具出卡时写进查询串：sid = 钉住的 DSH 会话，tid = 对应的宿主任务）。
-   * 有票的页面把票面带到 mux URL 上，中继据此只让活跃任务的流建起来（失活即拒建并断开，
-   * 见 src/runtime/bridge.ts）。无票（主卡 / FP / 直开页）不闸。
+   * 本面钉住的会话坐标（有坐标的面在顶部挂一行跟踪态，见 mountCardStrip）。
+   * 坐标来自查询串 ?sid= / ?tid=；没有（主卡 / FP / 黑板上的跟随卡）返回 null，
+   * 那种面不钉会话、不挂跟踪行。
    */
   function cardTicket(): { sessionId: string; taskId: string } | null {
     try {
@@ -446,7 +464,7 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
     let timer: ReturnType<typeof setTimeout> | null = null;
     const stop = (): void => { if (timer !== null) { clearTimeout(timer); timer = null; } };
     const read = (): Promise<string> =>
-      hana.api.fetch("dshana/card-state?sessionId=" + encodeURIComponent(sid), {
+      apiFetch("dshana/card-state?sessionId=" + encodeURIComponent(sid), {
         method: "GET", cache: "no-store", headers: { Accept: "text/html" }
       }).then((res: Response) => {
         if (!res.ok) throw new Error("card-state HTTP " + res.status);
@@ -746,55 +764,10 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
   function pushThemeNow() {
     pushThemeToSelf();
   }
-  // 宿主主题（宿主的原生能力，取代我们自补的一切）：
-  //   宿主经 App surface iframe 的 URL 参数给 hana-theme / hana-css / hana-theme-appearance，
-  //   变更再经 hana.theme.changed 推同一组值（SDK hana.theme.subscribe 已有快照）。
-  //   契约：**App 自己把宿主主题贴进自己的文档**（官方样例 SDK 的 followHostTheme：
-  //   fetch cssUrl → <style data-hana-theme-style>），宿主不代劳。
-  //   所以本 App 必须先把宿主主题样式表贴进自己的文档，再读 getComputedStyle(documentElement)：
-  //   不贴就永远读到空值，页面一路吃 HTML 里的纸张 fallback（var(--bg, #F5EFE4)），连 loading
-  //   壳页也不跟随。贴好之后，壳页、注入的 DSH UI、以及主题桥读到的变量才是真实的 Hana 配色。
-  var THEME_STYLE_ATTR = "data-hana-theme-style";
-  var themeCssUrl: string | null = null;
-  // 注：dsh 自己的主题偏好（system/light/dark）**不由壳页判断**——它是 DSH 侧的事实
-  // （宿主主题 API 里也没有它）。现由 ui-layout 的 presenter 投影到
-  // html[data-dsh-theme-preference]，DSH 内的主题桥直接观察该属性决定是否跟随。
-  // 壳页在这里只负责一件事：维持宿主主题变量（样式表）。
-  function applyThemeCss(cssUrl) {
-    if (typeof cssUrl !== "string" || !cssUrl) return;
-    themeCssUrl = cssUrl;
-    fetch(cssUrl, { credentials: "same-origin", cache: "no-store" }).then(function (res) {
-      if (!res.ok) throw new Error("theme.css HTTP " + res.status);
-      return res.text();
-    }).then(function (css) {
-      if (themeCssUrl !== cssUrl) return; // 期间主题又变了，等新的那次落地
-      var el = document.querySelector("style[" + THEME_STYLE_ATTR + "]");
-      if (!el) {
-        el = document.createElement("style");
-        el.setAttribute(THEME_STYLE_ATTR, "");
-        (document.head || document.documentElement).appendChild(el);
-      }
-      if (el.textContent !== css) el.textContent = css;
-      // CSS 落地后立即再推一次：属性变化通知会早于样式表到位，桥那一刻读到的还是旧值。
-      try { pushThemeNow(); } catch (e) { /* 忽略 */ }
-    }).catch(function (err) {
-      // 主题拿不到不致命：页面仍用 HTML 里写好的纸张 fallback 色。
-      try { console.warn("[dshana] 宿主主题样式表加载失败", err && err.message ? err.message : err); } catch (e) { /* 忽略 */ }
-    });
-  }
-  function applyHostTheme(snap) {
-    if (!snap || typeof snap !== "object") return;
-    var themeId = typeof snap.theme === "string" && snap.theme ? snap.theme : null;
-    var appearance = snap.appearance === "light" || snap.appearance === "dark" ? snap.appearance : null;
-    try {
-      var root = document.documentElement;
-      if (themeId) root.setAttribute("data-theme", themeId);
-      if (appearance) root.setAttribute("data-appearance", appearance);
-      else root.removeAttribute("data-appearance");
-    } catch (e) { /* 忽略 */ }
-    applyThemeCss(snap.cssUrl);
-    seedDshTokens();
-  }
+  // 宿主主题：宿主经 App surface iframe 的 URL 参数给 hana-theme / hana-css /
+  // hana-theme-appearance，变更再经 hana.theme.changed 推同一组值。「贴样式表」那一步的
+  // 契约与实现见 src/ui/host-theme.ts（壳页 / 设置页 / 入口卡共用一份）；壳页只额外做面
+  // 相关的事：应用后垫 DSH 首帧底色 token，样式表落地后把主题推给内层桥。
 
   // ---- 注入前先垫上 DSW 自己的底色 token（见 src/lib/seed-tokens.ts）----
   // 写 body 的内联 style、不加 !important：赢过 DSH 的静态样式表，输给主题桥的 !important。
@@ -839,27 +812,12 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
       if (backdropValue) document.body.style.backgroundColor = backdropValue;
     }
   }
-  // 首屏主题：官方读法 hana.theme.getSnapshot()（宿主报过来的实况）；
-  // 拿不到再退 URL 参数（宿主白名单参数名）。
-  try {
-    var themeSnap = hana && hana.theme && typeof hana.theme.getSnapshot === "function" ? hana.theme.getSnapshot() : null;
-    if (themeSnap) applyHostTheme(themeSnap);
-  } catch (e) { /* 忽略 */ }
-  try {
-    var themeParams = new URLSearchParams(location.search);
-    if (themeParams.get("hana-css") || themeParams.get("hana-theme")) {
-      applyHostTheme({
-        theme: themeParams.get("hana-theme"),
-        cssUrl: themeParams.get("hana-css"),
-        appearance: themeParams.get("hana-theme-appearance"),
-      });
-    }
-  } catch (e) { /* 忽略 */ }
-  try {
-    if (hana && hana.theme && typeof hana.theme.subscribe === "function") {
-      hana.theme.subscribe(function (snap) { applyHostTheme(snap); pushThemeNow(); });
-    }
-  } catch (e) { /* SDK 主题订阅不可用则只靠首屏那一次 */ }
+  // 首屏跟随 + 订阅（共用 src/ui/host-theme.ts）。分面差异只在两个钩子：应用后垫 DSH 首帧
+  // 底色 token；样式表落地后推一次主题给内层桥。
+  followHostTheme(hana, {
+    onApplied: function () { seedDshTokens(); pushThemeNow(); },
+    onStylesApplied: function () { pushThemeNow(); },
+  });
 
   // ---- 认面：页面自己声明为准，宿主 slot 只作兜底 ----
   // 与样例 hana-dsh 同一姿势："我是哪个面"写在**页面自己身上**（样例用 <meta name="hana-dsh-role">，

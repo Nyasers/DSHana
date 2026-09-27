@@ -32,41 +32,10 @@ import {
 } from "@hana/plugin-components/settings";
 import type { SelectOption } from "@hana/plugin-components/settings";
 import "@hana/plugin-components/settings.css";
+import { followHostTheme } from "#/ui/host-theme.ts";
 
-// ---- 主题跟随（与壳页同一姿势）----
-const THEME_STYLE_ATTR = "data-hana-theme-style";
-let themeCssUrl: string | null = null;
-
-type ThemeSnap = { theme?: string; appearance?: string; cssUrl?: string };
-
-function applyTheme(snap: ThemeSnap | null | undefined) {
-  if (!snap || typeof snap !== "object") return;
-  const root = document.documentElement;
-  if (typeof snap.theme === "string" && snap.theme) root.setAttribute("data-theme", snap.theme);
-  if (typeof snap.appearance === "string" && snap.appearance) {
-    root.setAttribute("data-appearance", snap.appearance);
-    // 原生控件与滚动条跟着宿主明暗，而不是跟着系统（两者不一致时页面会半黑半白）。
-    root.style.colorScheme = snap.appearance === "dark" ? "dark" : "light";
-  }
-  const url = typeof snap.cssUrl === "string" ? snap.cssUrl : "";
-  if (!url) return;
-  themeCssUrl = url;
-  fetch(url, { credentials: "same-origin", cache: "no-store" })
-    .then((r) => (r.ok ? r.text() : ""))
-    .then((css) => {
-      if (themeCssUrl !== url || !css) return; // 期间主题又变了，等新的那次落地
-      let el = document.querySelector("style[" + THEME_STYLE_ATTR + "]");
-      if (!el) {
-        el = document.createElement("style");
-        el.setAttribute(THEME_STYLE_ATTR, "");
-        (document.head || document.documentElement).appendChild(el);
-      }
-      if (el.textContent !== css) el.textContent = css;
-    })
-    .catch(() => {
-      /* 拿不到主题不致命：交给宿主主题变量与组件库自带的兜底 */
-    });
-}
+// ---- 主题跟随（与壳页、入口卡同一姿势，实现在 src/ui/host-theme.ts）----
+// 本页要跟着宿主明暗改 color-scheme（原生控件与滚动条跟宿主，不跟系统），故传 syncColorScheme。
 
 // ---- 小工具 ----
 const MODEL_KEY_SEP = "\u0000"; // provider 与 model id 之间（见 modelOptions）
@@ -163,25 +132,6 @@ function sessionOf(settings: any): { mode: string; picked: string; effort: strin
   };
 }
 
-/** 会话行的显示名：任务 label 优先，缺则按动作给默认前缀 + sessionId 短串。 */
-function sessionLabel(s: any): string {
-  const label = typeof s?.label === "string" && s.label ? s.label : "";
-  if (label) return label;
-  const head = s?.action === "send" ? "DSH 续会话" : "DSH 新任务";
-  const sid = typeof s?.sessionId === "string" ? s.sessionId.slice(0, 18) : "";
-  return head + (sid ? "：" + sid + "…" : "");
-}
-
-/** 会话行的副文案：状态 + 工作目录 + 最近活动时间。 */
-function sessionRowHint(s: any): string {
-  const parts: string[] = [];
-  if (typeof s?.status === "string" && s.status) parts.push(s.status);
-  if (typeof s?.cwd === "string" && s.cwd) parts.push(s.cwd);
-  const at = Number(s?.updatedAt || s?.createdAt || 0);
-  if (Number.isFinite(at) && at > 0) parts.push(new Date(at).toLocaleString());
-  return parts.join(" · ");
-}
-
 function App() {
   const [draft, setDraft] = useState<Record<string, string>>(() => stringifySettings(null));
   const [cfgHint, setCfgHint] = useState("");
@@ -198,12 +148,6 @@ function App() {
   const [sessionHint, setSessionHint] = useState("");
   const [sessionWarn, setSessionWarn] = useState(false);
   const [model, setModel] = useState<any>(null); // 最近一次读回的模型候选（{catalog:{groups}} 或 {error}）
-  // 会话清单（「会话」区块）：坐标来自宿主任务记录，列出即可在新窗口里打开。
-  const [sessions, setSessions] = useState<any[]>([]);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
-  const [sessionsHint, setSessionsHint] = useState("");
-  const [sessionsWarn, setSessionsWarn] = useState(false);
-  const [openingTask, setOpeningTask] = useState("");
   const alive = useRef(true);
 
   useEffect(() => {
@@ -245,47 +189,10 @@ function App() {
     }
   }, []);
 
-  const loadSessions = useCallback(async () => {
-    setSessionsLoading(true);
-    setSessionsHint("");
-    setSessionsWarn(false);
-    try {
-      const { res, data } = await readJson("dshana/sessions");
-      if (!res.ok || !data || data.ok !== true) throw new Error((data && data.error) || "HTTP " + res.status);
-      setSessions(Array.isArray(data.sessions) ? data.sessions : []);
-    } catch (e) {
-      setSessionsWarn(true);
-      setSessionsHint("读取失败：" + errText(e));
-    } finally {
-      setSessionsLoading(false);
-    }
-  }, []);
-
-  const openSession = async (s: any) => {
-    setOpeningTask(s.taskId);
-    setSessionsHint("");
-    setSessionsWarn(false);
-    try {
-      const { res, data } = await readJson("dshana/sessions/open", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ sessionId: s.sessionId, taskId: s.taskId, title: sessionLabel(s) }),
-      });
-      if (!res.ok || !data || data.ok !== true) throw new Error((data && data.error) || "HTTP " + res.status);
-      setSessionsHint("已请求打开：" + sessionLabel(s));
-    } catch (e) {
-      setSessionsWarn(true);
-      setSessionsHint("打开失败：" + errText(e));
-    } finally {
-      setOpeningTask("");
-    }
-  };
-
   useEffect(() => {
     void loadConfig();
     void loadModel();
-    void loadSessions();
-  }, [loadConfig, loadModel, loadSessions]);
+  }, [loadConfig, loadModel]);
 
   // 设置变更广播的落地：宿主 App 存储只有 get/set、没有订阅口（已核 SDK 的 d.ts），
   // 所以本页在重新可见时重读一次——另一个窗口改过设置也不会拿着旧值继续操作。
@@ -495,62 +402,6 @@ function App() {
         />
       </SettingsSection>
 
-      <SettingsSection
-        title="会话"
-        description="本 App 提交过的 DSH 会话（坐标取自宿主任务记录）。打开会在一个新窗口里显示那一段会话。"
-      >
-        {sessions.map((s) => (
-          <SettingRow
-            key={s.taskId}
-            label={sessionLabel(s)}
-            hint={sessionRowHint(s)}
-            control={
-              <button
-                type="button"
-                disabled={openingTask === s.taskId}
-                onClick={() => void openSession(s)}
-                style={{
-                  font: "inherit",
-                  fontSize: 12.5,
-                  padding: "4px 12px",
-                  borderRadius: 6,
-                  border: "1px solid var(--border, #D8CFBE)",
-                  background: "var(--bg-card, #FBF7EE)",
-                  color: "var(--text, #2A2622)",
-                  cursor: openingTask === s.taskId ? "default" : "pointer",
-                }}
-              >
-                {openingTask === s.taskId ? "打开中…" : "在新窗口打开"}
-              </button>
-            }
-          />
-        ))}
-        <SettingRow
-          label=""
-          hint={sessionsHint || (sessions.length === 0 ? "还没有可打开的会话。" : undefined)}
-          hintVariant={sessionsWarn ? "warn" : "default"}
-          control={
-            <button
-              type="button"
-              disabled={sessionsLoading}
-              onClick={() => void loadSessions()}
-              style={{
-                font: "inherit",
-                fontSize: 12.5,
-                padding: "4px 12px",
-                borderRadius: 6,
-                border: "1px solid var(--border, #D8CFBE)",
-                background: "var(--bg-card, #FBF7EE)",
-                color: "var(--text, #2A2622)",
-                cursor: sessionsLoading ? "default" : "pointer",
-              }}
-            >
-              {sessionsLoading ? "读取中…" : "刷新"}
-            </button>
-          }
-        />
-      </SettingsSection>
-
     </SettingsPage>
   );
 }
@@ -562,17 +413,7 @@ function App() {
   } catch {
     /* 宿主未提供则忽略 */
   }
-  try {
-    const snap = hana && hana.theme && typeof hana.theme.getSnapshot === "function" ? hana.theme.getSnapshot() : null;
-    if (snap) applyTheme(snap);
-  } catch {
-    /* 忽略 */
-  }
-  try {
-    if (hana && hana.theme && typeof hana.theme.subscribe === "function") hana.theme.subscribe(applyTheme);
-  } catch {
-    /* 忽略 */
-  }
+  followHostTheme(hana, { syncColorScheme: true });
   const host = document.getElementById("root");
   if (host) createRoot(host).render(<App />);
 })();

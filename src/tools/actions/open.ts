@@ -69,8 +69,8 @@ export async function run(input: OpenInput, ctx: ToolCtx, deps?: SubmitDeps): Pr
     (loc.cwd ? "，cwd " + loc.cwd : "") +
     "。任务在后台执行，完成/失败按 " + loc.delivery + " 档投递回本会话（下一个输入点自动贴回，不必为等结果结束回合）；要看执行过程或最终结论用 dshana action=get（taskId " +
     loc.taskId + "）。";
-  // 入口卡：一个会话一张把手（reply 不挂，避免叠）。卡上是一行坐标与一颗「在新窗口打开」的
-  // 按钮，点了才在原生窗口里开出 DSH 现场——聊天流里因此不放注入的 iframe。
+  // 入口卡：一个会话一张把手（reply 不挂，避免叠）。卡上是一行坐标与一颗「放到黑板」的
+  // 按钮，点了才把这段会话放到黑板上开出 DSH 现场——聊天流里因此不放注入的 iframe。
   return {
     content: [{ type: "text", text }],
     details: {

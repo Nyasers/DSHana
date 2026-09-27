@@ -20,6 +20,16 @@
 /** UI 共享通道的键前缀（与 ui/app-shell.ts 的 sharedKey 同源；改一处必须改两处）。 */
 export const SHARED_KEY_PREFIX = "dshana.";
 
+/** 跨面共用的当前选中会话（写侧：入口卡与设置页放置黑板卡前、壳页的本地选中变化；
+ * 读侧：黑板上的会话卡、FP 与主卡的对齐）。消费方见 ui/app-shell.ts 与
+ * src-integrations/ui-session。 */
+export const SELECTION_SHARED_KEY = SHARED_KEY_PREFIX + "selection";
+
+/** 会话选中的写入值：意见带写入时刻 at（消费侧只采纳比自己动手更新的）。 */
+export function selectionSharedValue(sessionId: string | null, at = Date.now()): { sessionId: string | null; at: number } {
+  return { sessionId: typeof sessionId === "string" && sessionId ? sessionId : null, at };
+}
+
 /** 应用态存储的最小面（结构类型：不绑定 SDK 类型，单测可直接传假实现）。
  * 与宿主 `ctx.storage.global` 一致：getAll 回 `{ entries }`，delete 按键删。 */
 export interface SharedStateStore {

@@ -27,6 +27,7 @@ const BRIDGE_SRC = readFileSync(
   "utf8",
 );
 const SHELL_SRC = readFileSync(new URL("../../src/ui/app-shell.ts", import.meta.url), "utf8");
+const HOST_THEME_SRC = readFileSync(new URL("../../src/ui/host-theme.ts", import.meta.url), "utf8");
 
 const BG = "#101010";
 const SIDEBAR_BG = "#202020";
@@ -266,7 +267,9 @@ test("壳页：dsh 自选明暗时不垫首帧底色（那一段归它自己的 
 test("壳页确实把这一面的底座 token 与宿主明暗写上了（桥的入口契约）", () => {
   assert.ok(SHELL_SRC.includes("data-dshana-backdrop"), "壳页没写 data-dshana-backdrop");
   assert.ok(SHELL_SRC.includes("backdropTokenForView"), "壳页没按面取底座 token");
-  assert.ok(SHELL_SRC.includes("data-appearance"), "壳页没把宿主明暗写出来");
+  // 宿主明暗由壳页经共享的 host-theme 写：壳页接上跟随、共享件落 data-appearance。
+  assert.ok(SHELL_SRC.includes("followHostTheme"), "壳页没接上共享的宿主主题跟随");
+  assert.ok(HOST_THEME_SRC.includes("data-appearance"), "共享件没把宿主明暗写出来");
   assert.ok(BRIDGE_SRC.includes("data-dshana-backdrop"), "桥没读 data-dshana-backdrop");
   assert.ok(BRIDGE_SRC.includes("data-appearance"), "桥没读宿主明暗");
 });
