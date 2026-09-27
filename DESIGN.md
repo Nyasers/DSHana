@@ -113,7 +113,7 @@ DSHana 以**单卡 + 自带功能面板**注册（manifest `contributes.cards[0]
 
 ### 设置面
 
-- **App 设置页**：`contributes.settings.ui.route`，宿主设置区渲染，不依赖 DSH 运行。两项常规（审批超时 / 任务超时，App 自持存储）+ 会话模型模式 + 会话清单。模型候选读 `GET /dshana/models`，后端取**宿主模型目录**（`ctx.models.list`，能力面 `app/models.infer`）——宿主目录是「这条路走不走得通」的唯一事实源，页面因此不列 DSH 自己的目录，DSH 在不在跑都一样（`src/lib/model-catalog-view.ts` 归一化、按 provider 归组并附推理档）。
+- **App 设置页**：`contributes.settings.ui.route`，宿主设置区渲染，不依赖 DSH 运行。两项常规（审批超时 / 任务超时，App 自持存储）+ 会话模型模式。模型候选读 `GET /dshana/models`，后端取**宿主模型目录**（`ctx.models.list`，能力面 `app/models.infer`）——宿主目录是「这条路走不走得通」的唯一事实源，页面因此不列 DSH 自己的目录，DSH 在不在跑都一样（`src/lib/model-catalog-view.ts` 归一化、按 provider 归组并附推理档）。
 - **放到黑板**：入口卡点「放到黑板」把这段会话写进跨面共用选中，再请宿主放置本 App 在 manifest 里声明的那张 `session` 卡（`hana.cards.open("session")`，见 `src/lib/chalkboard.ts`）——位置、外框、关闭按钮与 surface 凭据都归宿主。卡 route 是纯 ui 路径 `/stream.html`，不带 `sid` 时跟随跨面共用的当前选中；声明卡在黑板上只有一份，宿主已有就揭示它、不开第二份。会话历史归 DSH 自己的侧边栏（打开 DSH UI 即可翻看），App 不另存清单。这是**不依赖宿主入口**的放置路径：聊天流底部的任务 chip 点开去哪由宿主决定（宿主侧诉求单独附，不进仓）。
 - **会话模型从哪来**：App 设置项 `sessionModelMode` 决定——`caller`（缺省，复用调用方那份）或 `custom`（`sessionModelProvider` / `sessionModelModel` / `sessionModelReasoningEffort` 固定一条，推理强度空串 = 不指定、由 DSH 决定）。优先级：工具入参显式 > App 自定义那条 > 用户手设的 DSH 默认（`caller` 模式下 user 层非空就不补） > **调用方那张角色卡**配的 `models.chat`（`agent:list` 的 `isCurrent` 优先，能力面 `app/agents.read`）。选出的那条**随会话请求带上**（集成层给 `session/create` 与 `session/prompt` 加了可选 `model` 字段，见 `src-integrations/api-session-controller`）：只在会话内生效，不写 `settings.yaml` 的全局默认；只在 create 上补，send 沿用会话已有的选择。见 `src/lib/caller-model.ts`（决策）、`agent-models.ts`（读角色卡）、`host-models.ts`（宿主目录）。
 - **DSH 自己的默认模型**（`agent-default-model`）：本页不经手它，也不在 config.json 存副本。它的用户层有值、而已不在宿主目录里时，`src/lib/model-default-guard.ts` 在 runtime 就绪与宿主 `models-changed` 之后就地对账换一条可服务的（优先留在原 provider 里换，再退角色卡模型、目录第一条）；用户层为空不动手——本形态里界面直接开的会话在 DSH 自己的模型选择器里选一条。
@@ -127,6 +127,8 @@ DSH 的 workspace 选择对话框来自 `directory-picker` seam（宿主半列�
 ## 主题跟随
 
 `@dshana/theme` 经 `tapIndex` 注入 index 响应：静态 fallback + 动态桥脚本，向壳页索取宿主主题 vars → 写 body 层 `!important` 覆盖 `--dsw-alias-*` / `--dsw-specific-*`。
+
+**App 页面这一侧要自己贴样式表**：宿主把主题参数附在 App surface iframe 的 URL 上（`hana-theme` / `hana-css` / `hana-theme-appearance`），变化时再推 `hana.theme.changed`；但把样式表贴进页面这件事宿主不代劳，而 SDK 只在收到 `hana.theme.changed` 时才应用 `cssUrl`——页面不自己贴首帧，就会一路吃 HTML 里写死的纸张 fallback，直到第一次主题变化才跟上。壳页 / 设置页 / 入口卡共用 `src/ui/host-theme.ts` 做这一步（首屏读快照 + URL 兜底 + 订阅）。
 
 **跟随语义（有意自持）**：仅当 DSH 主题偏好为 `system` 时跟随宿主配色；显式 `light`/`dark` 时完全用 DSH 自己的主题，宿主配色不介入。偏好变更经事件驱动重读（不再周期轮询）。此语义与官方样例的「无条件双 palette 替换」不同，是保留项。
 
