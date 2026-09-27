@@ -4,8 +4,10 @@
 // scripts/shared/version.mts — 版本域共享模块（release/version、derive、changelog 复用）
 // 布局原则：跨脚本共享/流程性构件放 scripts/shared/，领域特有随各自域或源码（src-cordis/build）。
 // 提供 cordis 包清单（src-cordis 顶层 roster bundle + plugins/*）与派生同步目标
-// （manifest + cordis 包）——版本单一事实源 = 主 package.json（pnpm version 是改版本唯一入口，
-// 派生同步见 scripts/derive/index.mts，git 收口见 scripts/release/version.mts）。
+// （manifest + cordis 包）——版本号两个写手各管一段：主号归 `pnpm version`（唯一入口），
+// build metadata 段（`+dsh-…`）归 derive 从交付面清单的 dsh 声明派生（见
+// scripts/derive/version-metadata.mts；派生同步见 scripts/derive/index.mts，
+// git 收口见 scripts/release/version.mts）。
 import fs from "node:fs";
 import path from "node:path";
 import { ROOT } from "./root.mts";
@@ -55,6 +57,15 @@ export function cleanVersion(version) {
 // 不另设修订号：同一版本里改两次覆盖层应当由发版流程 bump 版本，而不是在这里编计数。
 export function patchVersion(upstreamVersion) {
   return `${cleanVersion(upstreamVersion)}+dshana-${cleanVersion(readPkg("package.json").version)}`;
+}
+
+// 完整版号：主号（剥掉既有 build 段）+ build metadata 段 `+dsh-<交付面 pin>`。
+// 这段 metadata 的来源只有一处——packaging/package.json 的 @deepseek-ai/dsh 声明；pnpm version
+// 算号会把 build 段剥掉，所以 bump 时由 version 钩子拼回，平时由 derive 的 version-metadata
+// 任务守着（pin 一动版号就跟，不等到下次 bump）。pin 未声明时只剩主号。
+export function fullVersion(version, dsh = dshPin()) {
+  const base = cleanVersion(version);
+  return dsh ? `${base}+dsh-${dsh}` : base;
 }
 
 // ---- 交付面清单（packaging/package.json）----

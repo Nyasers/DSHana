@@ -24,6 +24,7 @@
 //
 // 职责（version 钩子内按序）：
 //   1. 读 package.json version（pnpm 已写裸号）+ dsh 依赖声明 → 拼回完整版写主
+//      （拼法 = shared/version.mts#fullVersion，与 derive 的 version-metadata 任务共用一份实现）
 //   2. derive 派生同步（manifest + cordis 包 + vendor 的 checkout，幂等）
 //   3. changelog 增量生成（conventional-changelog，标题带完整版）
 //   4. HEAD 版本门禁（完整版相对 HEAD 未变化 → 拒绝，防 --allow-same-version 空转/误跑）
@@ -41,7 +42,7 @@ import { execSync } from "node:child_process";
 
 import { errText } from "../shared/err-text.mts";
 import { ROOT } from "../shared/root.mts";
-import { versionCommitFiles, readPkg, readShipPkg, writePkg } from "../shared/version.mts";
+import { fullVersion, versionCommitFiles, readPkg, readShipPkg, writePkg } from "../shared/version.mts";
 const run = (cmd, desc) => {
   console.log("[version-hook] " + desc + "...");
   try {
@@ -64,7 +65,7 @@ function main() {
     process.exit(1);
   }
   // 1) 拼回完整版（build 段 = dsh 依赖段，版本规则见文件头）写主
-  const full = bare + "+dsh-" + dshDep;
+  const full = fullVersion(bare, dshDep);
   pkg.version = full;
   writePkg("package.json", pkg);
   console.log("[version-hook] 主版本拼回完整版: " + bare + " -> " + full);
