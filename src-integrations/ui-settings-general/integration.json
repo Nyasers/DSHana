@@ -1,19 +1,19 @@
 {
   "package": "@deepseek-ai/dsh-client-ui-settings-general",
-  "upstreamVersion": "0.1.7-rc.1",
+  "upstreamVersion": "0.1.7-rc.2",
   "upstreamDir": "packages/client/ui-settings-general",
   "files": [
     {
       "path": "src/client/SettingsRoot.tsx",
-      "upstreamSha256": "6a0fe6d492ab2aeed06123d7bc1ae6fe78b6c76a26e9d1611a9c8c79dfcc7603"
+      "upstreamSha256": "01966a7299b66d16b2f80106c72dd1f37c541bbfe2d3a0397ca9edd96c21f466"
     },
     {
       "path": "src/client/SettingsRoot.module.css",
-      "upstreamSha256": "db40d7e1cc98ac9df2b4bdf9cac5d217315eb6bcd945ab0bdc66ce5a7c3697b1"
+      "upstreamSha256": "883f491221c5485cf89d2bcbe19146aae2b16b05ac94a35f8e28d4705a924ae7"
     },
     {
       "path": "src/client/locales.ts",
-      "upstreamSha256": "1a72b8de2b01070040a7cc4f66fa4e22d07913d7ddf0e5eeea759571ced3d0f3"
+      "upstreamSha256": "c2b370dae452142ff1c3e00777ffd90562447998006e50c7976c1137da3f512f"
     }
   ],
   "notes": [

@@ -211,6 +211,24 @@ export const TOKEN_MAP: ReadonlyArray<AdapterRule> = [
   ["--dsw-specific-sidebar-nav-item-active", "--accent-light"],
   ["--dsw-specific-sidebar-nav-item-hover", "--accent-light"],
   ["--dsw-specific-tip", "--accent-light"],
+
+  // ---- 设置卡片 / 引导面 / 菜单面 ----
+  // settings-card-fill 上游取 bg-layer-2（内容面），与上面 layer-1/2 → --bg-card 同一格；
+  // stroke 上游取 border-l4，但这一条的语义就是“卡片描边”——语义明确的线，不是层次位，
+  // 与 separator-primary / ghost-active-border 同族 → --border。
+  ["--dsw-alias-settings-card-fill", "--bg-card"],
+  ["--dsw-alias-settings-card-stroke", "--border"],
+  // 引导面（DesktopOnboarding / onboarding.css）：accent 是引导自己的强调色，接 --accent
+  // 让欢迎页与整站同调；card-fill 上游是中性面掺 80% 透明 → 内容面；secondary-fill 是
+  // “比它再低一档的表面” → 层次偏移；checkbox-border 是控件描边 → --border。
+  ["--dsw-alias-onboarding-accent", "--accent"],
+  ["--dsw-alias-onboarding-card-fill", "--bg-card"],
+  ["--dsw-alias-onboarding-secondary-fill", { of: "--bg", shift: 8 }],
+  ["--dsw-alias-onboarding-checkbox-border", "--border"],
+  // menu-icon 是菜单里的图标色（浅色取中性深灰、深色取 label-primary-dimmed），与 label-secondary 同读法。
+  ["--dsw-alias-menu-icon", "--text-light"],
+  // menu-surface-fill 是弹出菜单的底，与 --dsw-specific-menu 同源（上游把后者指到它），归宿一致。
+  ["--dsw-menu-surface-fill", "--sidebar-bg"],
 ];
 
 /**
@@ -220,7 +238,7 @@ export const TOKEN_MAP: ReadonlyArray<AdapterRule> = [
  */
 export const PASSTHROUGH: ReadonlyArray<{ match: RegExp; why: string }> = [
   {
-    match: /^--dsw-(font|elevation|shadow|corner|mask-blur|linear)/,
+    match: /^--dsw-(font|elevation|shadow|corner|radius|mask-blur|linear|gradient)/,
     why: "字体、投影、圆角、模糊与渐变：与主题配色无关，跟着 dsh 自己的设计语言走。",
   },
   {
@@ -228,8 +246,12 @@ export const PASSTHROUGH: ReadonlyArray<{ match: RegExp; why: string }> = [
     why: "调色板：固定色值本身不随主题走。上面单列的四个 neutral 值是例外——它们被组件当层次位用。",
   },
   {
-    match: /^--dsw-alias-(tooltip-bg|toast-bg)$/,
-    why: "深色浮层 + 硬编码反白字的功能性配对：接成宿主卡片色会白底白字。",
+    match: /^--dsw-alias-(tooltip-bg|tooltip-key-bg|toast-bg|toast-label)$/,
+    why: "深色浮层 + 硬编码反白字的功能性配对：接成宿主卡片色会白底白字（key-bg 是 tooltip 底色掺白的按键底，同属这一层）。",
+  },
+  {
+    match: /^--dsw-focus-ring-/,
+    why: "焦点环：宽度是几何值；颜色在根作用域本就没有定义（取值处自带 state-business-primary 兜底，指针模态下被置 transparent），接管等于替上游补定义。",
   },
   {
     match: /^--dsw-alias-border-l(?!3$)/,

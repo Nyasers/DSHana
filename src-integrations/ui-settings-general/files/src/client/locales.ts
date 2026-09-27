@@ -3,6 +3,7 @@
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
   'trigger': '设置',
+  'shortcut.open': '打开设置',
   'desktop.update.available': '新版本',
   'desktop.update.checking': '正在检查更新…',
   'desktop.update.progress': '{percent}%',
@@ -27,9 +28,9 @@ export const zh = {
   'openDocument.error': '无法打开配置文件',
   'general.nav': '通用设置',
   'general.currentVersion': '当前版本：{version}',
-  'developerTools.title': '开发者工具',
+  'developerTools.title': '代码工作工具',
   'developerTools.error': '保存失败，请重试',
-  'developerTools.description': '显示用于调试和排查问题的工具与信息',
+  'developerTools.description': '开启后显示轨迹、本轮代码差异，新对话中的 Agent 预设切换',
   'connection.error': '连接异常，刷新重试',
   'connection.connecting': '重新连接中',
   'connection.connected': '连接成功',
@@ -46,6 +47,7 @@ export type SettingsKey = keyof typeof zh
 /** English dictionary, checked complete against the zh key set. */
 export const en = {
   'trigger': 'Settings',
+  'shortcut.open': 'Open settings',
   'desktop.update.available': 'Update',
   'desktop.update.checking': 'Checking for updates…',
   'desktop.update.progress': '{percent}%',
@@ -70,9 +72,9 @@ export const en = {
   'openDocument.error': 'Could not open configuration file',
   'general.nav': 'General',
   'general.currentVersion': 'Current version: {version}',
-  'developerTools.title': 'Developer tools',
+  'developerTools.title': 'Coding Tools',
   'developerTools.error': 'Could not save. Please try again.',
-  'developerTools.description': 'Show tools and information for debugging and troubleshooting',
+  'developerTools.description': 'Shows trajectory, code diffs, and Agent preset switching in new chats',
   'connection.error': 'Disconnected',
   'connection.connecting': 'Reconnecting',
   'connection.connected': 'Connected',

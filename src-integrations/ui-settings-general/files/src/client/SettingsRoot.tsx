@@ -5,15 +5,16 @@
  * close label, sections) arrives from registrants through slots; accessible
  * names resolve from localized content (trigger: shell locale; dialog:
  * aria-labelledby the title node; close: visually-hidden slot text). Modal
- * open state and the active section id are component-local viewing state;
+ * open state and the active section id belong to the declared owner store;
  * the onboarding coordinator mounts exactly one ordered registrant while the
  * sessions-derived empty-Hero fact is active. Visible dialog chrome belongs
  * to the step, so a mounted-but-deciding step paints nothing here.
  */
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import {
-  ConnectionIndicator,
+  ConnectionIndicator, Tooltip, useModalLayer,
   IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconCloseOutlineRegular, IconDataOutlineMedium,
   IconPersonalizationOutlineMedium, IconSettingsOutlineMedium, IconUserOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -60,7 +61,7 @@ function hanaBridge(): HanaSettingsBridge | undefined {
 }
 
 /**
- * The modal layer: full-viewport mask + centered panel. Close paths: the
+ * Body-portaled modal layer: full-viewport mask + centered panel. Close paths: the
  * header button, a mask click, and document-level Escape (mounted only while
  * open, so the listener lifetime is the panel's).
  */
@@ -70,25 +71,21 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose, embedded
   const active = rows.find(r => r.id === activeId)?.id ?? rows[0]?.id
   const titleId = useId()
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => { document.removeEventListener('keydown', onKeyDown) }
-  }, [onClose])
+  const panel = useRef<HTMLDivElement>(null)
+  // 嵌入式（占满整列）不是对话框：不装模态层、不抢焦点、不 portal。
+  useModalLayer(panel, !embedded, onClose)
 
-  // Entering the dialog focuses the close button; the root restores its trigger on close.
-  // embedded（占满整列）不是对话框，不抢焦点。
-  const closeButton = useRef<HTMLButtonElement | null>(null)
-  useEffect(() => { if (!embedded) closeButton.current?.focus() }, [embedded])
-
-  return (
+  // Portalled beside #root like the Modal primitive: a covering surface mounted
+  // inside the root would precede the columns' chrome in document order, so a
+  // chrome row that declares window drag after it would override its subtraction.
+  // Beside the root, base.css's `body > :not(#root)` rule subtracts it instead.
+  const shell = (
     <div className={embedded ? css.embedded : css.overlay} role={embedded ? 'region' : 'presentation'}>
       {!embedded && <div className={css.mask} aria-hidden="true" onClick={onClose} />}
-      <div className={clsx(css.panel, embedded && css.embeddedPanel)} role={embedded ? undefined : 'dialog'} aria-modal={embedded ? undefined : 'true'} aria-labelledby={titleId}>
+      <div ref={panel} tabIndex={-1} data-shortcut-modal="settings" className={clsx(css.panel, embedded && css.embeddedPanel)} role={embedded ? undefined : 'dialog'} aria-modal={embedded ? undefined : 'true'} aria-labelledby={titleId}>
         <nav className={css.nav}>
-          <div className={css.navTitle} id={titleId}>{renderSlot('settings.header', {})}</div>
+          <div className={css.navTitle} id={titleId} tabIndex={-1}
+            data-modal-autofocus={active === undefined ? '' : undefined}>{renderSlot('settings.header', {})}</div>
           <div className={css.navList}>
             {rows.map(row => (
               <button
@@ -96,6 +93,7 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose, embedded
                 type="button"
                 className={clsx(css.navCell, row.id === active && css.active)}
                 aria-current={row.id === active ? 'true' : undefined}
+                data-modal-autofocus={row.id === active ? '' : undefined}
                 onClick={() => { onSelect(row.id) }}
               >
                 {navIcon(row.id)}
@@ -107,7 +105,7 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose, embedded
         <div className={css.content}>
           <div className={css.header}>
             <div className={css.actions}>{renderSlot('settings.action', {})}</div>
-            <button ref={closeButton} type="button" className={css.close} onClick={onClose}>
+            <button type="button" className={css.close} onClick={onClose}>
               <IconCloseOutlineRegular size={14} />
               <span className={css.hiddenLabel}>{renderSlot('settings.close', {})}</span>
             </button>
@@ -119,6 +117,7 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose, embedded
       </div>
     </div>
   )
+  return embedded ? shell : createPortal(shell, document.body)
 }
 
 /**
@@ -129,24 +128,22 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose, embedded
 export function SettingsRoot(props: SettingsRootComponentProps) {
   const {
     wide, reconnect, useConnectionState, useSections, useOnboardingSteps, useSessions, renderSlot, t,
-    useDesktopUpdate, openDesktopUpdate,
+    useDesktopUpdate, openDesktopUpdate, useStore, actions, useShortcuts,
   } = props
-    const bridge = hanaBridge()
+  const bridge = hanaBridge()
   const role = bridge?.role ?? 'navigation'
   const readView = bridge?.readSettingsView
   const writeView = bridge?.writeSettingsView
   const onViewChanged = bridge?.onSettingsViewChanged
-  const [open, setOpen] = useState(false)
-  const [activeId, setActiveId] = useState<string | undefined>(undefined)
+  const { open, activeId } = useStore(state => state)
+  const shortcut = useShortcuts(rows => rows.find(row => row.id === 'settings.open'))
+  const { open: openState, close: closeState, select: selectState, openSection: openSectionState } = actions
   const [requestedOnboarding, setRequestedOnboarding] = useState<string | undefined>()
   const [completedOnboarding, setCompletedOnboarding] = useState<ReadonlySet<string>>(() => new Set())
   const [showRecovery, setShowRecovery] = useState(false)
   const [viewFailure, setViewFailure] = useState<{ kind: 'read' | 'write'; revision: number } | null>(null)
   const [holdConnecting, setHoldConnecting] = useState(false)
   const connectingShownAt = useRef<number | undefined>(undefined)
-  const triggerRow = useRef<HTMLDivElement | null>(null)
-  const triggerButton = useRef<HTMLButtonElement | null>(null)
-  const wasOpen = useRef(open)
   const viewRevision = useRef(0)
   const pendingWrite = useRef<{ next: SettingsView; revision: number } | null>(null)
   const refreshSettingsView = useRef<(() => void) | undefined>(undefined)
@@ -170,20 +167,14 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   }, [writeView])
 
   const close = useCallback(() => {
-    setOpen(false)
-    setActiveId(undefined)
+    closeState()
     publish({ open: false, section: null })
-  }, [publish])
-  // Restore after the close commit, when the dialog can no longer own focus.
-  useEffect(() => {
-    if (wasOpen.current && !open) triggerRow.current?.querySelector('button')?.focus()
-    wasOpen.current = open
-  }, [open])
+  }, [closeState, publish])
   const openSection = useCallback((id?: string) => {
-    if (id !== undefined) setActiveId(id)
-    setOpen(true)
+    if (id === undefined) openState()
+    else openSectionState(id)
     publish({ open: true, section: id ?? activeId ?? null })
-  }, [activeId, publish])
+  }, [activeId, openState, openSectionState, publish])
 
   // 跟随共享状态：只有 workspace / standalone 订阅并应用——
   // FP（navigation）是发射端（点设置写出去），主卡是接收端（读进来以模态面板打开）。
@@ -199,8 +190,12 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
       const revision = viewRevision.current
       void readView().then((next) => {
         if (!active || request !== generation || revision !== viewRevision.current) return
-        setOpen(next.open)
-        setActiveId(next.section ?? undefined)
+        if (next.open) {
+          if (next.section === null) openState()
+          else openSectionState(next.section)
+        } else {
+          closeState()
+        }
       }, (error: unknown) => {
         if (!active || request !== generation) return
         console.error('DSH settings view could not be read.', error)
@@ -245,6 +240,16 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
     if (onboardingActive) return
     setCompletedOnboarding(new Set())
   }, [onboardingActive])
+
+  const onboardingStepSeen = useRef(onboardingStep)
+  // An onboarding step owns the viewport and marks `#root` inert. The panel portals
+  // beside `#root`, outside that mark, so a step that appears while the panel is open
+  // takes the panel down rather than leaving it focusable behind the onboarding mask.
+  useEffect(() => {
+    const appeared = onboardingStepSeen.current === undefined && onboardingStep !== undefined
+    onboardingStepSeen.current = onboardingStep
+    if (appeared && open) close()
+  }, [onboardingStep, open, close])
 
   useLayoutEffect(() => {
     const previous = previousConnectionState.current
@@ -307,7 +312,7 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
         rows={rows}
         renderSlot={renderSlot}
         activeId={activeId}
-        onSelect={setActiveId}
+        onSelect={selectState}
         onClose={() => { /* settings 面常开，无关闭语义 */ }}
         embedded
       />
@@ -319,7 +324,7 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
       rows={rows}
       renderSlot={renderSlot}
       activeId={activeId}
-      onSelect={(id: string) => { setActiveId(id); publish({ open: true, section: id }) }}
+      onSelect={(id: string) => { selectState(id); publish({ open: true, section: id }) }}
       onClose={close}
     />
   )
@@ -351,18 +356,24 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
 
   return (
     <>
-      <div ref={triggerRow} className={clsx(css.triggerRow, !wide && css.railRow)}>
-        {renderSlot('settings.launcher', { wide, openSettings: () => { setOpen(true) }, openOnboarding: (id) => { setOpen(false); setRequestedOnboarding(id) } }, { fallback: <button
-          ref={triggerButton}
-          type="button"
-          className={clsx(css.trigger, !wide && css.rail)}
-          aria-label={t('trigger')}
-          aria-haspopup="dialog"
-          aria-expanded={role === 'navigation' ? false : open}
-          onClick={() => { openSection() }}
-        >
-          {renderSlot('settings.trigger', { wide })}
-        </button> })}
+      <div className={clsx(css.triggerRow, !wide && css.railRow)}>
+        {renderSlot('settings.launcher', {
+          wide, settingsOpen: open, openSettings: openSection,
+          ...(shortcut?.keys.length ? { settingsShortcut: { keys: shortcut.keys, aria: shortcut.aria } } : {}),
+          openOnboarding: (id) => { close(); setRequestedOnboarding(id) },
+        }, { fallback: <Tooltip disabled={open} label={t('trigger')} shortcutKeys={shortcut?.keys}>
+          <button
+            type="button"
+            className={clsx(css.trigger, !wide && css.rail)}
+            aria-label={t('trigger')}
+            aria-keyshortcuts={shortcut?.aria}
+            aria-haspopup="dialog"
+            aria-expanded={role === 'navigation' ? false : open}
+            onClick={() => { openSection() }}
+          >
+            {renderSlot('settings.trigger', { wide })}
+          </button>
+        </Tooltip> })}
         <ConnectionIndicator
           state={wide && desktopUpdate.presentation?.phase !== 'installing' ? connectionIndicator : undefined}
           disconnectedLabel={t('connection.error')}
