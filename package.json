@@ -1,6 +1,6 @@
 {
   "name": "dshana",
-  "version": "1.0.0-rc.27+dsh-0.1.7-rc.2",
+  "version": "1.0.0-rc.27+dsh-0.2.0-rc.1",
   "private": true,
   "packageManager": "pnpm@12.6.0+sha512.3ef68f951cb111ac204b4a5a16f0b2ddf0da56a96e0413e81d855d9f0b55ef926714709028e1cd00c405c2c5fb7b9e8ec4dc46777c805d0373c2f2ff00fd20ec",
   "engines": {
@@ -28,9 +28,10 @@
     "derive:thirdparty": "node scripts/derive/index.mts thirdparty",
     "derive:product-package": "node scripts/derive/index.mts product-package",
     "sync": "pnpm run sync:vendor",
+    "postsync": "pnpm run derive",
     "sync:vendor": "pnpm run sync:vendor:sdk && pnpm run sync:vendor:dsh",
     "sync:vendor:sdk": "node scripts/vendor/sdk.mts",
-    "postsync:vendor:sdk": "pnpm install --no-prefer-frozen-lockfile && pnpm run derive",
+    "postsync:vendor:sdk": "pnpm install --no-prefer-frozen-lockfile",
     "sync:vendor:dsh": "node scripts/vendor/dsh.mts",
     "changelog": "node scripts/release/changelog.mts",
     "facts:record": "node scripts/release/package-facts.mts",
@@ -53,8 +54,8 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",
-    "@deepseek-ai/dsh": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-host-open-in-app": "0.1.7-rc.2",
+    "@deepseek-ai/dsh": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-host-open-in-app": "0.2.0-rc.1",
     "@hana/app-sdk": "file:vendor/hana-app-sdk/hana-app-sdk.tgz",
     "@hana/plugin-components": "file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz",
     "@hana/plugin-protocol": "file:vendor/hana-app-sdk/hana-plugin-protocol-0.0.0.tgz",
