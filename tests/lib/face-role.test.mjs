@@ -109,11 +109,12 @@ test("侧栏收起：只在有轨的 default（standalone）面上生效，无�
   assert.match(sidebarRoot, /toggleSidebar\(\)/, "折叠钮要真的能切换");
 });
 
-test("清单与页面：stream 面由 ui/stream.html 承担（卡页就是它，不另开卡）", () => {
+test("清单与页面：会话卡由 ui/stream.html 承担（聊天卡就是这一页，不注册 manifest 卡）", () => {
   const html = readFileSync(join(here, "..", "..", "src", "ui", "stream.html"), "utf8");
   assert.match(html, /<meta name="hana-dshana-role" content="stream">/);
   assert.match(html, /data-dshana-view="stream"/);
   const manifest = JSON.parse(readFileSync(join(here, "..", "..", "src", "manifest.json"), "utf8"));
   const ids = manifest.contributes.cards.map((c) => c.id);
-  assert.ok(!ids.includes("stream"), "会话流走工具的聊天流卡（details.card 指这一页），不占卡片中心一格");
+  assert.ok(!ids.includes("stream"), "会话卡走工具的聊天流卡（details.card 指这一页），不占卡片中心一格");
+  assert.ok(!ids.includes("session"), "取出由宿主手势完成，不再声明一张黑板的会话卡");
 });

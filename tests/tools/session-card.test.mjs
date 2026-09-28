@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/tools/session-card.test.mjs — 会话入口卡字面量（src/tools/shared/card.ts）与工具回执的形状。
+// tests/tools/session-card.test.mjs — 会话卡字面量（src/tools/shared/card.ts）与工具回执的形状。
 //
-// open 挂一张入口卡（route = ui/entry.html：一行坐标 + 一颗"在新窗口打开"的按钮），reply 不挂
-// ——一个会话一张把手就够。卡字面量的字段规则由宿主定：pluginId 必填且等于归属 App id、
-// route 走 ui/ 静态树、aspectRatio 是 "宽:高" 字符串。提交链用 deps.submitDshTask 注入 fake，
-// 不触真 runtime、不碰宿主任务面。
+// open 挂一张会话卡（route = ui/stream.html：聊天流里画一行入口，取出到黑板 / 拆窗后同一页
+// 注入完整 DSH 现场），reply 不挂——一个会话一张把手就够。卡字面量的字段规则由宿主定：
+// pluginId 必填且等于归属 App id、route 走 ui/ 静态树、aspectRatio 是 "宽:高" 字符串。
+// 提交链用 deps.submitDshTask 注入 fake，不触真 runtime、不碰宿主任务面。
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
@@ -39,12 +39,12 @@ async function run(action, loc, input = {}) {
 
 /** 卡 route 的查询串（宿主把 route 拼在 App ui 静态树路径后面，查询串是卡页的数据源） */
 function cardQuery(card) {
-  assert.match(card.route, /^\/entry\.html\?/, "App 卡的 route 走 ui/ 静态树，不是 /routes/ 命名空间");
+  assert.match(card.route, /^\/stream\.html\?/, "App 卡的 route 走 ui/ 静态树，不是 /routes/ 命名空间");
   return new URLSearchParams(card.route.slice(card.route.indexOf("?") + 1));
 }
 
 test("卡页存在：SESSION_CARD_ROUTE 指向 ui/ 里真实存在的页面", () => {
-  assert.equal(SESSION_CARD_ROUTE, "/entry.html");
+  assert.equal(SESSION_CARD_ROUTE, "/stream.html");
   assert.ok(
     existsSync(join(here, "..", "..", "src", "ui", SESSION_CARD_ROUTE.replace(/^\//, ""))),
     "常量指向的页面必须真的在 src/ui 里（宿主按 ui 静态树取页）",
@@ -72,16 +72,18 @@ test("open：回执带入口卡，details.dsh 形状不变", async () => {
   const card = out.details.card;
   assert.equal(card.pluginId, "dshana", "宿主要求 pluginId 等于工具归属 App id，缺了或不等一律丢卡");
   assert.match(card.aspectRatio, /^\d+:\d+$/, "aspectRatio 是 \"宽:高\" 字符串；给数字会被渲染端当非法值");
-  assert.match(card.title, /子代理已开启/);
+  assert.equal(card.cardForm, "flush", "聊天卡的 cardForm 会随取出复制到黑板绑定，形态要定在这里");
+  assert.equal(card.title, "DSHana", "卡面抬头固定就是 DSHana；状态字样在卡内第一行");
 
   const q = cardQuery(card);
   assert.ok(Number(q.get("ts")) > 0, "?ts= 防缓存");
+  assert.equal(q.get("act"), "open", "act 是卡内状态字样的依据（文案住在卡页里）");
   assert.equal(q.get("sid"), SID, "sid 是窗口里那段会话的唯一依据");
-  assert.equal(q.get("tid"), "task-1", "tid 给「在新窗口打开」回传给后端用");
+  assert.equal(q.get("tid"), "task-1", "tid 给入口行回显用");
   assert.equal(q.get("cwd"), cwd);
 });
 
-test("reply：回执不带卡（一个会话一张把手）", async () => {
+test("reply：回执也挂卡（act=reply 是卡内小标题行的依据）", async () => {
   const loc = { action: "send", sessionId: SID, rpcId: "rpc-2", taskId: "task-2", delivery: "next-step" };
   const { out, fake } = await run("reply", loc, { task: "接着跑", sessionId: SID });
 
@@ -95,7 +97,8 @@ test("reply：回执不带卡（一个会话一张把手）", async () => {
     cwd: undefined,
   });
   assert.equal(fake.calls[0].action, "send", "工具面是 reply，提交链内部仍是 send");
-  assert.equal(out.details.card, undefined, "reply 不叠卡");
+  assert.equal(out.details.card.pluginId, "dshana", "reply 与 open 挂同一张会话卡（抬头是动作）");
+  assert.equal(cardQuery(out.details.card).get("act"), "reply");
 });
 
 test("卡字面量：没有 cwd 就不塞这一格", () => {

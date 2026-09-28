@@ -8,6 +8,7 @@
 // 同会话多次 reply 由 App 侧串行化（lib/session-serialize.ts），按提交顺序排队。
 import { submitDshTask } from "#/lib/session-run.ts";
 import { resolveTarget } from "#/tools/shared/target.ts";
+import { sessionCard } from "#/tools/shared/card.ts";
 import type { ToolCtx } from "#/types/host.ts";
 import type { ToolInputBase, ToolResult } from "#/tools/shared/types.ts";
 
@@ -70,7 +71,7 @@ export async function run(input: ReplyInput, ctx: ToolCtx, deps?: SubmitDeps): P
     (loc.cwd ? "，cwd " + loc.cwd : "") +
     "。任务在后台执行，完成/失败按 " + loc.delivery + " 档投递回本会话（下一个输入点自动贴回，不必为等结果结束回合）；要看执行过程或最终结论用 dshana action=get（taskId " +
     loc.taskId + "）。";
-  // 不挂流内卡：与 open 同一口径，会话的可见入口统一交给对话底部的任务 chip。
+  // 与 open 同一口径挂流内卡：卡面抬头是 DSHana，小标题行写动作，右边跟这段会话的跟踪态。
   return {
     content: [{ type: "text", text }],
     details: {
@@ -83,6 +84,7 @@ export async function run(input: ReplyInput, ctx: ToolCtx, deps?: SubmitDeps): P
         delivery: loc.delivery,
         cwd: loc.cwd || undefined,
       },
+      card: sessionCard({ action: "reply", sessionId: sid, taskId: loc.taskId, delivery: loc.delivery, cwd: loc.cwd }),
     },
   };
 }

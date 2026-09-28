@@ -758,6 +758,8 @@ function installCrossSurfaceSelection(ctx: Context): void {
   let generation = 0
   let pendingApply: SessionId | null | undefined
   let localAt = 0
+  // 只读会话流面：钉住的那一段是否已经开过。开过之后本面不再被任何外部选中改动。
+  let pinnedApplied = false
   let seen = mainSessionId(list)
   // 本面所属文档的视图所有者导航面；ui-workspace 到场前缺席（见文件头那一段）。
   let navigate: UiWorkspace | undefined
@@ -783,13 +785,19 @@ function installCrossSurfaceSelection(ctx: Context): void {
   }
 
   const applyRemote = (): void => {
+    // 只读会话流面在被钉住后是一个闭环：按自己的坐标开一次，之后不再跟外部选中走。
+    if (readOnly && pinnedApplied) return
     const request = ++generation
     void desired().then((next) => {
       if (request !== generation) return
       const id = next.id
       const at = next.at
       if (at <= localAt) return
-      if (id === mainSessionId(list)) return
+      if (id === mainSessionId(list)) {
+        // 目标已在位：对只读面算「已开过」，不让后续的选中变化再把它拉走。
+        if (readOnly) pinnedApplied = true
+        return
+      }
       // 对方此刻没有意见（无选中）不动本地：视图所有者没有「清空」入口，
       // 而空值只表示对方那一面此刻没有可宣告的选中。
       if (id === null) return
@@ -805,6 +813,7 @@ function installCrossSurfaceSelection(ctx: Context): void {
       pendingApply = target
       try {
         navigate.openSession(target)
+        if (readOnly) pinnedApplied = true
       } catch (error: unknown) {
         // 目标会话可能已不存在：保持本地选中。
         pendingApply = undefined
@@ -822,7 +831,8 @@ function installCrossSurfaceSelection(ctx: Context): void {
   })
 
   ctx.effect(() => {
-    const off = onChanged(applyRemote)
+    // 只读会话流面不听共用选中的广播：它的目标是钉住的那一段，且只认一次（见 applyRemote）。
+    const off = readOnly ? () => {} : onChanged(applyRemote)
     const offList = list.subscribe(() => {
       const snap = list.getSnapshot()
       const current = mainSessionId(list)
