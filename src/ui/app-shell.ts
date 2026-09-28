@@ -966,9 +966,10 @@ import { followHostTheme } from "#/ui/host-theme.ts";
   }
 
   // ---- 会话卡：同一页两个挂载态 ----
-  // 判据（宿主契约，APPS_EN.md「Mount-mode table」）：聊天流卡 height=flexible（可随内容长，
-  // 封顶是聊天列）；黑板 / 拆窗 height=fixed（用户拖的尺寸说话）。envelope 还没到时用 surface
-  // context 兜底：聊天流卡可能没有 cardInstanceId 而带 embeddedSessionId。
+  // 判据（宿主契约，APPS_EN.md「Mount-mode table」与「Size envelope」）：聊天流里的卡 height 是
+  // flexible（内容自适应，封顶是聊天列）；取出到黑板 / 拆窗后是 fixed（用户拖的尺寸说话）。
+  // **只信 hana.envelope**：surface context（{ appId, slot, cardInstanceId }）在两个挂载态下都
+  // 带 cardInstanceId（聊天流里的 v2 卡也由宿主发实例 id），拿它当判据会把聊天流误判成黑板。
   function classifyMount(): "chat" | "canvas" | null {
     var env: any = null;
     try {
@@ -976,27 +977,29 @@ import { followHostTheme } from "#/ui/host-theme.ts";
         ? (hana as any).envelope.getSnapshot() : null;
     } catch (e) { env = null; }
     var mode = env && env.height ? env.height.mode : null;
-    if (mode === "flexible") return "chat";
     if (mode === "fixed") return "canvas";
-    var ctx: any = null;
-    try {
-      ctx = hana && hana.surface && typeof hana.surface.getContext === "function"
-        ? hana.surface.getContext() : null;
-    } catch (e) { ctx = null; }
-    if (ctx) {
-      if (ctx.cardInstanceId) return "canvas";
-      if (typeof ctx.embeddedSessionId === "string" && ctx.embeddedSessionId) return "chat";
-    }
-    return null;
+    if (mode === "flexible" || mode === "unbounded") return "chat";
+    return null; // 还没收到信号（宿主在 iframe ready 之后才推第一帧）
+  }
+
+  // 两个挂载态各自那块 DOM 只在认到该态时才实例化。不用 hidden / display 藏：藏起来的子树仍占着
+  // DOM（活着的那种还会继续跑），而这一页的两个态本来就不该同时在。模板内容既不渲染也不执行，
+  // 实例化哪一个由挂载态决定——等价于条件渲染，只是这里没有组件层。
+  var streamViewNode: Element | null = null;
+  function mountStreamView(templateId: string, view: string) {
+    if (streamViewNode && streamViewNode.parentNode) streamViewNode.parentNode.removeChild(streamViewNode);
+    streamViewNode = null;
+    var tpl = document.getElementById(templateId) as HTMLTemplateElement | null;
+    var node = tpl && tpl.content && tpl.content.firstElementChild
+      ? (tpl.content.firstElementChild.cloneNode(true) as Element)
+      : null;
+    if (node) { streamViewNode = node; document.body.appendChild(node); }
+    document.body.setAttribute("data-view", view);
   }
 
   /** 聊天流态：只画一行入口（会话坐标），不装配 DSH、不打任何后端请求。 */
   function renderSessionEntry() {
-    document.body.setAttribute("data-view", "entry");
-    var stage = document.getElementById("dsh-stage");
-    if (stage) stage.hidden = true;
-    var entry = document.getElementById("dsh-entry");
-    if (entry) entry.hidden = false;
+    mountStreamView("tpl-entry", "entry");
     var sid = routeSessionId(), tid = "", cwd = "";
     try {
       var q = new URLSearchParams(location.search);
@@ -1022,35 +1025,48 @@ import { followHostTheme } from "#/ui/host-theme.ts";
     // 入口行不注入、不轮询：取出到黑板 / 拆窗时页面重新挂载，那时才装配 DSH。
   }
 
+  // 等 envelope 首帧的封顶时间。宿主在 iframe ready 之后立刻推第一帧，通常远快于此；这一条只为
+  // 从不发信号的旧宿主兜底。
+  var MOUNT_WAIT_MS = 2000;
+
   /** 认出挂载态后分派：聊天流 = 入口行；其余 = 黑板 / 拆窗的 DSH 现场。 */
   function beginStreamCard() {
     // 认到 sid 就记进卡实例态（两个挂载态都记）：同一张卡换挂载时 route 之外还有落点。
     rememberCardSession(routeSessionId());
-    var mode = classifyMount();
-    if (mode === "chat") { renderSessionEntry(); return; }
-    if (mode === "canvas") { streamRuntime(); return; }
-    // envelope 还没到：订一次变更，再留一条短兜底。兜底按黑板走——黑板卡只显示入口行
-    // 等于没内容，而聊天卡多认一会儿只是多停一帧 loader，代价小。
-    var settled = false;
-    var settle = function () {
-      if (settled) return;
-      settled = true;
-      if (classifyMount() === "chat") renderSessionEntry();
+    var decided = false;
+    var decide = function (mode: "chat" | "canvas") {
+      if (decided) return;
+      decided = true;
+      if (mode === "chat") renderSessionEntry();
       else streamRuntime();
     };
+    var mode = classifyMount();
+    if (mode !== null) { decide(mode); return; }
+    // envelope 还没到。`hana.envelope.subscribe()` 注册时会立刻用当前快照叫一次回调（可能仍是
+    // null），所以这里必须自己判空、不能一叫就定——否则等于没等，通道一旦是 null 就落进兜底。
+    var timer = setTimeout(function () {
+      // 始终没等到信号（旧宿主不发这道事件）：按聊天流收尾。整幅 DSH 现场（拉中继、打后端、
+      // 注入一整个前端）灌进聊天转录是更重也更意外的结果，入口行至少是无副作用的安全面。
+      decide("chat");
+    }, MOUNT_WAIT_MS);
     try {
       if (hana && (hana as any).envelope && typeof (hana as any).envelope.subscribe === "function") {
         var off = (hana as any).envelope.subscribe(function () {
+          var next = classifyMount();
+          if (next === null) return; // 还没信号，继续等
           try { if (typeof off === "function") off(); } catch (e) { /* 忽略 */ }
-          settle();
+          clearTimeout(timer);
+          decide(next);
         });
       }
     } catch (e) { /* SDK 未提供则只走兜底 */ }
-    setTimeout(settle, 1200);
   }
 
   /** 黑板 / 拆窗：装配中继、注入 DSH 现场。与主卡 / FP 同一套轮询与共享快照。 */
   function streamRuntime() {
+    // 自举台只在此态实例化：poll → applySnapshot 要用的 #dsh-stage / #dsh-spin / #dsh-status /
+    // #boot-panel 都在它里面。
+    mountStreamView("tpl-stage", "idle");
     window.addEventListener("pagehide", function () {
       if (injected.transport) { try { injected.transport.dispose(); } catch (e) { /* 忽略 */ } }
       try { dropShared(); } catch (e) { /* 忽略 */ }
@@ -1100,6 +1116,9 @@ import { followHostTheme } from "#/ui/host-theme.ts";
     }
     // 等宿主交面（样例协议）：已有 context 立即开始；否则订一次变更事件，并留 1.5s 兜底
     // （自己在浏览器里开页调试时宿主不会给 context）。
+    // 会话卡例外：stream 面由页面自己声明（meta / data-dshana-view），认挂载态不需要这道
+    // 握手（它只用 hana.envelope），所以立刻开始——坐标和挂载态都不该被这个门拦一下。
+    if (declaredView(root) === "stream") { begin(); return; }
     if (hostSlot() !== null) { begin(); return; }
     try {
       if (hana && hana.surface && typeof hana.surface.onContextChanged === "function") {

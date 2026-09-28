@@ -24,7 +24,8 @@
      body 上的 data-dshana-shell 是壳脚本的根锚（boot() 取它，缺失则什么都不做）。 -->
 <link rel="stylesheet" href="./face-stage.css">
 <style>
-  /* 聊天流入口态：一行坐标。样式与台面无关，只为聊天卡那一格服务。 */
+  /* 聊天流入口态：一行坐标。样式与台面无关，只为聊天卡那一格服务。
+     这块 DOM 只在 entry 态才被实例化（见 app-shell.ts 的 mountStreamView），所以不必自藏。 */
   #dsh-entry {
     box-sizing: border-box; height: 100%; padding: 10px 14px;
     display: flex; align-items: center; gap: 12px;
@@ -56,21 +57,28 @@
 </style>
 </head>
 <body data-view="idle" data-dshana-shell data-dshana-view="stream">
-  <div id="dsh-entry" hidden>
-    <span class="dot"></span>
-    <div class="entry-texts">
-      <div class="entry-label" data-dsh-entry-label>DSH 会话</div>
-      <div class="entry-meta" data-dsh-entry-meta>正在读取坐标…</div>
+  <!-- 两个挂载态各自的 DOM 只在认到该态时才实例化（app-shell.ts 的 mountStreamView）：模板内容
+       不进渲染树、不执行脚本，实例化哪一个由 hana.envelope 认出的挂载态决定。不用 hidden /
+       display 藏：藏起来的子树仍占着 DOM（活着的那种还会继续跑），而这两态本来就不该同时在。 -->
+  <template id="tpl-entry">
+    <div id="dsh-entry">
+      <span class="dot"></span>
+      <div class="entry-texts">
+        <div class="entry-label" data-dsh-entry-label>DSH 会话</div>
+        <div class="entry-meta" data-dsh-entry-meta>正在读取坐标…</div>
+      </div>
     </div>
-  </div>
-  <div id="dsh-stage">
-    <div class="loader">
-      <span class="wordmark">DSHANA</span>
-      <span class="ring" id="dsh-spin" hidden></span>
-      <p id="dsh-status">正在读取状态…</p>
+  </template>
+  <template id="tpl-stage">
+    <div id="dsh-stage">
+      <div class="loader">
+        <span class="wordmark">DSHANA</span>
+        <span class="ring" id="dsh-spin" hidden></span>
+        <p id="dsh-status">正在读取状态…</p>
+      </div>
+      <div id="boot-panel"></div>
     </div>
-    <div id="boot-panel"></div>
-  </div>
+  </template>
   <script type="module" src="./app-shell.js"></script>
 </body>
 </html>
