@@ -266,7 +266,15 @@ export const PASSTHROUGH: ReadonlyArray<{ match: RegExp; why: string }> = [
     why: "滤镜值（blur + saturate），不是颜色。",
   },
   {
-    match: /^--dsw-alias-(bg|label)-document-preview$/,
-    why: "文档预览面：深底 + 浅字的成对配色（浅色主题下也是深色预览区）。只接背景会白底白字，不拆对。",
+    match: /^--dsw-alias-(bg|label)-document-(preview|selection)$/,
+    why: "文档预览面：深底 + 浅字的成对配色（浅色主题下也是深色预览区）。只接背景会白底白字，不拆对；正文选区（bg-document-selection）就压在这层深底上，同一个面同一个判法。",
+  },
+  {
+    match: /^--dsw-alias-label-(shimmer|deep-diving|deep-diving-shimmer)$/,
+    why: "思考态标签与其扫光是配对关系：扫光是同色浅化到半透明的扫光值（ChatView 里 label-shimmer 直接指到 deep-diving-shimmer）。宿主色位不带 alpha，拆开接会让字与扫光不同色，成对保持 DSH 原生。",
+  },
+  {
+    match: /^--dsw-alias-switch-thumb$/,
+    why: "开关旋钮：本表未接管开关整族，thumb 与 track 是对比配对，单接一头会破坏开关开合的辨识。",
   },
 ];
