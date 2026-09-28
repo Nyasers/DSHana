@@ -6,8 +6,9 @@
 // 约定：本文件存在 = 该包有 service 半（index.js，rspack 打包，默认开）；client 半
 // （浏览器端 client.js，tsdown closure-factory）按需声明。
 //
-// 本包 client 半（client.js）= shadow navigator.clipboard.writeText：先试原生，被权限策略
-// 拒了改走壳页桥（__DSHANA__.clipboardWrite → 宿主 capability clipboard.writeText）。
+// 本包 client 半（client.js）= 一层纯转发：把 navigator.clipboard.writeText / write 换成转发
+// 实现，转给壳页桥（__DSHANA__.clipboardWrite → 应用侧 handler 走宿主 capability
+// clipboard.writeText）。转发本体在 src/ui/clipboard-forward.ts，本包不自己判断、不回落。
 // 不额外声明 externals/defines：只用浏览器原生 API 与全局桥，无 cordis 服务、无 React、
 // 无环境常量。service 半留空（见 index.js 文件头）。
 export default { client: {} };

@@ -344,7 +344,7 @@ import { followHostTheme } from "#/ui/host-theme.ts";
   // 挂到宿主桥（__DSHANA__）上的跨面接口：
   //   设置视图 → src-integrations/ui-settings-general；会话选中 → src-integrations/ui-session；
   //   主面板选中 → ui-sidebar（FP 发射）与 ui-layout（主卡落地）。
-  //   剪贴板 → @dshana/clipboard 的 client 半（同文档，直接调，无消息协议）。
+  //   剪贴板 → DSH 侧那层纯转发（src/ui/clipboard-forward.ts）。
   var SURFACE_API = {
     readSettingsView: readSettingsView,
     writeSettingsView: writeSettingsView,
@@ -719,24 +719,19 @@ import { followHostTheme } from "#/ui/host-theme.ts";
     if (!data || typeof data !== "object") return;
     if (data.dshHanaThemeRequest) { try { sendThemeTo(e.source); } catch (err) { /* 忽略 */ } }
   });
-  // 剪贴板：走宿主能力门（app/ui.clipboard-write）。本窗口（嵌入场景）里
-  // navigator.clipboard 被宿主的 Permissions-Policy 拒（'denied'），所以壳级全局 shadow
-  // （src/ui/clipboard-shadow.ts，桥优先）改调 __DSHANA__.clipboardWrite，最终落到这里：
-  // 宿主执行 hana.clipboard.writeText，不受插件 iframe 权限链限制。
+  // 剪贴板：DSH 侧那层纯转发（src/ui/clipboard-forward.ts；@dshana/clipboard 的 client 半幂等
+  // 补装同一份实现）把 DSH 的写请求落到这里。本窗口（嵌入场景）里 navigator.clipboard 被宿主的
+  // Permissions-Policy 拒（'denied'），能落地的只有宿主能力门：hana.clipboard.writeText 在宿主
+  // 主窗口上下文执行，不受插件 iframe 权限链限制。
   //
-  // 契约：@hana/plugin-sdk 的 HanaClipboardWriteTextResult 是
-  // **{ written: boolean }**。旧代码判的是 `payload.ok === false`——字段名不对，于是
-  // 宿主明确回 written:false 时这里照样返回 true，表现为「界面显示复制成功、系统剪贴板里
-  // 什么都没有」（DSH 那个 helper 只要不抛就报成功）。现在：显式 written:false 与异常都
-  // **reject 并打印原因**，让失败可见（调用方据此报失败，不假装成功）。
+  // **失败只用 reject 表达**：@hana/plugin-sdk 的 HanaClipboardWriteTextResult 是
+  // { written: boolean }，而 DSH 那个 helper 只看「抛不抛」——把失败折成 resolve 值会被读成
+  // 「复制成功」（界面报成功、系统剪贴板里什么都没有）。所以显式 written:false 与异常都 reject
+  // 并打印原因：调用方据此报失败，不假装成功；失败也不静音，每次即时上报。
   //
-  // 现场结论（方向已按决定暂停）：**两条路都在宿主手里**——
-  //   宿主：Plugin UI capability "clipboard.writeText" is not allowed in card slots
-  //         （App 卡面不被允许用这个能力通道，SDK 直接拒）
-  //   原生：NotAllowedError（Permissions-Policy 把 Clipboard API 在本文档里关死）
-  // 转发逻辑保留（宿主哪天放开，不用改代码就能活）。**报错每次都说**：她要的是即时反馈，
-  // 不是被静音过的失败（失败每次即时上报）。唯一未试过的候选是
-  // document.execCommand('copy')（DSH 只在 writeText 不存在时才走它），大概被同一道策略管着，不做。
+  // 已知边界：宿主对卡槽回 `Plugin UI capability "clipboard.writeText" is not allowed in
+  // card slots`（App 卡面不被允许走这条能力通道），同一时刻原生那条也被 Permissions-Policy
+  // 关死。转发链保留着：宿主哪天放开，这里不用改就能活。
   function writeClipboard(text) {
     if (!hana || !hana.clipboard || typeof hana.clipboard.writeText !== "function") {
       console.warn("[dshana/clipboard] 宿主 SDK 无 hana.clipboard.writeText（能力 app/ui.clipboard-write 未授予？）");

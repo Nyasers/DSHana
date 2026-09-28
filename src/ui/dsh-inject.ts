@@ -15,7 +15,7 @@
 //
 // 依赖：全部走浏览器原生 API（DOMParser / fetch / WebSocket / <script> 注入），无第三方包。
 
-import { installClipboardShadow } from "#/ui/clipboard-shadow.ts";
+import { installClipboardForward } from "#/ui/clipboard-forward.ts";
 import {
   ChunkAssembler,
   MUX_CHUNK_QUERY,
@@ -641,12 +641,13 @@ export function installTransport(
     // src-integrations/ui-settings-general 靠它做「FP 点设置、主卡打开」。
     ...(bridge && typeof bridge === "object" ? bridge : {}),
   };
-  // 剪贴板影子：壳级全局安装，也必须在 DSH 注入之前。
-  // 理由（实读 dsh-web-frontend 主 bundle 的 writeClipboard）：它在调用时才读
-  // navigator.clipboard?.writeText，而原生一失败就 `return false`，execCommand 兜底只在
-  // writeText **不存在**时才走——嵌入场景里原生被 Permissions-Policy 关死，于是复制永远失败，
-  // 还每次先留一条 [Violation]。影子必须在属性被读到之前就位；桥面已就绪，故放在 __DSHANA__ 之后。
-  const restoreClipboard = installClipboardShadow({ bridge: window.__DSHANA__ });
+  // 剪贴板：装一层纯转发（DSH 的写请求 → 壳页桥 __DSHANA__.clipboardWrite → 应用侧 handler
+  // writeClipboard）。转发本体在 src/ui/clipboard-forward.ts，DSH 侧那半（@dshana/clipboard 的
+  // client 半）随后再幂等补装同一份实现，先装的那次生效。
+  // 装在这里的理由：DSH 前端在**调用时**才读 navigator.clipboard?.writeText，属性被读到之前
+  // 就位即可；注入之前是全局最早的一次，插件那条路万一没走成（换了注入形态、插件没被激活），
+  // 这里还有一次机会。桥面刚就绪，故放在 __DSHANA__ 之后。
+  const restoreClipboard = installClipboardForward({ bridge: window.__DSHANA__ });
   // 目录选择器桥：同样必须在 DSH 注入之前（客户端在流程激活时读一次）。SDK 由壳页传入——
   // 它是模块作用域的导入，不在 globalThis 上。
   const restoreDirectoryPicker = installDirectoryPickerBridge(sdk);
