@@ -641,9 +641,9 @@ export function installTransport(
     // src-integrations/ui-settings-general 靠它做「FP 点设置、主卡打开」。
     ...(bridge && typeof bridge === "object" ? bridge : {}),
   };
-  // 剪贴板：装一层纯转发（DSH 的写请求 → 壳页桥 __DSHANA__.clipboardWrite → 应用侧 handler
+  // 剪贴板：装写口（原生优先）（DSH 的写请求 → 壳页桥 __DSHANA__.clipboardWrite → 应用侧 handler
   // writeClipboard）。转发本体在 src/ui/clipboard-forward.ts，DSH 侧那半（@dshana/clipboard 的
-  // client 半）随后再幂等补装同一份实现，先装的那次生效。
+  // client 半）随后再幂等补装同一份实现，先装的那次生效（写口原生优先，见该文件头）。
   // 装在这里的理由：DSH 前端在**调用时**才读 navigator.clipboard?.writeText，属性被读到之前
   // 就位即可；注入之前是全局最早的一次，插件那条路万一没走成（换了注入形态、插件没被激活），
   // 这里还有一次机会。桥面刚就绪，故放在 __DSHANA__ 之后。

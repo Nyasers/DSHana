@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// @dshana/clipboard 前端 client 半 —— **一层纯转发**。
+// @dshana/clipboard 前端 client 半 —— 剪贴板写口（原生优先，失败才转给应用侧）。
 //
-// 它只做一件事：把 DSH 侧读到的 navigator.clipboard.writeText / write 换成转发实现，转给
+// 它的顺序是**原生优先**：把 DSH 侧读到的 navigator.clipboard.writeText / write 换成写口：先试原生，拿不到才转给
 // DSHana 应用侧（壳页发布的 __DSHANA__.clipboardWrite）。判断、回落、失败表达都不在这里：
 // 写不写得成由应用侧的 handler 决定（src/ui/app-shell.ts 的 writeClipboard），它 reject 就是
 // 失败，它 resolve 就是成功——转发层原样把那个结果交回 DSH。

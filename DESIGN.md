@@ -362,9 +362,9 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 - src/ui/{main.html, sidebar.html, app-shell.ts}（build:src 复制到 dist/ui/）：
   页面同层相对引用（`./app-shell.js`），无根路径绝对 URL；appId/路由前缀由页面
   location.pathname 推导（/api/apps/<appId>/... 段），不硬编码整 URL。壳页轮询 boot-state、
-  POST start/stop；主题桥（同文档，`dshHanaThemeRequest`）best-effort。剪贴板 = DSH 侧一层
+  POST start/stop；主题桥（同文档，`dshHanaThemeRequest`）best-effort。剪贴板 = DSH 侧的写口（原生优先）
   纯转发（`src/ui/clipboard-forward.ts`，`@dshana/clipboard` 的 client 半幂等补装）：把
-  `navigator.clipboard.writeText` / `write` 换成转发实现，转给 `__DSHANA__.clipboardWrite`，
+  `navigator.clipboard.writeText` / `write` 换成写口（先试原生，拿不到才转给） `__DSHANA__.clipboardWrite`，
   由壳页 `writeClipboard` 走宿主能力门落笔；判断/回落/失败表达全在应用侧。
 
 ### 交付 4：旧插件数据迁移（交付代码与 --check 路径，本刀不真跑）
@@ -405,7 +405,7 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 | app | serve fork 官方前端到根路径（宿主 WebUI iframe 载体） | **保留（惰性优先）** | DSH Web UI 根页面服务仍走 webserver fallback；v2 经代理前缀访问不变；内容面待 UI 真机验收 |
 | view | client 端 root 装配（main/sidebar 视图、layout 服务） | **保留（惰性优先）** | DSH UI 视图装配属 DSH 侧；URL 三态参数与壳页 ?dshana-view 约定一致即可 |
 | theme | 壳页 postMessage 主题注入（tapIndex 注入桥） | **保留（桥壳页侧需对账）** | v2 壳页 app-shell.ts 已实现 dshHanaThemeRequest 应答（best-effort）；TOKEN_MAP 对齐待真机 |
-| clipboard | 剪贴板桥（宿主 capability 写剪贴板） | **保留（缩到一层纯转发）** | 转发层只把 DSH 的写请求转给应用侧（`__DSHANA__.clipboardWrite`）；写不写得成、失败怎么表达归壳页 `writeClipboard`（宿主能力门 `clipboard.writeText`），失败用 reject 如实回执 |
+| clipboard | 剪贴板桥（宿主 capability 写剪贴板） | **保留（写口：原生优先 + 兜底转发）** | 写口先试文档原生，拿不到才转给应用侧（`__DSHANA__.clipboardWrite`）；写不写得成、失败怎么表达归壳页 `writeClipboard`（宿主能力门 `clipboard.writeText`），失败用 reject 如实回执 |
 | settings | DSH Web 设置页「DSHana 设置」分页（默认模型/版本卡 + 更新总线） | **已退役（2026-09-12，改由 App 自己设置页承担）** | v1 更新链路（dshana.bus → 宿主）v2 无宿主侧；本地版本卡/默认模型 UI 保留；更新段退役（App 发版即 DSH 升级）——真机验收刀随 UI 修剪 |
 | logger | DSH 内日志收集 → dshanaBus → 宿主会话文件 | **已退役（2026-09-12）** | bus 一走它只剩“写一行到 cordis logger”，无存在价值；唯一消费者 theme 改为直接用内建 LoggerService（行首 `[theme]`） | v2 无宿主 WS 连接，总线缓冲不再送达；受管 runtime stdout 由宿主 runtime 日志承载（App 侧不再落盘，见 spec §8 j）——真机后移除总线转发段 |
 | bus | dshana.bus WS 服务端（宿主插件 IPC 通道） | **已退役（2026-09-12）** | v2 宿主不再连 dshana.bus：App→runtime = loopback HTTP RPC（决策 A），runtime→宿主 = connectAppRuntime（tasks/models）。无消费方即死代码——真机确认 logger/settings 无注入依赖后从 patch.yml 移除 |

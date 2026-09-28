@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/ui/clipboard-forward.test.mjs — DSH 剪贴板写请求的一层纯转发
+// tests/ui/clipboard-forward.test.mjs — DSH 剪贴板写口：原生优先，失败才转给应用侧
 //
-// 锁死「纯转发」的定义：
-//   ① 桥可用时只转发，原生一次都不碰（嵌入场景里原生被 Permissions-Policy 关死，
-//      碰它只会刷一条 [Violation]）；
-//   ② **桥拒绝也不回落原生**：失败由应用侧用 reject 表达，转发层原样交回；
-//   ③ 没有可转发的目标（桥缺席 / clipboardWrite 不是函数）就不装，页面保持原生行为；
-//   ④ 安装幂等、可逆，且覆盖实例方法 + 原型方法。
-// 另加：只有图 / 富文本时明确失败，不假装成功。
+// 锁死这条顺序与它的边界：
+//   ① 本文档原生写得成时**只走原生**，兜底桥一次都不碰（声明了能力的 App 直接调，向 githana 看齐）；
+//   ② 原生失败（或不存在）才把文本转给应用侧；桥的返回值原样交回；
+//   ③ 两条都失败 → reject，以应用侧那条为准，原生那条挂在 `cause` 上；
+//   ④ 桥缺席就**不装**（原生本来就够用）；
+//   ⑤ 安装幂等、可逆，且覆盖实例方法 + 原型方法。
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -35,60 +34,93 @@ function fakeWindow({ withClipboard = true } = {}) {
   return { target, clipboard, calls };
 }
 
-test("桥可用：只转发，原生零调用（不触发 Permissions-Policy violation）", async () => {
+test("原生写得成：只走原生，兜底桥一次都不碰", async () => {
   const { target, clipboard, calls } = fakeWindow();
   const bridged = [];
   target.__DSHANA__ = { clipboardWrite: (text) => { bridged.push(text); return Promise.resolve({ written: true }); } };
   installClipboardForward({ target });
   await clipboard.writeText("hello");
-  assert.deepEqual(bridged, ["hello"]);
-  assert.equal(calls.length, 0);
+  assert.deepEqual(calls, [{ kind: "native", text: "hello" }]);
+  assert.equal(bridged.length, 0, "原生成了就不该再转给应用侧");
 });
 
-test("桥拒绝：原样 reject，原生一次都不碰（纯转发不回落）", async () => {
-  const { target, clipboard, calls } = fakeWindow();
-  target.__DSHANA__ = { clipboardWrite: () => Promise.reject(new Error("not allowed in card slots")) };
-  installClipboardForward({ target, warn: () => {} });
-  await assert.rejects(() => clipboard.writeText("a"), /not allowed in card slots/);
-  assert.equal(calls.length, 0, "桥拒绝后不该回落原生——失败是应用侧用 reject 表达的");
-});
-
-test("转发结果原样交回（resolve 什么就 resolve 什么）", async () => {
+test("原生失败：转给应用侧，桥的返回值原样交回", async () => {
   const { target, clipboard } = fakeWindow();
+  clipboard.writeText = () => Promise.reject(new Error("native denied"));
   const payload = { written: true };
-  target.__DSHANA__ = { clipboardWrite: () => Promise.resolve(payload) };
+  const bridged = [];
+  target.__DSHANA__ = { clipboardWrite: (text) => { bridged.push(text); return Promise.resolve(payload); } };
   installClipboardForward({ target });
-  assert.equal(await clipboard.writeText("x"), payload);
+  assert.equal(await clipboard.writeText("a"), payload);
+  assert.deepEqual(bridged, ["a"]);
 });
 
-test("桥同步抛错：转成 reject，不碰原生", async () => {
-  const { target, clipboard, calls } = fakeWindow();
-  target.__DSHANA__ = { clipboardWrite: () => { throw new Error("bridge exploded"); } };
+test("原生同步抛错：同样落到应用侧", async () => {
+  const { target, clipboard } = fakeWindow();
+  clipboard.writeText = () => { throw new Error("native threw"); };
+  const bridged = [];
+  target.__DSHANA__ = { clipboardWrite: (text) => { bridged.push(text); return Promise.resolve(true); } };
+  installClipboardForward({ target });
+  await clipboard.writeText("b");
+  assert.deepEqual(bridged, ["b"]);
+});
+
+test("两条都失败：reject，以应用侧为准，原生那条挂在 cause 上", async () => {
+  const { target, clipboard } = fakeWindow();
+  clipboard.writeText = () => Promise.reject(new Error("native denied"));
+  target.__DSHANA__ = { clipboardWrite: () => Promise.reject(new Error("host refused: not allowed in card slots")) };
   installClipboardForward({ target, warn: () => {} });
-  await assert.rejects(() => clipboard.writeText("x"), /bridge exploded/);
-  assert.equal(calls.length, 0);
+  await assert.rejects(
+    () => clipboard.writeText("x"),
+    (error) => {
+      assert.match(error.message, /host refused/);
+      assert.match(String(error.cause && error.cause.message), /native denied/);
+      return true;
+    },
+  );
 });
 
-test("write(items)：text/plain 走桥且不碰原生", async () => {
+test("原生不存在时：直接转给应用侧", async () => {
+  const { target, clipboard } = fakeWindow();
+  Object.defineProperty(clipboard, "writeText", { value: undefined, writable: true, configurable: true });
+  const bridged = [];
+  target.__DSHANA__ = { clipboardWrite: (text) => { bridged.push(text); return Promise.resolve(true); } };
+  installClipboardForward({ target });
+  await clipboard.writeText("c");
+  assert.deepEqual(bridged, ["c"]);
+});
+
+test("write(items)：原生写得成时只走原生", async () => {
   const { target, clipboard, calls } = fakeWindow();
   const bridged = [];
-  target.__DSHANA__ = { clipboardWrite: (text) => { bridged.push(text); return Promise.resolve({ written: true }); } };
+  target.__DSHANA__ = { clipboardWrite: (text) => { bridged.push(text); return Promise.resolve(true); } };
   clipboard.write = (items) => { calls.push({ kind: "native-write", items }); return Promise.resolve(); };
   installClipboardForward({ target });
   const item = { types: ["text/plain"], getType: () => Promise.resolve({ text: () => Promise.resolve("hi") }) };
   await clipboard.write([item]);
-  assert.deepEqual(bridged, ["hi"]);
-  assert.equal(calls.length, 0, "走桥时不该碰原生");
+  assert.deepEqual(calls.map((c) => c.kind), ["native-write"]);
+  assert.equal(bridged.length, 0);
 });
 
-test("write(items)：只有图像时明确失败，不回落原生", async () => {
+test("write(items)：原生失败后取 text/plain 走写文本（仍是原生优先）", async () => {
   const { target, clipboard, calls } = fakeWindow();
-  target.__DSHANA__ = { clipboardWrite: () => Promise.resolve({ written: true }) };
-  clipboard.write = (items) => { calls.push({ kind: "native-write", items }); return Promise.resolve(); };
+  const bridged = [];
+  target.__DSHANA__ = { clipboardWrite: (text) => { bridged.push(text); return Promise.resolve(true); } };
+  clipboard.write = () => Promise.reject(new Error("native write denied"));
+  installClipboardForward({ target });
+  const item = { types: ["text/plain"], getType: () => Promise.resolve({ text: () => Promise.resolve("hi") }) };
+  await clipboard.write([item]);
+  assert.deepEqual(calls, [{ kind: "native", text: "hi" }], "取出的文本仍先走原生");
+  assert.equal(bridged.length, 0);
+});
+
+test("write(items)：只有图像且原生失败 → 明确失败（消息带 text/plain）", async () => {
+  const { target, clipboard } = fakeWindow();
+  target.__DSHANA__ = { clipboardWrite: () => Promise.resolve(true) };
+  clipboard.write = () => Promise.reject(new Error("native write denied"));
   installClipboardForward({ target, warn: () => {} });
   const image = { types: ["image/png"], getType: () => Promise.resolve({ text: () => Promise.resolve("ignored") }) };
   await assert.rejects(() => clipboard.write([image]), /text\/plain/);
-  assert.equal(calls.length, 0);
 });
 
 test("extractText：取第一个 text/plain；只认 types 里的文本项", async () => {
@@ -106,7 +138,7 @@ test("桥缺席：不装，页面保持原生行为", async () => {
   const { target, clipboard, calls } = fakeWindow();
   const nativeInstance = clipboard.writeText;
   installClipboardForward({ target });
-  assert.equal(clipboard.writeText, nativeInstance, "没有可转发的目标就不该接管");
+  assert.equal(clipboard.writeText, nativeInstance, "没有兜底目标就不该接管");
   await clipboard.writeText("plain");
   assert.deepEqual(calls, [{ kind: "native", text: "plain" }]);
 });
@@ -125,9 +157,9 @@ test("实例 + 原型都换掉，disposer 还原到原值，二次安装是空�
   target.__DSHANA__ = { clipboardWrite: () => Promise.resolve(true) };
 
   const dispose = installClipboardForward({ target });
-  assert.notEqual(clipboard.writeText, nativeProto, "实例方法应被换成转发实现");
-  assert.notEqual(target.Clipboard.prototype.writeText, nativeProto, "原型方法应被换成转发实现");
-  assert.equal(clipboard.writeText, target.Clipboard.prototype.writeText, "两层是同一个转发实现");
+  assert.notEqual(clipboard.writeText, nativeProto, "实例方法应被换掉");
+  assert.notEqual(target.Clipboard.prototype.writeText, nativeProto, "原型方法应被换掉");
+  assert.equal(clipboard.writeText, target.Clipboard.prototype.writeText, "两层是同一个实现");
 
   const second = installClipboardForward({ target });
   assert.equal(typeof second, "function");
@@ -159,7 +191,9 @@ test("装配失败（属性不可写）走 warn，不静默", () => {
   assert.match(String(warns[0][0]), /writeText/);
 });
 
-test("createClipboardForward：桥存在时原生的同步抛错不会被碰到", async () => {
-  const { writeText } = createClipboardForward({ bridge: { clipboardWrite: () => Promise.resolve(undefined) } });
+test("createClipboardForward：只给桥、没有原生时，写口直接转发", async () => {
+  const bridged = [];
+  const { writeText } = createClipboardForward({ bridge: { clipboardWrite: (text) => { bridged.push(text); return Promise.resolve(undefined); } } });
   await writeText("x");
+  assert.deepEqual(bridged, ["x"]);
 });

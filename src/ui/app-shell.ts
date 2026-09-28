@@ -344,7 +344,7 @@ import { followHostTheme } from "#/ui/host-theme.ts";
   // 挂到宿主桥（__DSHANA__）上的跨面接口：
   //   设置视图 → src-integrations/ui-settings-general；会话选中 → src-integrations/ui-session；
   //   主面板选中 → ui-sidebar（FP 发射）与 ui-layout（主卡落地）。
-  //   剪贴板 → DSH 侧那层纯转发（src/ui/clipboard-forward.ts）。
+  //   剪贴板 → DSH 侧的写口（原生优先，src/ui/clipboard-forward.ts）。
   var SURFACE_API = {
     readSettingsView: readSettingsView,
     writeSettingsView: writeSettingsView,
@@ -719,9 +719,9 @@ import { followHostTheme } from "#/ui/host-theme.ts";
     if (!data || typeof data !== "object") return;
     if (data.dshHanaThemeRequest) { try { sendThemeTo(e.source); } catch (err) { /* 忽略 */ } }
   });
-  // 剪贴板：DSH 侧那层纯转发（src/ui/clipboard-forward.ts；@dshana/clipboard 的 client 半幂等
+  // 剪贴板：DSH 侧的写口（原生优先）（src/ui/clipboard-forward.ts；@dshana/clipboard 的 client 半幂等
   // 补装同一份实现）把 DSH 的写请求落到这里。本窗口（嵌入场景）里 navigator.clipboard 被宿主的
-  // Permissions-Policy 拒（'denied'），能落地的只有宿主能力门：hana.clipboard.writeText 在宿主
+  // Permissions-Policy 拿不到时才会落到这里，写入走宿主能力门：hana.clipboard.writeText 在宿主
   // 主窗口上下文执行，不受插件 iframe 权限链限制。
   //
   // **失败只用 reject 表达**：@hana/plugin-sdk 的 HanaClipboardWriteTextResult 是
@@ -731,7 +731,7 @@ import { followHostTheme } from "#/ui/host-theme.ts";
   //
   // 已知边界：宿主对卡槽回 `Plugin UI capability "clipboard.writeText" is not allowed in
   // card slots`（App 卡面不被允许走这条能力通道），同一时刻原生那条也被 Permissions-Policy
-  // 关死。转发链保留着：宿主哪天放开，这里不用改就能活。
+  // 只当兜底（主路径是文档自己的原生 API）：宿主哪天放开，这里不用改就能活。
   function writeClipboard(text) {
     if (!hana || !hana.clipboard || typeof hana.clipboard.writeText !== "function") {
       console.warn("[dshana/clipboard] 宿主 SDK 无 hana.clipboard.writeText（能力 app/ui.clipboard-write 未授予？）");

@@ -7,7 +7,7 @@
 // permissions.query({name:'clipboard-write'}) → 'denied'），原生 writeText 一调就是一条
 // [Violation] 随后 reject。所以把 DSH 侧的写请求转给 DSHana 应用侧。
 //
-// 本包只有**一层纯转发**（client 半，client.js）：把 navigator.clipboard.writeText / write
+// 本包只有写口这一层（原生优先 + 兜底）（client 半，client.js）：把 navigator.clipboard.writeText / write
 // 换成转发实现，转给壳页发布的 __DSHANA__.clipboardWrite。写不写得成由应用侧的 handler 决定
 // （src/ui/app-shell.ts 的 writeClipboard，它走宿主 capability clipboard.writeText，在宿主主
 // 窗口上下文执行，不受插件 iframe 权限链限制）——本包不做判断、不做回落、不上报。
