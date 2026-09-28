@@ -9,11 +9,11 @@
     },
     {
       "path": "src/client/SettingsRoot.module.css",
-      "upstreamSha256": "883f491221c5485cf89d2bcbe19146aae2b16b05ac94a35f8e28d4705a924ae7"
+      "upstreamSha256": "886528a854b668db25c60cbc46ad982687142fcb02fda1f533dcbf491dc73513"
     },
     {
       "path": "src/client/locales.ts",
-      "upstreamSha256": "c2b370dae452142ff1c3e00777ffd90562447998006e50c7976c1137da3f512f"
+      "upstreamSha256": "d958ddee1a2eb2a208a3c15f841f2f92560274e4251422f1a8bce7c29248bb2e"
     }
   ],
   "notes": [

@@ -263,6 +263,18 @@
         "../vendor/deepseek-harness/packages/client/modules/src/invariant.ts",
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-modules"
       ],
+      "@deepseek-ai/dsh-client-product-analytics": [
+        "../vendor/deepseek-harness/packages/client/product-analytics/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-product-analytics"
+      ],
+      "@deepseek-ai/dsh-client-product-analytics/client": [
+        "../vendor/deepseek-harness/packages/client/product-analytics/src/client/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-product-analytics"
+      ],
+      "@deepseek-ai/dsh-client-product-analytics/types": [
+        "../vendor/deepseek-harness/packages/client/product-analytics/src/events.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-product-analytics"
+      ],
       "@deepseek-ai/dsh-client-resources": [
         "../vendor/deepseek-harness/packages/client/resources/src/index.ts",
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-resources"
@@ -549,6 +561,14 @@
       "@deepseek-ai/dsh-client-ui-settings-plugins/client": [
         "../vendor/deepseek-harness/packages/client/ui-settings-plugins/src/client/index.ts",
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-settings-plugins"
+      ],
+      "@deepseek-ai/dsh-client-ui-settings-session-log": [
+        "../vendor/deepseek-harness/packages/client/ui-settings-session-log/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-settings-session-log"
+      ],
+      "@deepseek-ai/dsh-client-ui-settings-session-log/client": [
+        "../vendor/deepseek-harness/packages/client/ui-settings-session-log/src/client/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-settings-session-log"
       ],
       "@deepseek-ai/dsh-client-ui-settings-shell": [
         "../vendor/deepseek-harness/packages/client/ui-settings-shell/src/index.ts",
@@ -1023,6 +1043,10 @@
       "@deepseek-ai/dsh-experimental-ptc-runtime-python": [
         "../vendor/deepseek-harness/packages/experimental/ptc-runtime-python/src/index.ts"
       ],
+      "@deepseek-ai/dsh-experimental-schedule-bundle": [
+        "../vendor/deepseek-harness/packages/experimental/schedule-bundle/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-experimental-schedule-bundle"
+      ],
       "@deepseek-ai/dsh-experimental-speech-to-text": [
         "../vendor/deepseek-harness/packages/experimental/speech-to-text/src/index.ts",
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-experimental-speech-to-text"
@@ -1242,7 +1266,8 @@
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-host-plugin-inventory"
       ],
       "@deepseek-ai/dsh-host-product-telemetry-otel": [
-        "../vendor/deepseek-harness/packages/host/product-telemetry-otel/src/index.ts"
+        "../vendor/deepseek-harness/packages/host/product-telemetry-otel/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-host-product-telemetry-otel"
       ],
       "@deepseek-ai/dsh-host-webserver": [
         "../vendor/deepseek-harness/packages/host/webserver/src/index.ts",
@@ -1885,6 +1910,10 @@
       "@deepseek-ai/dsh-win32-process": [
         "../vendor/deepseek-harness/packages/subprocess/win32-process/src/index.ts",
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-win32-process"
+      ],
+      "@deepseek-ai/dsh-otel": [
+        "../vendor/deepseek-harness/packages/telemetry/otel/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-otel"
       ],
       "@deepseek-ai/dsh-terminal": [
         "../vendor/deepseek-harness/packages/terminal/terminal/src/index.ts",

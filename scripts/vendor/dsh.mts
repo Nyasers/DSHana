@@ -10,8 +10,7 @@
 // 两个入口共用本实现：derive 的 vendor 任务（derive --check 门禁的一部分）与
 // `pnpm run sync:vendor:dsh`。这里只导出「检查」与「修复」，调度、日志前缀与退出码归各自入口。
 //
-// repair 会 `checkout` 并 `git add`（后者把 gitlink 更新进 index），改的是仓库状态，所以只在
-// apply 且确有差异时跑，--check 绝不碰。
+// repair 先按需 fetch 该 tag（镜像首次跟进新上游版本时本地必然没有），再 `checkout` 并 `git add`（后者把 gitlink 更新进 index）；改的是仓库状态，所以只在 apply 且确有差异时跑，--check 绝不碰。
 //
 // 用法：
 //   pnpm run sync:vendor:dsh                  # 本脚本（sync:vendor 聚合入口会带上它）
@@ -60,10 +59,21 @@ export function inspect(): string[] {
   return out;
 }
 
-/** 修复：checkout 到 tag，并把 gitlink 更新进 index。 */
+/** 修复：先确保镜像有这个 tag，再 checkout 到 tag，并把 gitlink 更新进 index。 */
 export function repair(): void {
   const tag = tagOf();
   if (!tag) throw new Error("packaging/package.json 未声明 dependencies['@deepseek-ai/dsh']");
+  // `checkout <tag>` 撞上本地没有的 tag 只会报 pathspec 不匹配，指错了方向：镜像没 fetch 过而已。
+  const probe = `git -C vendor/deepseek-harness rev-parse --verify --quiet refs/tags/${tag}`;
+  if (!gitOut(probe)) {
+    console.log(`[sync-vendor-dsh] git -C vendor/deepseek-harness fetch origin tag ${tag}`);
+    try {
+      execSync(`git -C vendor/deepseek-harness fetch origin tag ${tag}`, { cwd: ROOT, stdio: "inherit" });
+    } catch {
+      throw new Error(`vendor/deepseek-harness 取不到 ${tag}：上游未发该 tag，或网络不通`);
+    }
+  }
+  if (!gitOut(probe)) throw new Error(`vendor/deepseek-harness 取到 ${tag} 后仍无该 ref（fetch 未落 tag？）`);
   console.log(`[sync-vendor-dsh] git -C vendor/deepseek-harness checkout ${tag}`);
   execSync(`git -C vendor/deepseek-harness checkout ${tag}`, { cwd: ROOT, stdio: "inherit" });
   execSync("git add vendor/deepseek-harness", { cwd: ROOT, stdio: "inherit" });
