@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.0-rc.28+dsh-0.2.0-rc.1](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.27%2Bdsh-0.1.7-rc.2...v1.0.0-rc.28%2Bdsh-0.2.0-rc.1) (2026-09-28)
+
+### Features
+
+* **dshana:** 会话卡拆轻/重两半，入口行与小标题行收口 ([8c6f08d](https://github.com/Nyasers/DSHana/commit/8c6f08df0aa7b48b8972d4a314e025118cdc64f2))
+
+### Bug Fixes
+
+* **theme:** 给 dsh 0.2.0 新增的 5 个 --dsw-* token 补归宿 ([3c99210](https://github.com/Nyasers/DSHana/commit/3c99210527b2bf0c0ae654eeb839dabfab094af1))
+* **ui:** 会话卡只按 hana.envelope 认挂载态，两态 DOM 按需实例化 ([567d5c7](https://github.com/Nyasers/DSHana/commit/567d5c7ae4feec43227da9195114b3d048ec5c91))
+
 ## [1.0.0-rc.27+dsh-0.1.7-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.26%2Bdsh-0.1.7-rc.1...v1.0.0-rc.27%2Bdsh-0.1.7-rc.2) (2026-09-27)
 
 ## [1.0.0-rc.26+dsh-0.1.7-rc.1](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.25%2Bdsh-0.1.7-rc.1...v1.0.0-rc.26%2Bdsh-0.1.7-rc.1) (2026-09-27)
@@ -613,6 +624,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
