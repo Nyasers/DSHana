@@ -8,77 +8,129 @@
      语义：看，不参与。输入与打断仍走 dshana 工具链，这一面不提供任何写入口。 -->
 <meta name="hana-dshana-role" content="stream">
 <title>DSHana 会话</title>
-<!-- src/ui/stream.html — dshana 的会话卡，同一页两个挂载态（由 app-shell 认）：
+<!-- src/ui/stream.html — dshana 的会话卡，同一页两个挂载态（由 stream-entry.ts 认）：
        · 聊天流里（宿主 mount 的 height 是 flexible）：只画一行入口（会话坐标），不注入 DSH、
          不连中继——所以不叠也不冻结。这是工具出卡（details.card）落进来的形态。
        · 取出到黑板 / 拆窗（height 是 fixed）：宿主把同一 route 装到新挂载上，本页此时才装配
          中继、注入完整 DSH 现场（./face-stage.css 的台面 → DSH Web UI）。
      两种进入方式共用这一页：聊天卡带 sid=<DSH session id> 钉住一段会话；主题、surface
-     凭据与「认面」都走壳脚本那一套（见 app-shell.ts / face-role.ts / host-theme.ts）。
-     与 main / default 同一副自举台面（./face-stage.css），ready 后把整幅让给注入的 DSH
-     Web UI，由 ui-layout 覆盖层按 surface=stream 只画中列、并由 CSS 摘掉 [data-composer-card]（输入卡）；
-     座位（[data-composer-seat]）留着，统计信息行就挂在它里面。
-     注入的 DSH UI 里带 sid 的会话，app-shell 在顶部再挂一行跟踪态（取 GET /dshana/card-state：
-     只在 tracked / cancelling 期间慢轮询 4s，其余状态停手）。**终态之后不断流**：这段会话多半是
-     用户主动打开来翻看的历史会话，断掉或拒绝重开就等于看不了。
-     body 上的 data-dshana-shell 是壳脚本的根锚（boot() 取它，缺失则什么都不做）。 -->
+    凭据与「认面」都走壳脚本那一套（见 stream-entry.ts / stream-stage.tsx / face-role.ts）。
+    
+    **首帧坐标不排在任何握手后面**：入口行就在下面的 DOM 里，紧跟其后的内联脚本在**求值时**
+    按 location.search 把 sid / tid / cwd 写进去——不依赖 SDK、不依赖宿主 context、不依赖
+    hana.envelope。聊天流态下这一行就是最终内容。
+    
+    两个挂载态各自的 DOM 按需实例化，不用 hidden / display 藏：
+    · 聊天流：下面这行 #dsh-entry 就是全部（零 React 依赖，见 stream-entry.ts）；
+    · 黑板 / 拆窗：stream-entry.ts 认到 height.mode=fixed 后**动态 import()** 重型 chunk
+    （stream-stage.tsx：React 三态 + dsh-inject + host-theme），成功取到才拆掉
+    入口行、实例化 <template id="tpl-stage">。取不到 chunk 时入口行留着，失败可见。
+    
+      注入的 DSH UI 就是那段会话本身：这一面不带 App 侧的状态行。
+    相对资源纪律：页面里不出现根路径绝对 URL；重型 chunk 也走相对路径（rspack 的
+    output.chunkFilename，见 src/ui/rspack.config.mts），所以宿主以 /api/apps/<id>/ui/stream.html
+      服务本页时它照样取得到。 -->
 <link rel="stylesheet" href="./face-stage.css">
 <style>
-  /* 聊天流入口态：一行坐标。样式与台面无关，只为聊天卡那一格服务。
-     这块 DOM 只在 entry 态才被实例化（见 app-shell.ts 的 mountStreamView），所以不必自藏。 */
+  /* 聊天流入口态：一行抬头 + 三行坐标（会话 / 目录 / 任务），宽扁卡（8:1）装得下。
+     默认不显示：取出的卡（黑板 / 拆窗）首帧不许出现坐标行——只有认到聊天流态
+     （body[data-stream-view="entry"]）才露出，认态在 stream-entry.ts 里做。 */
   #dsh-entry {
-    box-sizing: border-box; height: 100%; padding: 10px 14px;
-    display: flex; align-items: center; gap: 12px;
+    box-sizing: border-box; height: 100%; padding: 10px 16px;
+    display: none; flex-direction: column; justify-content: center; gap: 3px;
   }
-  #dsh-entry .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--border, #8a93a3); }
-  #dsh-entry .entry-texts { min-width: 0; flex: 1; }
-  #dsh-entry .entry-label { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #dsh-entry .entry-meta {
-    margin-top: 2px; font-size: 11.5px; color: var(--text-muted, #6B6158);
-    font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  body[data-stream-view="entry"] #dsh-entry { display: flex; }
+  #dsh-entry .entry-head { display: flex; align-items: center; gap: 10px; }
+  #dsh-entry .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--accent, #537D96); }
+  #dsh-entry .entry-state { flex: none; font-weight: 600; }
+  #dsh-entry .entry-hint { margin-left: auto; flex: none; font-size: 11.5px; color: var(--text-muted, #6B6158); opacity: .85; }
+  /* 小标题行里的跟踪态：片段由 App 后端给（.state / .dot / .detail），头行已经有一个圆点，
+     这里把它那颗收起。 */
+  #dsh-entry .entry-status { flex: none; display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-muted, #6B6158); }
+  #dsh-entry .entry-status .dot { display: none; }
+  #dsh-entry .entry-status .state { display: flex; align-items: center; gap: 5px; margin: 0; min-width: 0; }
+  /* detail 不占版面：轻半把它挪到悬停提示上（title），行里只留 label。 */
+  #dsh-entry .entry-status [data-state] { cursor: help; }
+  #dsh-entry .entry-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  #dsh-entry .entry-key { flex: none; width: 2.8em; font-size: 11.5px; color: var(--text-muted, #6B6158); }
+  #dsh-entry .entry-val {
+    min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 12.5px; font-variant-numeric: tabular-nums;
   }
 
-  /* 卡状态行（app-shell 在带 sid 的黑板面顶部挂的一条）：内容就是 App 后端 /dshana/card-state
-     返回的那段片段（.state / .dot / .detail），所以那三个类名是卡页的渲染契约。 */
-  #dshana-card-strip {
-    display: flex; align-items: center; gap: 6px;
-    height: 31px; box-sizing: border-box; padding: 0 12px;
-    font-size: 12.5px; color: var(--text-muted, #6B6158);
-    background: var(--bg-card, #FBF7EE);
-    border-bottom: 1px solid var(--border, #D8CFBE);
-    overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
-  }
-  #dshana-card-strip .state { display: flex; align-items: center; gap: 6px; margin: 0; min-width: 0; }
-  #dshana-card-strip .dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--accent, #537D96); }
-  #dshana-card-strip .state[data-state="ended"] .dot { background: var(--text-muted, #6B6158); }
-  #dshana-card-strip .state[data-state="cancelling"] .dot { background: var(--danger, #B0453E); }
-  #dshana-card-strip .state[data-state="unknown"] .dot { background: var(--border, #D8CFBE); }
-  #dshana-card-strip .detail { overflow: hidden; text-overflow: ellipsis; }
 </style>
 </head>
-<body data-view="idle" data-dshana-shell data-dshana-view="stream">
-  <!-- 两个挂载态各自的 DOM 只在认到该态时才实例化（app-shell.ts 的 mountStreamView）：模板内容
-       不进渲染树、不执行脚本，实例化哪一个由 hana.envelope 认出的挂载态决定。不用 hidden /
-       display 藏：藏起来的子树仍占着 DOM（活着的那种还会继续跑），而这两态本来就不该同时在。 -->
-  <template id="tpl-entry">
-    <div id="dsh-entry">
+<body data-view="idle" data-dshana-view="stream">
+  <!-- 入口行：聊天流态的最终内容。坐标由紧跟其后的内联脚本在求值时写入（不碰 SDK / 宿主握手）；
+       但它默认不显示——认到聊天流态才由 stream-entry.ts 露出，所以取出的卡首帧不会出现这一行。
+       右侧那句提示只在聊天流态有意义：取出（右上角菜单 / 拖拽）之后这张卡就是完整 DSH 现场。 -->
+  <div id="dsh-entry">
+    <div class="entry-head">
       <span class="dot"></span>
-      <div class="entry-texts">
-        <div class="entry-label" data-dsh-entry-label>DSH 会话</div>
-        <div class="entry-meta" data-dsh-entry-meta>正在读取坐标…</div>
+      <span class="entry-state" data-dsh-entry-state>DSHana 会话</span>
+      <span class="entry-status" data-dsh-entry-status></span>
+      <span class="entry-hint">取出卡片展开完整会话</span>
       </div>
-    </div>
-  </template>
+    <div class="entry-row"><span class="entry-key">目录</span><span class="entry-val" data-dsh-entry-cwd></span></div>
+    <div class="entry-row"><span class="entry-key">会话</span><span class="entry-val" data-dsh-entry-sid></span></div>
+    <div class="entry-row"><span class="entry-key">任务</span><span class="entry-val" data-dsh-entry-tid></span></div>
+  </div>
+  <script>
+    /* 求值时做两件事，都不依赖 SDK / 宿主 context / hana.envelope：
+       ① 主题：宿主把主题参数附在卡页 URL（hana-theme / hana-css / hana-theme-appearance）。
+          这里同步写好身份属性并贴一张 <link> 样式表——样式表会挡住首次绘制，所以第一帧就是
+          宿主配色，而不是 HTML 里那套纸张 fallback（模块那一步要等一次 fetch，太晚）。
+       ② 坐标：?sid= &tid= &cwd=（字段与 src/tools/shared/card.ts 的 route 查询串同源，
+          都经 encodeURIComponent）。
+       失败（URL 畸形 / 拿不到主题）一律不阻断页面：留着占位文案继续走。 */
+    (function () {
+      "use strict";
+      var root = document.documentElement;
+      var q = null;
+      try { q = new URLSearchParams(location.search); } catch (e) { /* 忽略 */ }
+      var get = function (k) { try { return q ? String(q.get(k) || "").trim() : ""; } catch (e) { return ""; } };
+      try {
+        var theme = get("hana-theme"), appearance = get("hana-theme-appearance"), css = get("hana-css");
+        if (theme) root.setAttribute("data-theme", theme);
+        if (appearance === "light" || appearance === "dark") root.setAttribute("data-appearance", appearance);
+        if (css) {
+          var link = document.createElement("link");
+          link.rel = "stylesheet";
+          link.href = css;
+          (document.head || root).appendChild(link);
+        }
+      } catch (e) { /* 主题拿不到就用 fallback，不阻断 */ }
+      /* 卡内第一行：动作对应的状态字样。文案住在这里（不是 route 上的 act），所以改文案对
+         已经发出的卡也生效——卡页每次都从安装树现取。**只属于聊天流态**：取出的卡不显示
+         这一行，那边的状态由卡状态行负责。 */
+      var ACT_TEXT = { open: "新会话", reply: "续会话" };
+      var stateEl = document.querySelector("[data-dsh-entry-state]");
+      if (stateEl) stateEl.textContent = ACT_TEXT[get("act")] || "DSHana 会话";
+      var setRow = function (sel, value) {
+        var el = document.querySelector(sel);
+        if (!el) return;
+        el.textContent = value || "";
+        /* 空值就把整行收起来（不留下悬空的标签）。不用 hidden 属性：.entry-row 的 display
+           由作者样式给，会盖过 UA 的 [hidden]。 */
+        var row = el.closest(".entry-row");
+        if (row) row.style.display = value ? "" : "none";
+      };
+      setRow("[data-dsh-entry-sid]", get("sid") || "（这张卡没有带会话坐标）");
+      setRow("[data-dsh-entry-cwd]", get("cwd"));
+      setRow("[data-dsh-entry-tid]", get("tid"));
+      /* 兜底：模块没能接管（脚本没加载 / 报错）时也要把入口行露出来，别让这张卡空着。 */
+      setTimeout(function () {
+        if (root.getAttribute("data-dshana-stream") !== "claimed") {
+          document.body.setAttribute("data-stream-view", "entry");
+        }
+      }, 3000);
+    }());
+  </script>
+  <!-- 黑板 / 拆窗态的自举台：只有容器，内容（loader / 状态行 / 诊断块）由重型 chunk 的 React 画。
+         模板内容既不渲染也不执行；实例化只发生在 stream-entry.ts 取到重型 chunk 之后。 -->
   <template id="tpl-stage">
-    <div id="dsh-stage">
-      <div class="loader">
-        <span class="wordmark">DSHANA</span>
-        <span class="ring" id="dsh-spin" hidden></span>
-        <p id="dsh-status">正在读取状态…</p>
-      </div>
-      <div id="boot-panel"></div>
-    </div>
+    <div id="dsh-stage"></div>
   </template>
-  <script type="module" src="./app-shell.js"></script>
+  <script type="module" src="./stream.js"></script>
 </body>
 </html>

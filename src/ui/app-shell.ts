@@ -1,24 +1,39 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/ui/app-shell.ts — dshana App v2 壳页逻辑（main/sidebar 共用；浏览器 ESM）
+// src/ui/app-shell.ts — dshana App v2 壳页逻辑（main / default / sidebar 共用；浏览器 ESM）
 //
 // 相对资源纪律：经 <script type="module" src="./app-shell.js"> 相对引入，
 // 页面内不出现根路径绝对 URL。浏览器 SDK = 官方 @hana/plugin-sdk（devDependencies，
 // file:vendor/hana-app-sdk/hana-plugin-sdk-0.0.0.tgz），构建期由 rspack 静态打进本文件（见
 // src/ui/rspack.config.mts）——浏览器 ESM 不解析裸包名（宿主不注入 importmap），所以依赖
-// 由打包器 resolve、产物自包含，不在 dist/ui 另放 vendored 拷贝。到本 App 后端路由一律
-// apiFetch：显式带上 surface 会话头——宿主对 /api/apps/<id>/... 的凭据取自
-// header/query/cookie/路径票据四处，什么都不带会被拒 missing_credential（真机实测）。
-// 受管 runtime 代理首访透传同一张票，宿主按 surface 授权并种 hana_app_runtime cookie。
-// 视觉沿袭 v1 webui-shell 纸张风（CSS 变量 + fallback 纸张色），数据语义 v2 boot-state
-// （phase idle/starting/ready/error/stopped）。
+// 由打包器 resolve、产物自包含，不在 dist/ui 另放 vendored 拷贝。
+//
+// 本文件只管 main / default / sidebar 三个面。**会话卡（stream 面）不在这里**：
+// src/ui/stream.html 引的是 src/ui/stream-entry.ts（轻半，零 React），它按 hana.envelope 认到
+// 黑板 / 拆窗（fixed）后才动态 import() src/ui/stream-stage.tsx（重型半，带 React 与 DSH 注入）。
+// 低层宿主管道（凭据 / 取数 / 跨面共享 / 卡实例态 / 剪贴板）两边共用，住在
+// src/ui/surface-bridge.ts。视觉沿袭 v1 webui-shell 纸张风（CSS 变量 + fallback 纸张色），
+// 数据语义 v2 boot-state（phase idle/starting/ready/error/stopped）。
 import { hana } from "@hana/plugin-sdk";
-import { SHARED_KEY_PREFIX, selectionSharedValue } from "#/lib/shared-state.ts";
 import { injectDshIndex, installTransport, type DshTransport } from "#/ui/dsh-inject.ts";
 import { isFaceView, roleForView } from "#/lib/face-role.ts";
 import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPreference } from "#/lib/seed-tokens.ts";
 import { followHostTheme } from "#/ui/host-theme.ts";
+import {
+  SURFACE_API,
+  SURFACE_MISSING,
+  clipboardWrite,
+  credMissingHtml,
+  dropShared,
+  fetchBootState,
+  onSharedChanged,
+  readShared,
+  writeShared,
+  postAction,
+  surfaceSession,
+  withSurfaceTicket,
+} from "#/ui/surface-bridge.ts";
 
 (function () {
   "use strict";
@@ -40,97 +55,6 @@ import { followHostTheme } from "#/ui/host-theme.ts";
       .replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
-  // 到 App 后端路由的取数面：本页的凭据是 surface 会话票，只从 location 读——查询串
-  // （宿主给 App surface iframe 附 appSurfaceSession）或路径票据（/_surface/<票>/ 段）。
-  // 不经过 SDK 的 hana.api.fetch：它只读查询串，而凭据形态不止那一种。宿主对
-  // /api/apps/<id>/... 的凭据解析认显式头，所以这里自己拼路由、直接带上票头。
-  function appIdFromPath() {
-    try {
-      var m = /^\/api\/apps\/([^\/]+)\//.exec(location.pathname || "");
-      return m ? decodeURIComponent(m[1]) : null;
-    } catch (e) { return null; }
-  }
-  function apiFetch(path, init) {
-    var appId = appIdFromPath();
-    var ss = surfaceSession();
-    if (!appId || !ss) return Promise.reject(new Error("缺少 App surface 会话凭据（appSurfaceSession）"));
-    var headers = new Headers((init && init.headers) || {});
-    headers.set("X-Hana-App-Surface-Session", ss);
-    var opts: any = Object.assign({ credentials: "same-origin" }, init || {});
-    opts.headers = headers;
-    return fetch("/api/apps/" + encodeURIComponent(appId) + "/routes/" + path, opts);
-  }
-  function fetchState() {
-    return apiFetch("dshana/boot-state", {
-      method: "GET", cache: "no-store", headers: { Accept: "application/json" }
-    }).then(function (res) {
-      if (!res.ok) throw new Error("boot-state HTTP " + res.status);
-      return res.json();
-    }).then(function (d) { return (d && d.state) || null; })
-      .catch(function (err) {
-        var msg = err && err.message ? err.message : String(err);
-        if (/appSurfaceSession/.test(msg)) {
-          throw new Error(SURFACE_MISSING);
-        }
-        throw err;
-      });
-  }
-  function postAction(action) {
-    return apiFetch("dshana/" + action, { method: "POST", cache: "no-store" })
-      .then(function (res) { return res.json().catch(function () { return {}; }); });
-  }
-
-  // ---- App surface 凭据（iframe 不能自定 header，两条路一起走）----
-  // 宿主 0.946.2 runtime 代理（bundle ffe/kLt/ELt）认四条：Authorization/query token、
-  // 头 X-Hana-App-Surface-Session、cookie hana_app_runtime（HttpOnly，Path 锁在
-  // /api/apps/<id>/routes/_runtime/<rid>/）、以及「路径票据」
-  //   /api/apps/<id>/routes/_runtime/<rid>/_surface/<appSurfaceSession>/<rest>
-  // （宿主按 ffe 解析，并把上游 302 的 Location 重写回同一基路径；官方样例
-  //  @hana/plugin-sdk 的 hana.api.url(path, /*authenticateRuntime*/ true) 就是这一形态）。
-  // iframe 只认后两条：路径票据让「文档请求自身」就带凭据（不赌 cookie 时序/作用域），
-  // cookie 兜住 iframe 内丢掉前缀的绝对路径子请求。
-  function surfaceSession() {
-    try {
-      var q = new URLSearchParams(location.search).get("appSurfaceSession");
-      if (q) return q;
-      // 宿主 FP / 主卡的 iframe 用的是**路径票据**形态（functionPanel.routeUrl 经
-      // /api/apps/iframe-ticket 换回 uiBasePath，票据在路径里），不会带我们的查询参数；
-      // 只认查询参数会把这类页面判成「缺少凭据」。这里也认路径形态。
-      var m = /\/_surface\/([^\/]+)\//.exec(location.pathname || "");
-      return m ? decodeURIComponent(m[1]) : null;
-    } catch (e) { return null; }
-  }
-  // 代理前缀 → 带路径票据的前缀（已带则不重复插）
-  function withSurfaceTicket(prefix, ss) {
-    if (!ss) return prefix;
-    var m = /^(\/api\/apps\/[^/]+\/routes\/_runtime\/[^/]+)\/?(.*)$/.exec(prefix);
-    if (!m) return prefix;
-    if (/^_surface\//.test(m[2])) return prefix;
-    return m[1] + "/_surface/" + encodeURIComponent(ss) + "/" + m[2];
-  }
-  // 同源预请求一次代理前缀：带上 header，宿主会在响应里种下 hana_app_runtime cookie
-  // （bundle 109816：`req.query(appSurfaceSession) || req.header(X-Hana-App-Surface-Session)`
-  // → Set-Cookie Path=代理前缀；HttpOnly，JS 读不到，只当保险丝用）。
-  function warmRuntimeCookie(prefix) {
-    var ss = surfaceSession();
-    if (!ss) return Promise.resolve(false);
-    return fetch(prefix, {
-      headers: { "X-Hana-App-Surface-Session": ss },
-      cache: "no-store",
-      credentials: "same-origin",
-    })
-      .then(function (r) {
-        return r.text().catch(function () { return ""; }).then(function () { return r.ok; });
-      })
-      .catch(function () { return false; });
-  }
-  // 本页没拿到 surface 会话时的说明（appSurfaceSession 由宿主开页时附在 surface URL 上）
-  var SURFACE_MISSING = "状态读取失败：本页缺少 App surface 会话凭据，请从 Card Center 重新打开本卡";
-  function credMissingHtml() {
-    return '<pre class="diag-progress">缺少 App surface 会话凭据：本页 URL 上没有 appSurfaceSession，\n'
-      + "DSH 运行时经宿主代理会被直接拒（missing_credential），状态面与内嵌视图都拿不到。\n"
-      + "请从 Card Center 重新打开本卡。</pre>";
-  }
   // ---- 视图判定（v2 phase → 壳视图）----
   function viewOf(s) {
     if (!s) return "idle";
@@ -236,160 +160,9 @@ import { followHostTheme } from "#/ui/host-theme.ts";
     schedulePoll(view === "booting" ? POLL_FAST_MS : POLL_MID_MS);
   }
 
-  // ---- 跨面共享状态（样例 src/ui/settings/view-state.ts 的同一语义，载体换成 App 全局存储）----
-  // 四个消费方：boot 快照（FP 与主卡共用一份就绪态）、设置视图（FP 齿轮点开 → 主卡开面板）、
-  // 会话选中（FP 点会话 → 主卡跟随）、主面板选中（FP 侧栏点「插件」这类面板行 → 主卡开那一页：
-  // FP 整面只有侧栏，没有中列）。
-  // 作用域：本 App 单 DSH 源、单主卡，宿主给主卡与其 FP 同一个 cardInstanceId，按实例分段没有
-  // 区分度，键就是 `dshana.<kind>`（前缀与 lib/shared-state.ts 同源）。这批键的寿命是一次 App
-  // 生命周期：加载时由 renewSharedState 清空，页面下线时由 dropShared 删。
-  function sharedKey(kind) {
-    return SHARED_KEY_PREFIX + kind;
-  }
-  // 本页可能写过的四种共享键（与下面各 readShared/writeShared 的 kind 同名）。
-  var SHARED_KINDS = ["boot-state", "settings-view", "selection", "panel-view"];
-  /** 删掉本页写过的共享键（下线时调用；过期留着没有消费方）。 */
-  function dropShared() {
-    var st = sharedStore();
-    if (!st || typeof st.delete !== "function") return Promise.resolve();
-    return Promise.all(SHARED_KINDS.map(function (kind) {
-      try { return Promise.resolve(st.delete(sharedKey(kind))); } catch (e) { return Promise.resolve(); }
-    }));
-  }
-  // storage.global 在 SDK 里即可调用对象、也可能是工厂（两边兼容地取）。
-  function sharedStore() {
-    try {
-      var g: any = hana && hana.storage ? hana.storage.global : null;
-      if (typeof g === "function") { var s = g(); if (s && typeof s.get === "function") return s; }
-      if (g && typeof g.get === "function") return g;
-    } catch (e) { /* 忽略 */ }
-    return null;
-  }
-  function readShared(kind) {
-    var st = sharedStore();
-    if (!st) return Promise.resolve(null);
-    return Promise.resolve(st.get(sharedKey(kind))).then(function (entry) {
-      var v = entry && typeof entry === "object" ? entry.value : null;
-      return v && typeof v === "object" ? v : null;
-    }, function () { return null; });
-  }
-  function writeShared(kind, value) {
-    var st = sharedStore();
-    if (!st) return Promise.reject(new Error("hana.storage.global \u4e0d\u53ef\u7528"));
-    return Promise.resolve(st.set(sharedKey(kind), value));
-  }
-  function onSharedChanged(kind, listener) {
-    var st = sharedStore();
-    if (!st || typeof st.onChanged !== "function") return function () { /* 无通知面则只靠读时刷新 */ };
-    var key = sharedKey(kind);
-    var off = st.onChanged(function (keys) {
-      if (Array.isArray(keys) && keys.indexOf(key) >= 0) { try { listener(); } catch (e) { /* 忽略 */ } }
-    });
-    return typeof off === "function" ? off : function () { /* 无取消句柄 */ };
-  }
-
-  // 设置视图：{ open, section }。
-  function readSettingsView() {
-    return readShared("settings-view").then(function (v) {
-      return {
-        open: !!(v && v.open === true),
-        section: v && typeof v.section === "string" && v.section ? v.section : null,
-      };
-    });
-  }
-  function writeSettingsView(next) {
-    var open = !!(next && next.open === true);
-    var section = next && typeof next.section === "string" && next.section ? next.section : null;
-    return writeShared("settings-view", { open: open, section: section });
-  }
-
-  // 会话选中：{ sessionId, at }。at 是写入时刻，接收端据此判断这条意见是否比自己的动手新
-  // （主卡自己切工作区/新建会话也会改本地选中，旧意见不得把它压回去）。
-  // 启动握手靠读快照（存储有当前值，没有“错过广播”的问题）。
-  function readSelection() {
-    return readShared("selection").then(function (v) {
-      return {
-        sessionId: v && typeof v.sessionId === "string" && v.sessionId ? v.sessionId : null,
-        at: v && typeof v.at === "number" ? v.at : 0,
-      };
-    });
-  }
-  function writeSelection(sessionId) {
-    return writeShared("selection", selectionSharedValue(sessionId));
-  }
-
-  // 主面板选中：{ panelId }。DSH 侧栏的面板行（0.1.6 起多了「插件」那一行）在 FP 上没有中列可放，
-  // 那一页归主卡：FP 只发射选中的面板 id，主卡把它交给自己的 layout（空值 = 回到会话）。
-  function readPanelView() {
-    return readShared("panel-view").then(function (v) {
-      return { panelId: v && typeof v.panelId === "string" && v.panelId ? v.panelId : null };
-    });
-  }
-  function writePanelView(panelId) {
-    return writeShared("panel-view", {
-      panelId: typeof panelId === "string" && panelId ? panelId : null,
-    });
-  }
-
-  // ---- 会话卡的会话坐标（只认这张卡自己的状态，不读应用态全局）----
-  // 两个来源，都在卡自身：
-  //   · route 的 ?sid=（宿主出卡时写进卡面的坐标，工具出卡 / 取出时都跟着过去）；
-  //   · 卡实例态 hana.state 的 sid（同一张卡在聊天流 / 黑板 / 拆窗之间换挂载时的落点）。
-  // **不读也不写应用态全局（dshana.selection）**：那是主卡与 FP 的「当前选中」，
-  // 会话卡属于它钉住的那一段会话，不因别处的选中变化就改绑自己。
-  function routeSessionId() {
-    try {
-      var sid = new URLSearchParams(location.search).get("sid");
-      return sid && sid.trim() ? sid.trim() : "";
-    } catch (e) { return ""; }
-  }
-  function cardStateApi(): any {
-    try { return hana && (hana as any).state && typeof (hana as any).state.get === "function" ? (hana as any).state : null; } catch (e) { return null; }
-  }
-  function readCardState(key: string): Promise<any> {
-    var st = cardStateApi();
-    if (!st) return Promise.resolve(null);
-    try {
-      return Promise.resolve(st.get(key)).then(function (r: any) {
-        return r && typeof r.value === "string" && r.value ? r.value : null;
-      }, function () { return null; });
-    } catch (e) { return Promise.resolve(null); }
-  }
-  function writeCardState(key: string, value: unknown): Promise<any> {
-    var st = cardStateApi();
-    if (!st || typeof st.set !== "function") return Promise.resolve();
-    try { return Promise.resolve(st.set(key, value)).catch(function () { /* 忽略 */ }); } catch (e) { return Promise.resolve(); }
-  }
-  // 本卡钉住的会话：route 优先（工具出卡写进卡面的坐标），没有就取卡实例态。
-  function readPinnedSession() {
-    var sid = routeSessionId();
-    if (sid) return Promise.resolve(sid);
-    return readCardState("sid");
-  }
-  // 认到就记进卡实例态：同一张卡换挂载（聊天流 / 黑板 / 拆窗）时 route 之外还有一个落点。
-  function rememberCardSession(sid) {
-    if (sid) return writeCardState("sid", sid);
-    return Promise.resolve();
-  }
-
-  // 挂到宿主桥（__DSHANA__）上的跨面接口：
-  //   设置视图 → src-integrations/ui-settings-general；会话选中 → src-integrations/ui-session；
-  //   主面板选中 → ui-sidebar（FP 发射）与 ui-layout（主卡落地）。
-  //   剪贴板 → @dshana/clipboard 的 client 半（同文档，直接调，无消息协议）。
-  var SURFACE_API = {
-    readSettingsView: readSettingsView,
-    writeSettingsView: writeSettingsView,
-    onSettingsViewChanged: function (listener) { return onSharedChanged("settings-view", listener); },
-    readSelection: readSelection,
-    writeSelection: writeSelection,
-    onSelectionChanged: function (listener) { return onSharedChanged("selection", listener); },
-    readPanelView: readPanelView,
-    writePanelView: writePanelView,
-    onPanelViewChanged: function (listener) { return onSharedChanged("panel-view", listener); },
-    readPinnedSession: readPinnedSession,
-    clipboardWrite: writeClipboard,
-  };
-
+  // 低层宿主管道（到 App 后端路由的取数面、surface 凭据、跨面共享状态、卡实例态、剪贴板）
+  // 已抽到 src/ui/surface-bridge.ts：会话卡的轻半（stream-entry.ts）也要这一层，但不该为此
+  // 背上下面的 DSH 注入与 React。本文件从那里 import，别名不变、调用点不动。
   // ---- DSH 注入（对齐官方样例：同文档注入 + __DSH_TRANSPORT__，不再用 iframe）----
   // 一次装配：标记视图参数（DSH 侧 view 插件读 ?dshana-view=）→ 装 transport → 取回 DSH
   // index 注入本页。私有前缀 = 中继前缀 + surface 路径票据（DSH 前端经原生 fetch 发出的
@@ -416,19 +189,6 @@ import { followHostTheme } from "#/ui/host-theme.ts";
       return;
     }
     startInjection(s.proxyPrefix, s.runtimeId);
-  }
-  /**
-   * 本面钉住的会话坐标（有坐标的面在顶部挂一行跟踪态，见 mountCardStrip）。
-   * 坐标来自查询串 ?sid= / ?tid=；没有（主卡 / FP / 黑板上的跟随卡）返回 null，
-   * 那种面不钉会话、不挂跟踪行。
-   */
-  function cardTicket(): { sessionId: string; taskId: string } | null {
-    try {
-      const q = new URLSearchParams(location.search);
-      const sessionId = String(q.get("sid") || "").trim();
-      const taskId = String(q.get("tid") || "").trim();
-      return sessionId || taskId ? { sessionId, taskId } : null;
-    } catch (e) { return null; }
   }
   function startInjection(prefix, runtimeId) {
     if (injected.started) return;
@@ -465,57 +225,10 @@ import { followHostTheme } from "#/ui/host-theme.ts";
       })
       // 注入完成后推一次（桥此刻已在文档里）；再开标题栏交互区域的上报。此后主题完全由
       // hana.theme.subscribe 事件驱动。
-      .then(function () { pushThemeNow(); startInteractiveRegions(); mountCardStrip(); })
+      .then(function () { pushThemeNow(); startInteractiveRegions(); })
       .catch(function (err) { showInjectionError(err); });
   }
 
-  // ---- 卡状态条：URL 带 sid 的面（钉住某一段 DSH 会话的页面）在顶部挂一行跟踪态 ----
-  // 片段与卡页同源：App 后端 /dshana/card-state 返回的就是可直接换进 DOM 的状态行。
-  // 状态跟踪：非终态（tracked / cancelling）期间慢轮询，终态即停手——页面不再打任何请求。
-  // 终态之后**不断流**：这段会话多半是用户主动打开来翻看的历史会话，断掉或拒绝重开就等于看不了
-  //（旧的「陈旧卡冻结」是给聊天流里的流内卡补的，那种卡已经不挂了）。
-  // 取不到状态就整条撤掉，不占版面。行内样式：这条只属于带 sid 的面，不为它往四个页面的
-  // CSS 里各拄一份（片段里的 .state/.dot/.detail 由页面提供）。
-  var CARD_POLL_MS = 4000;
-  function mountCardStrip() {
-    const ticket = cardTicket();
-    const sid = ticket ? ticket.sessionId : "";
-    if (!sid) return;
-    const root = document.getElementById("root");
-    if (root === null || root.parentNode === null) return;
-    const parent: Node = root.parentNode;
-    const strip = document.createElement("div");
-    strip.id = "dshana-card-strip";
-    parent.insertBefore(strip, root);
-    root.style.height = "calc(100% - 31px)";
-    const drop = (): void => {
-      try { root.style.height = ""; } catch (e) { /* 忽略 */ }
-      if (strip.parentNode !== null) strip.parentNode.removeChild(strip);
-    };
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const stop = (): void => { if (timer !== null) { clearTimeout(timer); timer = null; } };
-    const read = (): Promise<string> =>
-      apiFetch("dshana/card-state?sessionId=" + encodeURIComponent(sid), {
-        method: "GET", cache: "no-store", headers: { Accept: "text/html" }
-      }).then((res: Response) => {
-        if (!res.ok) throw new Error("card-state HTTP " + res.status);
-        return res.text();
-      }).then((html: string) => {
-        if (!html || !html.trim()) { drop(); return "gone"; }
-        strip.innerHTML = html;
-        const stateEl = strip.querySelector("[data-state]");
-        return stateEl ? String(stateEl.getAttribute("data-state") || "") : "";
-      });
-    const loop = (): void => {
-      read().then((state: string) => {
-        if (state === "ended") return; // 终态：停手（页面留着翻看，不轮询也不断流）
-        // tracked / cancelling 才继续问；其余（unknown / gone / 无状态）停手：卡成快照。
-        if (state !== "tracked" && state !== "cancelling") return;
-        timer = setTimeout(loop, CARD_POLL_MS);
-      }).catch(() => { stop(); drop(); });
-    };
-    loop();
-  }
   // DSH index 的 boot-theme 行（ui-theme/src/boot-theme.ts 生成，紧跟 <body> 开标签）：
   //   const preference = "system"|"light"|"dark"
   // 官方把这行定位成 "the browser's pre-plugin interval"：插件树激活前浏览器手里只有它，
@@ -690,7 +403,7 @@ import { followHostTheme } from "#/ui/host-theme.ts";
       .catch(function () { /* 拿不到共享面就当没有，本面照常自取 */ });
   }
   function fetchOwnState() {
-    fetchState().then(function (s) {
+    fetchBootState().then(function (s) {
       lastOwnFetchAt = Date.now();
       if (!isSidebar) publishBootState(s);
       applySnapshot(s);
@@ -750,43 +463,8 @@ import { followHostTheme } from "#/ui/host-theme.ts";
     if (!data || typeof data !== "object") return;
     if (data.dshHanaThemeRequest) { try { sendThemeTo(e.source); } catch (err) { /* 忽略 */ } }
   });
-  // 剪贴板：走宿主能力门（app/ui.clipboard-write）。本窗口（嵌入场景）里
-  // navigator.clipboard 被宿主的 Permissions-Policy 拒（'denied'），所以壳级全局 shadow
-  // （src/ui/clipboard-shadow.ts，桥优先）改调 __DSHANA__.clipboardWrite，最终落到这里：
-  // 宿主执行 hana.clipboard.writeText，不受插件 iframe 权限链限制。
-  //
-  // 契约：@hana/plugin-sdk 的 HanaClipboardWriteTextResult 是
-  // **{ written: boolean }**。旧代码判的是 `payload.ok === false`——字段名不对，于是
-  // 宿主明确回 written:false 时这里照样返回 true，表现为「界面显示复制成功、系统剪贴板里
-  // 什么都没有」（DSH 那个 helper 只要不抛就报成功）。现在：显式 written:false 与异常都
-  // **reject 并打印原因**，让失败可见（调用方据此报失败，不假装成功）。
-  //
-  // 现场结论（方向已按决定暂停）：**两条路都在宿主手里**——
-  //   宿主：Plugin UI capability "clipboard.writeText" is not allowed in card slots
-  //         （App 卡面不被允许用这个能力通道，SDK 直接拒）
-  //   原生：NotAllowedError（Permissions-Policy 把 Clipboard API 在本文档里关死）
-  // 转发逻辑保留（宿主哪天放开，不用改代码就能活）。**报错每次都说**：她要的是即时反馈，
-  // 不是被静音过的失败（失败每次即时上报）。唯一未试过的候选是
-  // document.execCommand('copy')（DSH 只在 writeText 不存在时才走它），大概被同一道策略管着，不做。
-  function writeClipboard(text) {
-    if (!hana || !hana.clipboard || typeof hana.clipboard.writeText !== "function") {
-      console.warn("[dshana/clipboard] 宿主 SDK 无 hana.clipboard.writeText（能力 app/ui.clipboard-write 未授予？）");
-      return Promise.reject(new Error("host clipboard API unavailable"));
-    }
-    return Promise.resolve(hana.clipboard.writeText(text)).then(
-      function (payload) {
-        if (payload && payload.written === false) {
-          console.warn("[dshana/clipboard] 宿主返回 written:false（复制未发生）：", payload);
-          throw new Error("host clipboard write refused");
-        }
-        return true;
-      },
-      function (error) {
-        console.warn("[dshana/clipboard] 宿主能力调用失败：", (error && error.message) || error);
-        throw error instanceof Error ? error : new Error(String(error));
-      }
-    );
-  }
+  // 剪贴板实现（writeClipboard）随低层管道移到了 src/ui/surface-bridge.ts 的 clipboardWrite，
+  // 契约与现场结论的来龙去脉见那里的注释；本文件只是把它挂进 SURFACE_API（见上方 import）。
   // 主题跟随（**事件驱动，不轮询**）：宿主主题变化由 SDK 通知（事件名 hana.theme.changed，
   // 常量见 @hana/plugin-protocol 的 THEME_CHANGED），SDK 侧即 hana.theme.subscribe；
   // 当前主题的官方读法是 hana.theme.getSnapshot()。SDK README 另写明：重绘本身由 SDK
@@ -965,115 +643,10 @@ import { followHostTheme } from "#/ui/host-theme.ts";
     scheduleInteractiveRegions();
   }
 
-  // ---- 会话卡：同一页两个挂载态 ----
-  // 判据（宿主契约，APPS_EN.md「Mount-mode table」与「Size envelope」）：聊天流里的卡 height 是
-  // flexible（内容自适应，封顶是聊天列）；取出到黑板 / 拆窗后是 fixed（用户拖的尺寸说话）。
-  // **只信 hana.envelope**：surface context（{ appId, slot, cardInstanceId }）在两个挂载态下都
-  // 带 cardInstanceId（聊天流里的 v2 卡也由宿主发实例 id），拿它当判据会把聊天流误判成黑板。
-  function classifyMount(): "chat" | "canvas" | null {
-    var env: any = null;
-    try {
-      env = hana && (hana as any).envelope && typeof (hana as any).envelope.getSnapshot === "function"
-        ? (hana as any).envelope.getSnapshot() : null;
-    } catch (e) { env = null; }
-    var mode = env && env.height ? env.height.mode : null;
-    if (mode === "fixed") return "canvas";
-    if (mode === "flexible" || mode === "unbounded") return "chat";
-    return null; // 还没收到信号（宿主在 iframe ready 之后才推第一帧）
-  }
-
-  // 两个挂载态各自那块 DOM 只在认到该态时才实例化。不用 hidden / display 藏：藏起来的子树仍占着
-  // DOM（活着的那种还会继续跑），而这一页的两个态本来就不该同时在。模板内容既不渲染也不执行，
-  // 实例化哪一个由挂载态决定——等价于条件渲染，只是这里没有组件层。
-  var streamViewNode: Element | null = null;
-  function mountStreamView(templateId: string, view: string) {
-    if (streamViewNode && streamViewNode.parentNode) streamViewNode.parentNode.removeChild(streamViewNode);
-    streamViewNode = null;
-    var tpl = document.getElementById(templateId) as HTMLTemplateElement | null;
-    var node = tpl && tpl.content && tpl.content.firstElementChild
-      ? (tpl.content.firstElementChild.cloneNode(true) as Element)
-      : null;
-    if (node) { streamViewNode = node; document.body.appendChild(node); }
-    document.body.setAttribute("data-view", view);
-  }
-
-  /** 聊天流态：只画一行入口（会话坐标），不装配 DSH、不打任何后端请求。 */
-  function renderSessionEntry() {
-    mountStreamView("tpl-entry", "entry");
-    var sid = routeSessionId(), tid = "", cwd = "";
-    try {
-      var q = new URLSearchParams(location.search);
-      tid = String(q.get("tid") || "").trim();
-      cwd = String(q.get("cwd") || "").trim();
-    } catch (e) { /* 忽略：没有坐标就按空处理 */ }
-    var labelEl = document.querySelector("[data-dsh-entry-label]");
-    var metaEl = document.querySelector("[data-dsh-entry-meta]");
-    if (labelEl) labelEl.textContent = sid ? "DSH 会话 " + sid : "DSH 会话";
-    if (metaEl) {
-      var parts: string[] = [];
-      if (cwd) parts.push(cwd);
-      if (tid) parts.push("task " + tid.slice(0, 12));
-      metaEl.textContent = parts.length ? parts.join(" · ") : "这张卡没有带会话坐标";
-    }
-    // route 没带 sid 时从卡实例态补一次（同一张卡换挂载后的落点）
-    if (!sid && labelEl) {
-      var labelNode = labelEl;
-      readCardState("sid").then(function (s) {
-        if (s) labelNode.textContent = "DSH 会话 " + s;
-      }, function () { /* 忽略 */ });
-    }
-    // 入口行不注入、不轮询：取出到黑板 / 拆窗时页面重新挂载，那时才装配 DSH。
-  }
-
-  // 等 envelope 首帧的封顶时间。宿主在 iframe ready 之后立刻推第一帧，通常远快于此；这一条只为
-  // 从不发信号的旧宿主兜底。
-  var MOUNT_WAIT_MS = 2000;
-
-  /** 认出挂载态后分派：聊天流 = 入口行；其余 = 黑板 / 拆窗的 DSH 现场。 */
-  function beginStreamCard() {
-    // 认到 sid 就记进卡实例态（两个挂载态都记）：同一张卡换挂载时 route 之外还有落点。
-    rememberCardSession(routeSessionId());
-    var decided = false;
-    var decide = function (mode: "chat" | "canvas") {
-      if (decided) return;
-      decided = true;
-      if (mode === "chat") renderSessionEntry();
-      else streamRuntime();
-    };
-    var mode = classifyMount();
-    if (mode !== null) { decide(mode); return; }
-    // envelope 还没到。`hana.envelope.subscribe()` 注册时会立刻用当前快照叫一次回调（可能仍是
-    // null），所以这里必须自己判空、不能一叫就定——否则等于没等，通道一旦是 null 就落进兜底。
-    var timer = setTimeout(function () {
-      // 始终没等到信号（旧宿主不发这道事件）：按聊天流收尾。整幅 DSH 现场（拉中继、打后端、
-      // 注入一整个前端）灌进聊天转录是更重也更意外的结果，入口行至少是无副作用的安全面。
-      decide("chat");
-    }, MOUNT_WAIT_MS);
-    try {
-      if (hana && (hana as any).envelope && typeof (hana as any).envelope.subscribe === "function") {
-        var off = (hana as any).envelope.subscribe(function () {
-          var next = classifyMount();
-          if (next === null) return; // 还没信号，继续等
-          try { if (typeof off === "function") off(); } catch (e) { /* 忽略 */ }
-          clearTimeout(timer);
-          decide(next);
-        });
-      }
-    } catch (e) { /* SDK 未提供则只走兜底 */ }
-  }
-
-  /** 黑板 / 拆窗：装配中继、注入 DSH 现场。与主卡 / FP 同一套轮询与共享快照。 */
-  function streamRuntime() {
-    // 自举台只在此态实例化：poll → applySnapshot 要用的 #dsh-stage / #dsh-spin / #dsh-status /
-    // #boot-panel 都在它里面。
-    mountStreamView("tpl-stage", "idle");
-    window.addEventListener("pagehide", function () {
-      if (injected.transport) { try { injected.transport.dispose(); } catch (e) { /* 忽略 */ } }
-      try { dropShared(); } catch (e) { /* 忽略 */ }
-    }, { once: true });
-    poll();
-  }
-
+  // ---- 会话卡（stream 面）已移出本文件 ----
+  // 那一页的两态（聊天流入口行 / 黑板·拆窗的完整 DSH 现场）见 src/ui/stream-entry.ts 与
+  // src/ui/stream-stage.tsx：判据仍是 hana.envelope 的 height.mode（APPS_EN.md「Mount-mode
+  // table」与「Size envelope」），但重型的注入半只在 fixed 态经动态 import() 装载。
   // ---- 启动 ----
   function boot() {
     var root = $("[data-dshana-shell]");
@@ -1088,8 +661,6 @@ import { followHostTheme } from "#/ui/host-theme.ts";
       began = true;
       var view = resolveView(root);
       isSidebar = view === "sidebar";
-      // 会话卡（stream 面）先认挂载态：聊天流里只画入口行，取出到黑板 / 拆窗才装配 DSH 现场。
-      if (view === "stream") { beginStreamCard(); return; }
       // FP 是投影面：owner（主卡）一写快照就立刻跟随（事件驱动，不等自己的定时器），
       // 并先用快照渲染首屏（免得空等到第一次定时器）。owner 不在场时下面的 poll 会自己取。
       if (isSidebar) {
@@ -1116,9 +687,6 @@ import { followHostTheme } from "#/ui/host-theme.ts";
     }
     // 等宿主交面（样例协议）：已有 context 立即开始；否则订一次变更事件，并留 1.5s 兜底
     // （自己在浏览器里开页调试时宿主不会给 context）。
-    // 会话卡例外：stream 面由页面自己声明（meta / data-dshana-view），认挂载态不需要这道
-    // 握手（它只用 hana.envelope），所以立刻开始——坐标和挂载态都不该被这个门拦一下。
-    if (declaredView(root) === "stream") { begin(); return; }
     if (hostSlot() !== null) { begin(); return; }
     try {
       if (hana && hana.surface && typeof hana.surface.onContextChanged === "function") {

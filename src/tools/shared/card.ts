@@ -21,14 +21,16 @@ import { APP_ID } from "#/lib/boot-state.ts";
 /** 会话卡页（App ui/ 静态树内的 stream 面）。 */
 export const SESSION_CARD_ROUTE = "/stream.html";
 
-/** 聊天流里的占位比例（"宽:高"；渲染端按冒号拆，数字会被当非法值丢掉）。入口只有一行，压扁。 */
+/** 聊天流里的占位比例（"宽:高"；渲染端按冒号拆，数字会被当非法值丢掉）。
+    8:1 的高度对「1 行抬头 + 3 行坐标」刚好；宽度变窄时宿主会按同一比例把高度一起压扁，
+    所以入口行自己把真实高度报给宿主（见 stream-entry.ts 的 reportEntryHeight）。 */
 const CARD_ASPECT_RATIO = "8:1";
 
-/** 会话卡的动作面（title 的措辞随它变）。 */
-export type SessionCardAction = "open" | "reply";
+/** 卡面抬头（宿主聊天卡上那一行标题）。动作不写在这里：状态字样是卡**内**第一行的事。 */
+const CARD_TITLE = "DSHana";
 
-/** 动作 → 卡面文案。 */
-const WHAT: Record<SessionCardAction, string> = { open: "子代理已开启", reply: "续发消息已提交" };
+/** 会话卡的动作面（写进 route 的 act=，卡页据此渲染状态字样）。 */
+export type SessionCardAction = "open" | "reply";
 
 /** sessionCard 的入参：提交成功后拿到的定位信息。 */
 export interface SessionCardInput {
@@ -56,16 +58,18 @@ export function sessionCard({ action, sessionId, taskId, delivery, cwd }: Sessio
   const params = [
     "ts=" + now,
     "at=" + now,
+    // 动作是数据，状态字样（"子代理已开启" 这类）是卡页的文案：文案住在卡页里，改文对
+    // 已经发出的卡也生效（它们每次打开都重新取那一页）。
+    "act=" + action,
     "sid=" + encodeURIComponent(sessionId),
     // tid 只作展示与备查：入口行把它写在副行上。
     "tid=" + encodeURIComponent(taskId),
   ];
   if (cwd) params.push("cwd=" + encodeURIComponent(cwd));
-  const what = WHAT[action] || WHAT.open;
   return {
     pluginId: APP_ID,
     route: SESSION_CARD_ROUTE + "?" + params.join("&"),
-    title: "DSHana " + what,
+    title: CARD_TITLE,
     description: sessionId.slice(0, 12) + "… · " + (cwd || "未指定工作目录") + " · taskId " + taskId +
       (delivery ? " · 结果按 " + delivery + " 档投递" : ""),
     aspectRatio: CARD_ASPECT_RATIO,

@@ -73,16 +73,17 @@ test("open：回执带入口卡，details.dsh 形状不变", async () => {
   assert.equal(card.pluginId, "dshana", "宿主要求 pluginId 等于工具归属 App id，缺了或不等一律丢卡");
   assert.match(card.aspectRatio, /^\d+:\d+$/, "aspectRatio 是 \"宽:高\" 字符串；给数字会被渲染端当非法值");
   assert.equal(card.cardForm, "flush", "聊天卡的 cardForm 会随取出复制到黑板绑定，形态要定在这里");
-  assert.match(card.title, /子代理已开启/);
+  assert.equal(card.title, "DSHana", "卡面抬头固定就是 DSHana；状态字样在卡内第一行");
 
   const q = cardQuery(card);
   assert.ok(Number(q.get("ts")) > 0, "?ts= 防缓存");
+  assert.equal(q.get("act"), "open", "act 是卡内状态字样的依据（文案住在卡页里）");
   assert.equal(q.get("sid"), SID, "sid 是窗口里那段会话的唯一依据");
   assert.equal(q.get("tid"), "task-1", "tid 给入口行回显用");
   assert.equal(q.get("cwd"), cwd);
 });
 
-test("reply：回执不带卡（一个会话一张把手）", async () => {
+test("reply：回执也挂卡（act=reply 是卡内小标题行的依据）", async () => {
   const loc = { action: "send", sessionId: SID, rpcId: "rpc-2", taskId: "task-2", delivery: "next-step" };
   const { out, fake } = await run("reply", loc, { task: "接着跑", sessionId: SID });
 
@@ -96,7 +97,8 @@ test("reply：回执不带卡（一个会话一张把手）", async () => {
     cwd: undefined,
   });
   assert.equal(fake.calls[0].action, "send", "工具面是 reply，提交链内部仍是 send");
-  assert.equal(out.details.card, undefined, "reply 不叠卡");
+  assert.equal(out.details.card.pluginId, "dshana", "reply 与 open 挂同一张会话卡（抬头是动作）");
+  assert.equal(cardQuery(out.details.card).get("act"), "reply");
 });
 
 test("卡字面量：没有 cwd 就不塞这一格", () => {

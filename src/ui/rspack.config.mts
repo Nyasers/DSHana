@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/ui/rspack.config.mts — 壳页脚本 bundle 构建配置（ui 域）
-// 产物：dist/ui/app-shell.js（壳页，ESM，`<script type="module" src="./app-shell.js">`）
-// 与 dist/ui/settings.js（App 自己的设置页脚本），
+// src/ui/rspack.config.mts — 页面脚本 bundle 构建配置（ui 域）
+// 产物：dist/ui/app-shell.js（main / default / sidebar 壳页，ESM，
+// `<script type="module" src="./app-shell.js">`）、dist/ui/stream.js（会话卡轻半，
+// stream.html 引它）、dist/ui/settings.js（App 自己的设置页脚本），
 // 以及被 import 的样式 dist/ui/<name>.css（页面用 <link> 引入）。
+// 会话卡的重型半（stream-stage.tsx：React + DSH 注入）是 stream-entry.ts 里**动态 import()** 的
+// 结果，rspack 按需切出独立 chunk（output.chunkFilename）——聊天流态的卡只解析 stream.js，
+// 永远不取这个 chunk。chunk 名走相对路径（页面在 /api/apps/<id>/ui/stream.html，静态树同层），
+// 所以页面内不出现根绝对 URL。
 //
 // 打包纪律：
 //   - 浏览器 SDK @hana/plugin-sdk 与组件库 @hana/plugin-components 从 devDependencies 解析
@@ -29,11 +34,17 @@ export default {
   target: "web",
   entry: {
     "app-shell": ui("app-shell.ts"),
+    // 会话卡轻半：stream.html 引 ./stream.js。重型半（stream-stage.tsx）不在入口里——它是
+    // 这个模块动态 import() 出来的 chunk，只有 fixed 态（黑板 / 拆窗）才取。
+    stream: ui("stream-entry.ts"),
     settings: ui("settings.tsx"),
   },
   output: {
     path: path.join(DIST_DIR, "ui"),
     filename: "[name].js",
+    // 动态 import() 的 chunk 与页面同层（dist/ui/），相对 stream.js 解析；module 产物里
+    // 由浏览器按相对 URL 取，不经 publicPath。
+    chunkFilename: "[name].js",
     cssFilename: "[name].css",
     module: true,
     clean: false, // 主 bundle 已 clean 整树；这里只写 ui/*（静态页由 build.ts copy）
