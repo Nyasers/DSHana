@@ -7,21 +7,37 @@
      复用 DSH 前端、只留中列那一段转录，DSH 侧栏、右列与输入卡（composer card）全部收起。
      语义：看，不参与。输入与打断仍走 dshana 工具链，这一面不提供任何写入口。 -->
 <meta name="hana-dshana-role" content="stream">
-<title>DSHana 会话流</title>
-<!-- src/ui/stream.html — dshana App v2 的 stream 面（只读会话流）。
-     两种进入方式，同一页：
-       · 工具出卡的会话流卡（open/reply 的 details.card 指向本页，查询串带 sid=<DSH session id>）：
-         会话被钉住，app-shell 在顶部再挂一行跟踪态（非终态看慢轮询；会话终结后停手并
-         断掉消息流——陈旧卡不再吃连接，也不再接更新）；
-       · 直接开页（不带 sid）：跟随跨面共用的当前 DSH 会话，不钉住。
+<title>DSHana 会话</title>
+<!-- src/ui/stream.html — dshana 的会话卡，同一页两个挂载态（由 app-shell 认）：
+       · 聊天流里（宿主 mount 的 height 是 flexible）：只画一行入口（会话坐标），不注入 DSH、
+         不连中继——所以不叠也不冻结。这是工具出卡（details.card）落进来的形态。
+       · 取出到黑板 / 拆窗（height 是 fixed）：宿主把同一 route 装到新挂载上，本页此时才装配
+         中继、注入完整 DSH 现场（./face-stage.css 的台面 → DSH Web UI）。
+     两种进入方式共用这一页：聊天卡带 sid=<DSH session id> 钉住一段会话；主题、surface
+     凭据与「认面」都走壳脚本那一套（见 app-shell.ts / face-role.ts / host-theme.ts）。
      与 main / default 同一副自举台面（./face-stage.css），ready 后把整幅让给注入的 DSH
      Web UI，由 ui-layout 覆盖层按 surface=stream 只画中列、并由 CSS 摘掉 [data-composer-card]（输入卡）；
      座位（[data-composer-seat]）留着，统计信息行就挂在它里面。
-     本页自己的样式只有一条卡状态行。到本 App 后端路由一律 hana.api.fetch（surface session
-     凭据，见 app-shell.js）。body 上的 data-dshana-shell 是壳脚本的根锚（boot() 取它，缺失则不轮询）。 -->
+     注入的 DSH UI 里带 sid 的会话，app-shell 在顶部再挂一行跟踪态（取 GET /dshana/card-state：
+     只在 tracked / cancelling 期间慢轮询 4s，其余状态停手）。**终态之后不断流**：这段会话多半是
+     用户主动打开来翻看的历史会话，断掉或拒绝重开就等于看不了。
+     body 上的 data-dshana-shell 是壳脚本的根锚（boot() 取它，缺失则什么都不做）。 -->
 <link rel="stylesheet" href="./face-stage.css">
 <style>
-  /* 卡状态行（app-shell 在带 sid 的面顶部挂的一条）：内容就是 App 后端 /dshana/card-state
+  /* 聊天流入口态：一行坐标。样式与台面无关，只为聊天卡那一格服务。 */
+  #dsh-entry {
+    box-sizing: border-box; height: 100%; padding: 10px 14px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  #dsh-entry .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--border, #8a93a3); }
+  #dsh-entry .entry-texts { min-width: 0; flex: 1; }
+  #dsh-entry .entry-label { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #dsh-entry .entry-meta {
+    margin-top: 2px; font-size: 11.5px; color: var(--text-muted, #6B6158);
+    font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* 卡状态行（app-shell 在带 sid 的黑板面顶部挂的一条）：内容就是 App 后端 /dshana/card-state
      返回的那段片段（.state / .dot / .detail），所以那三个类名是卡页的渲染契约。 */
   #dshana-card-strip {
     display: flex; align-items: center; gap: 6px;
@@ -40,6 +56,13 @@
 </style>
 </head>
 <body data-view="idle" data-dshana-shell data-dshana-view="stream">
+  <div id="dsh-entry" hidden>
+    <span class="dot"></span>
+    <div class="entry-texts">
+      <div class="entry-label" data-dsh-entry-label>DSH 会话</div>
+      <div class="entry-meta" data-dsh-entry-meta>正在读取坐标…</div>
+    </div>
+  </div>
   <div id="dsh-stage">
     <div class="loader">
       <span class="wordmark">DSHANA</span>

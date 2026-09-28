@@ -331,14 +331,45 @@ import { followHostTheme } from "#/ui/host-theme.ts";
     });
   }
 
-  // 钉住的会话（只读会话流面用）：卡页带 sid 时钉住那一段，不跟随跨面切换。
-  // 坐标来自 URL 的 ?sid=（工具出卡时写进 route 的查询串）；没有时返回 null，
-  // 表示「跟随跨面共用的当前选中」——黑板上的会话卡（/stream.html 不带 sid）走的就是这条。
-  function readPinnedSession() {
+  // ---- 会话卡的会话坐标（只认这张卡自己的状态，不读应用态全局）----
+  // 两个来源，都在卡自身：
+  //   · route 的 ?sid=（宿主出卡时写进卡面的坐标，工具出卡 / 取出时都跟着过去）；
+  //   · 卡实例态 hana.state 的 sid（同一张卡在聊天流 / 黑板 / 拆窗之间换挂载时的落点）。
+  // **不读也不写应用态全局（dshana.selection）**：那是主卡与 FP 的「当前选中」，
+  // 会话卡属于它钉住的那一段会话，不因别处的选中变化就改绑自己。
+  function routeSessionId() {
     try {
       var sid = new URLSearchParams(location.search).get("sid");
-      return Promise.resolve(sid && sid.trim() ? sid.trim() : null);
+      return sid && sid.trim() ? sid.trim() : "";
+    } catch (e) { return ""; }
+  }
+  function cardStateApi(): any {
+    try { return hana && (hana as any).state && typeof (hana as any).state.get === "function" ? (hana as any).state : null; } catch (e) { return null; }
+  }
+  function readCardState(key: string): Promise<any> {
+    var st = cardStateApi();
+    if (!st) return Promise.resolve(null);
+    try {
+      return Promise.resolve(st.get(key)).then(function (r: any) {
+        return r && typeof r.value === "string" && r.value ? r.value : null;
+      }, function () { return null; });
     } catch (e) { return Promise.resolve(null); }
+  }
+  function writeCardState(key: string, value: unknown): Promise<any> {
+    var st = cardStateApi();
+    if (!st || typeof st.set !== "function") return Promise.resolve();
+    try { return Promise.resolve(st.set(key, value)).catch(function () { /* 忽略 */ }); } catch (e) { return Promise.resolve(); }
+  }
+  // 本卡钉住的会话：route 优先（工具出卡写进卡面的坐标），没有就取卡实例态。
+  function readPinnedSession() {
+    var sid = routeSessionId();
+    if (sid) return Promise.resolve(sid);
+    return readCardState("sid");
+  }
+  // 认到就记进卡实例态：同一张卡换挂载（聊天流 / 黑板 / 拆窗）时 route 之外还有一个落点。
+  function rememberCardSession(sid) {
+    if (sid) return writeCardState("sid", sid);
+    return Promise.resolve();
   }
 
   // 挂到宿主桥（__DSHANA__）上的跨面接口：
@@ -766,7 +797,7 @@ import { followHostTheme } from "#/ui/host-theme.ts";
   }
   // 宿主主题：宿主经 App surface iframe 的 URL 参数给 hana-theme / hana-css /
   // hana-theme-appearance，变更再经 hana.theme.changed 推同一组值。「贴样式表」那一步的
-  // 契约与实现见 src/ui/host-theme.ts（壳页 / 设置页 / 入口卡共用一份）；壳页只额外做面
+  // 契约与实现见 src/ui/host-theme.ts（壳页 / 设置页 / 会话卡共用一份）；壳页只额外做面
   // 相关的事：应用后垫 DSH 首帧底色 token，样式表落地后把主题推给内层桥。
 
   // ---- 注入前先垫上 DSW 自己的底色 token（见 src/lib/seed-tokens.ts）----
@@ -934,6 +965,99 @@ import { followHostTheme } from "#/ui/host-theme.ts";
     scheduleInteractiveRegions();
   }
 
+  // ---- 会话卡：同一页两个挂载态 ----
+  // 判据（宿主契约，APPS_EN.md「Mount-mode table」）：聊天流卡 height=flexible（可随内容长，
+  // 封顶是聊天列）；黑板 / 拆窗 height=fixed（用户拖的尺寸说话）。envelope 还没到时用 surface
+  // context 兜底：聊天流卡可能没有 cardInstanceId 而带 embeddedSessionId。
+  function classifyMount(): "chat" | "canvas" | null {
+    var env: any = null;
+    try {
+      env = hana && (hana as any).envelope && typeof (hana as any).envelope.getSnapshot === "function"
+        ? (hana as any).envelope.getSnapshot() : null;
+    } catch (e) { env = null; }
+    var mode = env && env.height ? env.height.mode : null;
+    if (mode === "flexible") return "chat";
+    if (mode === "fixed") return "canvas";
+    var ctx: any = null;
+    try {
+      ctx = hana && hana.surface && typeof hana.surface.getContext === "function"
+        ? hana.surface.getContext() : null;
+    } catch (e) { ctx = null; }
+    if (ctx) {
+      if (ctx.cardInstanceId) return "canvas";
+      if (typeof ctx.embeddedSessionId === "string" && ctx.embeddedSessionId) return "chat";
+    }
+    return null;
+  }
+
+  /** 聊天流态：只画一行入口（会话坐标），不装配 DSH、不打任何后端请求。 */
+  function renderSessionEntry() {
+    document.body.setAttribute("data-view", "entry");
+    var stage = document.getElementById("dsh-stage");
+    if (stage) stage.hidden = true;
+    var entry = document.getElementById("dsh-entry");
+    if (entry) entry.hidden = false;
+    var sid = routeSessionId(), tid = "", cwd = "";
+    try {
+      var q = new URLSearchParams(location.search);
+      tid = String(q.get("tid") || "").trim();
+      cwd = String(q.get("cwd") || "").trim();
+    } catch (e) { /* 忽略：没有坐标就按空处理 */ }
+    var labelEl = document.querySelector("[data-dsh-entry-label]");
+    var metaEl = document.querySelector("[data-dsh-entry-meta]");
+    if (labelEl) labelEl.textContent = sid ? "DSH 会话 " + sid : "DSH 会话";
+    if (metaEl) {
+      var parts: string[] = [];
+      if (cwd) parts.push(cwd);
+      if (tid) parts.push("task " + tid.slice(0, 12));
+      metaEl.textContent = parts.length ? parts.join(" · ") : "这张卡没有带会话坐标";
+    }
+    // route 没带 sid 时从卡实例态补一次（同一张卡换挂载后的落点）
+    if (!sid && labelEl) {
+      var labelNode = labelEl;
+      readCardState("sid").then(function (s) {
+        if (s) labelNode.textContent = "DSH 会话 " + s;
+      }, function () { /* 忽略 */ });
+    }
+    // 入口行不注入、不轮询：取出到黑板 / 拆窗时页面重新挂载，那时才装配 DSH。
+  }
+
+  /** 认出挂载态后分派：聊天流 = 入口行；其余 = 黑板 / 拆窗的 DSH 现场。 */
+  function beginStreamCard() {
+    // 认到 sid 就记进卡实例态（两个挂载态都记）：同一张卡换挂载时 route 之外还有落点。
+    rememberCardSession(routeSessionId());
+    var mode = classifyMount();
+    if (mode === "chat") { renderSessionEntry(); return; }
+    if (mode === "canvas") { streamRuntime(); return; }
+    // envelope 还没到：订一次变更，再留一条短兜底。兜底按黑板走——黑板卡只显示入口行
+    // 等于没内容，而聊天卡多认一会儿只是多停一帧 loader，代价小。
+    var settled = false;
+    var settle = function () {
+      if (settled) return;
+      settled = true;
+      if (classifyMount() === "chat") renderSessionEntry();
+      else streamRuntime();
+    };
+    try {
+      if (hana && (hana as any).envelope && typeof (hana as any).envelope.subscribe === "function") {
+        var off = (hana as any).envelope.subscribe(function () {
+          try { if (typeof off === "function") off(); } catch (e) { /* 忽略 */ }
+          settle();
+        });
+      }
+    } catch (e) { /* SDK 未提供则只走兜底 */ }
+    setTimeout(settle, 1200);
+  }
+
+  /** 黑板 / 拆窗：装配中继、注入 DSH 现场。与主卡 / FP 同一套轮询与共享快照。 */
+  function streamRuntime() {
+    window.addEventListener("pagehide", function () {
+      if (injected.transport) { try { injected.transport.dispose(); } catch (e) { /* 忽略 */ } }
+      try { dropShared(); } catch (e) { /* 忽略 */ }
+    }, { once: true });
+    poll();
+  }
+
   // ---- 启动 ----
   function boot() {
     var root = $("[data-dshana-shell]");
@@ -946,7 +1070,10 @@ import { followHostTheme } from "#/ui/host-theme.ts";
     function begin() {
       if (began) return;
       began = true;
-      isSidebar = resolveView(root) === "sidebar";
+      var view = resolveView(root);
+      isSidebar = view === "sidebar";
+      // 会话卡（stream 面）先认挂载态：聊天流里只画入口行，取出到黑板 / 拆窗才装配 DSH 现场。
+      if (view === "stream") { beginStreamCard(); return; }
       // FP 是投影面：owner（主卡）一写快照就立刻跟随（事件驱动，不等自己的定时器），
       // 并先用快照渲染首屏（免得空等到第一次定时器）。owner 不在场时下面的 poll 会自己取。
       if (isSidebar) {

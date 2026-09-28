@@ -34,7 +34,7 @@ import type { SelectOption } from "@hana/plugin-components/settings";
 import "@hana/plugin-components/settings.css";
 import { followHostTheme } from "#/ui/host-theme.ts";
 
-// ---- 主题跟随（与壳页、入口卡同一姿势，实现在 src/ui/host-theme.ts）----
+// ---- 主题跟随（与壳页同一姿势，实现在 src/ui/host-theme.ts）----
 // 本页要跟着宿主明暗改 color-scheme（原生控件与滚动条跟宿主，不跟系统），故传 syncColorScheme。
 
 // ---- 小工具 ----
