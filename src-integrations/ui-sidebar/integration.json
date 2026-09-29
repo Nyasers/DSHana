@@ -5,7 +5,7 @@
   "files": [
     {
       "path": "src/client/SidebarRoot.tsx",
-      "upstreamSha256": "facfd82e3b46d036b63ea31a4927a76234d56508c9f01c76b7c96b733abb8451"
+      "upstreamSha256": "51d95e300ed74cdfdeb2c7f7daa8b32324af95071787c0e6d3905b450c9e4951"
     },
     {
       "path": "src/client/SidebarRoot.module.css",
