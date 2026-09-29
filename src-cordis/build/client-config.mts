@@ -29,7 +29,7 @@
 // 消费方：src-cordis/build.ts（package.json build:cordis）编排。
 // tsdown 为 devDep（构建工具不进运行时依赖）。
 import { build } from "tsdown";
-import { dirname, join, resolve } from "node:path";
+import { dirname, extname, join, resolve } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 
@@ -100,6 +100,46 @@ export function scopedClassName(id, file, local, pkgDir) {
 /** 一条 class 名的记账（class 名 → 生成它的源文件）：构建期的类名唯一性闸读它。 */
 type CssClassRecord = { className: string; local: string; scope: string; file: string };
 
+// url(...) 整段（含引号与内层空白）。载荷不是 class 名，扫描/改写前必须整段摘出去。
+const URL_RE = /url\(\s*(['"]?)([^'")]*)\1\s*\)/gi;
+
+// 可内联资产的扩展名 → MIME。只列会出现在样式里的图/字。
+const ASSET_MIME = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".svg": "image/svg+xml",
+  ".woff2": "font/woff2",
+  ".woff": "font/woff",
+  ".ttf": "font/ttf",
+  ".otf": "font/otf",
+};
+
+/**
+ * 把一条 url(...) 转成可直接用的 data URI。
+ * @param {string} full - 整段 url(...) 文本。
+ * @param {string} quote - 原引号（无引号则是空串）。
+ * @param {string} raw - 载荷。
+ * @param {string} cssFile - 该样式文件的绝对路径（相对载荷的解析基准）。
+ * @returns {string} 可用的 url(...)；外部/绝对/data/锚点、或文件缺失时原样返回。
+ */
+function inlineAssetUrl(full, quote, raw, cssFile) {
+  const url = String(raw).trim();
+  // 外部与绝对引用不属本地资产；空载荷（@supports 的能力探测写法 url('')）也原样留。
+  if (url === "" || /^(?:data:|https?:|\/\/|#|\/)/i.test(url)) return full;
+  const mime = ASSET_MIME[extname(url).toLowerCase()];
+  if (mime === undefined) return full;
+  const abs = resolve(dirname(cssFile), url);
+  if (!existsSync(abs)) {
+    // 宁可留一条看得见的坏引用也不静默改坏（rc.2 的 running-whale 就是这么整只消失的）。
+    console.warn(`[hanako-css-modules] ${cssFile}: 资产缺失，样式里留一条取不到的引用 —— ${url}`);
+    return full;
+  }
+  return "url(" + quote + "data:" + mime + ";base64," + readFileSync(abs).toString("base64") + quote + ")";
+}
+
 // css-modules 虚拟模块源码：class 名映射（默认导出）+ 样式文本注入 style 标签（幂等）。
 // 类名与官方产物等价：官方是 lightningcss 的 [hash]_[local]，本链没有哈希，就用包身份 +
 // 模块身份自己造一段唯一的键（见 scopedClassName）。关键是唯一性：多个被重建的包共用一条
@@ -109,11 +149,20 @@ type CssClassRecord = { className: string; local: string; scope: string; file: s
 // 注入点 = 模块 materialization（factory 执行）——官方 css-modules 同款时机
 // （claimStyles 记账 style[data-plugin]）。
 function cssModuleSource(id, fileId, css, emitted: CssClassRecord[] = [], pkgDir) {
+  // url() 载荷不是 class 名：rc.2 的 ChatView 写了 mask: url('./running-whale@2x.png')，
+  // 载荷里的「.png」会被 tokenRe 当成 class 名改写，把贴图名改成不存在的文件（鲸鱼整只消失）。
+  // 所以先整段摘出去，改写完再放回；顺手把本地资产内联成 data URI——注入的是 <style> 文本，
+  // 相对 URL 按**页面**解析，而资源既没随包发也没在页面根上提供，不内联必然取不到。
+  const urls: string[] = [];
+  const cssNoUrls = css.replace(URL_RE, (full, quote, raw) => {
+    urls.push(inlineAssetUrl(full, quote, raw, fileId));
+    return "\u0001" + String(urls.length - 1) + "\u0001";
+  });
   const locals = new Set<string>();
   const prefixed: Record<string, string> = {};
   const tokenRe = /\.([A-Za-z_][A-Za-z0-9_-]*)/g;
   let m;
-  while ((m = tokenRe.exec(css)) !== null) locals.add(m[1]);
+  while ((m = tokenRe.exec(cssNoUrls)) !== null) locals.add(m[1]);
   const classMap: Record<string, string> = {};
   for (const local of locals) {
     const pname = scopedClassName(id, fileId, local, pkgDir);
@@ -122,10 +171,10 @@ function cssModuleSource(id, fileId, css, emitted: CssClassRecord[] = [], pkgDir
     // 记账（class 名 → 生成它的源文件）：闸据此判重名，不去扫产物文本，免掉压缩后的假阳性。
     emitted.push({ className: pname, local, scope: cssScopeOf(id), file: fileId });
   }
-  // 仅改写已知 local class 选择器（保留 data 属性/伪类等非 class 语法；本包 css 无
-  // url()/带点字符串内容，tokenRe 替换安全）
-  const rewritten = css.replace(/\.([A-Za-z_][A-Za-z0-9_-]*)/g, (full, name) =>
-    prefixed[name] ? "." + prefixed[name] : full);
+  // 仅改写已知 local class 选择器（保留 data 属性/伪类等非 class 语法；url() 已摘出，
+  // 余下的「带点字符串」不在本包样式里）
+  const rewritten = cssNoUrls.replace(/\.([A-Za-z_][A-Za-z0-9_-]*)/g, (full, name) =>
+    prefixed[name] ? "." + prefixed[name] : full).replace(/\u0001(\d+)\u0001/g, (_m, i) => urls[Number(i)]);
   const tagId = styleTagId(id, fileId);
   return [
     "const css = " + JSON.stringify(rewritten) + ";",
