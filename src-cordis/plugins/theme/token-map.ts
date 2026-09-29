@@ -115,6 +115,11 @@ export const TOKEN_MAP: ReadonlyArray<AdapterRule> = [
   ["--dsw-alias-markdown-tag", "--accent-light"],
   ["--dsw-alias-markdown-placeholder", "--accent-light"],
   ["--dsw-alias-markdown-citation", "--bg-card"],
+  // turn-trigger 是会话里那个收/展回合的触发节点（TurnTriggerNodeView）：它的静态底上游就
+  // 指到 markdown-code-block，跟紧同一档；悬停那格上游指到 interactive-bg-hover，本表那格
+  // 接的是 --accent-light（悬停面的统一判法），跟齐不另起。
+  ["--dsw-alias-turn-trigger-bg", { of: "--bg", shift: 8 }],
+  ["--dsw-alias-turn-trigger-bg-hover", "--accent-light"],
   // state 语义色
   ["--dsw-alias-state-business-primary", "--accent"],
   ["--dsw-alias-state-business-tertiary", "--accent-light"],
@@ -229,6 +234,10 @@ export const TOKEN_MAP: ReadonlyArray<AdapterRule> = [
   ["--dsw-alias-menu-icon", "--text-light"],
   // menu-surface-fill 是弹出菜单的底，与 --dsw-specific-menu 同源（上游把后者指到它），归宿一致。
   ["--dsw-menu-surface-fill", "--sidebar-bg"],
+  // menu-group-header-fill 是分组标题吸顶（data-stuck）时的底：上游给的是同一支白更不透明的
+  // 一档（0.94 对菜单底的 0.58），要的正是「遮住底下滚过去的内容」。本表的菜单面本来就是实色，
+  // 两格落同一处即可，也恰好满足吸顶要不透明的本意。
+  ["--dsw-alias-menu-group-header-fill", "--sidebar-bg"],
 ];
 
 /**
