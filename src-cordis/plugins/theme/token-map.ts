@@ -183,6 +183,11 @@ export const TOKEN_MAP: ReadonlyArray<AdapterRule> = [
   ["--dsw-alias-fill-l2", { of: "--bg", shift: 8 }],
   ["--dsw-alias-fill-tsp-secondary", { of: "--bg", shift: 8 }],
   ["--dsw-alias-label-quaternary", "--text-muted"],
+  // 思考态那行的「深度求索中」：上游是自带的一支蓝（deep-diving），与它的扫光
+  // （deep-diving-shimmer，同色反向偏一档）成对。接宿主强调色时两格一起接，否则扫过去
+  // 那一下会串成另一个色。shimmer 的 shift 30 方向与上游的配对一致（浅色主题压深、深色提亮）。
+  ["--dsw-alias-label-deep-diving", "--accent"],
+  ["--dsw-alias-label-deep-diving-shimmer", { of: "--accent", shift: 30 }],
   ["--dsw-hovercard-bg", "--bg-card"],
 
   // ---- 卡片填充色：调色板值被当成随主题走的层次位 ----
@@ -279,8 +284,8 @@ export const PASSTHROUGH: ReadonlyArray<{ match: RegExp; why: string }> = [
     why: "文档预览面：深底 + 浅字的成对配色（浅色主题下也是深色预览区）。只接背景会白底白字，不拆对；正文选区（bg-document-selection）就压在这层深底上，同一个面同一个判法。",
   },
   {
-    match: /^--dsw-alias-label-(shimmer|deep-diving|deep-diving-shimmer)$/,
-    why: "思考态标签与其扫光是配对关系：扫光是同色浅化到半透明的扫光值（ChatView 里 label-shimmer 直接指到 deep-diving-shimmer）。宿主色位不带 alpha，拆开接会让字与扫光不同色，成对保持 DSH 原生。",
+    match: /^--dsw-alias-label-shimmer$/,
+    why: "通用扫光叠色（压在文字上的一次高光，浅色主题中性深、深色主题中性浅），别处也在用，动的面比思考态那行大得多，先保持 DSH 原生；思考态那行自己把 shimmer 重指到了 deep-diving-shimmer，那一格已在本表接上。",
   },
   {
     match: /^--dsw-alias-switch-thumb$/,
