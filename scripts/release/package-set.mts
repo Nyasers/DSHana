@@ -103,7 +103,8 @@ export interface DshPackageSet {
 }
 
 /** `@dshana/*` 包的所在目录（相对仓库根），按目录名排。 */
-const DSHANA_DIR = path.join("dist", "cordis");
+/** 我们自己那批子插件的**源码**目录（@dshana 一族的身份就在这里的 package.json）。 */
+const DSHANA_PLUGINS_DIR = path.join("src-cordis", "plugins");
 
 /** 算一个文件的 npm 形 integrity。 */
 export function integrityOfFile(absolute: string): { bytes: number; integrity: string } {
@@ -174,11 +175,15 @@ export function deliveredAppBootDir(key: string): string {
 /**
  * 我们自己的 `@dshana/*` 根集条目（带版本）。
  *
- * 它们是我们自己的构建产物（dist/cordis），不来自 T1 包集，所以在这里记版本而不进 packages。
+ * 读**源码**（`src-cordis/plugins/<包名>/package.json`）而不读构建产物（`dist/cordis`）：那份身份
+ * 就是构建组装时拷过去的原件（见 src-cordis/build.ts），而派生文件不该依赖构建产物——否则
+ * 干净检出上 `derive` / `derive --check` 会无端要求先跑一次 `build`（CI 上这就是个死锁：
+ * 清单对拍要 dist/cordis，而 build 排在它后面）。版本由 derive 的 cordis 任务同批同步，
+ * TASKS 里它在 package-set 之前，写回与校验两条路径读到的都是同一份。
  */
 function dshanaPackageEntries(): RootEntry[] {
-  const dir = path.join(ROOT, DSHANA_DIR);
-  if (!fs.existsSync(dir)) throw new Error(`${DSHANA_DIR} 不存在：先跑 pnpm run build`);
+  const dir = path.join(ROOT, DSHANA_PLUGINS_DIR);
+  if (!fs.existsSync(dir)) throw new Error(`${DSHANA_PLUGINS_DIR} 不存在：源码树不完整`);
   const out: RootEntry[] = [];
   for (const entry of fs.readdirSync(dir).sort()) {
     const manifest = path.join(dir, entry, "package.json");
@@ -192,7 +197,7 @@ function dshanaPackageEntries(): RootEntry[] {
       });
     }
   }
-  if (!out.length) throw new Error(`${DSHANA_DIR} 下没有 @dshana/* 包：先跑 pnpm run build`);
+  if (!out.length) throw new Error(`${DSHANA_PLUGINS_DIR} 下没有 @dshana/* 包：源码树不完整`);
   return out;
 }
 
