@@ -14,7 +14,7 @@ import { errText } from "../shared/err-text.mts";
 
 // 收集目录下全部 .js 的 file:// URL（rspack 会把 import.meta.url 静态化为构建机源码
 // 绝对路径；构建后产物出现这些字面量一律替换回 import.meta.url——分发路径失效根因）。
-// 产物侧（rewriter/terser/assert）同时覆盖 .js 与 .mjs：受管 runtime 入口 dist/runtime/
+// 产物侧（rewriter/terser/assert）同时覆盖 .js 与 .mjs：受管 runtime 入口 .cache/dist/runtime/
 // dsh-host.mjs 也是 rspack ESM 产物，同样存在 import.meta.url 静态化问题（step 2）。
 export function collectSource(urlRoot) {
   const map = new Map();
@@ -75,7 +75,7 @@ export async function extraMinify(root) {
     const before = Buffer.byteLength(code, "utf8");
     let out;
     try {
-      // .html 是静态壳页（React 不参与，它们是原样拷进 dist 的）：只去注释与收空白。
+      // .html 是静态壳页（React 不参与，它们是原样拷进交付目录的）：只去注释与收空白。
       out = file.endsWith(".html") ? await minifyHtml(code) : await minifyJs(code);
     } catch (err) {
       throw new Error("extra minify 失败（" + file + "）：" + errText(err));

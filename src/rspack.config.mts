@@ -3,7 +3,7 @@
 //
 // src/rspack.config.mts — dshana 主 bundle 构建配置（src 域：随源码根，见布局原则\n// 「领域专用脚本随各自源码」；.mjs 不被 collectSource 收集，不随 bundle 打包）
 // 与 hana-remote-dev 的 rspack.config.mts 对齐，按 dshana 实际适配：
-//   - 单入口 src/index.js → 单产物 dist/index.js（生命周期 + dshana 工具 + lib + 路由全部收敛）
+//   - 单入口 src/index.js → 单产物 .cache/dist/index.js（生命周期 + dshana 工具 + lib + 路由全部收敛）
 //   - 输出 ESM module（纯 ESM 无原生模块，不需要 CJS+loadBundle 沙箱；宿主直接 import）
 //   - library.type=module：入口具名导出（apply）真 emit 成 ESM export，宿主直接 import
 //   - src/assets 只有 icon.png（App 图标，由 build.ts 原样 copy，不进 bundle），本配置不需要
@@ -13,8 +13,9 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { DIST_DIR } from "../scripts/shared/paths.mts";
+
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const DIST_DIR = path.join(root, "dist");
 
 export default {
   name: "dshana",

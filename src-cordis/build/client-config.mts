@@ -220,7 +220,7 @@ function createCssModulePlugin(id, emitted: CssClassRecord[] = [], pkgDir) {
 /**
  * 打一个包的 client 半（closure-factory 自注册 bundle）。
  * @param {object} opts - { id, pkgDir, outDir, externals, defines }：id = 包名（注册与
- *   注入 style 标记用）；pkgDir = 包源码目录（entry = pkgDir/client.js）；outDir = dist
+ *   注入 style 标记用）；pkgDir = 包源码目录（entry = pkgDir/client.js）；outDir = 产物目录
  *   目标（与 rspack 服务端半同目录共存，只写 client.js）；externals = loader 模块表
  *   require 解析清单（默认 react 系）；defines = 包级 tsdown define 常量（合并进环境
  *   默认 define）。

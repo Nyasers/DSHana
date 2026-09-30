@@ -20,7 +20,7 @@ export const PRODUCT_PACKAGE_KEYS = ["name", "type", "version", "dependencies"];
  * 交付树 package.json 校验：字段白名单 + 版本一致 + type: module。
  * 那份文件是 packaging/package.json（手写实体，version 由 derive 的 product-package 任务同步），
  * pack 复制成包根的 package.json。它被改坏/抄了旧版就直接拒包。
- * @param outDir - 交付目录（dist 或组装树）
+ * @param outDir - 交付目录（.cache/dist 或组装树）
  * @param version - 本次出包的版本
  */
 export function assertProductPackage(outDir, version) {
@@ -48,37 +48,40 @@ export function assertProductPackage(outDir, version) {
 }
 
 /**
- * cordis 子插件包 version 一致性校验（防回归，与 manifest 校验对称）：子插件（provider /
+ * cordis 子插件与 roster patch 的产物断言（防回归，与 manifest 校验对称）：子插件（provider /
 theme / clipboard）version 与主 package.json 同批由 derive/version（pnpm version 发版流程）
-同步，pack 时读 dist 产物校验一致——手改/漏同步即出包版本漂移。
- * roster patch（dist/cordis.patch.yml）不是包，只校验在位。
+同步，pack 时读产物校验一致——手改/漏同步即出包版本漂移。
+ * roster patch（.cache/dist/cordis.patch.yml）不是包，只校验在位；子插件住 .cache/cordis，
+ * 与它不同源，两份在交付布局里各就各位。
+ * @param cordisDir 子插件产物目录（.cache/cordis）
+ * @param patchFile roster patch 文件（.cache/dist/cordis.patch.yml）
+ * @param version 本次出包的版本
  */
-export function assertCordisDistVersions(outDir, version) {
-  const cordisRoot = join(outDir, "cordis");
+export function assertCordisArtifacts(cordisDir, patchFile, version) {
   // cordis 未组装 = 构建未跑/被清：fail-closed（校验放行空产物会让缺插件的包过包）
-  if (!fs.pathExistsSync(cordisRoot)) {
-    throw new Error("cordis 产物缺失（dist/cordis 不存在）：先跑 pnpm run build 再打包");
+  if (!fs.pathExistsSync(cordisDir)) {
+    throw new Error(`cordis 产物缺失（${cordisDir} 不存在）：先跑 pnpm run build 再打包`);
   }
-  if (!fs.pathExistsSync(join(outDir, "cordis.patch.yml"))) {
-    throw new Error("roster patch 缺失（dist/cordis.patch.yml 不存在）：先跑 pnpm run build 再打包");
+  if (!fs.pathExistsSync(patchFile)) {
+    throw new Error(`roster patch 缺失（${patchFile} 不存在）：先跑 pnpm run build 再打包`);
   }
   // 完整性：子插件全部存在且 package.json 版本一致——缺失/部分产物（含 count=0）
-  // 一律拒包，防 build 失败后残留部分 dist 被误打包。
+  // 一律拒包，防 build 失败后残留部分产物被误打包。
   const required = [
     "clipboard", "provider", "theme",
   ];
   let count = 0;
   for (const name of required) {
-    const pj = join(cordisRoot, name, "package.json");
+    const pj = join(cordisDir, name, "package.json");
     if (!fs.pathExistsSync(pj)) {
       throw new Error(
-        `cordis 产物不完整：缺少 ${name}/package.json（dist/cordis 下）——先跑 pnpm run build 再打包`,
+        `cordis 产物不完整：缺少 ${name}/package.json（${cordisDir} 下）——先跑 pnpm run build 再打包`,
       );
     }
     const j = fs.readJsonSync(pj);
     if (j.version !== version) {
       throw new Error(
-        `版本不一致：cordis 包 ${join("cordis", name, "package.json")} version ${j.version} ≠ package.json ${version}（跑 node scripts/derive/index.mts 同步后再打包）`,
+        `版本不一致：cordis 包 ${join(name, "package.json")} version ${j.version} ≠ package.json ${version}（跑 node scripts/derive/index.mts 同步后再打包）`,
       );
     }
     count += 1;
@@ -90,7 +93,7 @@ export function assertCordisDistVersions(outDir, version) {
 export function assertUiTree(outDir) {
   const uiDir = join(outDir, "ui");
   if (!fs.pathExistsSync(uiDir)) {
-    throw new Error("App ui/ 静态树缺失（dist/ui 不存在）：src/ui 未随 build 拷贝——先跑 pnpm run build 再打包");
+    throw new Error("App ui/ 静态树缺失（.cache/dist/ui 不存在）：src/ui 未随 build 拷贝——先跑 pnpm run build 再打包");
   }
   for (const rel of ["main.html", "sidebar.html", "app-shell.js"]) {
     if (!fs.pathExistsSync(join(uiDir, rel))) {

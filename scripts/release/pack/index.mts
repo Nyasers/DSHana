@@ -2,12 +2,12 @@
 // Copyright (c) 2026 Nyasers
 //
 // scripts/release/pack/index.mts — dshana 自包含打包（适配单 bundle 收敛架构；构建脚本不随源码编译）
-// 交付物 = 代码 bundle（dist/）+ cordis 插件 + ui/ 静态树 + **物化后的生产依赖树**
+// 交付物 = 代码 bundle（.cache/dist/）+ cordis 子插件包（.cache/cordis/）+ **物化后的生产依赖树**
 // （含 win32/darwin/linux × x64/arm64 预编译资产），安装即用、无需 npm install。
 // 依赖物化形态对齐样例 hana-dsh：hoisted 布局（顶层真实目录、无软链接——软链进 zip 跨机
 // 解压即断）。物化在 .tmp/pkg-root/ 隔离进行，不触碰仓库 node_modules。
 // 流程：复制交付清单（prepackage 钩子已先行 build）→ 物化生产依赖 → 断言多平台资产 → zip → SHA256。
-// 用法：pnpm run package --target <名字>（prepackage 自动前置 build；单独 node scripts/release/pack/index.mts 要求 dist/ 已构建）
+// 用法：pnpm run package --target <名字>（prepackage 自动前置 build；单独 node scripts/release/pack/index.mts 要求 .cache/dist 已构建）
 // 产出：releases/dshana-v<version>[-<target>].zip + .sha256。**zip 根 = 包根**：manifest.json、
 //   index.js、node_modules/、ui/ 等全部在 zip 根级，不得套一层目录（宿主安装时在包根读 manifest.json）。
 // 两个临时目录的分工（都在 .tmp/ 下，起手清残留、用完即清、收尾由 postpackage 钩子清）：
@@ -15,7 +15,7 @@
 //     交付面自带的三件（packaging/package.json + packaging/pnpm-lock.yaml + 按目标替换过
 //     supportedArchitectures 的 pnpm-workspace.yaml）落进去跑 `pnpm install --prod --frozen-lockfile`。
 //     隔离在 .tmp 下，仓库自身的 node_modules 与锁文件不被污染。
-//   · .tmp/pkg：交付**组装台**。只放要进包的东西（dist/ + 物化依赖树 + cordis + ui + manifest），
+//   · .tmp/pkg：交付**组装台**。只放要进包的东西（.cache/dist/ + .cache/cordis/ + 物化依赖树），
 //     不带 pnpm 的中间物（lockfile、workspace yaml、.modules.yaml 这些是构建输入，不是交付物）。
 //     把「工位」与「组装台」分开，就是不让构建输入混进安装包；组装出包后立即删。
 //
@@ -29,11 +29,12 @@ import { ZipArchive } from "archiver";
 import fs from "fs-extra";
 
 import { errText } from "../../shared/err-text.mts";
+import { CORDIS_DIR, DIST_DIR } from "../../shared/paths.mts";
 import { ROOT } from "../../shared/root.mts";
-import { assertCordisDistVersions, assertProductPackage, assertUiTree } from "./assert.mts";
+import { assertCordisArtifacts, assertProductPackage, assertUiTree } from "./assert.mts";
 import { declareInstallationPlugins } from "./bundle-deps.mts";
 import { STAGING_ROOT, materializeProdDeps } from "./materialize.mts";
-import { minifyDistStatics } from "./minify.mts";
+import { minifyCordisStatics } from "./minify.mts";
 import { applyIntegrations } from "./overlays.mts";
 import { failUsage, targetSpec } from "./targets.mts";
 
@@ -50,20 +51,20 @@ if (version !== manifestVersion)
     `版本不一致：package.json ${version} ≠ manifest.json ${manifestVersion}（manifest 未同步，跑 node scripts/derive/index.mts 同步后再打包）`,
   );
 
-// 1. 静态项复制进 dist —— dist 即完整交付目录（bundle + manifest + skills + cordis 插件），
+// 1. 静态项复制进交付目录 —— 它即 App 安装态（bundle + manifest + skills + roster patch），
 //    包根结构 = 标准插件形态（根 index.js + routes/ 壳，无 dist 这层目录）。
 //    app/（card.js/css 已 asset/source 内联进 bundle）与 routes/（壳由 build 生成）不再复制。
 const staticItems = [
   "NOTICE",
   "THIRD_PARTY_NOTICES.md",
   // manifest.json 与 skills 已随 src 域（src/manifest.json、src/skills/，build:src 产出
-  // dist 副本），不再经根级静态复制
+  // 交付目录副本），不再经根级静态复制
   // 注：package.json 也不在清单里：仓库那份带 scripts/devDependencies/packageManager/imports
   // （构建入口），交付面那份（packaging/package.json，单独复制）才是包根要的——见 packaging/README.md。
   // 注：pnpm-workspace.yaml / pnpm-lock.yaml 不随包——安装侧不执行任何 pnpm install
   // （依赖已物化进包），两份文件在本流程里没有消费方
 ];
-const distDir = join(ROOT, "dist");
+const distDir = DIST_DIR;
 for (const item of staticItems) {
   const src = join(ROOT, item);
   if (!fs.pathExistsSync(src)) throw new Error(`静态项不存在：${item}`);
@@ -88,7 +89,7 @@ for (const item of staticItems) {
 fs.copySync(join(ROOT, "packaging", "package.json"), join(distDir, "package.json"));
 
 // 1.5 / 1.6) 产物断言：cordis 包版本与完整性、交付树 package.json、App ui/ 静态树（缺失即拒包）
-assertCordisDistVersions(distDir, version);
+assertCordisArtifacts(CORDIS_DIR, join(distDir, "cordis.patch.yml"), version);
 assertProductPackage(distDir, version);
 assertUiTree(distDir);
 
@@ -116,8 +117,8 @@ const spec = (() => {
   return found;
 })();
 
-// 2. 静态资产压缩（terser JS 纯语法级，覆盖写回 dist 副本）
-await minifyDistStatics(distDir);
+// 2. 静态资产压缩（terser JS 纯语法级，覆盖写回交付目录副本）
+await minifyCordisStatics(CORDIS_DIR);
 
 // 3+4) 组装 → zip → SHA256（单目标；发布产物归档 releases/）
 //    archiver 纯 Node 跨平台 zip（对齐 hana-remote-dev）：不用 tar -a -cf——
@@ -151,17 +152,15 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
   });
   applyIntegrations(join(pkgDir, "node_modules"));
   // @dshana 子插件落进安装树的 node_modules（与 @deepseek-ai/* 同锚点）：DSH 的 runtime 解析模式
-  // 从安装树 + bundle 依赖图算解析代、不建链接，所以插件不能住在 cordis/ 那种安装树外的位置。
-  // dist/ 那份原样拷贝已在包根留下 cordis/，这里把它换成 node_modules/@dshana/。
-  // roster patch（dist/cordis.patch.yml）已随 dist 复制到包根，runtime 经 patchFiles 传它。
-  const cordisDist = join(distDir, "cordis");
-  if (!fs.pathExistsSync(cordisDist)) throw new Error("dist/cordis 缺失：先跑 pnpm run build 再打包");
-  fs.removeSync(join(pkgDir, "cordis"));
-  fs.copySync(cordisDist, join(pkgDir, "node_modules", "@dshana"));
+  // 从安装树 + bundle 依赖图算解析代、不建链接，插件因此不能住在安装树外的位置。它们本来就不在
+  // 交付面里（产物在 .cache/cordis），到这一步才按交付布局落进 node_modules/@dshana。
+  // roster patch 则随交付面原样到包根（受管 runtime 按 <installRoot>/cordis.patch.yml 读它）。
+  if (!fs.pathExistsSync(CORDIS_DIR)) throw new Error(".cache/cordis 缺失：先跑 pnpm run build 再打包");
+  fs.copySync(CORDIS_DIR, join(pkgDir, "node_modules", "@dshana"));
   for (const rel of ["cordis.patch.yml", join("node_modules", "@dshana", "provider", "index.js")]) {
     if (!fs.pathExistsSync(join(pkgDir, rel))) throw new Error(`包内产物缺失：${rel}（拒绝出包）`);
   }
-  console.log("[pack] @dshana 子插件落进 node_modules/@dshana，包根不再有 cordis/")
+  console.log("[pack] cordis 产物就位（子插件 -> node_modules/@dshana，roster patch 随交付面到包根）")
   // 只躺在 node_modules 里不够：DSH 按「安装树 + 被选中 bundle 的依赖图」算解析代，真机上
   // profile 在数据目录里向上解析走不到安装树，得由被选中 bundle 认领才进解析代（见 bundle-deps.mts）。
   declareInstallationPlugins(join(pkgDir, "node_modules"));

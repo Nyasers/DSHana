@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Nyasers
 //
 // src/runtime/rspack.config.mts — 受管 runtime 入口 bundle 构建配置（runtime/ 域）
-// 产物：dist/runtime/dsh-host.mjs（ESM，宿主 ctx.runtime.start({ runtime:"node", entry:
+// 产物：.cache/dist/runtime/dsh-host.mjs（ESM，宿主 ctx.runtime.start({ runtime:"node", entry:
 // "runtime/dsh-host.mjs" }) 直接以 node 执行；entry 相对 App 安装根）。
 //
 // 打包纪律：
@@ -20,8 +20,9 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { DIST_DIR } from "../../scripts/shared/paths.mts";
+
 const root = path.dirname(path.dirname(path.dirname(fileURLToPath(import.meta.url)))); // src/runtime/ → 仓库根
-const DIST_DIR = path.join(root, "dist");
 
 export default {
   name: "dshana-runtime",

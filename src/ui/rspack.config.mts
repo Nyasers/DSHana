@@ -2,10 +2,10 @@
 // Copyright (c) 2026 Nyasers
 //
 // src/ui/rspack.config.mts — 页面脚本 bundle 构建配置（ui 域）
-// 产物：dist/ui/app-shell.js（main / default / sidebar 壳页，ESM，
-// `<script type="module" src="./app-shell.js">`）、dist/ui/stream.js（会话卡轻半，
-// stream.html 引它）、dist/ui/settings.js（App 自己的设置页脚本），
-// 以及被 import 的样式 dist/ui/<name>.css（页面用 <link> 引入）。
+// 产物：.cache/dist/ui/app-shell.js（main / default / sidebar 壳页，ESM，
+// `<script type="module" src="./app-shell.js">`）、.cache/dist/ui/stream.js（会话卡轻半，
+// stream.html 引它）、.cache/dist/ui/settings.js（App 自己的设置页脚本），
+// 以及被 import 的样式 .cache/dist/ui/<name>.css（页面用 <link> 引入）。
 // 会话卡的重型半（stream-stage.tsx：React + DSH 注入）是 stream-entry.ts 里**动态 import()** 的
 // 结果，rspack 按需切出独立 chunk（output.chunkFilename）——聊天流态的卡只解析 stream.js，
 // 永远不取这个 chunk。chunk 名走相对路径（页面在 /api/apps/<id>/ui/stream.html，静态树同层），
@@ -14,7 +14,7 @@
 // 打包纪律：
 //   - 浏览器 SDK @hana/plugin-sdk 与组件库 @hana/plugin-components 从 devDependencies 解析
 //     （file:vendor/hana-app-sdk/*.tgz），由 rspack 静态打进产物。浏览器 ESM 不解析裸包名
-//     （宿主不注入 importmap），故不由页面裸 import、也不在 dist/ui 另放一份 vendored
+//     （宿主不注入 importmap），故不由页面裸 import、也不在 .cache/dist/ui 另放一份 vendored
 //     拷贝——依赖来源单一（包管理器），产物自包含。
 //   - target: "web"（无 node 内置、无 node polyfill）；源码是纯浏览器 ESM（无 node 依赖）。
 //   - .ts/.tsx 交给内置 swc 转译，JSX 走 automatic runtime（源码不需要 import React）。
@@ -23,8 +23,9 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { DIST_DIR } from "../../scripts/shared/paths.mts";
+
 const root = path.dirname(path.dirname(path.dirname(fileURLToPath(import.meta.url)))); // src/ui/ → 仓库根
-const DIST_DIR = path.join(root, "dist");
 
 const ui = (f) => path.join(root, "src", "ui", f);
 
@@ -42,7 +43,7 @@ export default {
   output: {
     path: path.join(DIST_DIR, "ui"),
     filename: "[name].js",
-    // 动态 import() 的 chunk 与页面同层（dist/ui/），相对 stream.js 解析；module 产物里
+    // 动态 import() 的 chunk 与页面同层（.cache/dist/ui/），相对 stream.js 解析；module 产物里
     // 由浏览器按相对 URL 取，不经 publicPath。
     chunkFilename: "[name].js",
     cssFilename: "[name].css",
