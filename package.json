@@ -37,7 +37,7 @@
     "build:dsh": "node scripts/vendor/build.mts",
     "changelog": "node scripts/release/changelog.mts",
     "facts:record": "node scripts/release/package-facts.mts",
-    "prepackage": "pnpm run derive && pnpm run build",
+    "prepackage": "pnpm run build:dsh && pnpm run derive && pnpm run build",
     "package": "node scripts/release/pack/index.mts",
     "postpackage": "node scripts/release/clean-tmp.mts",
     "install:local": "node scripts/dev/install-local.mts",

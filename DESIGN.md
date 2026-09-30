@@ -80,6 +80,7 @@ Hana 宿主进程（App 隔离进程加载包根 index.js 壳 → bin/impl.js �
 ```
 
 - **交付布局（入口壳 + bin/ 实现）**：包根 `index.js` 是壳，只做一件事——`await import("./bin/impl.js")` 再转交 `apply`；会变的代码（实现 bundle + 受管子进程入口 `bin/dsh-host.mjs`）全在 `bin/`。分家理由：宿主的 app-host 子进程按 `manifest.entry` 的 file:// URL import 入口一次、不带 cache-bust（`app-host-entry.js`），入口保持稳定才不会让“换实现”牵动入口；同一层也给宿主侧将来做「同进程重入」留了位置（那时实现可带 `?v=` 重 import，入口不动）。不做 cache-bust：今天换代码走的是换进程（宿主 reload / 装新包），新子进程的模块缓存本来就是空的。壳厚薄有闸：pack 断言 `index.js` ≤ 20 KB（实现不许被内联回入口）。
+- **T1 包集缓存自愈**：`.cache/dsh-build/<key>` 是构建产物（不进仓库），键由 tag/commit/配方/node/pnpm/上游锁/delta 算出。`build:dsh`（`scripts/vendor/build.mts`）幂等——命中只打印 `cache hit` 后返回，缺失才真构建；`prepackage` 与 CI 都先过它，所以干净环境不需要“先手工跑一次构建”，`derive:check` 里的包集对拍在 CI 上因此有实料可校。
 - **受管 runtime**：DSH 跑在 `ctx.runtime.start` 拉起的独立 Node 子进程中（不再是宿主进程内 boot）。App 侧与子进程分责：App 管启动/停止/状态，子进程管 DSH 的 cordis 生命周期；崩溃可被父侧识别并重起。
 - **依赖形态（自包含打包）**：DSH 及其依赖树由 `scripts/release/pack/index.mts` 在构建时物化进**安装目录** `node_modules`，运行时**不再安装、不再 spawn pnpm**（v1 的 `ensure-deps` / `lib/pnpm.js` / `lib/bootstrap.js` / `lib/errclass.js` 已删除）。运行时依赖的唯一真源是交付面清单 `packaging/package.json`（根那份只留构建面，另留一条同名 devDependencies 供开发侧安装，两处版本由 integrations 闸守）。
 - **更新 = 装新 App 包 + 重载 App**：无独立升级通道。重载会重新 import App 服务端入口并重新注册工具/路由，受管子进程（DSH）按自动链重起；DSH 跑在受管子进程里，**宿主进程没有它的模块缓存要清**，因此不必重启宿主。已建立的会话握着上次重建会话状态时解析的工具对象副本，重载/换装后要在那个会话里继续调该 App 的工具得压缩上下文（或开新会话）。

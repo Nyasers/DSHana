@@ -21,8 +21,19 @@ jobs:
           node-version-file: ".nvmrc"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # 派生文件闸：manifest / cordis 子插件版本 / 交付面清单与锁 / 镜像 paths 都是派生产物，
+      # T1 包集缓存（构建产物，不进仓库）：包集清单对拍与出包物化都读它。
+      # 命中就用、缺失就建——build.mts 自身幂等（命中只打印 cache hit 后返回），
+      # 所以干净环境不需要人先手工跑一次构建，这条链由此自愈。
+      - id: dshset
+        run: echo "key=$(node scripts/vendor/build.mts --print-key)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6
+        with:
+          path: .cache/dsh-build
+          key: dsh-build-${{ steps.dshset.outputs.key }}
+      - run: pnpm run build:dsh
+      # 派生文件闸：manifest / cordis 子插件版本 / 交付面清单与锁 / 镜像 paths / 包集清单都是派生产物，
       # 本地跑 `node scripts/derive/index.mts` 写回后要一并提交，这一步拦「忘了提交」。
+      # 其中包集清单要对拍 T1 缓存（上一步已确保在位）；缓存缺失时这一步硬失败，不静默跳过。
       - run: pnpm run derive:check
       - run: pnpm run build
       # 单测：node --test tests/，含 provider / task-bridge / watch-sse / cancel-chain / approval-bridge 等

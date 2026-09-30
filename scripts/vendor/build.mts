@@ -383,6 +383,11 @@ async function writeClientRecord(
 
 async function main(): Promise<void> {
   const checkOnly = process.argv.includes("--check");
+  // 只打印现算的缓存键：CI 的 Actions 缓存键与自愈路径的判定都用它，不做任何别的动作。
+  if (process.argv.includes("--print-key")) {
+    console.log(currentBuildIdentity().key);
+    return;
+  }
   const tag = dshBuildTag();
   const vendorDir = path.join(ROOT, VENDOR_REL);
 

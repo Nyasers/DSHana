@@ -8,7 +8,8 @@
 // 与清单比对；上游改了模板，--check 就报，而不是等发版时人工对账。
 //
 // 只读性：--check 绝不写盘、绝不解包；缺 T1 缓存时**报错而不是跳过**——一个"跳过即通过"
-// 的校验门在 CI 里等于不存在。
+// 的校验门在 CI 里等于不存在。缺失由**上游自愈**：prepackage 与 CI 都先跑一次 build:dsh
+// （scripts/vendor/build.mts 幂等，命中只读），所以这道闸在干净环境里有实料可校。
 import fs from "node:fs";
 import path from "node:path";
 
