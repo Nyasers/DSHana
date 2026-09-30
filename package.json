@@ -2,7 +2,7 @@
   "name": "dshana",
   "version": "1.0.0-rc.29+dsh-0.2.0-rc.2",
   "private": true,
-  "packageManager": "pnpm@12.6.0+sha512.3ef68f951cb111ac204b4a5a16f0b2ddf0da56a96e0413e81d855d9f0b55ef926714709028e1cd00c405c2c5fb7b9e8ec4dc46777c805d0373c2f2ff00fd20ec",
+  "packageManager": "pnpm@11.7.0+sha512.19cc852c120c7125760f2443ee6be0ca5b40f9f50598de1a09a1f177503e010e57c23c77646e01e761de59bf874fb22a3398c33ab9691fc13eb946b6f0f4d620",
   "engines": {
     "node": "^22.22.2 || ^24.15.0 || ^26.8.1"
   },
