@@ -19,14 +19,16 @@
 // 为什么用 file: **相对**路径：pnpm 的 allowBuilds 键是 name@spec 形状，绝对路径拼不出稳定键；
 // 而且相对路径让六个目标共用同一份锁文件（各目标工位布局一致）。
 //
-// 两道 sha512 校验（都是代码，不是口头）：
-//   · 前：拷进工位的 tarball 逐个比对清单的 bytes/sha512（少一个字节就拒装）；
+// 两道 sha512 校验（都是代码，不是口头，但**只在同源时逐字节**：`release:pack` 的字节不可跨机
+// 复现，见 scripts/shared/package-set-digest.mts）：
+//   · 前：拷进工位的 tarball 逐个比对清单的 bytes/sha512（少一个字节就拒装；不同源则只校在不在）；
 //   · 后：pnpm 记进锁文件的 file: 条目 integrity 与清单比对，且装出来的 @deepseek-ai/* 版本
 //         必须与清单一致（对不上就拒包）。
 import fs from "node:fs";
 import path from "node:path";
 
-import { cacheEntryDir, integrityOfFile } from "../package-set.mts";
+import { cacheEntryDir, integrityOfFile, readBuildRecipe } from "../package-set.mts";
+import { isSameOriginAsSet } from "../../shared/package-set-digest.mts";
 import { readPnpmDeclaration } from "../pnpm.mts";
 import type { DshPackageSet, PackageRecord } from "../package-set.mts";
 
@@ -70,9 +72,22 @@ export function tarballSpec(record: PackageRecord): string {
  * @throws 缺文件、字节数不符、sha512 不符时点名抛出。
  */
 export function verifyTarballs(set: DshPackageSet): Array<{ record: PackageRecord; absolute: string }> {
-  const distDir = path.join(cacheEntryDir(set.build.cacheKey), "dist-npm");
+  const entryDir = cacheEntryDir(set.build.cacheKey);
+  const distDir = path.join(entryDir, "dist-npm");
   if (!fs.existsSync(distDir)) {
     throw new Error("包集目录不存在：" + distDir + "（先跑 node scripts/vendor/build.mts）");
+  }
+  // 字节对拍只在同源时做：release:pack 的 tarball 字节不可跨机复现（win32 CRLF 对 linux LF +
+  // gzip mtime），清单里那些字节只对"造它那次构建"成立。不同源时只校"在不在"——结构与身份
+  // 另有各自的闸。
+  let sameOrigin = false;
+  try {
+    sameOrigin = isSameOriginAsSet(set.packages, readBuildRecipe(set.build.cacheKey));
+  } catch {
+    sameOrigin = false;
+  }
+  if (!sameOrigin) {
+    console.log("[pack] 包集与清单不同源（字节不可跨机复现）——只校 tarball 在不在，不逐字节比");
   }
   const out: Array<{ record: PackageRecord; absolute: string }> = [];
   for (const record of set.packages) {
@@ -80,12 +95,14 @@ export function verifyTarballs(set: DshPackageSet): Array<{ record: PackageRecor
     if (!fs.existsSync(absolute)) {
       throw new Error("清单记录了但包集里没有：" + record.file + "（缓存条目被换过？）");
     }
-    const actual = integrityOfFile(absolute);
-    if (actual.bytes !== record.bytes) {
-      throw new Error(record.file + " 字节数不符：清单 " + record.bytes + " ≠ 实际 " + actual.bytes);
-    }
-    if (actual.integrity !== record.integrity) {
-      throw new Error(record.file + " sha512 不符：清单 " + record.integrity + " ≠ 实际 " + actual.integrity);
+    if (sameOrigin) {
+      const actual = integrityOfFile(absolute);
+      if (actual.bytes !== record.bytes) {
+        throw new Error(record.file + " 字节数不符：清单 " + record.bytes + " ≠ 实际 " + actual.bytes);
+      }
+      if (actual.integrity !== record.integrity) {
+        throw new Error(record.file + " sha512 不符：清单 " + record.integrity + " ≠ 实际 " + actual.integrity);
+      }
     }
     out.push({ record, absolute });
   }

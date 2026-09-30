@@ -29,3 +29,18 @@ export function packageSetDigest(members: readonly SetMember[]): string {
   const lines = members.map((m) => `${m.file}\u0000${m.integrity}`).sort();
   return createHash("sha256").update(lines.join("\n")).digest("hex").slice(0, 16);
 }
+
+/**
+ * 清单与 T1 缓存档案是不是同一次构建（字节对拍的前提）。
+ *
+ * 构建期把这一批的指纹写进缓存档案的 `artifact.setDigest`，清单侧现算同一个值：相等即同源，
+ * 逐字节对拍才有意义；不同源（含档案里没有指纹的旧条目）只校在不在与结构。
+ *
+ * @param members - 清单里那批 tarball 的身份。
+ * @param recipe - 缓存条目的 build-recipe.json 内容；读不到传 null。
+ * @returns 是否同源。
+ */
+export function isSameOriginAsSet(members: readonly SetMember[], recipe: unknown): boolean {
+  const recorded = (recipe as { artifact?: { setDigest?: unknown } } | null | undefined)?.artifact?.setDigest;
+  return typeof recorded === "string" && recorded === packageSetDigest(members);
+}

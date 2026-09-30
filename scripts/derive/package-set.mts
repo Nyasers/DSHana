@@ -14,7 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { ROOT } from "../shared/root.mts";
-import { packageSetDigest } from "../shared/package-set-digest.mts";
+import { isSameOriginAsSet } from "../shared/package-set-digest.mts";
 import {
   PACKAGE_SET_REL,
   buildPackageSet,
@@ -24,7 +24,7 @@ import {
   readPackageSet,
 } from "../release/package-set.mts";
 import { currentBuildIdentity } from "../vendor/build.mts";
-import type { FileTask } from "./index.mts";
+import type { DerivedFile, FileTask } from "./index.mts";
 
 /**
  * 现算当前包集的 T1 缓存键。
@@ -68,15 +68,9 @@ export function verifyPackageSet(): string[] {
   // 逐字节对拍只在两侧**同源**时做：release:pack 的 tarball 字节不可跨机复现（win32 的 CRLF 对
   // linux 的 LF、gzip mtime 各有差异），拿别处那次的字节来比只会一片红。判据是这批 tarball 的
   // 指纹——构建期写进缓存档案、清单侧现算，两侧同一份实现（scripts/shared/package-set-digest）。
-  const recordedDigest = (recipe.artifact as { setDigest?: unknown } | undefined)?.setDigest;
-  const setDigest = packageSetDigest(set.packages);
-  const sameOrigin = typeof recordedDigest === "string" && recordedDigest === setDigest;
+  const sameOrigin = isSameOriginAsSet(set.packages, recipe);
   if (!sameOrigin) {
-    console.log(
-      "[derive] package-set: 本机包集与清单不同源（" +
-        (typeof recordedDigest === "string" ? `档案指纹 ${recordedDigest} ≠ 清单 ${setDigest}` : "缓存档案里没有指纹") +
-        "）——只校结构/根集/身份，不逐字节对拍",
-    );
+    console.log("[derive] package-set: 本机包集与清单不同源（字节不可跨机复现）——只校结构/根集/身份，不逐字节对拍");
   }
   const diffs = checkPackageSet(
     set,
@@ -86,6 +80,34 @@ export function verifyPackageSet(): string[] {
   );
   diffs.push(...checkPackageSetBuild(set, recipe));
   return diffs;
+}
+
+/**
+ * 清单的"算不算漂"口径：同源才逐字比，不同源只算结构（由 verify() 校）。
+ *
+ * 为什么需要：清单里装着那批 tarball 的 bytes/sha512，而它们只对「造它那次构建」成立——字节不可
+ * 跨机复现。不同源时逐字比必然报漂，而那并不是漂移，是本机复现不了的事实。
+ *
+ * @param file - 期望产物。
+ * @param actual - 盘上的实际内容。
+ * @returns 算不算漂。
+ */
+function sameManifest(file: DerivedFile, actual: string): boolean {
+  if (actual === file.content) return true;
+  try {
+    const parsed = JSON.parse(actual) as {
+      build?: { cacheKey?: unknown };
+      packages?: { file?: unknown; integrity?: unknown }[];
+    };
+    const key = typeof parsed.build?.cacheKey === "string" ? parsed.build.cacheKey : null;
+    if (!key) return false;
+    const members = (parsed.packages ?? []).filter(
+      (p): p is { file: string; integrity: string } => typeof p.file === "string" && typeof p.integrity === "string",
+    );
+    return !isSameOriginAsSet(members, readBuildRecipe(key));
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -99,4 +121,5 @@ export const packageSetTask: FileTask = {
   about: "T1 dist-npm → packaging/dsh-package-set.json（包名/版本/字节/sha512 + 根集 + 身份）",
   plan: planPackageSet,
   verify: verifyPackageSet,
+  same: sameManifest,
 };

@@ -63,6 +63,12 @@ export interface FileTask {
    * 返回差异描述（空 = 一致）。用于"清单自洽但指向坏字节/另一次构建"这类内容比较看不出的漂移。
    */
   verify?(): string[];
+  /**
+   * 可选：自定义"这份文件算不算漂"（缺省逐字比）。用于期望内容里含**本机无从复现**的字段——
+   * 包集清单里的 tarball 字节就是这样：字节不可跨机复现，拿别处那次的来比只会一片红。
+   * 传了就用它判，不传仍逐字比（写回路径不受影响）。
+   */
+  same?(file: DerivedFile, actual: string): boolean;
 }
 
 /**
@@ -200,7 +206,12 @@ export async function runTask(task: DeriveTask, { checkOnly, log = console.log }
     return diff.length;
   }
   const files = await task.plan();
-  const stale = files.filter((f) => !exists(f.rel) || readText(f.rel) !== f.content);
+  // 逐字比是缺省；任务可用 same() 改口径（如清单里的 tarball 字节本机无从复现，见 FileTask.same）
+  const stale = files.filter((f) => {
+    if (!exists(f.rel)) return true;
+    const actual = readText(f.rel);
+    return task.same ? !task.same(f, actual) : actual !== f.content;
+  });
   // 内容一致不等于可信：清单可能自洽却指向被换过的 tarball 或另一次构建。--check 时补验。
   const semantic = checkOnly && task.verify ? task.verify() : [];
   if (!stale.length && !semantic.length) {
