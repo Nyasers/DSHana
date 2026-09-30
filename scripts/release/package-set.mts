@@ -29,14 +29,12 @@ import { pathToFileURL } from "node:url";
 import { ROOT } from "../shared/root.mts";
 import { readTarMember } from "../vendor/tar-extract.mts";
 import { materializeDeliveredAppBoot } from "./app-boot-probe.mts";
-import { readPnpmDeclaration } from "./pnpm.mts";
 
 /** 清单位置（相对仓库根）。 */
 export const PACKAGE_SET_REL = path.join("packaging", "dsh-package-set.json");
 
-/** 清单格式版本；字段语义变才 +1。
- * 2：build 段拆出交付链那一格 deliveryPnpm（构建链 pnpm 与交付链 pnpm 本就不同，合成一格说不清）。 */
-export const PACKAGE_SET_FORMAT = 2;
+/** 清单格式版本；字段语义变才 +1。 */
+export const PACKAGE_SET_FORMAT = 1;
 
 /** 根集里一个包的来源类别（清单里标注，便于 diff 时看懂为什么它在）。 */
 export type PackageCategory = "profile-template" | "optional-bundle" | "dshana";
@@ -79,13 +77,6 @@ export interface PackageSetBuild {
   node: string;
   /** **构建链**实际用的 pnpm（检出/vendor 里那份，上游 pin；进缓存键）。 */
   pnpm: string;
-  /**
-   * **交付链**实际用的 pnpm（derive 派生锁文件 + pack 物化）：本仓 `packageManager` 声明的那一份。
-   *
-   * 为什么单独一格：两者**本来就该不同**（构建链跟上游 pin、交付链跟我们自己的声明），塞进同一个
-   * 字段就再也说不清「哪条链用了哪个版本」。分开记，出包时才能对账。
-   */
-  deliveryPnpm: string;
   builtAt: string;
 }
 
@@ -353,8 +344,6 @@ export function checkPackageSetBuild(
   expect("recipeVersion", set.build.recipeVersion, recipe.recipeVersion);
   expect("node", set.build.node, recipe.node);
   expect("pnpm", set.build.pnpm, recipe.pnpm);
-  // 交付链版本现算对账：它由本仓声明决定、不来自缓存条目，所以不能拿 recipe 比。
-  expect("deliveryPnpm", set.build.deliveryPnpm, readPnpmDeclaration().version);
   if (typeof recipe.artifact?.tarballs === "number" && recipe.artifact.tarballs !== set.packages.length) {
     diffs.push(`包数：清单 ${set.packages.length} ≠ 缓存 recipe ${recipe.artifact.tarballs}`);
   }
@@ -440,9 +429,6 @@ export async function buildPackageSet(key: string): Promise<DshPackageSet> {
       recipeVersion: recipeString(recipe.recipeVersion),
       node: recipeString(recipe.node),
       pnpm: recipeString(recipe.pnpm),
-      // 交付链的版本不进缓存键（与构建产物无关），它是**出包时**的事实：这里现读本仓声明，
-      // 让清单如实记下「这份包集将用哪个 pnpm 铺成交付树」。
-      deliveryPnpm: readPnpmDeclaration().version,
       builtAt: recipeString(recipe.createdAt),
     },
     upstream: { ...upstream, appBootCommit: recipeString(recipe.commit) },

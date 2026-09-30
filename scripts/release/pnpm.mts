@@ -8,14 +8,15 @@
 // 别的机器）就停在别处。构建链把版本钉在检出里并放进缓存键，交付链却是环境决定：**交付树的形状
 // 由此随机器漂移**，与「同一 tag + 同一工具链 = 同一份产物」自相矛盾。
 //
-// 口径（Nyaser 已定）：构建链继续用检出/vendor 里那份（上游 pin）；**交付链统一用本仓
-// `packageManager` 声明的那一份**。实现上**不自己拼 pnpm 入口**，走同一套「声明决定版本」的机制：
+// 口径：构建链用检出/vendor 里那份（上游 pin）；**交付链用本仓 `packageManager` 声明的那一份**——当前
+// 两边同值 11.7.0，同版本由 `assertPnpmChainsUnified` 守着（见下）。实现上**不自己拼 pnpm 入口**，走同一套「声明决定版本」的机制：
 // cwd 放在**仓内**（.tmp 工位也在仓内），pnpm 自带的版本管理便读到仓根那份声明。
 //
 // 声明 ≠ 实际，所以三件是硬要求：
 //   ① **断言 + 记录**：pnpm 收尾行 `using pnpm vX` 是判据；派生锁文件的 `lockfileVersion` 作交叉
-//      校验（版本大改会改锁格式，这里要显式认账而不是随它变）。实际版本另记进包集清单的交付侧
-//      那一格（`build.deliveryPnpm`）。
+//      校验（版本大改会改锁格式，这里要显式认账而不是随它变）。实际版本记在 pack 日志；包集清单里
+//      只留构建链那份（`build.pnpm`）——清单描述的是「我们编出了什么」，交付链的 pnpm 是 pack 期
+//      属性，不进产物清单。
 //   ② **受限环境的退路也必须落在声明那一份上**：解析不到、取不到、或跑出来不是那一份，一律
 //      **失败说清**，绝不静默换版本——宁可不出包，也不出一个工具链不明的交付树。
 //   ③ **锁文件护栏**：交付链绝不能让隐式自换改到仓根 `pnpm-lock.yaml` 或 `packaging/pnpm-lock.yaml`
@@ -216,6 +217,35 @@ export function runDeliveryPnpm(
   return { status: out.status, stdout: out.stdout, stderr: out.stderr, reportedVersion: reported, decl };
 }
 
+/**
+ * 跨链不变量：**两条链的 pnpm 必须相等**——清单里的构建链版本（检出/vendor 那份上游 pin，
+ * 也是缓存键的一半）== 交付链**实际**解析到的版本。
+ *
+ * 为什么要有这一条：「统一到一个版本」若只靠两边各自「实际 == 自己的声明」，那只证明了各自自洽
+ * ——检出 pin 是 11.7.0、本仓声明是 12.x 时，两条都自洽却并不统一，而交付树的形状正是两者合起来
+ * 的结果。把相等写成**被检查的不变量**，才让「统一」是可验证的事实，而不是一句声明。
+ *
+ * 代价（写在明处）：**上游 pin 一动，本仓声明也得跟**，否则出包在这里被拒。这就是「统一」的含义
+ * ——不再靠多记一格同值字段去暗示它，而是不接受两条链分叉。
+ *
+ * @param buildPnpm - 构建链实际用的 pnpm（清单 `build.pnpm`，来自 T1 缓存条目的 recipe）。
+ * @param deliveryPnpm - 交付链实际解析到的 pnpm（`assertDeliveryPnpmVersion()` 的返回值）。
+ * @returns 两者相等时返回该版本，便于调用方记录。
+ */
+export function assertPnpmChainsUnified(buildPnpm: string, deliveryPnpm: string): string {
+  if (typeof buildPnpm !== "string" || buildPnpm === "") {
+    throw new Error("清单里没有构建链 pnpm（build.pnpm）：无法核对两条链是否统一");
+  }
+  if (buildPnpm !== deliveryPnpm) {
+    throw new Error(
+      `构建链 pnpm ${buildPnpm}（清单 build.pnpm / 检出上游 pin）≠ 交付链 pnpm ${deliveryPnpm}（本仓声明实际解析值）` +
+        "——两条链必须用同一个 pnpm。\n" +
+        "  修法：把本仓 packageManager 改成与上游 pin 一致，或把 vendor 检出钉到与之匹配的上游 tag。\n" +
+        "  为什么拒：上游 pin 一动、本仓声明就得跟——这正是「统一」的含义。",
+    );
+  }
+  return buildPnpm;
+}
 /**
  * pnpm 主版本 → 它写出的 `lockfileVersion`。
  *

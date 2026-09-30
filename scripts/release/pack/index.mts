@@ -35,7 +35,7 @@ import fs from "fs-extra";
 import { errText } from "../../shared/err-text.mts";
 import { ROOT } from "../../shared/root.mts";
 import { readPackageSet, assertRootSetMatchesManifest } from "../package-set.mts";
-import { assertDeliveryPnpmVersion, assertLockfilesUnchanged, lockfileSnapshot, readPnpmDeclaration } from "../pnpm.mts";
+import { assertDeliveryPnpmVersion, assertLockfilesUnchanged, assertPnpmChainsUnified, lockfileSnapshot, readPnpmDeclaration } from "../pnpm.mts";
 import { assertCordisDistVersions, assertProductPackage, assertRecipeBakedCurrentDelta, assertUiTree, assertVersionEquation } from "./assert.mts";
 import { declareInstallationPlugins } from "./bundle-deps.mts";
 import { STAGING_ROOT, materializeProdDeps } from "./materialize.mts";
@@ -114,12 +114,19 @@ if (manifestSet === null) {
 const baked = assertRecipeBakedCurrentDelta(manifestSet, join(ROOT, "src-integrations"));
 console.log("[pack] 集成烘焙对账：档案 " + baked.packages + " 个集成 / " + baked.stagedFiles + " 个文件，与当前声明一致");
 
-// 1.9) 交付链 pnpm：版本必须**实际**等于本仓 packageManager 声明的那一份（不是「手边那份」）。
-//      为什么放在物化之前：交付树的形状由 pnpm 决定，版本不对就该在花掉一次安装之前停。
-//      同时取锁文件基线——整条 pack 跑完，仓根与 packaging/ 两份都必须原样（packaging 那份只归 derive 写）。
+// 1.9) pnpm 的两道闸（都在物化之前：版本不对就该在花掉一次安装之前停）：
+//      ① 各自自洽——交付链**实际**解析到的版本 == 本仓 packageManager 声明的那一份（不是「手边那份」）；
+//      ② 跨链统一——它 == 清单里构建链用的那份（build.pnpm，检出/vendor 的上游 pin）。
+//      ② 是「统一」的**被检查不变量**：上游 pin 一动、本仓声明也得跟，否则在这里被拒（代价写在
+//      assertPnpmChainsUnified 的注释里）。放在这份清单读出来之后——对账要用它。
+//      同时取锁文件基线：整条 pack 跑完，仓根与 packaging/ 两份都必须原样（packaging 只归 derive 写）。
 const deliveryPnpm = assertDeliveryPnpmVersion();
+const unifiedPnpm = assertPnpmChainsUnified(manifestSet.build.pnpm, deliveryPnpm);
 const packLockBaseline = lockfileSnapshot();
-console.log("[pack] 交付链 pnpm " + deliveryPnpm + "（= 声明 " + readPnpmDeclaration().version + "）；锁文件基线已取");
+console.log(
+  "[pack] pnpm 统一：构建链 " + unifiedPnpm + "（清单 build.pnpm）== 交付链 " + deliveryPnpm +
+    "（本仓声明 " + readPnpmDeclaration().version + "）；锁文件基线已取",
+);
 
 // 目标选择：`--target <名字>`（必须显式给，无默认）。
 // 用 node:util 的 parseArgs 结构化解析（strict + 禁位置参数）：未知选项、缺值、多余位置参数
