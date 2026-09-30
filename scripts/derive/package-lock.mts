@@ -27,7 +27,7 @@ import { join } from "node:path";
 
 import { ROOT } from "../shared/root.mts";
 import { readPackageSet } from "../release/package-set.mts";
-import { assertLockfilesUnchanged, assertLockfileVersion, lockfileSnapshot, readPnpmDeclaration, runDeliveryPnpm } from "../release/pnpm.mts";
+import { assertLockfilesUnchanged, assertLockfilePnpmSection, assertLockfileVersion, lockfileSnapshot, readPnpmDeclaration, runDeliveryPnpm } from "../release/pnpm.mts";
 import { PACKAGE_DIR, prepareInstallSource, verifyLockfileIntegrity } from "../release/pack/install-source.mts";
 import { stagingWorkspaceYaml } from "../release/pack/targets.mts";
 
@@ -107,9 +107,14 @@ export function inspect(): string[] {
   }
   try {
     prepareWorkDir({ lockFrom: lockAbs });
-    // 交叉校验：锁文件的 lockfileVersion 必须与声明版本的 pnpm 相符（版本/格式跨了大版本要人认账）。
+    // 交叉校验两道（都纯读、都在跑 frozen 之前）：
+    //   1. lockfileVersion 与声明版本的 pnpm 相符；
+    //   2. packageManagerDependencies 指纹相符——**这道才是抓「声明降级、旧锁留下高版本半段」的**，
+    //      frozen 探针看不见它（11.x 整个忽略该段，照旧放行）。
     try {
-      assertLockfileVersion(fs.readFileSync(lockAbs, "utf8"), readPnpmDeclaration(), SHIP_LOCK_REL);
+      const decl = readPnpmDeclaration();
+      assertLockfileVersion(fs.readFileSync(lockAbs, "utf8"), decl, SHIP_LOCK_REL);
+      assertLockfilePnpmSection(fs.readFileSync(lockAbs, "utf8"), decl, SHIP_LOCK_REL);
     } catch (error) {
       return [String(error instanceof Error ? error.message : error)];
     }
@@ -134,8 +139,11 @@ export function repair(): void {
     if (code !== 0) throw new Error("工位重生成 " + SHIP_LOCK_REL + " 失败（pnpm 退出码 " + code + "）");
     const produced = join(WORK_DIR, "pnpm-lock.yaml");
     if (!fs.pathExistsSync(produced)) throw new Error("工位未产出锁文件：" + produced);
-    // 写回前校验格式：产出的锁文件必须仍是声明版本那份格式（交叉校验，不随版本静默改格式）。
-    assertLockfileVersion(fs.readFileSync(produced, "utf8"), readPnpmDeclaration(), "工位产出的 " + SHIP_LOCK_REL);
+    // 写回前校验两道格式：产出的锁文件必须是声明版本那份形状（不随版本静默改格式，也不静默带/丢
+    // packageManagerDependencies 段）。这一道防的是「新派生的锁本身就不符合声明」。
+    const decl = readPnpmDeclaration();
+    assertLockfileVersion(fs.readFileSync(produced, "utf8"), decl, "工位产出的 " + SHIP_LOCK_REL);
+    assertLockfilePnpmSection(fs.readFileSync(produced, "utf8"), decl, "工位产出的 " + SHIP_LOCK_REL);
     fs.copySync(produced, join(ROOT, SHIP_LOCK_REL));
     console.log("[derive] " + SHIP_LOCK_REL + " 已重生成（以仓库锁文件为种子）");
   } finally {

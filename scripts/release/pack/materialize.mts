@@ -24,7 +24,7 @@ import { join } from "node:path";
 
 import { ROOT } from "../../shared/root.mts";
 import { readPackageSet } from "../package-set.mts";
-import { assertLockfilesUnchanged, assertLockfileVersion, assertDeliveryPnpmVersion, lockfileSnapshot, readPnpmDeclaration, runDeliveryPnpm } from "../pnpm.mts";
+import { assertLockfilesUnchanged, assertLockfilePnpmSection, assertLockfileVersion, lockfileSnapshot, readPnpmDeclaration, runDeliveryPnpm } from "../pnpm.mts";
 import { assertIntegrationTargets } from "./assert.mts";
 import { prepareInstallSource, verifyLockfileIntegrity, verifyMaterializedModules } from "./install-source.mts";
 import { stagingWorkspaceYaml } from "./targets.mts";
@@ -58,8 +58,15 @@ export function materializeProdDeps(spec) {
   fs.copySync(lockFrom, join(dir, "pnpm-lock.yaml"));
   // 物化前的第二道 sha512 校：锁文件里 pnpm 自己记的本地 tarball integrity 与清单对拍。
   // 第一道（verifyTarballs）证「拷进来的字节 == 清单」；这道证「pnpm 要装的那份 == 清单」。
-  const lockChecked = verifyLockfileIntegrity(fs.readFileSync(lockFrom, "utf8"), set);
+  const lockText = fs.readFileSync(lockFrom, "utf8");
+  const lockChecked = verifyLockfileIntegrity(lockText, set);
   console.log("[pack] " + spec.name + " 锁文件完整性：本地 tarball " + lockChecked + " 个 integrity 与清单一致");
+  // 交付链 pnpm 指纹闸：锁文件的 packageManagerDependencies 段必须与声明相符（两个方向都判）。
+  // 放在物化之前：这份锁若不合声明，就不该拿它装出交付树。derived 那次已经判过，这里是消费侧兜底
+  // ——锁文件是提交进版本库的，pack 完全可能跑在一份「声明改了而锁没跟」的树上。
+  const lockDecl = readPnpmDeclaration();
+  assertLockfileVersion(lockText, lockDecl, "packaging/pnpm-lock.yaml");
+  assertLockfilePnpmSection(lockText, lockDecl, "packaging/pnpm-lock.yaml");
   console.log(
     "[pack] 物化 " + spec.name + "（源 = 包集清单 " + packages + " 个 tarball，隔离目录 .tmp/pkg-root/" + spec.name + "）...",
   );

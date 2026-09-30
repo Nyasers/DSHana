@@ -254,6 +254,69 @@ export function assertLockfileVersion(lockText: string, decl: PnpmDeclaration, l
   return actual;
 }
 
+/**
+ * pnpm 主版本 → 它写的锁文件里**是否含** `packageManagerDependencies` 段。
+ *
+ * 为什么 `lockfileVersion` 不够、还得有这张表：11.x 与 12.x 都写 `9.0`，那一格**区分不了**这两个大
+ * 版本。而声明从 12.x 降回 11.x 时，旧锁里那段 12.x 的 `packageManagerDependencies` 会被 11.x
+ * **整个忽略**（11.x 早于这个机制），frozen 探针照旧放行——高版本那半段就静默留下了（实测踩到过）。
+ * 「这一段在不在」正好当指纹。
+ *
+ * 实测（本机，六组）：声明 11.7.0 / 11.24.0 / 无声明 → 无段；声明 12.6.0 / 12.8.2 → 有段（specifier
+ * 等于声明值）。且**跟随声明、不跟随实际运行的二进制**：拿 12.8.2 的 exe 跑、把声明写成 11.7.0，
+ * 段仍不写。9/10 两行按版本先后推得（早于 11.x，同样无此机制）。表里没有的 major 一律报错（不猜）。
+ */
+const PACKAGE_MANAGER_DEPENDENCIES_BY_MAJOR: Record<number, boolean> = { 9: false, 10: false, 11: false, 12: true };
+
+/** 该 major 是否应在锁文件里写 `packageManagerDependencies`；未知 major 当场报（fail-closed）。 */
+export function expectsPackageManagerDependencies(major: number): boolean {
+  const want = PACKAGE_MANAGER_DEPENDENCIES_BY_MAJOR[major];
+  if (want === undefined) {
+    throw new Error(`不知道 pnpm ${major}.x 会不会写 packageManagerDependencies：确认后加进表（不猜）`);
+  }
+  return want;
+}
+
+/** 读锁文件里 `packageManagerDependencies` 段的 specifier；无段返回 null。 */
+export function readPackageManagerDependency(lockText: string): string | null {
+  const matched = /^\s*packageManagerDependencies:[\s\S]*?^\s+specifier:\s*['"]?([^'"\s]+)/mu.exec(String(lockText));
+  return matched === null ? null : matched[1];
+}
+
+/**
+ * 断言锁文件的 `packageManagerDependencies` 指纹与声明相符——**两个方向都判**。
+ *
+ * 正向（声明不写该段）：锁里出现该段即拒——正是「声明降级、旧锁留下高版本半段」那种静默残留。
+ * 反向（声明应写该段）：锁里没有该段也拒，而不是默默放过。另外有段时 specifier 必须等于声明版本。
+ *
+ * 前提：这份锁由**带声明的工位**派生（install-source 保证工位清单写有 packageManager）。因此
+ * 「12.x 却不带段」只可能来自更早的声明，不会是「工位没声明」那种正常情形。
+ *
+ * @returns 该声明是否应写该段（供调用方记录）。
+ */
+export function assertLockfilePnpmSection(lockText: string, decl: PnpmDeclaration, label: string): boolean {
+  const expected = expectsPackageManagerDependencies(decl.major);
+  const specifier = readPackageManagerDependency(lockText);
+  if (!expected && specifier !== null) {
+    throw new Error(
+      `${label}：pnpm ${decl.version} 不写 packageManagerDependencies，锁文件里却有（specifier ${specifier}）` +
+        "——这是声明降级时旧锁留下的高版本半段，pnpm 11.x 会整个忽略它。重派生该锁文件后再继续",
+    );
+  }
+  if (expected && specifier === null) {
+    throw new Error(
+      `${label}：pnpm ${decl.version} 应写 packageManagerDependencies，锁文件里却没有` +
+        "——这份锁是更早的声明派生的（或不完整）。重派生该锁文件后再继续",
+    );
+  }
+  if (specifier !== null && specifier !== decl.version) {
+    throw new Error(
+      `${label}：锁文件 packageManagerDependencies 的 specifier ${specifier} ≠ 声明 ${decl.version}——重派生`,
+    );
+  }
+  return expected;
+}
+
 /** 受护栏锁文件的哈希快照（存在性与内容都记）。 */
 export function lockfileSnapshot(rootDir: string = ROOT) {
   return GUARDED_LOCKFILES.map((rel) => {
