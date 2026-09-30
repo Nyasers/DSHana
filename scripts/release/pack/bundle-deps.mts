@@ -6,14 +6,14 @@
 // 为什么必须声明：DSH 的 runtime 解析模式按「安装树 + **被选中 bundle 的依赖图**」算一份解析代
 // （app-boot 的 profile-resolution），一行 loader 插件的 import 以这份解析代为基准解析。包内
 // node_modules/@dshana/* 只解决「这份文件在不在」；进不了解析代，真机上下载面照旧报
-//   Cannot find package '@dshana/provider' imported from <DSH_HOME>/profiles/web/
+//   Cannot find package '@dshana/provider' imported from <DSH_HOME>/profiles/<预设名>/
 // 因为 profile 住在数据目录里，向上 node 解析永远走不到安装树的 node_modules。官方在
 // healProfileModuleFallback / resolveModuleFallbackEntries 里给这种情况留了口子：**只被选中
 // bundle 携带**的包按 profile 作用域补进解析代（并按需在 profile 下 reconcile 一条自有链接），
 // 官方 bundle 声明的那些包走的就是这条路。于是子插件必须由某个**被选中**的 bundle 认领。
 //
-// 认领者选 @deepseek-ai/dsh-web-app：web profile 随附两层 bundle（dsh-base + dsh-web-app）里的
-// 上层，已经被 profile 选中，声明在这里即随它进解析代。声明值用 file:../../@dshana/<名>（与它
+// 认领者选 @deepseek-ai/dsh-web-app：我们的预设（dshana）与上游 web 用同一份 bundle 清单
+//（dsh-base + dsh-web-app），被选中两层里的上层；声明在这里即随它进解析代。声明值用 file:../../@dshana/<名>（与它
 // 同锚点的真实目录）：解析代只取依赖**名**做闭包遍历（packageDirFromAnchor 走 node 解析），
 // 任何真去解析它的人（pnpm、DSH 的链接模式）也会命中包内那份真实目录。
 //

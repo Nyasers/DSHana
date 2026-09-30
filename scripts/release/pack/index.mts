@@ -12,15 +12,19 @@
 //   index.js、node_modules/、ui/ 等全部在 zip 根级，不得套一层目录（宿主安装时在包根读 manifest.json）。
 // 两个临时目录的分工（都在 .tmp/ 下，起手清残留、用完即清、收尾由 postpackage 钩子清）：
 //   · .tmp/pkg-root/<target>：依赖物化**工位**。要跑一次真 install，就得有个像独立项目的目录——
-//     交付面自带的三件（packaging/package.json + packaging/pnpm-lock.yaml + 按目标替换过
-//     supportedArchitectures 的 pnpm-workspace.yaml）落进去跑 `pnpm install --prod --frozen-lockfile`。
+//     由包集清单派生（T2 的 packaging/dsh-package-set.json：拷包集 tarball + overrides 指向它们），
+//     再落进 derive 派生的 packaging/pnpm-lock.yaml，跑 `pnpm install --prod --frozen-lockfile`。
 //     隔离在 .tmp 下，仓库自身的 node_modules 与锁文件不被污染。
 //   · .tmp/pkg：交付**组装台**。只放要进包的东西（dist/ + 物化依赖树 + cordis + ui + manifest），
 //     不带 pnpm 的中间物（lockfile、workspace yaml、.modules.yaml 这些是构建输入，不是交付物）。
 //     把「工位」与「组装台」分开，就是不让构建输入混进安装包；组装出包后立即删。
 //
 // 分模块：目标表在 targets.mts，出包前断言在 assert.mts，依赖物化与精简在 materialize.mts，
-// 集成补丁覆盖在 overlays.mts，静态件压缩在 minify.mts；本文件是主流程（校验 → 组装 → zip）。
+// 集成版本戳在 stamp.mts，静态件压缩在 minify.mts；本文件是主流程（校验 → 组装 → zip）。
+//
+// 集成层在 T5 的落点（别在这里找"覆盖补丁"那一步，它没有了）：delta 在**构建期**铺进 scratch 检出、
+// 烤进产物（scripts/integrations/delta.mts）；pack 期只剩两件事——盖版本戳（stamp.mts）与对账式子
+// （assert.mts 的 assertVersionEquation / assertRecipeBakedCurrentDelta）。
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
@@ -30,11 +34,12 @@ import fs from "fs-extra";
 
 import { errText } from "../../shared/err-text.mts";
 import { ROOT } from "../../shared/root.mts";
-import { assertCordisDistVersions, assertProductPackage, assertUiTree } from "./assert.mts";
+import { readPackageSet, assertRootSetMatchesManifest } from "../package-set.mts";
+import { assertCordisDistVersions, assertProductPackage, assertRecipeBakedCurrentDelta, assertUiTree, assertVersionEquation } from "./assert.mts";
 import { declareInstallationPlugins } from "./bundle-deps.mts";
 import { STAGING_ROOT, materializeProdDeps } from "./materialize.mts";
 import { minifyDistStatics } from "./minify.mts";
-import { applyIntegrations } from "./overlays.mts";
+import { stampIntegrationVersions } from "./stamp.mts";
 import { failUsage, targetSpec } from "./targets.mts";
 
 // 版本单一事实源：package.json（唯一来源，不支持命令行传版本——显式传版本容易与
@@ -82,15 +87,31 @@ for (const item of staticItems) {
   });
 }
 
-// 1.2) 交付树的 package.json：复制 packaging/package.json（手写实体，只有 version 由 derive 的
-//      product-package 任务同步；不复制仓库根那份——它是构建入口，见 packaging/README.md）。
-//      字段白名单与版本一致由下面的 assertProductPackage 把关。
+// 1.2) 交付树的 package.json：**铭牌**，不是安装输入（T3 换源后物化输入由包集清单派生，见
+//      materialize.mts / install-source.mts）。它只回答「这包是什么、什么版本」，装机侧不跑 pnpm，
+//      所以只留 name / type / version 三个键（原来的 dependencies 声明已迁走——pin 现住根
+//      package.json#devDependencies）。
+//      字段白名单按这个新形状**写死并断言**（assertProductPackage），不放宽成「任意 package.json」。
 fs.copySync(join(ROOT, "packaging", "package.json"), join(distDir, "package.json"));
 
 // 1.5 / 1.6) 产物断言：cordis 包版本与完整性、交付树 package.json、App ui/ 静态树（缺失即拒包）
 assertCordisDistVersions(distDir, version);
 assertProductPackage(distDir, version);
 assertUiTree(distDir);
+// 1.7) 包集闸：根集在构建期现算（上游 app-boot 的 web 模板 ∪ OPTIONAL_BUNDLES ∪ @dshana/*），
+//      与 packaging/dsh-package-set.json 比对。上游改了名单而清单没跟，出包前就在这里断。
+await assertRootSetMatchesManifest();
+
+// 1.8) 集成烘焙对账：这份包集烤的 delta 必须就是当前 src-integrations 的 delta。
+//      delta 进构建产物后，"声明的补丁全部盖上"这道现场检查挪到了构建期（delta.mts#stageDelta），
+//      于是留下新洞：声明改了而包集没重编。这里把构建期的账与当前声明对拍，堵住它。
+//      放在物化之前：对不上就该在花掉一次安装之前停。
+const manifestSet = readPackageSet();
+if (manifestSet === null) {
+  throw new Error("找不到 packaging/dsh-package-set.json：先跑 node scripts/derive/index.mts package-set");
+}
+const baked = assertRecipeBakedCurrentDelta(manifestSet, join(ROOT, "src-integrations"));
+console.log("[pack] 集成烘焙对账：档案 " + baked.packages + " 个集成 / " + baked.stagedFiles + " 个文件，与当前声明一致");
 
 // 目标选择：`--target <名字>`（必须显式给，无默认）。
 // 用 node:util 的 parseArgs 结构化解析（strict + 禁位置参数）：未知选项、缺值、多余位置参数
@@ -149,7 +170,13 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
   fs.copySync(modules, join(pkgDir, "node_modules"), {
     filter: (srcPath) => !/[\/\\]node_modules[\/\\]\./.test(srcPath),
   });
-  applyIntegrations(join(pkgDir, "node_modules"));
+  // T5：pack 期不再覆盖任何内容（delta 已在构建期进产物）。只盖版本戳——`<清单版本>+dshana-<干净版本>`，
+  // 由清单版本算出（见 stamp.mts 与 shared/version.mts#patchVersionOf）。
+  const stamped = stampIntegrationVersions(join(pkgDir, "node_modules"), manifestSet.packages, version, join(ROOT, "src-integrations"));
+  console.log("[pack] 集成版本戳：" + stamped.length + " 个目标 → <清单版本>+dshana-" + version.split("+")[0]);
+  // 式子闸：交付树 = 清单闭包 + 已声明的戳（集成目标带戳、其余逐字等于清单版本）。这是**断言**不是观察。
+  const equation = assertVersionEquation(join(pkgDir, "node_modules"), manifestSet, version, join(ROOT, "src-integrations"));
+  console.log("[pack] 版本式子成立：" + equation.checked + " 个闭包包（其中集成目标 " + equation.targets + " 个带戳）");
   // @dshana 子插件落进安装树的 node_modules（与 @deepseek-ai/* 同锚点）：DSH 的 runtime 解析模式
   // 从安装树 + bundle 依赖图算解析代、不建链接，所以插件不能住在 cordis/ 那种安装树外的位置。
   // dist/ 那份原样拷贝已在包根留下 cordis/，这里把它换成 node_modules/@dshana/。

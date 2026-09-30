@@ -15,9 +15,10 @@
 //   3. 设本进程自有 env（DSH_HOME / DSHANA_*，不污染宿主进程环境）；
 //   4. 依赖就位（随包物化在 <installRoot>/node_modules，无运行时安装）；
 //   5. 产物在位（@dshana 子插件在 <installRoot>/node_modules/@dshana，roster patch 在
-//      <installRoot>/cordis.patch.yml——profile 不归我们：官方 web 模板由 DSH 首次加载时自建）；
+//      <installRoot>/cordis.patch.yml——profile 目录不归我们：模板条目 dshana 随包在
+//      @deepseek-ai/dsh-app-boot，由 DSH 首次加载时自建）；
 //   6. 子进程内 boot DSH（locateDsh → appBoot.loadLayeredEnv → profileBoot.runProfile，
-//      profile = 官方 web + patchFiles = roster patch），webserver 监听配置中的 dshPort；
+//      profile = 我们的 dshana 预设 + patchFiles = roster patch），webserver 监听配置中的 dshPort；
 //   7. 真实监听成功（webServer 服务端口 === 期望端口 + HTTP 探测）才向 stdout 打印约定
 //      readyMarker（独占一行、无前缀）——任何失败路径绝不打印 READY；
 //   8. SIGTERM/SIGINT/父进程 disconnect → 优雅释放：先关 DSH fiber（含 webserver），再
@@ -61,7 +62,11 @@ export const EXIT = {
 export const READY_TIMEOUT_MS = 60000;
 /** 优雅释放时 ctx.fiber.dispose 的最长等待（超时强退；dsh 自身 shutdown 5s 兜底）。 */
 const DISPOSE_TIMEOUT_MS = 4000;
-const PROFILE_NAME = "web";
+// 我们自己的预设名（spec §6.6）：bundle 清单与上游 `web` 相同，但**名字归我们**——上游改
+// `web` 模板不再悄悄改变我们装载的东西，清单里记的根集也就是我们的预设。
+// 模板条目由交付树里的 @deepseek-ai/dsh-app-boot 自带（src-integrations/app-boot-profile 的 delta），
+// 首次 `--profile dshana` 时由 DSH 自己建 $DSH_HOME/profiles/dshana；我们不写 DSH_HOME 里任何东西。
+const PROFILE_NAME = "dshana";
 
 /** 取错误的可读文本。catch 到的值类型未知，字段访问一律经这里。 */
 const errText = (e: unknown): string => ((e as any)?.message as string) || String(e);
@@ -356,8 +361,9 @@ export async function main(argv: string[]): Promise<number> {
   info(`依赖区：${depsRoot}（随包物化，无 ensure）`);
 
   // ---- 4) 定位 DSH + 产物在位检查 ----
-  // profile 不归我们：官方随附模板 `web` 由 DSH 首次加载时自建自维护（loadProfile 的
-  // template 分支），我们不写 DSH_HOME 里的任何东西（不种子化、不链接、不归一清单）。
+  // profile 目录本身不归我们：模板条目随包（@deepseek-ai/dsh-app-boot 的 PROFILE_TEMPLATES.dshana），
+  // 由 DSH 首次加载时自建自维护（loadProfile 的 template 分支）。我们不写 DSH_HOME 里的任何东西
+  // （不种子化、不链接、不归一清单）——DSH_HOME 可能是用户自己的目录，往里写等于跟用户争目录。
   let located;
   try {
     located = await locateDsh({ depsRoot, log: (s) => info("locate", s) });
@@ -375,7 +381,7 @@ export async function main(argv: string[]): Promise<number> {
     return EXIT.SEED;
   }
 
-  // ---- 5) 子进程内 boot DSH（官方 web profile + 我们的 roster 作启动期 overlay；显式端口）----
+  // ---- 5) 子进程内 boot DSH（我们的 dshana 预设 + 我们的 roster 作启动期 overlay；显式端口）----
   const environment = located.appBoot.loadLayeredEnv("dsh");
   info(`runProfile({ profile: ${PROFILE_NAME}, patchFiles: [${rosterPatch}], port: ${opts.dshPort} }) …`);
   let boot;

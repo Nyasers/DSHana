@@ -14,7 +14,8 @@
 #
 # 机制：一切经本 patch 文件声明，runtime 启动时经 runProfile 的 patchFiles 作启动期 overlay 传进去
 # （见 src-cordis/build.ts）；不使用 profile 用户层 cordis.patch.yml，也不使用命令行 --patch 叠加。
-# profile 用官方随附的 `web`，我们不往数据目录里的 cordis.yml / cordis.patch.yml 写任何东西。
+# profile 用我们随附的 `dshana` 预设（模板条目随包在 @deepseek-ai/dsh-app-boot，见 spec §6.6），
+# 我们不往数据目录里的 cordis.yml / cordis.patch.yml 写任何东西。
 
 # ── 1) 对官方行的覆盖 / disable ───────────────────────────────────────────────
 

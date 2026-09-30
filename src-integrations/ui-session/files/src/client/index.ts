@@ -13,7 +13,12 @@ import type {
 import { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 // ui-workspace 的导航面（declare merge 的 ctx.uiWorkspace）：切会话请本面所属文档的视图所有者代劳。
-import type { UiWorkspace } from '@deepseek-ai/dsh-client-ui-workspace/client'
+// 结构性声明，**不** import ui-workspace 的类型：装配次序上本插件先于 ui-workspace、两者之间没有
+// 依赖边（见下方 ctx.inject 那一段），而上游的 composite 工程图是按"谁 import 谁就声明 reference"
+// 维系的——这里加一条跨包 import 等于要求 ui-session 的 tsconfig 引用 ui-workspace，而 ui-workspace
+// 反过来又引用 ui-session（成环），client 面的聚合 tsc -b 会当场失败（TS6059/TS6307）。
+// 本面只用到 openSession，用结构类型既表达了这个事实，也与"运行期动态注入"的语义一致。
+type UiWorkspaceNavigator = { openSession(target: SessionId): void }
 import { notifySubscribers } from '@deepseek-ai/dsh-client-store'
 import { WeakMapWithValues } from '@deepseek-ai/dsh-util-values'
 import { standardHookPropName } from '@deepseek-ai/dsh-client-ui-slots'
@@ -762,7 +767,7 @@ function installCrossSurfaceSelection(ctx: Context): void {
   let pinnedApplied = false
   let seen = mainSessionId(list)
   // 本面所属文档的视图所有者导航面；ui-workspace 到场前缺席（见文件头那一段）。
-  let navigate: UiWorkspace | undefined
+  let navigate: UiWorkspaceNavigator | undefined
   let warnedAbsentNavigator = false
   // 面上线时列表已就绪 ⇒ 恢复早已落地，往后的选中变化都算用户动作。
   let settled = snap0.phase === 'ready'
@@ -824,7 +829,7 @@ function installCrossSurfaceSelection(ctx: Context): void {
 
   // 导航面在装配次序上晚于本插件：动态注入等它到场，进场即补一次（启动握手那次导航可能早于它）。
   ctx.inject(['uiWorkspace'], (scope) => {
-    const service = (scope as unknown as { uiWorkspace?: UiWorkspace }).uiWorkspace
+    const service = (scope as unknown as { uiWorkspace?: UiWorkspaceNavigator }).uiWorkspace
     navigate = service !== undefined && typeof service.openSession === 'function' ? service : undefined
     if (navigate !== undefined) applyRemote()
     return () => { navigate = undefined }

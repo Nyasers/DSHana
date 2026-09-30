@@ -17,11 +17,12 @@ import { join } from "node:path";
 
 import { ROOT } from "../shared/root.mts";
 
-for (const rel of [join(".tmp", "pkg"), join(".tmp", "pkg-root"), join(".tmp", "pkg-lock")]) {
+// .tmp/app-boot-probe/<key>/：从 T1 缓存摊开 app-boot 读模板表（脚本内部再建，清掉无妨）。
+for (const rel of [join(".tmp", "pkg"), join(".tmp", "pkg-root"), join(".tmp", "pkg-lock"), join(".tmp", "app-boot-probe")]) {
   const abs = join(ROOT, rel);
   if (fs.pathExistsSync(abs)) {
     fs.removeSync(abs);
     console.log(`[clean-tmp] 已清理 ${rel.replace(/\\/g, "/")}`);
   }
 }
-console.log("[clean-tmp] 临时目录干净（.tmp/pkg、.tmp/pkg-root、.tmp/pkg-lock）");
+console.log("[clean-tmp] 临时目录干净（.tmp/pkg、.tmp/pkg-root、.tmp/pkg-lock、.tmp/app-boot-probe）");

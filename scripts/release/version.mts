@@ -42,7 +42,7 @@ import { execSync } from "node:child_process";
 
 import { errText } from "../shared/err-text.mts";
 import { ROOT } from "../shared/root.mts";
-import { fullVersion, versionCommitFiles, readPkg, readShipPkg, writePkg } from "../shared/version.mts";
+import { fullVersion, versionCommitFiles, readPkg, writePkg } from "../shared/version.mts";
 const run = (cmd, desc) => {
   console.log("[version-hook] " + desc + "...");
   try {
@@ -58,10 +58,10 @@ const run = (cmd, desc) => {
 function main() {
   const pkg = readPkg("package.json");
   const bare = pkg.version;
-  // dsh 依赖段读交付面清单（packaging/package.json）——与 vendor 镜像 tag、集成漂移闸同源
-  const dshDep = readShipPkg()?.dependencies?.["@deepseek-ai/dsh"];
+  // dsh 依赖段读根 devDependencies（pin 的唯一真源）——与 vendor 镜像 tag、集成漂移闸同源
+  const dshDep = readPkg("package.json")?.devDependencies?.["@deepseek-ai/dsh"];
   if (typeof bare !== "string" || !bare || !dshDep) {
-    console.error("[version-hook] package.json version 或 packaging/package.json 的 @deepseek-ai/dsh 依赖声明缺失（bare=" + bare + ", dsh=" + dshDep + "）");
+    console.error("[version-hook] package.json version 或 devDependencies 的 @deepseek-ai/dsh 声明缺失（bare=" + bare + ", dsh=" + dshDep + "）");
     process.exit(1);
   }
   // 1) 拼回完整版（build 段 = dsh 依赖段，版本规则见文件头）写主

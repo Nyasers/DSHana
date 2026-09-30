@@ -141,6 +141,8 @@ test("sourceOf: private 恒为内置目录 + 常量 sourceId；shared 由 home+p
   assert.equal(priv.profileName, PRIVATE_PROFILE);
   assert.equal(priv.shared, false);
 
+  // shared 的 profile 是**用户自己**的 DSH 目录里的名字，与我们的预设无关：这里用 "web" 正是要
+  // 钉住"上游那张表的名字照旧可用"（§6.6 的负向面）。
   const idOf = (home, profile = "web") => sourceOf({ mode: "shared", path: home, profile }, dataDir).sourceId;
   const a = sourceOf({ mode: "shared", path: "/ds h/", profile: "web" }, dataDir);
   assert.equal(a.home, P("/ds h/"));

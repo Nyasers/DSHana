@@ -4,7 +4,7 @@
 // scripts/derive/version-metadata.mts — 主 package.json#version 的 build metadata 段（`+dsh-…`）
 // 与交付面清单声明的 dsh 版本对齐。
 //
-// 为什么进派生表：这段值任何时刻都能从 packaging/package.json#dependencies[@deepseek-ai/dsh]
+// 为什么进派生表：这段值任何时刻都能从根 package.json#devDependencies[@deepseek-ai/dsh]
 // 推出来，而 `pnpm version` 只是恰好会写它的那个入口。pin 一动、bump 还没到，树里的
 // package.json 与 src/manifest.json（宿主读的 App 版本）就报旧 dsh，pack 也可能落在这个窗口里。
 // 挂进派生表之后 derive --check 成了闸：pin 动了而版号没跟上，CI 当场红。
@@ -35,7 +35,7 @@ export function repair() {
 export const versionMetadataTask = {
   kind: "state" as const,
   name: "version-metadata",
-  about: "packaging/package.json#dependencies[@deepseek-ai/dsh] → package.json#version 的 +dsh- 段",
+  about: "package.json#devDependencies[@deepseek-ai/dsh] → package.json#version 的 +dsh- 段",
   inspect,
   repair,
 };

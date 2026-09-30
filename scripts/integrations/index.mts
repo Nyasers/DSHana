@@ -17,7 +17,7 @@
 // 本文件是 CLI 门面（子命令表 + 过闸），退出码 2 = 用法/子命令错，1 = 运行期失败。
 import { errText } from "../shared/err-text.mts";
 import { isDirectRun } from "../shared/run.mts";
-import { readPkg, readShipPkg } from "../shared/version.mts";
+import { dshPin } from "../shared/version.mts";
 import { buildIntegrations } from "./build.mts";
 import { REPO_ROOT, loadIntegrations, mirrorHasTag, readUpstreamFromMirror, stageIntegrations } from "./mirror.mts";
 import { dshVersionOf, sha256, tagForVersion, verifyIntegrations } from "./verify.mts";
@@ -84,7 +84,10 @@ const COMMANDS = {
     } catch (e) {
       throw new Error("编译失败：" + errText(e));
     }
-    for (const b of built) console.log(`[integrations] 产物：${b.out}`);
+    for (const b of built) {
+      // 纯源码 delta 没有自己的产物（out 为 null）：日志说清它交给了谁，别打一行 "产物：null"。
+      console.log(b.out ? `[integrations] 产物：${b.out}` : `[integrations] 产物：无（${b.package} 纯源码 delta，由上游构建编译）`);
+    }
   },
 } satisfies Record<string, (ctx: CommandContext) => Promise<void>>;
 
@@ -100,20 +103,11 @@ async function main() {
     console.error(`[integrations] 未知子命令：${cmd}（支持 ${Object.keys(COMMANDS).join("/")}）`);
     process.exit(2);
   }
-  // pin 读交付面清单（packaging/package.json）：运行时依赖只有一个真源
-  const version = dshVersionOf(readShipPkg());
+  // pin 的唯一真源是根 package.json#devDependencies（T3 起 packaging/package.json 是铭牌：
+  // 物化输入改由包集清单派生，那份不再声明运行时依赖）。vendor tag、集成漂移闸、版本串都读这里。
+  const version = dshPin();
   if (!version) {
-    console.error("[integrations] packaging/package.json 未声明 dependencies['@deepseek-ai/dsh']");
-    process.exit(1);
-  }
-  // 根那份 devDependencies 也应声明同一版本（开发侧要那棵树）：两处不一致就停。
-  // 为什么允许两处：DSH 版本既由出货面决定（物化 / 镜像 tag / 版本串），又是开发面直接装的依赖；
-  // 一致性由这条闸守，不靠人记得同时改。
-  const devPin = readPkg("package.json")?.devDependencies?.["@deepseek-ai/dsh"];
-  if (devPin !== undefined && devPin !== version) {
-    console.error(
-      `[integrations] DSH pin 不一致：packaging/package.json 是 ${version}，package.json devDependencies 是 ${devPin}`,
-    );
+    console.error("[integrations] package.json devDependencies 未声明 @deepseek-ai/dsh");
     process.exit(1);
   }
   await COMMANDS[cmd]({ tag: tagForVersion(version), version });

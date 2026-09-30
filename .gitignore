@@ -7,6 +7,9 @@ releases/
 # 临时文件（pack 中间原料 .tmp/pkg、测试产物 .tmp/tests 等）
 .tmp/
 
+# 树外构建的包集缓存（scripts/vendor/build.mts 的产物，跨 run 复用；键见 build-recipe.json）
+.cache/
+
 # 系统杂项
 *.log
 .DS_Store

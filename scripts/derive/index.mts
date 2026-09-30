@@ -14,7 +14,7 @@
 //                                             排第一，因为它改的是后面几个任务的源）
 //   manifest     主 package.json#version + SDK 快照 packedVersion → src/manifest.json（宿主读的 App 契约）
 //   cordis       主 package.json#version         → src-cordis/**/package.json（profile loader 读的 bundle 层）
-//   product-package 主 package.json#version    → packaging/package.json（交付树的包根那份）
+//   product-package 主 package.json#version    → packaging/package.json（包根铭牌的 version）
 //   thirdparty   vendor/hana-app-sdk 的 manifest → THIRD_PARTY_NOTICES.md（分发合规）
 //   paths        镜像包清单                       → src-integrations/tsconfig.paths.json（编辑器）
 //   vendor       交付面清单的 dsh 依赖           → vendor/deepseek-harness 的 checkout（状态型）
@@ -38,6 +38,7 @@ import { isDirectRun } from "../shared/run.mts";
 import { cordisPkgPaths, readPkg } from "../shared/version.mts";
 import { dshTask } from "../vendor/dsh.mts";
 import { packageLockTask } from "./package-lock.mts";
+import { packageSetTask } from "./package-set.mts";
 import { packedVersion, thirdpartyTask } from "./thirdparty.mts";
 import { versionMetadataTask } from "./version-metadata.mts";
 
@@ -56,7 +57,12 @@ export interface FileTask {
   name: string;
   /** 一句话：源 → 目标（日志与 --check 报告用）。 */
   about: string;
-  plan(): DerivedFile[];
+  plan(): DerivedFile[] | Promise<DerivedFile[]>;
+  /**
+   * 可选：内容之外还能验的东西（外部文件字节、身份字段）。--check 时在内容比较**之外**调用；
+   * 返回差异描述（空 = 一致）。用于"清单自洽但指向坏字节/另一次构建"这类内容比较看不出的漂移。
+   */
+  verify?(): string[];
 }
 
 /**
@@ -126,7 +132,7 @@ const cordisTask: FileTask = {
 const productPackageTask: FileTask = {
   kind: "file",
   name: "product-package",
-  about: "package.json#version → packaging/package.json",
+  about: "package.json#version → packaging/package.json（包根铭牌）",
   plan: () => versionFiles(["packaging/package.json"]),
 };
 
@@ -177,10 +183,10 @@ const packageLockTaskRef: StateTask = packageLockTask;
 
 /** 全部任务（main 按名筛选用；执行顺序即数组顺序——version-metadata 必须在所有读主版本的
  * 任务之前）。 */
-export const TASKS: DeriveTask[] = [versionMetadataTask, manifestTask, cordisTask, productPackageTask, pathsTask, vendorTask, thirdpartyTask, packageLockTaskRef];
+export const TASKS: DeriveTask[] = [versionMetadataTask, manifestTask, cordisTask, productPackageTask, pathsTask, vendorTask, thirdpartyTask, packageSetTask, packageLockTaskRef];
 
 /** 跑一个任务：比较期望内容与磁盘，写回或报漂。返回漂移文件数。 */
-export function runTask(task: DeriveTask, { checkOnly, log = console.log } = { checkOnly: false, log: console.log as (m: string) => void }): number {
+export async function runTask(task: DeriveTask, { checkOnly, log = console.log } = { checkOnly: false, log: console.log as (m: string) => void }): Promise<number> {
   if (task.kind === "state") {
     const diff = task.inspect();
     if (!diff.length) {
@@ -193,16 +199,24 @@ export function runTask(task: DeriveTask, { checkOnly, log = console.log } = { c
     log(`[derive] ${task.name}: 已修复`);
     return diff.length;
   }
-  const files = task.plan();
+  const files = await task.plan();
   const stale = files.filter((f) => !exists(f.rel) || readText(f.rel) !== f.content);
-  if (!stale.length) {
+  // 内容一致不等于可信：清单可能自洽却指向被换过的 tarball 或另一次构建。--check 时补验。
+  const semantic = checkOnly && task.verify ? task.verify() : [];
+  if (!stale.length && !semantic.length) {
     log(`[derive] ${task.name}: 一致（${files.length} 个文件）`);
     return 0;
   }
+  if (semantic.length) {
+    for (const d of semantic) log(`  - ${task.name}: ${d}`);
+  }
   if (checkOnly) {
-    log(`[derive] ${task.name}: 漂移 ${stale.length} 个文件（${task.about}）`);
-    for (const f of stale) log(`  - ${f.rel}`);
-    return stale.length;
+    if (stale.length) {
+      log(`[derive] ${task.name}: 漂移 ${stale.length} 个文件（${task.about}）`);
+      for (const f of stale) log(`  - ${f.rel}`);
+    }
+    // 语义漂移也计一处，否则 CI 会在内容相同但字节/身份不对时放行。
+    return stale.length + (semantic.length ? 1 : 0);
   }
   for (const f of stale) {
     const to = join(f.rel);
@@ -213,7 +227,7 @@ export function runTask(task: DeriveTask, { checkOnly, log = console.log } = { c
   return stale.length;
 }
 
-function main() {
+async function main() {
   const args = process.argv.slice(2);
   const checkOnly = args.includes("--check");
   const wanted = args.filter((a) => !a.startsWith("-"));
@@ -224,7 +238,7 @@ function main() {
     process.exit(2);
   }
   let drift = 0;
-  for (const task of tasks) drift += runTask(task, { checkOnly });
+  for (const task of tasks) drift += await runTask(task, { checkOnly });
   if (checkOnly && drift) {
     console.error(`[derive] 派生文件漂移 ${drift} 处——跑 node scripts/derive/index.mts 写回后提交`);
     process.exit(1);
@@ -232,4 +246,4 @@ function main() {
   console.log(`[derive] ${checkOnly ? "校验" : "派生"}完成：${tasks.length} 个任务，${drift} 个文件${checkOnly ? "漂移" : "写回"}`);
 }
 
-if (isDirectRun(import.meta.url)) main();
+if (isDirectRun(import.meta.url)) await main();

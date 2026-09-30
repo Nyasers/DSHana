@@ -1,0 +1,19 @@
+{
+  "package": "@deepseek-ai/dsh-app-boot",
+  "upstreamVersion": "0.2.0-rc.2",
+  "upstreamDir": "packages/boot/app-boot",
+  "sourceOnly": true,
+  "files": [
+    {
+      "path": "src/profile.ts",
+      "upstreamSha256": "30a883b090c4489b14371d947113d532ab9484d4e0f79c7a4fcddd066e24b6ab"
+    }
+  ],
+  "notes": [
+    "批次：预设归属我们（spec §6.6）。在 PROFILE_TEMPLATES 里加一条 dshana，bundle 清单与 web 相同（dsh-base + dsh-web-app）。",
+    "做法与 web 完全同一条路：给出随附模板条目，让 DSH 首次 `--profile dshana` 时自建 $DSH_HOME/profiles/dshana。",
+    "我们一行 DSH_HOME 都不写——不种子化、不链接、不归一清单。DSH_HOME 可能是用户自己的（数据源切换那一层就指向它），往里写等于跟用户争目录。",
+    "买到的：清单里记的根集就是我们的预设；上游改 web 模板不再悄悄改变我们装载的东西。",
+    "这是纯加法 delta（一张 const 表加一条），走同一个集成机制与同一道 upstreamSha256 闸。"
+  ]
+}

@@ -5,9 +5,9 @@
 // 布局原则：跨脚本共享/流程性构件放 scripts/shared/，领域特有随各自域或源码（src-cordis/build）。
 // 提供 cordis 包清单（src-cordis 顶层 roster bundle + plugins/*）与派生同步目标
 // （manifest + cordis 包）——版本号两个写手各管一段：主号归 `pnpm version`（唯一入口），
-// build metadata 段（`+dsh-…`）归 derive 从交付面清单的 dsh 声明派生（见
-// scripts/derive/version-metadata.mts；派生同步见 scripts/derive/index.mts，
-// git 收口见 scripts/release/version.mts）。
+// build metadata 段（`+dsh-…`）归 derive 从 DSH pin 派生（见
+// scripts/derive/version-metadata.mts；pin 现住根 package.json#devDependencies，见下；
+// 派生同步见 scripts/derive/index.mts，git 收口见 scripts/release/version.mts）。
 import fs from "node:fs";
 import path from "node:path";
 import { ROOT } from "./root.mts";
@@ -56,7 +56,20 @@ export function cleanVersion(version) {
 // 版本段只有一个来源——主 package.json（与 derive/version-hook 同一份实现）；
 // 不另设修订号：同一版本里改两次覆盖层应当由发版流程 bump 版本，而不是在这里编计数。
 export function patchVersion(upstreamVersion) {
-  return `${cleanVersion(upstreamVersion)}+dshana-${cleanVersion(readPkg("package.json").version)}`;
+  return patchVersionOf(upstreamVersion, readPkg("package.json").version);
+}
+
+/**
+ * 补丁包版本戳的**纯核**（与 patchVersion 同一份实现，只是把两个版本显式传入）。
+ *
+ * 拆出来是为了让"交付树版本式子"成为**可断言**的东西：pack 期写入用的算式与 assert 期判定用的
+ * 算式必须是同一份，否则会出现"写了却判不过"或反过来的假绿灯。纯函数的另一个好处是可单测。
+ *
+ * @param upstreamVersion - 集成目标在包集清单里的版本（上游版本）。
+ * @param appVersion - 我们自己的版本（主 package.json#version，可带 +dsh- 段）。
+ */
+export function patchVersionOf(upstreamVersion, appVersion) {
+  return `${cleanVersion(upstreamVersion)}+dshana-${cleanVersion(appVersion)}`;
 }
 
 // 完整版号：主号（剥掉既有 build 段）+ build metadata 段 `+dsh-<交付面 pin>`。
@@ -68,17 +81,21 @@ export function fullVersion(version, dsh = dshPin()) {
   return dsh ? `${base}+dsh-${dsh}` : base;
 }
 
-// ---- 交付面清单（packaging/package.json）----
-// 运行时依赖的唯一真源：pack 物化按它做一次干净安装（工位 = 根 package.json + 这份 + 锁文件 +
-// 按目标生成的 workspace yaml）；vendor 镜像 tag、集成漂移闸的 tag、产物版本串里的 `+dsh-…`
-// 都从这里读。根 package.json 只留构建面（devDependencies），不声明运行时依赖。
+// ---- 交付面清单（packaging/package.json = 包根铭牌）----
+// T3 起这份退成**铭牌**：物化输入由包集清单（packaging/dsh-package-set.json）派生，pack 不再读它
+// 装依赖。它只回答「这包是什么、什么版本」，字段是 name / type / version。没有任何脚本读它的
+// 内容（version 同步走 versionFiles 的通用路径），所以这里不再导出读取器——留着只会诱人再把它
+// 当依赖声明的真源。
 export const SHIP_PKG_REL = "packaging/package.json";
 
-/** 交付面清单（packaging/package.json）。 */
-export const readShipPkg = () => readPkg(SHIP_PKG_REL);
-
-/** 声明的 DSH 版本（未声明返回 null）。 */
+// ---- DSH pin（唯一真源：根 package.json#devDependencies）----
+// 为什么 pin 住在这里：它是**流水线的输入**（编哪份 DSH：vendor tag、集成漂移闸、产物版本串），
+// 必须在任何构建之前可读。放 T2 的清单里不行——清单是 T1 的产物，会成先有鸡还是先有蛋。
+// T3 之前 pin 住 packaging/package.json#dependencies；那份退成铭牌后没有 dependencies 了，
+// 于是归到根 devDependencies——它**本来就有**这一条（开发侧要那棵树），且这条闸一直要求两处一致
+// （见 scripts/integrations/index.mts），所以合并成一处是消除重复，不是新增约束。
+/** 声明的 DSH 版本（根 devDependencies；未声明返回 null）。 */
 export function dshPin() {
-  const v = readShipPkg()?.dependencies?.["@deepseek-ai/dsh"];
+  const v = readPkg("package.json")?.devDependencies?.["@deepseek-ai/dsh"];
   return typeof v === "string" && v ? v : null;
 }

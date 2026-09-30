@@ -22,6 +22,10 @@ import {
 } from "../../scripts/integrations/mirror.mts";
 import { extractRequires, duplicateCssClasses, patchGeneratedRequestModel } from "../../scripts/integrations/build.mts";
 import { cssScopeOf, scopedClassName } from "../../src-cordis/build/client-config.mts";
+import { MIN_FREE_BYTES, buildCacheKey, memoryGuardError } from "../../scripts/vendor/build.mts";
+import { deltaContentHash } from "../../scripts/integrations/delta.mts";
+import { integrationBakeError, versionEquationError } from "../../scripts/release/pack/assert.mts";
+import { patchVersionOf } from "../../scripts/shared/version.mts";
 
 const upstreamFile = "packages/client/ui-layout/src/client/index.ts";
 
@@ -312,13 +316,197 @@ test("patchGeneratedRequestModel：锚点找不到就抛（上游换了生成物
   );
 });
 
-test("patchGeneratedRequestModel：schema 里已有 model 就抛（上游把字段做进协议了，补丁该撤）", () => {
+test("patchGeneratedRequestModel：生成器已推出我们那份规范形状时，什么都不做（T5 的最好情形）", () => {
+  // delta 前移到构建期后，生成器会从烤进检出的 src/types.ts 自己推出 model 字段；
+  // 那时补丁不该再插一遍（会变成重复字段），也不该报错——那是"生成物不再打补丁"的正常态。
+  // 这里用规范形状本身构造"已含"的生成物：把它插进 prompt schema，补丁应当原样返回。
+  const canonical = [
+    "  'model': z.object({",
+    "  'provider': z.string().readonly(),",
+    "  'model': z.string().readonly(),",
+    "  'reasoningEffort': z.string().readonly().optional(),",
+    "}).readonly().optional(),",
+  ].join("\n") + "\n";
+  const fixture = TYPERT_FIXTURE.replace(
+    "  'sessionId': z.string().readonly(),",
+    "  'sessionId': z.string().readonly(),\n" + canonical,
+  );
+  const out = patchGeneratedRequestModel(fixture, ["session_prompt_parameter_0"]);
+  assert.equal(out, fixture, "生成器已给出规范形状时应当逐字不动（不重复插入）");
+  // 该 schema 里 model 只出现一次（= 生成器给的那份，没被补丁再插一遍）。
+  assert.equal(schemaBodyOf(out, "session_prompt_parameter_0").split("'model': z.object({").length - 1, 1);
+});
+
+test("patchGeneratedRequestModel：schema 里已有 model 但形状不对就抛（上游把字段做进协议了，补丁该撤）", () => {
   const already = TYPERT_FIXTURE.replace(
     "  'sessionId': z.string().readonly(),",
     "  'sessionId': z.string().readonly(),\n  'model': z.string().readonly().optional(),",
   );
   assert.throws(
     () => patchGeneratedRequestModel(already, ["session_prompt_parameter_0"]),
-    /已经有 model 字段/,
+    /形状与我们的 delta 不一致/,
   );
+});
+
+// ---- T5：内存护栏与缓存键（delta 进键、跨 dshana 版本可复用） ----
+
+test("memoryGuardError：够用时放行、不够时点名步骤并如实报数（纯函数，不必真压内存）", () => {
+  const GiB = 1024 * 1024 * 1024;
+  // 够用：安静放行（上限与下限各取一次，边界算够用）。
+  assert.equal(memoryGuardError(16 * GiB, "host: tsdown"), null);
+  assert.equal(memoryGuardError(MIN_FREE_BYTES, "host: tsdown"), null);
+  // 不够：报出步骤名、实际值、阈值，并说清"不自动重试"。
+  const msg = memoryGuardError(1.37 * GiB, "client: tsc -b tsconfig.client.json");
+  assert.ok(msg, "低于阈值必须给出说明");
+  assert.match(msg, /client: tsc -b tsconfig\.client\.json/);
+  assert.match(msg, /1\.37 GiB/);
+  assert.match(msg, new RegExp(String(MIN_FREE_BYTES / GiB) + " GiB"));
+  assert.match(msg, /不自动重试/);
+});
+
+test("buildCacheKey：delta 内容进键（改了 delta 就换键）", () => {
+  const base = {
+    tag: "dsh-v0.2.0-rc.2",
+    recipeVersion: "2",
+    nodeVersion: "26.8.1",
+    pnpmVersion: "11.7.0",
+    lockSha256: "deadbeef",
+  };
+  const a = buildCacheKey({ ...base, deltaHash: "a".repeat(64) });
+  const b = buildCacheKey({ ...base, deltaHash: "b".repeat(64) });
+  assert.notEqual(a, b, "delta 内容不同必须落不同键（否则会命中一份没有这次改动的包集）");
+  assert.equal(buildCacheKey({ ...base, deltaHash: "a".repeat(64) }), a, "同输入必须同键");
+});
+
+test("deltaContentHash：只随 delta 内容变，不随 dshana 版本变（缓存跨版本复用）", () => {
+  const h = deltaContentHash();
+  assert.match(h, /^[0-9a-f]{64}$/);
+  // 同一次调用两次必须一致（读的是仓库里的声明与 overlay 字节）。
+  assert.equal(deltaContentHash(), h);
+  // 键材料里不含任何版本号：把主版本换掉，deltaHash 与用它算出的键都必须原地不动。
+  const pkgPath = join(REPO_ROOT, "package.json");
+  const original = readFileSync(pkgPath, "utf8");
+  try {
+    for (const v of ["1.0.0-rc.30+dsh-0.2.0-rc.2", "9.9.9+dsh-0.2.0-rc.2"]) {
+      writeFileSync(pkgPath, JSON.stringify({ ...JSON.parse(original), version: v }, null, 2) + "\n");
+      assert.equal(deltaContentHash(), h, "deltaHash 不得随 dshana 版本变");
+    }
+  } finally {
+    writeFileSync(pkgPath, original);
+  }
+});
+
+// ---- T5 pack 侧：交付树版本式子 + 集成烘焙对账（都是纯函数，两个分支各覆盖一次） ----
+
+const APP = "1.0.0-rc.29+dsh-0.2.0-rc.2";
+const APP_CLEAN = "1.0.0-rc.29";
+
+test("patchVersionOf：戳 = <清单版本>+dshana-<干净版本>（剥掉 +dsh- 段）", () => {
+  assert.equal(patchVersionOf("0.2.0-rc.2", APP), "0.2.0-rc.2+dshana-" + APP_CLEAN);
+  // 上游版本本身若带 build 段，也要剥掉（版本串里不能出现两个 +）。
+  assert.equal(patchVersionOf("0.2.0-rc.2+build", APP), "0.2.0-rc.2+dshana-" + APP_CLEAN);
+});
+
+test("versionEquationError：式子成立时静默（集成目标带戳、其余逐字等于清单）", () => {
+  const manifest = new Map([
+    ["@deepseek-ai/dsh-client-ui-layout", "0.2.0-rc.2"],
+    ["@deepseek-ai/dsh-session", "0.2.0-rc.2"],
+  ]);
+  const targets = new Set(["@deepseek-ai/dsh-client-ui-layout"]);
+  const installed = [
+    { name: "@deepseek-ai/dsh-client-ui-layout", version: "0.2.0-rc.2+dshana-" + APP_CLEAN },
+    { name: "@deepseek-ai/dsh-session", version: "0.2.0-rc.2" },
+  ];
+  assert.deepEqual(versionEquationError(installed, manifest, targets, APP), []);
+});
+
+test("versionEquationError：集成目标没带戳 → 报（漏盖/盖错）", () => {
+  const manifest = new Map([["@deepseek-ai/dsh-client-ui-layout", "0.2.0-rc.2"]]);
+  const targets = new Set(["@deepseek-ai/dsh-client-ui-layout"]);
+  // 仍是清单版本 = 戳没盖上（正是旧 applyIntegrations 退场后最容易出的错）。
+  const problems = versionEquationError(
+    [{ name: "@deepseek-ai/dsh-client-ui-layout", version: "0.2.0-rc.2" }],
+    manifest, targets, APP,
+  );
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /@deepseek-ai\/dsh-client-ui-layout@0\.2\.0-rc\.2/);
+  assert.match(problems[0], /集成目标/);
+});
+
+test("versionEquationError：非目标包版本被带偏 → 也报（式子两侧都要判）", () => {
+  const manifest = new Map([["@deepseek-ai/dsh-session", "0.2.0-rc.2"]]);
+  const problems = versionEquationError(
+    [{ name: "@deepseek-ai/dsh-session", version: "0.2.0-rc.1" }],
+    manifest, new Set(), APP,
+  );
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /非目标/);
+});
+
+test("versionEquationError：清单外的包不属本式子作用域（registry 三方包不误报）", () => {
+  const manifest = new Map([["@deepseek-ai/dsh-session", "0.2.0-rc.2"]]);
+  const installed = [
+    { name: "@deepseek-ai/dsh-session", version: "0.2.0-rc.2" },
+    { name: "@deepseek-ai/cordis", version: "4.0.4" }, // 清单外，随便什么版本都不该报
+  ];
+  assert.deepEqual(versionEquationError(installed, manifest, new Set(), APP), []);
+});
+
+test("integrationBakeError：档案与当前声明一致时静默", () => {
+  const declared = [
+    { dir: "ui-layout", packageName: "@deepseek-ai/dsh-client-ui-layout", files: 2 },
+    { dir: "ui-theme", packageName: "@deepseek-ai/dsh-client-ui-theme", files: 1 },
+  ];
+  const baked = {
+    deltaHash: "a".repeat(64),
+    stagedFiles: 3,
+    packages: [
+      { dir: "ui-layout", package: "@deepseek-ai/dsh-client-ui-layout", files: 2 },
+      { dir: "ui-theme", package: "@deepseek-ai/dsh-client-ui-theme", files: 1 },
+    ],
+  };
+  assert.deepEqual(integrationBakeError(declared, baked, "a".repeat(64)), []);
+});
+
+test("integrationBakeError：改了 overlay 而包集没重编（deltaHash 不符）→ 报", () => {
+  const declared = [{ dir: "ui-layout", packageName: "@deepseek-ai/dsh-client-ui-layout", files: 2 }];
+  const baked = { deltaHash: "a".repeat(64), stagedFiles: 2, packages: [{ dir: "ui-layout", package: "@deepseek-ai/dsh-client-ui-layout", files: 2 }] };
+  const problems = integrationBakeError(declared, baked, "b".repeat(64));
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /与当前工作树不一致/);
+  assert.match(problems[0], /没重编包集/);
+});
+
+test("integrationBakeError：新增声明但档案里没有 → 报；档案多出已删声明 → 也报", () => {
+  const declared = [
+    { dir: "ui-layout", packageName: "@deepseek-ai/dsh-client-ui-layout", files: 2 },
+    { dir: "ui-new", packageName: "@deepseek-ai/dsh-client-ui-new", files: 1 },
+  ];
+  const baked = { deltaHash: "a".repeat(64), stagedFiles: 2, packages: [{ dir: "ui-layout", package: "@deepseek-ai/dsh-client-ui-layout", files: 2 }] };
+  const problems = integrationBakeError(declared, baked, "a".repeat(64));
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /ui-new/);
+  assert.match(problems[0], /没含这次声明/);
+
+  const declared2 = [{ dir: "ui-layout", packageName: "@deepseek-ai/dsh-client-ui-layout", files: 2 }];
+  const baked2 = { deltaHash: "a".repeat(64), stagedFiles: 2, packages: [
+    { dir: "ui-layout", package: "@deepseek-ai/dsh-client-ui-layout", files: 2 },
+    { dir: "ui-gone", package: "@deepseek-ai/dsh-client-ui-gone", files: 1 },
+  ] };
+  const problems2 = integrationBakeError(declared2, baked2, "a".repeat(64));
+  assert.equal(problems2.length, 1);
+  assert.match(problems2[0], /ui-gone/);
+  assert.match(problems2[0], /已不在 src-integrations/);
+});
+
+test("integrationBakeError：旧配方没有 integrations 记录 → 报（不能默认成已烤过）", () => {
+  const problems = integrationBakeError([{ dir: "x", packageName: "p", files: 1 }], undefined, "a".repeat(64));
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /没有 integrations 记录/);
+});
+
+test("integrationBakeError：overlay 数为 0 的声明不算缺口（与 stageDelta 同口径）", () => {
+  const declared = [{ dir: "empty", packageName: "@deepseek-ai/dsh-empty", files: 0 }];
+  const baked = { deltaHash: "a".repeat(64), stagedFiles: 0, packages: [] };
+  assert.deepEqual(integrationBakeError(declared, baked, "a".repeat(64)), []);
 });

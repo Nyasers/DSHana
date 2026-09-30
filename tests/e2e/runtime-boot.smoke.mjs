@@ -8,8 +8,10 @@
 //   boot 模式（默认）：定位 DSH → profile 种子化 → runProfile → webserver 真实监听 → 起中继
 //   preflight 模式（--preflight）：只验证目标 DSH_HOME 可用性（数据源切换探针），不 boot
 // 用本仓库 node_modules 作 depsRoot（替代随包物化），dataDir 指向临时目录；@dshana 子插件由
-// build:cordis 落进仓库的 node_modules/@dshana（仓库树扮演安装树，与出包后同形）；profile 用官方
-// 随附的 web（DSH 首次加载时自建），我们的 roster patch 由 runtime 经 patchFiles 传入
+// build:cordis 落进仓库的 node_modules/@dshana（仓库树扮演安装树，与出包后同形）；profile 用我们
+// 随附的 dshana 预设（模板条目随包在交付的 @deepseek-ai/dsh-app-boot；仓库形态下模板名未改时
+// 会自建 profiles/dshana 并给出上游的模板表，见 §6.6），我们的 roster patch 由 runtime 经
+// patchFiles 传入
 // （仓库形态下 installRoot = <repo>/dist，即 dist/cordis.patch.yml）。
 // 经 child_process.fork 建立 IPC 通道（满足 connectAppRuntime 的 process.send 前置）。
 // 就绪判据（boot）= 中继端口对 http://127.0.0.1:<bridgePort>/ 有 HTTP 应答（无 key 得 403 也算

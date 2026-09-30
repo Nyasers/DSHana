@@ -5,8 +5,11 @@
 // （scripts/release/pack/assert.mts 的 assertProductPackage + packaging/package.json）
 //
 // 守的是「构建面不进安装包」：仓库那份带着 scripts/devDependencies/packageManager/imports，
-// 装机侧没有消费方，混进去只会让人读出错觉。交付树那份只有 name/version/type + dependencies
-// （后者是交付清单自己的运行时依赖声明，**唯一真源**；见 packaging/README.md）。
+// 装机侧没有消费方，混进去只会让人读出错觉。
+//
+// T3 起交付面清单退成**铭牌**：物化输入由包集清单派生（install-source.mts），这份不再装依赖，
+// 所以只有 name / type / version 三个键——**没有 dependencies**。旧测试还按"四件齐全"写，
+// 正是本文件要防的那类"契约漂了而测试没跟上"，故一并收口。
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -26,8 +29,8 @@ function withDist(contents, fn) {
   }
 }
 
-test("交付树 package.json：四件齐全且版本一致时放行", () => {
-  withDist({ name: "dshana", version: VERSION, type: "module", dependencies: { "@deepseek-ai/dsh": "0.1.6-alpha.2" } }, (dir) => {
+test("交付树 package.json：三件齐全且版本一致时放行", () => {
+  withDist({ name: "dshana", type: "module", version: VERSION }, (dir) => {
     assert.doesNotThrow(() => assertProductPackage(dir, VERSION));
   });
 });
@@ -40,14 +43,20 @@ test("构建面字段混进来就拒包（scripts/devDependencies/packageManager
     { imports: { "#/*": "./src/*" } },
     { private: true },
   ]) {
-    withDist({ name: "dshana", version: VERSION, type: "module", dependencies: {}, ...extra }, (dir) => {
+    withDist({ name: "dshana", type: "module", version: VERSION, ...extra }, (dir) => {
       assert.throws(() => assertProductPackage(dir, VERSION), /字段不对/, JSON.stringify(extra));
     });
   }
 });
 
-test("缺必填键也拒包（dependencies 不在 = 漏了交付面清单）", () => {
-  withDist({ name: "dshana", version: VERSION, type: "module" }, (dir) => {
+test("dependencies 不再允许（铭牌不装依赖：物化输入走包集清单）", () => {
+  withDist({ name: "dshana", type: "module", version: VERSION, dependencies: { "@deepseek-ai/dsh": "0.1.6-alpha.2" } }, (dir) => {
+    assert.throws(() => assertProductPackage(dir, VERSION), /字段不对/);
+  });
+});
+
+test("缺必填键也拒包（version 不在 = 漏了派生同步）", () => {
+  withDist({ name: "dshana", type: "module" }, (dir) => {
     assert.throws(() => assertProductPackage(dir, VERSION), /字段不对/);
   });
 });
@@ -56,10 +65,10 @@ test("文件缺失 / 版本漂移 / type 不是 module 一律拒包", () => {
   withDist(undefined, (dir) => {
     assert.throws(() => assertProductPackage(dir, VERSION), /缺失/);
   });
-  withDist({ name: "dshana", version: "1.0.0-rc.16", type: "module", dependencies: {} }, (dir) => {
+  withDist({ name: "dshana", type: "module", version: "1.0.0-rc.16" }, (dir) => {
     assert.throws(() => assertProductPackage(dir, VERSION), /≠ 本次出包版本/);
   });
-  withDist({ name: "dshana", version: VERSION, type: "commonjs", dependencies: {} }, (dir) => {
+  withDist({ name: "dshana", type: "commonjs", version: VERSION }, (dir) => {
     assert.throws(() => assertProductPackage(dir, VERSION), /type/);
   });
 });

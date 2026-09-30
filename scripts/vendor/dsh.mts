@@ -23,7 +23,7 @@ import { isDirectRun } from "../shared/run.mts";
 import { dshPin } from "../shared/version.mts";
 
 /** 一句话说明源 → 目标（derive 任务与 CLI 共用）。 */
-export const ABOUT = "packaging/package.json#dependencies[@deepseek-ai/dsh] → vendor/deepseek-harness 的 checkout";
+export const ABOUT = "package.json#devDependencies[@deepseek-ai/dsh] → vendor/deepseek-harness 的 checkout";
 
 /** 读一条 git 输出（trim；失败返回 null）。 */
 function gitOut(cmd: string): string | null {
@@ -45,7 +45,7 @@ function tagOf(): string | null {
 /** 只读检查：返回差异描述（空数组 = 一致）。 */
 export function inspect(): string[] {
   const tag = tagOf();
-  if (!tag) return ["packaging/package.json 未声明 dependencies['@deepseek-ai/dsh']"];
+  if (!tag) return ["package.json 未声明 devDependencies['@deepseek-ai/dsh']"];
   // 用 refs/tags/ 全名：避免与同名分支歧义，也绕开 `^` 在 cmd 下是转义符的坑。
   const tagSha = gitOut(`git -C vendor/deepseek-harness rev-parse --verify --quiet refs/tags/${tag}`);
   if (!tagSha) return [`vendor/deepseek-harness 无 ${tag}（镜像未 fetch 到该 tag？）`];
@@ -62,7 +62,7 @@ export function inspect(): string[] {
 /** 修复：先确保镜像有这个 tag，再 checkout 到 tag，并把 gitlink 更新进 index。 */
 export function repair(): void {
   const tag = tagOf();
-  if (!tag) throw new Error("packaging/package.json 未声明 dependencies['@deepseek-ai/dsh']");
+  if (!tag) throw new Error("package.json 未声明 devDependencies['@deepseek-ai/dsh']");
   // `checkout <tag>` 撞上本地没有的 tag 只会报 pathspec 不匹配，指错了方向：镜像没 fetch 过而已。
   const probe = `git -C vendor/deepseek-harness rev-parse --verify --quiet refs/tags/${tag}`;
   if (!gitOut(probe)) {

@@ -115,8 +115,14 @@ const SESSION_MODEL_SCHEMA = [
  * 列 zod 校验；而 zod 的 `z.object` 对未见过的键默认是**剥离**。于是只在 src/types.ts 里加的
  * 字段在 RPC 边界被拿走，服务端读到的永远是 undefined——现场只剩「模型没生效」这种无从归因的
  * 样子（服务端反而报它自己的默认路由不可服务）。
- * 定位靠锚点：schema 常量名 + `z.object({` 换行。上游换了生成器/改名/换形状就抛，不静默放过；
- * 若上游哪天把字段做进协议（schema 里已有 model），也抛——那是这里的补丁该撤的信号。
+ * 定位靠锚点：schema 常量名 + `z.object({` 换行。上游换了生成器/改名/换形状就抛，不静默放过。
+ *
+ * **T5 起的三态**（delta 前移到构建期后，语义从"必然插入"变成"插入或确认"）：
+ *   · 已含**我们那份规范形状**——生成器从烤进检出的 src/types.ts 自己推出来了，什么都不做。
+ *     这是 T5 预期的最好情形（类型级联动，生成物不再需要打补丁），不是异常。
+ *   · 不含 model——照旧按锚点插入（兜底：生成器没跟上我们的类型面时仍要正确）。
+ *   · 含 model 但**形状不是我们那份**——这才是真冲突（上游自己把字段做进了协议，或改了形状），
+ *     当场抛，让人来对账该撤还是该改。
  * @param text - 生成物文本（lib/typert.host.js）
  * @param schemaNames - 要补的 schema 常量名（如 session_prompt_parameter_0）
  * @param label - 报错里指代它的名字（包名）
@@ -136,8 +142,13 @@ export function patchGeneratedRequestModel(text, schemaNames, label = "生成物
     const at = m.index + m[0].length;
     const end = out.indexOf("\n}))", at);
     const body = out.slice(at, end >= 0 ? end : out.length);
+    // T5：生成器若已推出我们那份规范形状，就是"不需要打补丁"的正常态（见函数头三态）。
+    if (body.includes(SESSION_MODEL_SCHEMA.trimEnd())) continue;
     if (/'model':/.test(body)) {
-      throw new Error(`${label}: ${name} 的 schema 里已经有 model 字段——上游把它做进协议了，这里的补丁该撤`);
+      throw new Error(
+        `${label}: ${name} 的 schema 里已有 model 字段，但形状与我们的 delta 不一致——` +
+          "上游自己把该字段做进了协议（或改了形状），这里的补丁该撤/该改，请对账后再构建",
+      );
     }
     out = out.slice(0, at) + SESSION_MODEL_SCHEMA + out.slice(at);
   }
@@ -246,9 +257,27 @@ export async function buildIntegrations(integrations, { tag, mirrorDir = MIRROR,
     //    （既有八个集成都是这样）；server 半是上游 api 包那一类（发布单文件 ESM bundle）。
     const halves = it.halves && typeof it.halves === "object" ? it.halves : {};
     const serverDecl = halves.server && typeof halves.server === "object" ? halves.server : null;
-    const wantClient = halves.client !== false;
-    if (!wantClient && !serverDecl) {
-      throw new Error(`integration ${short}: halves 既没 client 也没 server（没东西可编译）`);
+    // sourceOnly：这个 delta **不自己编产物**，只改上游源码、由上游构建去编（app-boot 的模板表就是
+    // 这一类——它是 @deepseek-ai/dsh-app-boot 的一个源文件，靠 tsc -b 进 bundle）。步骤 1/2 照做
+    // （摊源 + 覆盖 + 2.5 的类型检查），跳过 3–5 的编译与组装。
+    //
+    // 判互斥只看**显式**声明：halves 缺省时 client 是"默认要编"，而 sourceOnly 正是要覆盖这个默认，
+    // 所以不能拿缺省值去撞它。
+    const sourceOnly = it.sourceOnly === true;
+    if (sourceOnly && (halves.client === true || serverDecl)) {
+      throw new Error(`integration ${short}: sourceOnly 与 halves 的编译声明互斥（写了一半就删掉那半）`);
+    }
+    if (!sourceOnly && halves.client === false && !serverDecl) {
+      throw new Error(`integration ${short}: halves 既没 client 也没 server（没东西可编译；纯源码 delta 请写 sourceOnly: true）`);
+    }
+    const wantClient = !sourceOnly && halves.client !== false;
+
+    if (sourceOnly) {
+      // 纯源码 delta：到此为止（源已摊、overlay 已盖、类型检查已过）。产物由上游构建产出，
+      // 我们这里没有自己的 bundle 要装。
+      built.push({ out: null, sourceOnly: true, package: pkg });
+      log(`[integrations] ${short}: 纯源码 delta（${it.files.length} 个 overlay）——不自己编产物，由上游构建编译`);
+      continue;
     }
 
     /** client 半的编译结果（集成只声明 server 半时是 null）。 */
