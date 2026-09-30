@@ -22,12 +22,12 @@
 //
 // 状态型任务（不是文件型）：产物由 pnpm 跑出来，不是我们算出来的。inspect 只读（拿已提交的
 // 锁文件跑 frozen 探针，不动任何东西），repair 才在契约工位里重生成并写回。
-import { spawnSync } from "node:child_process";
 import fs from "fs-extra";
 import { join } from "node:path";
 
 import { ROOT } from "../shared/root.mts";
 import { readPackageSet } from "../release/package-set.mts";
+import { assertLockfilesUnchanged, assertLockfileVersion, lockfileSnapshot, readPnpmDeclaration, runDeliveryPnpm } from "../release/pnpm.mts";
 import { PACKAGE_DIR, prepareInstallSource, verifyLockfileIntegrity } from "../release/pack/install-source.mts";
 import { stagingWorkspaceYaml } from "../release/pack/targets.mts";
 
@@ -40,18 +40,17 @@ const WORK_DIR = join(ROOT, ".tmp", "pkg-lock");
 export const ABOUT = "包集清单派生出的工位（file: tarball）→ packaging/pnpm-lock.yaml";
 
 /**
- * 在工位里跑一次 pnpm（返回退出码；输出直通）。inspect 用 frozen，repair 不用。
+ * 在工位里跑一次 pnpm（返回退出码与输出；实际版本由 runDeliveryPnpm 断言）。
  *
- * cwd 留在仓库根、用 --dir 指工位：corepack 因此读到根 package.json#packageManager 钉的 pnpm
- * 版本（工位里那份清单会把向上查找截断，落回机器上的默认 pnpm，锁文件就会因机器而异）。
+ * 目标用 `--dir` 钉在工位、cwd 留在仓根：pnpm 自带的版本管理因此读到**本仓** packageManager 声明
+ * 的那一份（工位里那份清单会把向上查找截断，落回机器上的默认 pnpm，锁文件就会因机器而异）。
+ * inspect 用 frozen、repair 不用；frozen 探针允许非零退出（调用方据退出码判漂移）。
  */
-function pnpmInWorkDir(args: string[]) {
-  const res = spawnSync("pnpm", ["--dir", WORK_DIR, ...args], {
-    cwd: ROOT,
-    stdio: "inherit",
-    shell: process.platform === "win32",
-  });
-  return res.status ?? 1;
+function pnpmInWorkDir(args: string[], label: string) {
+  const res = runDeliveryPnpm(args, { projectDir: WORK_DIR, label, decl: readPnpmDeclaration(), allowFailure: true });
+  const body = (res.stdout + res.stderr).trim();
+  if (body !== "") console.log(body);
+  return res.status;
 }
 
 /**
@@ -108,7 +107,13 @@ export function inspect(): string[] {
   }
   try {
     prepareWorkDir({ lockFrom: lockAbs });
-    const code = pnpmInWorkDir(["install", "--lockfile-only", "--frozen-lockfile"]);
+    // 交叉校验：锁文件的 lockfileVersion 必须与声明版本的 pnpm 相符（版本/格式跨了大版本要人认账）。
+    try {
+      assertLockfileVersion(fs.readFileSync(lockAbs, "utf8"), readPnpmDeclaration(), SHIP_LOCK_REL);
+    } catch (error) {
+      return [String(error instanceof Error ? error.message : error)];
+    }
+    const code = pnpmInWorkDir(["install", "--lockfile-only", "--frozen-lockfile"], "derive-lock-inspect");
     if (code !== 0) {
       return [SHIP_LOCK_REL + " 与包集清单派生的工位不同步（pnpm install --frozen-lockfile 退出码 " + code + "）——跑 node scripts/derive/index.mts package-lock 重生成"];
     }
@@ -120,15 +125,22 @@ export function inspect(): string[] {
 
 /** 修复：以仓库锁文件为种子在工位里重解析，把结果写回交付面锁文件。 */
 export function repair(): void {
+  // 护栏：派生**只许写 packaging/ 那份**。仓根 pnpm-lock.yaml 是构建链的输入，这里绝不许碰
+  // （历史上隐式自换正是把它改掉的那个机制）。前后比一次，变了就拒。
+  const locksBefore = lockfileSnapshot();
   try {
     prepareWorkDir({ lockFrom: null });
-    const code = pnpmInWorkDir(["install", "--lockfile-only"]);
+    const code = pnpmInWorkDir(["install", "--lockfile-only"], "derive-lock-repair");
     if (code !== 0) throw new Error("工位重生成 " + SHIP_LOCK_REL + " 失败（pnpm 退出码 " + code + "）");
     const produced = join(WORK_DIR, "pnpm-lock.yaml");
     if (!fs.pathExistsSync(produced)) throw new Error("工位未产出锁文件：" + produced);
+    // 写回前校验格式：产出的锁文件必须仍是声明版本那份格式（交叉校验，不随版本静默改格式）。
+    assertLockfileVersion(fs.readFileSync(produced, "utf8"), readPnpmDeclaration(), "工位产出的 " + SHIP_LOCK_REL);
     fs.copySync(produced, join(ROOT, SHIP_LOCK_REL));
     console.log("[derive] " + SHIP_LOCK_REL + " 已重生成（以仓库锁文件为种子）");
   } finally {
+    // packaging/ 那份本来就会被本函数写，故只对**仓根**那份执法。
+    assertLockfilesUnchanged(locksBefore.filter((s) => s.rel === "pnpm-lock.yaml"), "derive package-lock", ROOT);
     cleanWorkDir();
   }
 }

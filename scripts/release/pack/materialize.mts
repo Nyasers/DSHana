@@ -19,17 +19,15 @@
 // hoisted 布局：顶层真实目录、无软链接——软链进 zip 跨机解压即断。
 // 隔离的理由：不触碰仓库 node_modules（dev+prod 混合树，且动它会触发 pnpm 重建——Windows 上
 // 曾遇清理被拒导致树损坏）。
-import { createRequire } from "node:module";
 import fs from "fs-extra";
 import { join } from "node:path";
 
 import { ROOT } from "../../shared/root.mts";
 import { readPackageSet } from "../package-set.mts";
+import { assertLockfilesUnchanged, assertLockfileVersion, assertDeliveryPnpmVersion, lockfileSnapshot, readPnpmDeclaration, runDeliveryPnpm } from "../pnpm.mts";
 import { assertIntegrationTargets } from "./assert.mts";
 import { prepareInstallSource, verifyLockfileIntegrity, verifyMaterializedModules } from "./install-source.mts";
 import { stagingWorkspaceYaml } from "./targets.mts";
-
-const require = createRequire(import.meta.url);
 
 /** 依赖物化工位根（起手清残留、用完即清）。 */
 export const STAGING_ROOT = join(ROOT, ".tmp", "pkg-root");
@@ -44,7 +42,6 @@ export const STAGING_ROOT = join(ROOT, ".tmp", "pkg-root");
  * @returns 该目标的 node_modules 路径。
  */
 export function materializeProdDeps(spec) {
-  const { spawnSync } = require("node:child_process");
   const set = readPackageSet();
   if (set === null) {
     throw new Error("找不到 packaging/dsh-package-set.json：先跑 node scripts/derive/index.mts package-set");
@@ -66,12 +63,20 @@ export function materializeProdDeps(spec) {
   console.log(
     "[pack] 物化 " + spec.name + "（源 = 包集清单 " + packages + " 个 tarball，隔离目录 .tmp/pkg-root/" + spec.name + "）...",
   );
-  const res = spawnSync("pnpm", ["install", "--prod", "--frozen-lockfile"], {
-    cwd: dir,
-    stdio: "inherit",
-    shell: process.platform === "win32",
+  // 交付链 pnpm：版本由本仓 packageManager 声明决定（见 scripts/release/pnpm.mts）。裸名 + shell 是
+  // **故意**的——那正是「声明决定版本」那条机制；版本已在 index.mts 开工前断言过，这里再断言一次
+  // 实际收尾行，防中途被换。
+  const decl = readPnpmDeclaration();
+  // 锁文件护栏：物化前后比一次。仓根与 packaging/ 两份都不许被动（packaging 那份只归 derive 写）。
+  const locksBefore = lockfileSnapshot();
+  const res = runDeliveryPnpm(["install", "--prod", "--frozen-lockfile"], {
+    projectDir: dir,
+    label: "materialize-" + spec.name,
+    decl,
+    log: () => {},
   });
-  if (res.status !== 0) throw new Error("生产依赖物化失败（" + spec.name + "，pnpm install --prod 退出码 " + res.status + "）");
+  assertLockfilesUnchanged(locksBefore, "物化 " + spec.name, ROOT);
+  console.log("[pack] " + spec.name + " 物化用 pnpm " + res.reportedVersion + "（= 声明 " + decl.version + "）");
   if (!fs.pathExistsSync(modules)) throw new Error("生产依赖物化失败（" + spec.name + "）：node_modules 未生成");
   // 物化**后**的校：装出来的 @deepseek-ai/* 版本必须与清单一致（override 漏了就会从 registry
   // 取同版成品，树看起来齐但源已经不是我们的包集了）。

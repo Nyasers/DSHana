@@ -28,8 +28,23 @@ T3 之前这里还有一个 `dependencies: { "@deepseek-ai/dsh": ... }`：它曾
 ## dsh-package-set.json（包集清单）
 
 T2 的产物：T1 编出的 318 个 `@deepseek-ai/*` 包的 `name / version / file / bytes / sha512`，加根集
-（`web` 模板 ∪ `OPTIONAL_BUNDLES` ∪ `@dshana/*`）与构建身份（tag / commit / 缓存键 / node / pnpm）。
+（我们的 `dshana` 预设模板 ∪ `OPTIONAL_BUNDLES` ∪ `@dshana/*`）与构建身份（tag / commit / 缓存键 /
+node / 构建链 pnpm / 交付链 pnpm）。
 物化时按它把 tarball 拷进工位并逐个校 sha512；构建期另有一道闸拿现算根集与它比对。
+
+`build.pnpm` 与 `build.deliveryPnpm` 是**两条链各自的 pnpm**（前者检出/vendor 那份上游 pin，后者本仓
+`packageManager` 声明那份），故意分开记；同一个字段说不清哪条链用了哪个版本。清单格式版本 2 起有这一格。
+
+## 交付链的 pnpm（机器准备与首次使用）
+
+**本仓用哪个 pnpm，由 `packageManager` 声明决定**（corepack 与 pnpm 自带的版本管理都是这套机制的
+提供者）——构建链跟检出的上游声明，交付链（派生锁文件 + 物化）跟本仓声明。所以**换一台机器第一次
+跑，先让这份声明能被满足**（pnpm 能取到该版本，例如 `pnpm install` 一次）；取不到时交付链会当场
+报「实际版本 ≠ 声明版本」并拒绝出包，而不是退回手边那份。
+
+**干净克隆上 `pnpm run derive:check` 会 fail-closed**：包集清单与锁文件都派生自 T1 缓存条目，
+没有条目就报「T1 缓存条目不存在」。先跑一次 `pnpm run build:dsh` 把包集编出来（此后 `derive:check`
+才有东西可校）。
 
 ## pnpm-lock.yaml（物化锁文件）
 

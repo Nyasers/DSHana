@@ -27,6 +27,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { cacheEntryDir, integrityOfFile } from "../package-set.mts";
+import { readPnpmDeclaration } from "../pnpm.mts";
 import type { DshPackageSet, PackageRecord } from "../package-set.mts";
 
 /** 工位里放包集 tarball 的子目录名（锁文件里的 file: 路径依赖它，改名要重出锁文件）。 */
@@ -35,12 +36,21 @@ export const PACKAGE_DIR = "packages";
 /** 安装根的包名：A 口径，不换根（见文件头与 spec §6.4.2）。 */
 export const INSTALL_ROOT = "@deepseek-ai/dsh";
 
-/** 工位里那份派生出来的 package.json 的形状。 */
+/**
+ * 工位里那份派生出来的 package.json 的形状。
+ *
+ * `packageManager` 是**必须**的，不是可选装饰：pnpm 解析「该用哪个版本」时从目标目录向上找最近的
+ * package.json，**找到了就停**（没有才继续向上）。工位清单缺这个字段时，解析就落到 PATH 上那份
+ * ——实测同一台机器、同一条命令：工位有声明 → 12.8.2，无声明 → 11.24.0。而工位恰恰是用
+ * `--dir` 指过去的那个目录，于是「交付链用哪个 pnpm」又由跑包的机器决定，正是要堵的洞。
+ */
 export interface StagingManifest {
   name: string;
   version: string;
   private: boolean;
   type: string;
+  /** pnpm 声明（原样照抄本仓 packageManager 的**交付链**那一份）。 */
+  packageManager: string;
   dependencies: Record<string, string>;
 }
 
@@ -165,6 +175,9 @@ export function prepareInstallSource(
     version: set.build.tag.replace(/^dsh-v/u, ""),
     private: true,
     type: "module",
+    // 原样带上声明：工位是 pnpm 解析版本的落点（见 StagingManifest 注释）。用**现读**的声明而不是
+    // 清单里记的那格：清单可能是在别的声明下派生的，而这里要保证的是「本次运行按当前声明选版本」。
+    packageManager: readPnpmDeclaration().raw,
     dependencies: { [INSTALL_ROOT]: tarballSpec(rootRecord) },
   };
   fs.writeFileSync(path.join(projectDir, "package.json"), JSON.stringify(manifest, null, 2) + "\n", "utf8");

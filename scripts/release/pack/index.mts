@@ -35,6 +35,7 @@ import fs from "fs-extra";
 import { errText } from "../../shared/err-text.mts";
 import { ROOT } from "../../shared/root.mts";
 import { readPackageSet, assertRootSetMatchesManifest } from "../package-set.mts";
+import { assertDeliveryPnpmVersion, assertLockfilesUnchanged, lockfileSnapshot, readPnpmDeclaration } from "../pnpm.mts";
 import { assertCordisDistVersions, assertProductPackage, assertRecipeBakedCurrentDelta, assertUiTree, assertVersionEquation } from "./assert.mts";
 import { declareInstallationPlugins } from "./bundle-deps.mts";
 import { STAGING_ROOT, materializeProdDeps } from "./materialize.mts";
@@ -112,6 +113,13 @@ if (manifestSet === null) {
 }
 const baked = assertRecipeBakedCurrentDelta(manifestSet, join(ROOT, "src-integrations"));
 console.log("[pack] 集成烘焙对账：档案 " + baked.packages + " 个集成 / " + baked.stagedFiles + " 个文件，与当前声明一致");
+
+// 1.9) 交付链 pnpm：版本必须**实际**等于本仓 packageManager 声明的那一份（不是「手边那份」）。
+//      为什么放在物化之前：交付树的形状由 pnpm 决定，版本不对就该在花掉一次安装之前停。
+//      同时取锁文件基线——整条 pack 跑完，仓根与 packaging/ 两份都必须原样（packaging 那份只归 derive 写）。
+const deliveryPnpm = assertDeliveryPnpmVersion();
+const packLockBaseline = lockfileSnapshot();
+console.log("[pack] 交付链 pnpm " + deliveryPnpm + "（= 声明 " + readPnpmDeclaration().version + "）；锁文件基线已取");
 
 // 目标选择：`--target <名字>`（必须显式给，无默认）。
 // 用 node:util 的 parseArgs 结构化解析（strict + 禁位置参数）：未知选项、缺值、多余位置参数
@@ -224,5 +232,9 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
   fs.writeFileSync(`${zipPath}.sha256`, sha, "utf8");
   // 铺平目录已入包，即用即清
   fs.removeSync(pkgDir);
+  // 1.10) 锁文件护栏收尾：整条交付链跑完，仓根与 packaging/ 两份都必须一字未动。
+  //       历史上正是「pnpm 被隐式自换、目标落到仓里」把仓根锁文件改掉的；这道闸让那种事当场可见。
+  assertLockfilesUnchanged(packLockBaseline, "pack " + spec.name);
+  console.log("[pack] 锁文件未动（仓根 pnpm-lock.yaml 与 packaging/pnpm-lock.yaml）");
 }
 // 收尾全清 → postpackage 钩子（scripts/release/clean-tmp.mts）
