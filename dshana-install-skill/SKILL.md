@@ -125,7 +125,7 @@ target 名即产物名里 `-v<版本>` 之后那段（通用包没有后缀，�
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
-| 换装（或重载）App 后，**已建立的那个会话**里该 App 的工具报 `RPC peer closed; cannot call callback.tools.execute` | 重载/换装会重新注册工具与路由，但会话引擎在建立时捕获了当时那个 App 实例的工具对象，实例被替换后旧对象失效 | **刷新工具**：开一个新会话即可；App 本身是好的（路由与 runtime 正常）。**不必重启宿主**——DSH 跑在受管子进程里，宿主进程没有它的模块缓存要清 |
+| 换装（或重载）App 后，**已建立的那个会话**里该 App 的工具报 `RPC peer closed; cannot call callback.tools.execute` | 重载/换装只换宿主工具注册表里的条目；会话握着的是**上次重建会话状态时**解析的工具对象副本，不跟着更新 | **压缩上下文**（实测同一会话内立即恢复），或开一个新会话；App 本身是好的（路由与 runtime 正常）。**不必重启宿主**——DSH 跑在受管子进程里，宿主进程没有它的模块缓存要清 |
 | `index.v2.json` 的主 `archive.url` 指向某个平台包 | 生成期把不该进清单的 entry 喂给了构建器 | 索引按约定只该指 universal，见 `scripts/release/market-index.mts` 的目标选择 |
 | `latest` 指向的不是你以为的版本 | `latest` 跳过 prerelease，而流水线默认把新发布标为 prerelease | 目标版本是 prerelease 时用带 tag 的地址，或 `gh release download <tag>` |
 | 拿不到 `x-dshana-targets` | 该索引没带这块字段 | 用主 `archive`（universal）兜底，功能等同，只是体积更大 |

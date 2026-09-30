@@ -80,7 +80,7 @@ Hana 宿主进程（App 隔离进程内加载 dist/index.js）
 
 - **受管 runtime**：DSH 跑在 `ctx.runtime.start` 拉起的独立 Node 子进程中（不再是宿主进程内 boot）。App 侧与子进程分责：App 管启动/停止/状态，子进程管 DSH 的 cordis 生命周期；崩溃可被父侧识别并重起。
 - **依赖形态（自包含打包）**：DSH 及其依赖树由 `scripts/release/pack/index.mts` 在构建时物化进**安装目录** `node_modules`，运行时**不再安装、不再 spawn pnpm**（v1 的 `ensure-deps` / `lib/pnpm.js` / `lib/bootstrap.js` / `lib/errclass.js` 已删除）。运行时依赖的唯一真源是交付面清单 `packaging/package.json`（根那份只留构建面，另留一条同名 devDependencies 供开发侧安装，两处版本由 integrations 闸守）。
-- **更新 = 装新 App 包 + 重载 App**：无独立升级通道。重载会重新 import App 服务端入口并重新注册工具/路由，受管子进程（DSH）按自动链重起；DSH 跑在受管子进程里，**宿主进程没有它的模块缓存要清**，因此不必重启宿主。已建立的会话握着旧 App 实例的工具对象，需刷新工具（开新会话）才能继续调该 App 的工具。
+- **更新 = 装新 App 包 + 重载 App**：无独立升级通道。重载会重新 import App 服务端入口并重新注册工具/路由，受管子进程（DSH）按自动链重起；DSH 跑在受管子进程里，**宿主进程没有它的模块缓存要清**，因此不必重启宿主。已建立的会话握着上次重建会话状态时解析的工具对象副本，重载/换装后要在那个会话里继续调该 App 的工具得压缩上下文（或开新会话）。
 - **连接与鉴权交回官方**：`@dshana/bridge` 已退役；`dsh-web-app` 层的官方 connection（BrowserAuth token/cookie）与 frontend-static 各自负责其位，App 侧只经 runtime 中继补 cookie。
 - **DSH Web UI**：DSH 前端以**同文档注入**方式挂进壳页（`dsh-inject.ts`：取 index → 搬 link/script → 装配 `__DSH_TRANSPORT__` + 流 mux），不再用 iframe 内嵌；到 runtime 的请求走宿主代理前缀 + 路径票据。流 mux 的失败按官方**跨 bundle 契约**打结构标记（页半与内核半类身份不通，DSH 只看标记不看 `instanceof`）：载体丢失 `kind:'carrier'`（DSH 侧按可重试的载体丢失处理，自动重连续流），宿主交付的逻辑失败 `kind:'remote'` + 域码（原样重建成带码的 RemoteError）。少了 carrier 标，一次断链会被折成 `gateway/internal` 终态，会话历史流不再自愈。
 
@@ -140,7 +140,7 @@ DSH 的 workspace 选择对话框来自 `directory-picker` seam（宿主半列�
 
 ## 已知限制
 
-- **升级 DSH = 装新 App 包 + 重载 App**：重载会重新 import 服务端入口并重起受管 runtime；宿主进程内没有 DSH 的模块缓存（DSH 在受管子进程里跑），不必重启宿主。遗留一处：已建立的会话握着旧 App 实例的工具对象，重载后要继续调该 App 的工具得刷新工具（开新会话）。
+- **升级 DSH = 装新 App 包 + 重载 App**：重载会重新 import 服务端入口并重起受管 runtime；宿主进程内没有 DSH 的模块缓存（DSH 在受管子进程里跑），不必重启宿主。遗留一处：已建立的会话握着上次重建会话状态时解析的工具对象副本，重载后要继续调该 App 的工具得压缩上下文（或开新会话）。
 - **Windows 上的命令执行是 `pwsh`**：base 组合按平台互斥挂载 shell 行（`tool-bash` / `bash-sandbox` 在 win32 停，`tool-pwsh` / `pwsh-sandbox` 只在 win32 开），派给子代理的命令按 PowerShell 写；文件读写仍走文件系统工具。
 - **主题仅在 DSH 偏好为 system 时跟随宿主**（见上，有意为之）。
 - 越界权限请求默认走审批：deferred 通知 → `dshana(action="approve")` 应答；无人应答按 `approvalTimeoutSec` 自动拒绝。
