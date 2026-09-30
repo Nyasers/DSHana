@@ -14,6 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { ROOT } from "../shared/root.mts";
+import { packageSetDigest } from "../shared/package-set-digest.mts";
 import {
   PACKAGE_SET_REL,
   buildPackageSet,
@@ -58,12 +59,32 @@ export function verifyPackageSet(): string[] {
   if (set === null) return ["找不到 " + PACKAGE_SET_REL];
   const key = set.build.cacheKey;
   if (!key) return [PACKAGE_SET_REL + " 里没记 cacheKey"];
-  const diffs = checkPackageSet(set, path.join(ROOT, ".cache", "dsh-build", key, "dist-npm"));
+  let recipe: Record<string, unknown>;
   try {
-    diffs.push(...checkPackageSetBuild(set, readBuildRecipe(key)));
+    recipe = readBuildRecipe(key) as Record<string, unknown>;
   } catch (error) {
-    diffs.push("T1 缓存条目读不到：" + String(error));
+    return ["T1 缓存条目读不到：" + String(error)];
   }
+  // 逐字节对拍只在两侧**同源**时做：release:pack 的 tarball 字节不可跨机复现（win32 的 CRLF 对
+  // linux 的 LF、gzip mtime 各有差异），拿别处那次的字节来比只会一片红。判据是这批 tarball 的
+  // 指纹——构建期写进缓存档案、清单侧现算，两侧同一份实现（scripts/shared/package-set-digest）。
+  const recordedDigest = (recipe.artifact as { setDigest?: unknown } | undefined)?.setDigest;
+  const setDigest = packageSetDigest(set.packages);
+  const sameOrigin = typeof recordedDigest === "string" && recordedDigest === setDigest;
+  if (!sameOrigin) {
+    console.log(
+      "[derive] package-set: 本机包集与清单不同源（" +
+        (typeof recordedDigest === "string" ? `档案指纹 ${recordedDigest} ≠ 清单 ${setDigest}` : "缓存档案里没有指纹") +
+        "）——只校结构/根集/身份，不逐字节对拍",
+    );
+  }
+  const diffs = checkPackageSet(
+    set,
+    path.join(ROOT, ".cache", "dsh-build", key, "dist-npm"),
+    undefined,
+    { compareBytes: sameOrigin },
+  );
+  diffs.push(...checkPackageSetBuild(set, recipe));
   return diffs;
 }
 

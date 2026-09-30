@@ -260,11 +260,15 @@ export function writePackageSet(set: DshPackageSet): void {
  * @param set - 落盘清单。
  * @param distDir - 该包集的 dist-npm 目录（tarball 所在）。
  * @param expectedRoots - 现算根集；省略则跳过根集比对（清单自检用）。
+ * @param options - `compareBytes: false` 时跳过逐包字节/摘要（结构仍全检）。什么时候该跳过见
+ *   scripts/derive/package-set.mts 的 verifyPackageSet：tarball 字节不可跨机复现，只有两侧同源
+ *   时逐字节对拍才有意义。
  */
 export function checkPackageSet(
   set: DshPackageSet,
   distDir: string,
   expectedRoots?: readonly RootEntry[],
+  options?: { compareBytes?: boolean },
 ): string[] {
   const diffs: string[] = [];
   if (set.formatVersion !== PACKAGE_SET_FORMAT) {
@@ -290,13 +294,15 @@ export function checkPackageSet(
   } else {
     diffs.push(`dist 目录不存在：${distDir}`);
   }
-  // 逐包字节与摘要
-  for (const p of set.packages) {
-    const absolute = path.join(distDir, p.file);
-    if (!fs.existsSync(absolute)) continue; // 上面已报 missing
-    const actual = integrityOfFile(absolute);
-    if (actual.bytes !== p.bytes || actual.integrity !== p.integrity) {
-      diffs.push(`${p.file} 字节/摘要不符（清单 ${p.bytes}/${p.integrity.slice(0, 20)}…，实际 ${actual.bytes}/${actual.integrity.slice(0, 20)}…）`);
+  // 逐包字节与摘要（可关：跨机的字节本来就对不上，见函数注释）
+  if (options?.compareBytes !== false) {
+    for (const p of set.packages) {
+      const absolute = path.join(distDir, p.file);
+      if (!fs.existsSync(absolute)) continue; // 上面已报 missing
+      const actual = integrityOfFile(absolute);
+      if (actual.bytes !== p.bytes || actual.integrity !== p.integrity) {
+        diffs.push(`${p.file} 字节/摘要不符（清单 ${p.bytes}/${p.integrity.slice(0, 20)}…，实际 ${actual.bytes}/${actual.integrity.slice(0, 20)}…）`);
+      }
     }
   }
   // 根集：名字与类别都要对（同一个包换了归类同样是漂移）

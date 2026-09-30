@@ -35,6 +35,7 @@ import { ROOT } from "../shared/root.mts";
 import { isDirectRun } from "../shared/run.mts";
 import { applyGeneratedPatches, deltaContentHash, stageDelta } from "../integrations/delta.mts";
 import { dshPin } from "../shared/version.mts";
+import { packageSetDigest } from "../shared/package-set-digest.mts";
 import { extractTar } from "./tar-extract.mts";
 
 /** 构建配方版本：改动构建步骤/工具链口径就 +1，历史缓存随即失效。
@@ -608,6 +609,14 @@ async function main(): Promise<void> {
     const tarballs = fs.existsSync(distDir) ? fs.readdirSync(distDir).filter((name) => name.endsWith(".tgz")) : [];
     if (tarballs.length === 0) throw new Error(`release:pack 未产出 tarball：${distDir}`);
     const bytes = tarballs.reduce((sum, name) => sum + fs.statSync(path.join(distDir, name)).size, 0);
+    // 这批 tarball 的指纹：派生的清单侧现算同一个值，用来判断"清单与本机这份是否同源"。
+    // 口径在 scripts/shared/package-set-digest.mts（两侧共用），此处只负责把摘要喂进去。
+    const setDigest = packageSetDigest(
+      tarballs.map((name) => {
+        const body = fs.readFileSync(path.join(distDir, name));
+        return { file: name, integrity: "sha512-" + crypto.createHash("sha512").update(body).digest("base64") };
+      }),
+    );
 
     const recipe = {
       formatVersion: 1,
@@ -620,7 +629,7 @@ async function main(): Promise<void> {
       pnpm: pnpmVersion,
       lockSha256,
       steps,
-      artifact: { tarballs: tarballs.length, bytes, directory: "dist-npm" },
+      artifact: { tarballs: tarballs.length, bytes, directory: "dist-npm", setDigest },
       // 集成 delta 的身份：内容哈希进缓存键，铺入计数进档案——事后要能回答"这份包集含哪版 delta"。
       integrations: { deltaHash, stagedFiles: staged.files, packages: staged.packages },
       createdAt: new Date().toISOString(),
