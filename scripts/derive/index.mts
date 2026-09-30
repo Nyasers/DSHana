@@ -13,8 +13,8 @@
 //   version-metadata 交付面清单的 dsh 依赖    → package.json#version 的 +dsh- 段（状态型；
 //                                             排第一，因为它改的是后面几个任务的源）
 //   manifest     主 package.json#version + SDK 快照 packedVersion → src/manifest.json（宿主读的 App 契约）
-//   cordis       主 package.json#version         → src-cordis/**/package.json（profile loader 读的 bundle 层）
-//   product-package 主 package.json#version    → packaging/package.json（包根铭牌的 version）
+//   cordis       主 package.json#version         → src-cordis/**/package.json（3 子插件 + 我们的 bundle）
+//   product-package 主 package.json            → 包根铭牌（name/version/type 整份派生）
 //   thirdparty   vendor/hana-app-sdk 的 manifest → THIRD_PARTY_NOTICES.md（分发合规）
 //   paths        镜像包清单                       → src-integrations/tsconfig.paths.json（编辑器）
 //   vendor       交付面清单的 dsh 依赖           → vendor/deepseek-harness 的 checkout（状态型）
@@ -133,14 +133,36 @@ const cordisTask: FileTask = {
 };
 
 /**
- * 任务：product-package —— 主版本 → packaging/package.json（装出来的包根那份）。
- * 只有 version 是派生的：name / type 是手写的实体（交付树只要这三件，白名单与理由见该文件旁的 README）。
+ * 任务：product-package —— 根 package.json → 包根铭牌**整份**（写到 src 域的静态面）。
+ *
+ * 为什么整份派生（B 节把 packaging/ 退场后这里才有意义）：铭牌只有三件（name / type / version），
+ * 而它们全部能从上位文件推出来——name 与 type 是根的、version 是根的。留一份手写实体就会多出
+ * 一个"改根不改铭牌"的漂移面，而那正是 derive 存在的理由（能推导 + 抄了多份 + 抄漏会坏）。
+ *
+ * 落点选 src 域（`src/product-package.json`）而不是 dist：`dist/` 是构建产物，rspack 的
+ * `output.clean` 每次 build 都清空它，写在那儿的派生文件会被下一次构建抹掉（顺序上 derive 还在
+ * build 之前）。放源码域则"派生物"是一个可提交、可 `--check` 的文件，pack 再把它作为包根
+ * `package.json` 复制进交付树。
+ * 白名单与断言在 scripts/release/pack/assert.mts#assertProductPackage（那边判、这边产，同一形状）。
  */
 const productPackageTask: FileTask = {
   kind: "file",
   name: "product-package",
-  about: "package.json#version → packaging/package.json（包根铭牌）",
-  plan: () => versionFiles(["packaging/package.json"]),
+  about: "根 package.json 的 name/version/type → src/product-package.json（包根铭牌，整份）",
+  plan: () => {
+    const root = readPkg("package.json");
+    if (typeof root.name !== "string" || !root.name) throw new Error("package.json name 缺失（铭牌无从派生）");
+    if (typeof root.version !== "string" || !root.version) throw new Error("package.json version 缺失（铭牌无从派生）");
+    if (root.type !== "module") {
+      throw new Error(`package.json type 是 ${String(root.type)}：交付树包根的 index.js 是 ESM，铭牌必须 type: module`);
+    }
+    return [
+      {
+        rel: "src/product-package.json",
+        content: jsonText({ name: root.name, version: root.version, type: root.type }),
+      },
+    ];
+  },
 };
 
 /** 任务：paths —— 镜像包清单 → 编辑器用的 tsconfig.paths.json。 */
@@ -173,7 +195,7 @@ const pathsTask: FileTask = {
 };
 
 /**
- * 任务：vendor —— 让 vendor/deepseek-harness 站在交付面清单（packaging/package.json）声明的
+ * 任务：vendor —— 让 vendor/deepseek-harness 站在根 package.json#devDependencies 声明的
  * dsh 版本对应的 tag 上（gitlink 与工作树 HEAD 两处都要对，缘由见该模块的文件头）。
  *
  * 检查与修复在 scripts/vendor/dsh.mts，与 `pnpm run sync:vendor:dsh` 共用一份实现；
@@ -182,7 +204,7 @@ const pathsTask: FileTask = {
 const vendorTask: StateTask = dshTask;
 
 /**
- * 任务：package-lock —— 交付面清单的运行时依赖 → packaging/pnpm-lock.yaml（出包工位按它做干净安装）。
+ * 任务：package-lock —— 包集清单的安装输入 → 缓存条目里的 pnpm-lock.yaml（物化节点按它做干净安装）。
  *
  * 检查与修复在 scripts/derive/package-lock.mts（同样产物靠 pnpm 跑，不是我们算，所以是状态型）。
  */

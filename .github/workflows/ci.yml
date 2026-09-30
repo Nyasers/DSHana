@@ -34,6 +34,10 @@ jobs:
           path: .cache/dsh-build
           key: dsh-build-${{ steps.dshset.outputs.key }}
       - run: pnpm run build:dsh
+      # 清单与交付锁也是**该缓存条目**的产物（B 节起它们住条目里，不进仓库）：在下游的
+      # derive:check 之前先把它们派生出来，随 artifact 一起交接。没有这一步，下游会看到
+      # 「包集在、清单不在」——那是没派生，不是漂移。
+      - run: node scripts/derive/index.mts package-set package-lock
       # 交给下游 job：artifact（不是 cache）——同一次运行内的中间产物按它的本分走这里
       - uses: actions/upload-artifact@v7
         with:
@@ -77,9 +81,10 @@ jobs:
           mkdir -p .cache/dsh-build
           rm -rf ".cache/dsh-build/$KEY"
           mv "$SRC" ".cache/dsh-build/$KEY"
-      # 派生文件闸：manifest / cordis 子插件版本 / 交付面清单与锁 / 镜像 paths / 包集清单都是派生产物，
-      # 本地跑 `node scripts/derive/index.mts` 写回后要一并提交，这一步拦「忘了提交」。
-      # 其中包集清单要对拍 T1 缓存（上一步已取到）；缓存缺失时这一步硬失败，不静默跳过。
+      # 派生文件闸：manifest / cordis 包版本 / 包根铭牌 / 镜像 paths 都是派生产物，本地跑
+      # `node scripts/derive/index.mts` 写回后要一并提交，这一步拦「忘了提交」。
+      # 包集清单与交付锁（上一步随 artifact 取到）另做**自洽**校验：与现算的根集/字节/身份对拍，
+      # 缓存缺失时硬失败，不静默跳过。
       - run: pnpm run derive:check
       - run: pnpm run build
       # 单测：node --test tests/，含 provider / task-bridge / watch-sse / cancel-chain / approval-bridge 等

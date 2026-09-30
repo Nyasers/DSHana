@@ -27,11 +27,19 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { ROOT } from "../shared/root.mts";
+import { dshanaPackageManifestRels } from "../shared/version.mts";
 import { readTarMember } from "../vendor/tar-extract.mts";
+import { currentBuildIdentity } from "../vendor/build.mts";
 import { materializeDeliveredAppBoot } from "./app-boot-probe.mts";
 
-/** 清单位置（相对仓库根）。 */
-export const PACKAGE_SET_REL = path.join("packaging", "dsh-package-set.json");
+/**
+ * 清单在 T1 缓存条目里的**文件名**（与 build-recipe.json 同层）。
+ *
+ * B 节起清单归构建产物：键定了产物是谁，清单描述的就是那批字节。放进缓存条目而不是仓库里的
+ * `packaging/`，是因为它与 `dist-npm/` 是同一件事的两面——换键即换清单，陈旧条目不可能被读到；
+ * 而住仓库里时，"清单对的是哪次构建"要靠人记。
+ */
+export const PACKAGE_SET_FILENAME = "dsh-package-set.json";
 
 /** 清单格式版本；字段语义变才 +1。 */
 export const PACKAGE_SET_FORMAT = 1;
@@ -102,9 +110,14 @@ export interface DshPackageSet {
   roots: RootEntry[];
 }
 
-/** `@dshana/*` 包的所在目录（相对仓库根），按目录名排。 */
-/** 我们自己那批子插件的**源码**目录（@dshana 一族的身份就在这里的 package.json）。 */
-const DSHANA_PLUGINS_DIR = path.join("src-cordis", "plugins");
+/**
+ * 我们自己那批 `@dshana/*` 包的**源码**位置，按包列举。
+ *
+ * 不在这里 glob 目录：子插件（`plugins/<名>/`）与我们的 bundle（`app/`）形状不同，就地 glob 要么
+ * 漏掉 bundle、要么把 patch 文件当成包。名单的真源在 `scripts/shared/version.mts`
+ *（`dshanaPackageManifestRels`）——版本同步目标读的是同一份，两处不会再分叉。
+ */
+const dshanaManifestRels = dshanaPackageManifestRels();
 
 /** 算一个文件的 npm 形 integrity。 */
 export function integrityOfFile(absolute: string): { bytes: number; integrity: string } {
@@ -115,6 +128,21 @@ export function integrityOfFile(absolute: string): { bytes: number; integrity: s
 /** T1 缓存条目目录：.cache/dsh-build/<key>。 */
 export function cacheEntryDir(key: string): string {
   return path.join(ROOT, ".cache", "dsh-build", key);
+}
+
+/** 缓存条目里的清单路径（相对仓库根；日志与报错用它，别在调用处拼）。 */
+export function packageSetRel(key: string): string {
+  return path.join(".cache", "dsh-build", key, PACKAGE_SET_FILENAME);
+}
+
+/**
+ * 现算"本机当前该命中的"缓存键——读清单的缺省键。
+ *
+ * 走 T1 自己的键推导（scripts/vendor/build.mts#currentBuildIdentity），**不读清单里记的键**：
+ * 我们要的是"现在应该是谁"，读清单会让换了 tag/工具链之后永远照着老条目找。
+ */
+function currentCacheKey(): string {
+  return currentBuildIdentity().key;
 }
 
 /** 我们的预设名（spec §6.6）；模板条目由 src-integrations/app-boot-profile 的 delta 加进上游那张表。 */
@@ -175,34 +203,48 @@ export function deliveredAppBootDir(key: string): string {
 /**
  * 我们自己的 `@dshana/*` 根集条目（带版本）。
  *
- * 读**源码**（`src-cordis/plugins/<包名>/package.json`）而不读构建产物（`dist/cordis`）：那份身份
- * 就是构建组装时拷过去的原件（见 src-cordis/build.ts），而派生文件不该依赖构建产物——否则
- * 干净检出上 `derive` / `derive --check` 会无端要求先跑一次 `build`（CI 上这就是个死锁：
- * 清单对拍要 dist/cordis，而 build 排在它后面）。版本由 derive 的 cordis 任务同批同步，
- * TASKS 里它在 package-set 之前，写回与校验两条路径读到的都是同一份。
+ * 读**源码**（`src-cordis/plugins/<包名>/package.json`，加 `src-cordis/app`）而不读构建产物
+ *（`dist/cordis`）：那份身份就是构建组装时拷过去的原件（见 src-cordis/build.ts），而派生文件不该
+ * 依赖构建产物——否则干净检出上 `derive` / `derive --check` 会无端要求先跑一次 `build`（CI 上
+ * 这就是个死锁：清单对拍要 dist/cordis，而 build 排在它后面）。版本由 derive 的 cordis 任务同批
+ * 同步，TASKS 里它在 package-set 之前，写回与校验两条路径读到的都是同一份。
+ *
+ * 这一族里可以有包**同时**出现在模板 bundles 里（`@dshana/app` 就是）；与上游名单的重叠由
+ * {@link deriveRootSet} 合并处理，这里只管"这一族有哪些包"。
  */
 function dshanaPackageEntries(): RootEntry[] {
-  const dir = path.join(ROOT, DSHANA_PLUGINS_DIR);
-  if (!fs.existsSync(dir)) throw new Error(`${DSHANA_PLUGINS_DIR} 不存在：源码树不完整`);
   const out: RootEntry[] = [];
-  for (const entry of fs.readdirSync(dir).sort()) {
-    const manifest = path.join(dir, entry, "package.json");
-    if (!fs.existsSync(manifest)) continue;
+  for (const rel of dshanaManifestRels) {
+    const manifest = path.join(ROOT, rel);
+    if (!fs.existsSync(manifest)) throw new Error(`${rel} 不存在：源码树不完整`);
     const parsed = JSON.parse(fs.readFileSync(manifest, "utf8")) as { name?: unknown; version?: unknown };
-    if (typeof parsed.name === "string" && parsed.name.startsWith("@dshana/")) {
-      out.push({
-        name: parsed.name,
-        category: "dshana",
-        version: typeof parsed.version === "string" ? parsed.version : undefined,
-      });
-    }
+    if (typeof parsed.name !== "string" || !parsed.name.startsWith("@dshana/")) continue;
+    out.push({
+      name: parsed.name,
+      category: "dshana",
+      version: typeof parsed.version === "string" ? parsed.version : undefined,
+    });
   }
-  if (!out.length) throw new Error(`${DSHANA_PLUGINS_DIR} 下没有 @dshana/* 包：源码树不完整`);
+  if (!out.length) throw new Error("源码树里没有 @dshana/* 包：源码树不完整");
   return out;
 }
 
 /**
  * 现算根集（我们的 dshana 模板 ∪ 可选 bundle ∪ 我们那批）。
+ *
+ * **同一个包从两个来源进来是正常态，不是错误**：模板 bundles 里那三层中的 `@dshana/app` 同时也在
+ * 我们的 `@dshana/*` 枚举里——前者答"默认装载哪些层"，后者答"我们这一族有哪些包"，两个问题。
+ * 所以跨来源**合并去重**，而不是把新 bundle 从枚举里摘掉（那份枚举是这一族的唯一真源，见
+ * scripts/shared/version.mts）：摘掉等于把真源改成"除模板里那些之外的 @dshana 包"，一个随模板内容
+ * 而变的定义。
+ *
+ * **类别归属是契约，而且由我们的枚举赢**（不是去重时的无关细节）：`dshana` 类不在 T1 包集里
+ *（见 buildPackageSet 的跳过与 checkPackageSet 的"根集包必须在 packages 里"），而 @dshana/app 与
+ * 三个子插件都是我们自己的构建产物、确实不在那 318 个 tarball 里。所以重叠的名字**从上游名单里
+ * 摘掉、按 dshana 类追加在后**；若让模板类赢，它会被要求"必须在 packages 里"而当场炸
+ *（实测第一次去重就是这么炸的）。
+ *
+ * 摘掉不丢信息：模板原始名单仍逐字记在 `upstream.templateBundles` 里。
  *
  * @param appBootEntry - 已装的 app-boot 包目录。
  * @returns 按类别标注的根集，模板/可选 bundle 保上游顺序，`@dshana/*` 追加在后。
@@ -212,16 +254,26 @@ export async function deriveRootSet(appBootEntry: string): Promise<{
   upstream: Omit<RootSetUpstream, "appBootCommit">;
 }> {
   const { templateBundles, optionalBundles } = await readUpstreamRootLists(appBootEntry);
-  const entries: RootEntry[] = [
+  const upstreamEntries: RootEntry[] = [
     ...templateBundles.map((name) => ({ name, category: "profile-template" as const })),
     ...optionalBundles.map((name) => ({ name, category: "optional-bundle" as const })),
-    ...dshanaPackageEntries(),
   ];
-  const seen = new Set<string>();
-  for (const e of entries) {
-    if (seen.has(e.name)) throw new Error(`根集里重复的包名：${e.name}（模板与可选 bundle 名单重叠？）`);
-    seen.add(e.name);
+  // 上游名单**内部**（含模板 ∩ 可选）不得重复：那是名单自相矛盾（同一层既是默认又是可选，或
+  // 同一份列了两遍），不该用去重盖过去。跨来源重叠的豁免**只给我们的 @dshana 一族**（见下）。
+  const seenUpstream = new Set<string>();
+  for (const e of upstreamEntries) {
+    if (seenUpstream.has(e.name)) {
+      throw new Error(
+        `上游根集名单里重复的包名：${e.name}（模板与可选 bundle 名单重叠，或同一份名单列了两遍？）` +
+          "——这是上游名单自相矛盾，不是跨来源的正常重叠（后者由下面的 @dshana 合并处理）",
+      );
+    }
+    seenUpstream.add(e.name);
   }
+  // 重叠的名字一律按 dshana 类（我们的枚举赢），并从上游名单里摘掉——见上"类别归属是契约"。
+  const ours = dshanaPackageEntries();
+  const ourNames = new Set(ours.map((e) => e.name));
+  const entries: RootEntry[] = [...upstreamEntries.filter((e) => !ourNames.has(e.name)), ...ours];
   const pkg = JSON.parse(fs.readFileSync(path.join(appBootEntry, "package.json"), "utf8")) as {
     name?: unknown;
     version?: unknown;
@@ -238,16 +290,24 @@ export async function deriveRootSet(appBootEntry: string): Promise<{
   };
 }
 
-/** 读清单；不存在返回 null（derive 的 --check 用得到）。 */
-export function readPackageSet(): DshPackageSet | null {
-  const absolute = path.join(ROOT, PACKAGE_SET_REL);
+/**
+ * 读清单；不存在返回 null（derive 的 --check 用得到）。
+ *
+ * 位置由**现在的**缓存键决定（`currentBuildIdentity().key`）：清单描述的就是那份产物，所以没有
+ * "去别的条目里找找"这条路——键变了就是没派生，调用方该报缺并让人重跑派生。
+ *
+ * @param key - T1 缓存键；缺省用现算的键（读"本机当前该有的那份"）。
+ * @returns 清单对象；该条目里没有清单返回 null。
+ */
+export function readPackageSet(key: string = currentCacheKey()): DshPackageSet | null {
+  const absolute = path.join(cacheEntryDir(key), PACKAGE_SET_FILENAME);
   if (!fs.existsSync(absolute)) return null;
   return JSON.parse(fs.readFileSync(absolute, "utf8")) as DshPackageSet;
 }
 
-/** 写清单（稳定格式：2 空格 + 末尾换行）。 */
-export function writePackageSet(set: DshPackageSet): void {
-  const absolute = path.join(ROOT, PACKAGE_SET_REL);
+/** 写清单（稳定格式：2 空格 + 末尾换行）；目标目录不存在时建出来（缓存条目可能只有 dist-npm）。 */
+export function writePackageSet(set: DshPackageSet, key: string = set.build.cacheKey): void {
+  const absolute = path.join(cacheEntryDir(key), PACKAGE_SET_FILENAME);
   fs.mkdirSync(path.dirname(absolute), { recursive: true });
   fs.writeFileSync(absolute, `${JSON.stringify(set, null, 2)}\n`, "utf8");
 }
@@ -360,6 +420,13 @@ export function checkPackageSetBuild(
   }
   return diffs;
 }
+/** 构建期记的集成烘焙账（`build-recipe.json#integrations`；旧配方可能没有这个字段）。 */
+export interface RecipeIntegrations {
+  deltaHash?: unknown;
+  stagedFiles?: unknown;
+  packages?: Array<{ dir?: unknown; package?: unknown; files?: unknown }>;
+}
+
 /** T1 缓存条目的 build-recipe.json 形状（只读我们关心的字段）。 */
 export interface BuildRecipe {
   tag?: unknown;
@@ -369,7 +436,9 @@ export interface BuildRecipe {
   node?: unknown;
   pnpm?: unknown;
   createdAt?: unknown;
-  artifact?: { tarballs?: unknown; bytes?: unknown };
+  artifact?: { tarballs?: unknown; bytes?: unknown; setDigest?: unknown };
+  /** 这份包集烤进去的集成 delta（assert.mts 的集成烘焙对账要读它）。 */
+  integrations?: RecipeIntegrations;
 }
 
 /** 读 T1 缓存条目的 recipe。 */
@@ -410,7 +479,6 @@ export async function buildPackageSet(key: string): Promise<DshPackageSet> {
   const distDir = path.join(cacheEntryDir(key), "dist-npm");
   if (!fs.existsSync(distDir)) throw new Error(`包集目录不存在：${path.relative(ROOT, distDir)}`);
   const { entries, upstream } = await deriveRootSet(deliveredAppBootDir(key));
-  const rootsByPackage = new Map(entries.map((e) => [e.name, e]));
 
   const packages: PackageRecord[] = [];
   for (const file of fs.readdirSync(distDir).filter((n) => n.endsWith(".tgz")).sort()) {
@@ -463,7 +531,7 @@ export async function buildPackageSet(key: string): Promise<DshPackageSet> {
 export async function assertRootSetMatchesManifest(): Promise<void> {
   const set = readPackageSet();
   if (set === null) {
-    throw new Error("找不到 " + PACKAGE_SET_REL + "：先 node scripts/derive/index.mts package-set 生成");
+    throw new Error("找不到 " + packageSetRel(currentCacheKey()) + "：先 node scripts/derive/index.mts package-set 生成");
   }
   const { entries } = await deriveRootSet(deliveredAppBootDir(set.build.cacheKey));
   const diffs = checkPackageSet(set, path.join(ROOT, ".cache", "dsh-build", set.build.cacheKey, "dist-npm"), entries);

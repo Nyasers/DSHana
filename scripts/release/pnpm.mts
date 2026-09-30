@@ -19,8 +19,8 @@
 //      属性，不进产物清单。
 //   ② **受限环境的退路也必须落在声明那一份上**：解析不到、取不到、或跑出来不是那一份，一律
 //      **失败说清**，绝不静默换版本——宁可不出包，也不出一个工具链不明的交付树。
-//   ③ **锁文件护栏**：交付链绝不能让隐式自换改到仓根 `pnpm-lock.yaml` 或 `packaging/pnpm-lock.yaml`
-//      （后者只允许 derive 自己写）。运行前后各取一次哈希，变了即拒。
+//   ③ **锁文件护栏**：交付链绝不能让隐式自换改到仓根 `pnpm-lock.yaml`（派生出来的交付锁住缓存区，
+//      本来就归 derive 写）。运行前后各取一次哈希，变了即拒。
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -29,12 +29,13 @@ import { spawnSync } from "node:child_process";
 import { ROOT } from "../shared/root.mts";
 
 /**
- * 交付链必须保持不动的两份锁文件（相对仓根，正斜杠）。
+ * 交付链必须保持不动的那份锁文件（相对仓根，正斜杠）。
  *
- * 仓根那份服务本地开发与**构建链**；packaging 那份是 derive 派生的**交付锁**。两者都不该被
- * 「跑一次物化」顺手改掉——历史上正是隐式自换把目标落到了仓根那份。
+ * 仓根那份服务本地开发与**构建链**，该由"跑一次物化"顺手改掉——历史上正是隐式自换把目标落到了
+ * 它上面。派生出来的交付锁已搬进 `.cache/dsh-build/<键>/`（B 节），那份**本来**就归 derive 写，
+ * 且住在缓存区、不属于工作树，所以护栏只剩仓根这一条。
  */
-export const GUARDED_LOCKFILES = ["pnpm-lock.yaml", "packaging/pnpm-lock.yaml"];
+export const GUARDED_LOCKFILES = ["pnpm-lock.yaml"];
 
 /** 交付链 pnpm 输出落盘处：受限沙箱里管道 stdio 会被拒（EPERM），统一走文件。 */
 export const DELIVERY_PNPM_LOG_DIR = path.join(ROOT, ".tmp", "pnpm-logs");
@@ -376,7 +377,7 @@ export function assertLockfilesUnchanged(before: ReturnType<typeof lockfileSnaps
   if (changed.length > 0) {
     throw new Error(
       `${label}：仓里的锁文件被改了（拒绝继续）——${changed.join("、")}。\n` +
-        "  交付链只允许写 .tmp 工位里的锁文件；packaging/pnpm-lock.yaml 仅由 derive 写。\n" +
+        "  交付链只允许写工位（.cache 下的派生工位与物化节点）里的锁文件；仓根那份仅由开发安装写。\n" +
         "  通常意味着 pnpm 的目标没钉在工位（--dir 之外还改了仓里的那份）。",
     );
   }

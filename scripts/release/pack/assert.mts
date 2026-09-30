@@ -9,18 +9,19 @@ import { join } from "node:path";
 
 import { deltaContentHash } from "../../integrations/delta.mts";
 import { patchVersionOf } from "../../shared/version.mts";
-import { readBuildRecipe } from "../package-set.mts";
+import { readBuildRecipe, type RecipeIntegrations } from "../package-set.mts";
 import { readIntegrationDecls } from "./stamp.mts";
 
 /**
  * 交付树 package.json 允许出现的键（**铭牌形状**，T3 起物化输入走包集清单，不再读这份）。
  *
  * 为什么不留 dependencies：那份声明曾是安装输入（工位按它跑 pnpm install）。换源后物化输入由
- * packaging/dsh-package-set.json 派生，包根这份 dependencies 没有任何消费方——留着只会让人以为
+ * 缓存条目里的 dsh-package-set.json 派生，包根这份 dependencies 没有任何消费方——留着只会让人以为
  * 「改这里能换依赖」。装机侧不跑 pnpm，所以铭牌只需回答「是什么、什么版本」。
  * DSH pin 也随之迁到根 package.json#devDependencies（那份历来就有，且有一致性闸守着）。
  *
- * 三处来源：name / type 手写（packaging/package.json 实体），version 由 derive 的 product-package 任务同步。
+ * 三处来源都由 derive 的 product-package 任务从**根 package.json** 派生（源文件
+ * src/product-package.json），不再有手写实体——能推导的事别留第二份。
  */
 export const PRODUCT_PACKAGE_KEYS = ["name", "type", "version"];
 
@@ -63,10 +64,12 @@ export function assertProductPackage(outDir, version) {
 }
 
 /**
- * cordis 子插件包 version 一致性校验（防回归，与 manifest 校验对称）：子插件（provider /
-theme / clipboard）version 与主 package.json 同批由 derive/version（pnpm version 发版流程）
-同步，pack 时读 dist 产物校验一致——手改/漏同步即出包版本漂移。
- * roster patch（dist/cordis.patch.yml）不是包，只校验在位。
+ * cordis 产物 version 一致性校验（防回归，与 manifest 校验对称）：子插件（provider / theme /
+ * clipboard）与我们自己的 bundle @dshana/app 的 version 与主 package.json 同批由 derive/version
+ * （pnpm version 发版流程）同步，pack 时读 dist 产物校验一致——手改/漏同步即出包版本漂移。
+ *
+ * 我们的行变更现在住 @dshana/app/cordis.patch.yml（**不是** dist 根级那份 roster patch）：
+ * 分布式层是 profile 组合的一层，所以这里校验的是 bundle 包内的文件，不是 outDir 根。
  */
 export function assertCordisDistVersions(outDir, version) {
   const cordisRoot = join(outDir, "cordis");
@@ -74,13 +77,14 @@ export function assertCordisDistVersions(outDir, version) {
   if (!fs.pathExistsSync(cordisRoot)) {
     throw new Error("cordis 产物缺失（dist/cordis 不存在）：先跑 pnpm run build 再打包");
   }
-  if (!fs.pathExistsSync(join(outDir, "cordis.patch.yml"))) {
-    throw new Error("roster patch 缺失（dist/cordis.patch.yml 不存在）：先跑 pnpm run build 再打包");
+  // 旧形态的负向：dist 根级那份 roster patch 已退场。还在 = 构建路径没跟上（会出现两个来源）。
+  if (fs.pathExistsSync(join(outDir, "cordis.patch.yml"))) {
+    throw new Error("dist/cordis.patch.yml 还在：启动器 overlay 形态已退场（行变更住 @dshana/app/cordis.patch.yml）——先跑 pnpm run build 再打包");
   }
-  // 完整性：子插件全部存在且 package.json 版本一致——缺失/部分产物（含 count=0）
+  // 完整性：子插件 + 我们的 bundle 全部存在且 package.json 版本一致——缺失/部分产物（含 count=0）
   // 一律拒包，防 build 失败后残留部分 dist 被误打包。
   const required = [
-    "clipboard", "provider", "theme",
+    "clipboard", "provider", "theme", "app",
   ];
   let count = 0;
   for (const name of required) {
@@ -98,7 +102,12 @@ export function assertCordisDistVersions(outDir, version) {
     }
     count += 1;
   }
-  console.log(`[pack] cordis 子插件版本一致（${count} 个 = ${version}）+ roster patch 在位`);
+  // 我们的 bundle 的 patch 必须随它一起在 dist 里（缺了 = 那一层没有内容）。
+  const appPatch = join(cordisRoot, "app", "cordis.patch.yml");
+  if (!fs.pathExistsSync(appPatch)) {
+    throw new Error(`@dshana/app 的 patch 缺失（${join("cordis", "app", "cordis.patch.yml")}）：先跑 pnpm run build 再打包`);
+  }
+  console.log(`[pack] cordis 产物版本一致（${count} 个 = ${version}，含 bundle @dshana/app）+ 它的 patch 在位`);
 }
 
 /** App ui/ 静态树断言（cards route 资源面；相对资源契约）：缺失 = 卡片 404，拒包。 */
@@ -239,7 +248,7 @@ export function assertVersionEquation(modules, set, appVersion, integrationsDir)
  * @param currentDeltaHash - 现算的 delta 内容哈希（delta.mts#deltaContentHash）。
  * @returns 差异描述（空数组 = 对得上）。
  */
-export function integrationBakeError(declared, baked, currentDeltaHash) {
+export function integrationBakeError(declared, baked: RecipeIntegrations | undefined | null, currentDeltaHash) {
   const problems: string[] = [];
   if (baked === undefined || baked === null) {
     problems.push("  - 这份包集的构建档案里没有 integrations 记录（旧配方？）：无法确认它烤的是哪版 delta");
@@ -295,7 +304,12 @@ export function assertRecipeBakedCurrentDelta(set, integrationsDir) {
         problems.join("\n"),
     );
   }
+  // 走到这里 integrationBakeError 已经判过"档案里有 integrations"，但类型上它仍是可选的
+  // （旧配方没有该字段是合法输入）——所以这里显式收窄，而不是拿非空断言糊过去。
   const baked = recipe.integrations;
+  if (baked === undefined) {
+    throw new Error("包集的构建档案里没有 integrations 记录（旧配方？）：集成烘焙对账无法完成——重编包集");
+  }
   return { packages: Array.isArray(baked.packages) ? baked.packages.length : 0, stagedFiles: baked.stagedFiles };
 }
 /** 同步睡一会（打包脚本内部的顺序流程，不用事件循环）。 */

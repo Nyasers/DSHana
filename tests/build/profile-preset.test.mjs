@@ -3,10 +3,12 @@
 //
 // tests/build/profile-preset.test.mjs — 预设归属我们（spec §6.6）的单测。
 //
-// 守三件事：
-//   1. delta 是**纯加法**：模板表里加了一条 dshana，上游那张表的其余条目逐字未动；
-//   2. 我们的 bundle 清单与上游 `web` 相同（这是"同一组成、只换了名字归属"的可验证表述）；
-//   3. **负向**：`web` 仍在上游那张表里且清单未变——我们没动它，`--profile web` 照旧可用。
+// 守四件事：
+//   1. delta 是**纯加法**：我们插入的每一段删掉之后，逐字节还原上游；
+//   2. 我们的 bundle 清单 = 上游 `web` 两层 + **我们自己那层 @dshana/app**（顺序即层序，
+//      末层是它才有"用户层能覆盖我们"这条性质——见 integration.json 的 notes）；
+//   3. **负向**：`web` 仍在上游那张表里且清单未变——我们没动它，`--profile web` 照旧可用；
+//   4. 老安装的 profile 清单（上游 web 两层）能被规范化成我们那份——升级不靠重建 profile 目录。
 //
 // 为什么值得单测（而不是只靠构建期闸）：上游哈希闸管的是"overlay 还对得上上游吗"，管不到
 // "我们期望的语义是什么"。比如有人顺手把 dshana 的 bundles 改成少一层，闸照过、编译照过，
@@ -34,26 +36,53 @@ function bundlesOf(source, name) {
   return m[1].split(",").map((s) => s.trim().replace(/^['"]|['"]$/g, "")).filter(Boolean);
 }
 
-test("delta 是纯加法：上游模板表其余条目逐字未动", () => {
-  // 把 delta 里我们加的那整段（注释 + dshana 条目 + 收尾的 `},`）删掉，应当逐字节还原上游。
-  // 这就是"加法 delta"的可判定表述：删掉我们的增量必须得到原文，没有多余改动。
-  const start = OVERLAY.indexOf("  // dshana:");
-  assert.ok(start >= 0, "delta 锚点变了：找不到我们插入的注释块");
-  const entryStart = OVERLAY.indexOf("  dshana: {", start);
-  assert.ok(entryStart > start, "注释在但 dshana 条目不在？delta 结构变了");
-  const entryEnd = OVERLAY.indexOf("\n  },\n", entryStart);
-  assert.ok(entryEnd > entryStart, "dshana 条目没有正常收尾");
-  const inserted = OVERLAY.slice(start, entryEnd + "\n  },\n".length);
-  const stripped = OVERLAY.replace(inserted, "");
-  assert.equal(stripped, UPSTREAM.toString("utf8"), "删掉 delta 后不等于上游原文：我们的改动不止加法");
+/** 我们往上游源码里插入的加法段：注释锚点 → 条目锚点 → 段末（含，跟着条目走）。 */
+const DELTAS = [
+  // 模板表里的 dshana 条目：注释块 + 条目 + 收尾的 `},`。
+  { comment: "  // dshana:", entry: "  dshana: {", end: "\n  },\n" },
+  // 规范化表里的 dshana 元组：两行注释 + 一行条目。
+  { comment: "  // dshana profile", entry: "  dshana: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'],", end: "\n" },
+];
+
+test("delta 是纯加法：删掉每一段增量后逐字节还原上游", () => {
+  // 这就是"加法 delta"的可判定表述：把锚点围起来的每一段删掉，必须得到原文，没有多余改动。
+  let stripped = OVERLAY;
+  for (const delta of DELTAS) {
+    const start = stripped.indexOf(delta.comment);
+    assert.ok(start >= 0, `delta 锚点变了：找不到 ${JSON.stringify(delta.comment)}`);
+    const entryStart = stripped.indexOf(delta.entry, start);
+    assert.ok(entryStart > start, `注释在但条目不在：${JSON.stringify(delta.entry)}`);
+    const entryEnd = stripped.indexOf(delta.end, entryStart);
+    assert.ok(entryEnd > entryStart, `条目没有正常收尾：${JSON.stringify(delta.end)}`);
+    stripped = stripped.slice(0, start) + stripped.slice(entryEnd + delta.end.length);
+  }
+  assert.equal(stripped, UPSTREAM.toString("utf8"), "删掉 delta 后不等于上游原文：我们的改动不止这些加法段");
 });
 
-test("dshana 模板在，且 bundle 清单与上游 web 逐字相同", () => {
+test("dshana 模板在：上游 web 两层 + 我们自己那层 @dshana/app（且它在末位）", () => {
   const ours = bundlesOf(OVERLAY, PROFILE_TEMPLATE_NAME);
   const upstreamWeb = bundlesOf(UPSTREAM.toString("utf8"), "web");
   assert.ok(ours, `delta 里没有 ${PROFILE_TEMPLATE_NAME} 模板`);
   assert.deepEqual(upstreamWeb, ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"], "上游 web 模板变了：先看清再决定我们要不要跟");
-  assert.deepEqual(ours, upstreamWeb, "我们的模板清单必须与 web 相同（同一组成，只换名字归属）");
+  assert.deepEqual(
+    ours,
+    [...upstreamWeb, "@dshana/app"],
+    "我们的模板必须是 web 两层后面接我们自己的层",
+  );
+  // 末位是**契约**而不是风格：层序即数组顺序，用户层排在所有 bundles 之后——我们的层只要不在末尾，
+  // 它后面就有别的 bundle 能盖掉我们，而"用户能覆盖我们"这条性质仍成立却多了一层不确定。
+  assert.equal(ours[ours.length - 1], "@dshana/app", "我们的层必须在 bundles 末位");
+});
+
+test("规范化元组 = 上游 web 两层，且模板 = 元组 + @dshana/app（老安装升上来才落得到我们的层）", () => {
+  // 已初始化的 profile 不会被 initProfile 重写，所以"升级后多出我们那层"只能靠规范化元组。
+  // 元组必须正好是上游 web 的两层：多一层或少一层都意味着老安装升上来后清单不等于模板。
+  const upstreamWeb = bundlesOf(UPSTREAM.toString("utf8"), "web");
+  const m = OVERLAY.match(/^  dshana: \[([^\]]*)\],\n/m);
+  assert.ok(m, "delta 里没有 dshana 的规范化元组");
+  const tuple = m[1].split(",").map((s) => s.trim().replace(/^['"]|['"]$/g, "")).filter(Boolean);
+  assert.deepEqual(tuple, upstreamWeb, "规范化元组必须正是上游 web 那两层");
+  assert.deepEqual([...tuple, "@dshana/app"], bundlesOf(OVERLAY, PROFILE_TEMPLATE_NAME));
 });
 
 // 负向：我们没动上游那张表里的 web（`--profile web` 仍能正常用）。

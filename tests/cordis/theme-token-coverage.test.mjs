@@ -76,7 +76,7 @@ function scanUpstreamTokens(tag) {
 
 test("主题适配：上游在用的 --dsw-* 每个都有归宿（接了，或 PASSTHROUGH 里写明不接）", () => {
   // DSH 版本只有一个来源：根 package.json#devDependencies（T3 起交付面清单退成铭牌，
-  // readShipPkg 已删——它曾从这里读 packaging/package.json#dependencies）。
+  // readShipPkg 已删——它曾从交付面那份 manifest 的 dependencies 里读 DSH 版本）。
   const tag = tagForVersion(dshPin());
   const sites = scanUpstreamTokens(tag);
   assert.ok(

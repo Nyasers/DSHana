@@ -60,6 +60,21 @@ const UNIVERSAL_TARGET: TargetSpec = {
   assets: [...new Set(PLATFORM_TARGETS.flatMap((t) => t.assets))],
 };
 
+/**
+ * 全叉乘目标描述，供**与 target 无关**的两处共用：
+ *   · 交付锁的派生工位（scripts/derive/package-lock.mts）——锁要覆盖所有平台；
+ *   · 物化节点（scripts/release/pack/materialize.mts）——一次装出超集，各目标从它剪枝。
+ *
+ * 与 universal **包**的区别：那个是"要出的一份产物"（名字进 zip 文件名、资产断言盖住全叉乘），
+ * 这个是"派生/物化用的平台集合"。两者此刻同值，但用途不同——所以各留一个名字，改了一个不会
+ * 悄悄改掉另一个。
+ */
+export const UNIVERSAL_SPEC = {
+  name: "universal",
+  os: ["win32", "darwin", "linux"],
+  cpu: ["x64", "arm64"],
+};
+
 /** 目标名 → 目标描述（未知名返回 null）。 */
 export function targetSpec(name: string): TargetSpec | null {
   if (name === "universal") return UNIVERSAL_TARGET;
@@ -76,10 +91,10 @@ const PT_START = "# >>> pack-targets";
 const PT_END = "# <<< pack-targets";
 
 /** 生成该目标的 pnpm-workspace.yaml（只替换标记块内的 supportedArchitectures）。
- * 源是**交付面**那份（packaging/pnpm-workspace.yaml）：工位只吃交付面的配置（allowBuilds 等），
- * 与仓库根那份（服务本地开发安装）分开。 */
+ * 源是**交付面**那份（scripts/release/pack/pnpm-workspace.yaml，随本模块同目录）：工位只吃交付面的
+ * 配置（allowBuilds 等），与仓库根那份（服务本地开发安装）分开。 */
 export function stagingWorkspaceYaml(spec) {
-  const repoWs = fs.readFileSync(join(ROOT, "packaging", "pnpm-workspace.yaml"), "utf8");
+  const repoWs = fs.readFileSync(join(ROOT, "scripts", "release", "pack", "pnpm-workspace.yaml"), "utf8");
   const block = [
     "supportedArchitectures:",
     "  os:",

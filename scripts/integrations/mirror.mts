@@ -64,17 +64,26 @@ export function listMirrorFiles(tag, dir, mirrorDir = MIRROR) {
   return String(r.stdout || "").split("\n").map((s) => s.trim()).filter(Boolean);
 }
 
-/** 把 overlay 落进 .tmp/integrations/<短名>/（供后续编译步骤消费）。 */
+/**
+ * 集成 stage/build 的落点（缓存区，相对仓库根）。
+ *
+ * 住 `.cache` 而不是 `.tmp`：这两个目录由 `deltaContentHash` 决定内容（声明 + overlay 字节），
+ * 同一份 delta 反复构建得到同一棵树——是可复用、可校验的中间产物，不是每次重来的草稿
+ *（判据见 DESIGN.md；`.tmp` 只留组装台与测试产物）。
+ */
+export const CACHE_INTEGRATIONS = join(".cache", "integrations");
+
+/** 把 overlay 落进 .cache/integrations/<短名>/（供后续编译步骤消费）。 */
 export function stageIntegrations(integrations, rootDir = REPO_ROOT) {
   const staged: string[] = [];
   for (const it of integrations) {
     for (const f of Array.isArray(it.files) ? it.files : []) {
       const src = join(it.root, "files", f.path);
       if (!existsSync(src)) throw new Error(`integration ${it.dir}: overlay 文件缺失 ${src}`);
-      const dst = join(rootDir, ".tmp", "integrations", it.dir, f.path);
+      const dst = join(rootDir, CACHE_INTEGRATIONS, it.dir, f.path);
       mkdirSync(dirname(dst), { recursive: true });
       cpSync(src, dst);
-      staged.push(join(".tmp", "integrations", it.dir, f.path));
+      staged.push(join(CACHE_INTEGRATIONS, it.dir, f.path));
     }
   }
   return staged;

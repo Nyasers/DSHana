@@ -32,6 +32,6 @@ test("完整版号幂等：拿已完整的版号再拼一次不变", () => {
 });
 
 test("当前树的 version metadata 段与交付面 pin 一致（derive --check 的同一条判断）", () => {
-  assert.ok(dshPin(), "packaging/package.json 未声明 dependencies['@deepseek-ai/dsh']");
+  assert.ok(dshPin(), "根 package.json 未声明 devDependencies['@deepseek-ai/dsh']");
   assert.deepEqual(inspect(), []);
 });

@@ -5,22 +5,23 @@
 // 交付物 = 代码 bundle（dist/）+ cordis 插件 + ui/ 静态树 + **物化后的生产依赖树**
 // （含 win32/darwin/linux × x64/arm64 预编译资产），安装即用、无需 npm install。
 // 依赖物化形态对齐样例 hana-dsh：hoisted 布局（顶层真实目录、无软链接——软链进 zip 跨机
-// 解压即断）。物化在 .tmp/pkg-root/ 隔离进行，不触碰仓库 node_modules。
-// 流程：复制交付清单（prepackage 钩子已先行 build）→ 物化生产依赖 → 断言多平台资产 → zip → SHA256。
+// 解压即断）。物化的安装发生在 .cache/pkg-root/<键>（缓存节点，不触碰仓库 node_modules、与
+// target 无关），组装台在 .tmp/pkg/。
+// 流程：复制交付清单（prepackage 钩子已先行 build）→ 从物化节点拷进组装台并按目标剪枝 →
+// 断言多平台资产 → zip → SHA256。
 // 用法：pnpm run package --target <名字>（prepackage 自动前置 build；单独 node scripts/release/pack/index.mts 要求 dist/ 已构建）
 // 产出：releases/dshana-v<version>[-<target>].zip + .sha256。**zip 根 = 包根**：manifest.json、
 //   index.js、node_modules/、ui/ 等全部在 zip 根级，不得套一层目录（宿主安装时在包根读 manifest.json）。
-// 两个临时目录的分工（都在 .tmp/ 下，起手清残留、用完即清、收尾由 postpackage 钩子清）：
-//   · .tmp/pkg-root/<target>：依赖物化**工位**。要跑一次真 install，就得有个像独立项目的目录——
-//     由包集清单派生（T2 的 packaging/dsh-package-set.json：拷包集 tarball + overrides 指向它们），
-//     再落进 derive 派生的 packaging/pnpm-lock.yaml，跑 `pnpm install --prod --frozen-lockfile`。
-//     隔离在 .tmp 下，仓库自身的 node_modules 与锁文件不被污染。
-//   · .tmp/pkg：交付**组装台**。只放要进包的东西（dist/ + 物化依赖树 + cordis + ui + manifest），
+// 两处中间产物的分工（口径见 DESIGN.md：\`.cache/\` 住带键可复用的，\`.tmp/\` 住每次重来的草稿）：
+//   · .cache/pkg-root/<键>：依赖**物化节点**。装一次全叉乘超集，键不含 target（见 materialize.mts），
+//     各目标共用；命中即复用，不重装。隔离在缓存区，仓库自身的 node_modules 与锁文件不被污染。
+//   · .tmp/pkg：交付**组装台**。只放要进包的东西（dist/ + 物化依赖树剪枝后 + cordis + ui + manifest），
 //     不带 pnpm 的中间物（lockfile、workspace yaml、.modules.yaml 这些是构建输入，不是交付物）。
-//     把「工位」与「组装台」分开，就是不让构建输入混进安装包；组装出包后立即删。
+//     把「物化节点」与「组装台」分开，就是不让构建输入混进安装包；组装出包后立即删。
 //
 // 分模块：目标表在 targets.mts，出包前断言在 assert.mts，依赖物化与精简在 materialize.mts，
-// 集成版本戳在 stamp.mts，静态件压缩在 minify.mts；本文件是主流程（校验 → 组装 → zip）。
+// 我们自己的 bundle 的闸在 app-bundle.mts，集成版本戳在 stamp.mts，静态件压缩在 minify.mts；
+// 本文件是主流程（校验 → 组装 → zip）。
 //
 // 集成层在 T5 的落点（别在这里找"覆盖补丁"那一步，它没有了）：delta 在**构建期**铺进 scratch 检出、
 // 烤进产物（scripts/integrations/delta.mts）；pack 期只剩两件事——盖版本戳（stamp.mts）与对账式子
@@ -37,9 +38,9 @@ import { ROOT } from "../../shared/root.mts";
 import { extractTar } from "../../vendor/tar-extract.mts";
 import { readPackageSet, assertRootSetMatchesManifest } from "../package-set.mts";
 import { assertDeliveryPnpmVersion, assertLockfilesUnchanged, assertPnpmChainsUnified, lockfileSnapshot, readPnpmDeclaration } from "../pnpm.mts";
+import { assertAppBundle } from "./app-bundle.mts";
 import { assertAppEntryLayout, assertCordisDistVersions, assertProductPackage, assertRecipeBakedCurrentDelta, assertUiTree, assertVersionEquation } from "./assert.mts";
-import { declareInstallationPlugins } from "./bundle-deps.mts";
-import { STAGING_ROOT, materializeProdDeps } from "./materialize.mts";
+import { MATERIALIZE_ROOT, materializeProdDeps } from "./materialize.mts";
 import { minifyDistStatics } from "./minify.mts";
 import { stampIntegrationVersions } from "./stamp.mts";
 import { failUsage, targetSpec } from "./targets.mts";
@@ -66,7 +67,7 @@ const staticItems = [
   // manifest.json 与 skills 已随 src 域（src/manifest.json、src/skills/，build:src 产出
   // dist 副本），不再经根级静态复制
   // 注：package.json 也不在清单里：仓库那份带 scripts/devDependencies/packageManager/imports
-  // （构建入口），交付面那份（packaging/package.json，单独复制）才是包根要的——见 packaging/README.md。
+  // （构建入口），包根要的那份铭牌由 derive 的 product-package 任务从根 package.json 派生。
   // 注：pnpm-workspace.yaml / pnpm-lock.yaml 不随包——安装侧不执行任何 pnpm install
   // （依赖已物化进包），两份文件在本流程里没有消费方
 ];
@@ -94,15 +95,22 @@ for (const item of staticItems) {
 //      所以只留 name / type / version 三个键（原来的 dependencies 声明已迁走——pin 现住根
 //      package.json#devDependencies）。
 //      字段白名单按这个新形状**写死并断言**（assertProductPackage），不放宽成「任意 package.json」。
-fs.copySync(join(ROOT, "packaging", "package.json"), join(distDir, "package.json"));
+//      内容整份由 derive 的 product-package 任务从根 package.json 派生（源文件 src/product-package.json，
+//      不再有手写实体）；这里把它作为包根 package.json 复制进交付树。dist 每次 build 被清空，
+//      所以不能把派生目标放 dist——先派生、再由 pack 组装。
+const productManifestSource = join(ROOT, "src", "product-package.json");
+if (!fs.pathExistsSync(productManifestSource)) {
+  throw new Error("包根铭牌源缺失（src/product-package.json）：先跑 node scripts/derive/index.mts product-package");
+}
+fs.copySync(productManifestSource, join(distDir, "package.json"));
 
 // 1.5 / 1.6) 产物断言：cordis 包版本与完整性、交付树 package.json、App ui/ 静态树（缺失即拒包）
 assertCordisDistVersions(distDir, version);
 assertProductPackage(distDir, version);
 assertUiTree(distDir);
 assertAppEntryLayout(distDir);
-// 1.7) 包集闸：根集在构建期现算（上游 app-boot 的 web 模板 ∪ OPTIONAL_BUNDLES ∪ @dshana/*），
-//      与 packaging/dsh-package-set.json 比对。上游改了名单而清单没跟，出包前就在这里断。
+// 1.7) 包集闸：根集在构建期现算（上游 app-boot 的 dshana 模板 ∪ OPTIONAL_BUNDLES ∪ @dshana/*），
+//      与缓存条目里的清单比对。上游改了名单而清单没跟，出包前就在这里断。
 await assertRootSetMatchesManifest();
 
 // 1.8) 集成烘焙对账：这份包集烤的 delta 必须就是当前 src-integrations 的 delta。
@@ -111,7 +119,7 @@ await assertRootSetMatchesManifest();
 //      放在物化之前：对不上就该在花掉一次安装之前停。
 const manifestSet = readPackageSet();
 if (manifestSet === null) {
-  throw new Error("找不到 packaging/dsh-package-set.json：先跑 node scripts/derive/index.mts package-set");
+  throw new Error("找不到缓存条目里的 dsh-package-set.json：先跑 node scripts/derive/index.mts package-set");
 }
 const baked = assertRecipeBakedCurrentDelta(manifestSet, join(ROOT, "src-integrations"));
 console.log("[pack] 集成烘焙对账：档案 " + baked.packages + " 个集成 / " + baked.stagedFiles + " 个文件，与当前声明一致");
@@ -121,7 +129,7 @@ console.log("[pack] 集成烘焙对账：档案 " + baked.packages + " 个集成
 //      ② 跨链统一——它 == 清单里构建链用的那份（build.pnpm，检出/vendor 的上游 pin）。
 //      ② 是「统一」的**被检查不变量**：上游 pin 一动、本仓声明也得跟，否则在这里被拒（代价写在
 //      assertPnpmChainsUnified 的注释里）。放在这份清单读出来之后——对账要用它。
-//      同时取锁文件基线：整条 pack 跑完，仓根与 packaging/ 两份都必须原样（packaging 只归 derive 写）。
+//      同时取锁文件基线：整条 pack 跑完，仓根那份必须原样（派生的交付锁住缓存区、归 derive 写）。
 const deliveryPnpm = assertDeliveryPnpmVersion();
 const unifiedPnpm = assertPnpmChainsUnified(manifestSet.build.pnpm, deliveryPnpm);
 const packLockBaseline = lockfileSnapshot();
@@ -164,29 +172,23 @@ const relDir = join(ROOT, "releases");
 fs.ensureDirSync(relDir);
 // 临时目录纪律（曾因多目标连跑堆积 2.2 GB 把宿主压崩）：
 //   · 起手清残留（上次运行/中途崩溃留下的）；
-//   · 用完即清（暂存树 + 铺平目录）；
-//   · 收尾全清由 package.json 的 postpackage 钩子承担（scripts/release/clean-tmp.mts），CI 里也可单独调。
-// 中间原料与暂存树都可再生，真正的产物只有 releases/ 下的 zip + sha256。
+//   · 用完即清（铺平目录）；收尾全清由 package.json 的 postpackage 钩子承担
+//     （scripts/release/clean-tmp.mts），CI 里也可单独调。
+// 真正的产物只有 releases/ 下的 zip + sha256。
+//
+// 依赖树**不在**这里再装一次：物化是一个与 target 无关的缓存节点（.cache/pkg-root/<键>，
+// 见 materialize.mts），各目标只是把它拷进组装台再就地剪枝。
 const pkgRoot = join(ROOT, ".tmp", "pkg");
-for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
+fs.removeSync(pkgRoot);
+fs.removeSync(join(ROOT, ".tmp", "pkg-root")); // 旧形态（逐目标工位）的残留，只清不建
 {
-  const modules = materializeProdDeps(spec);
   // 命名：通用包无后缀（既有 CI/脚本按 dshana-v<ver>.zip 取件），平台包带目标后缀
   const base = spec.name === "universal" ? `dshana-v${version}` : `dshana-v${version}-${spec.name}`;
   const pkgDir = join(pkgRoot, base); // 组装暂存目录（内容原样进 zip 根，此目录名不出现在包里）
   fs.removeSync(pkgDir);
   fs.copySync(distDir, pkgDir);
-  // 依赖树拷进包时剔掉 node_modules 下的点号条目——pnpm 自己的账本，不是依赖：
-  //  · .bin —— 内容全为可执行入口软链，进 zip 跨机解压即断，宿主装机时以 INSTALL_ARCHIVE_SYMLINK
-  //    直接拒收；仓库内无消费方（runtime 经 createRequire 解析包，不经 .bin）。
-  //  · .pnpm —— hoisted 布局下不生成虚拟存储，仅剩 lock.yaml 残留；@deepseek-ai/dsh-app-boot 在顶层
-  //    node_modules，createRequire 直接命中，不触发 .pnpm 回退。
-  //  · .pnpm-workspace-state-v1.json / .modules.yaml —— pnpm 的安装状态，里面记着**构建机的绝对
-  //    路径**（工位目录）与当次 allowBuilds 决定，只对装它的那台机器有意义。
-  // 依赖名不会以点开头，按这个口径一刀切比逐个列举稳。
-  fs.copySync(modules, join(pkgDir, "node_modules"), {
-    filter: (srcPath) => !/[\/\\]node_modules[\/\\]\./.test(srcPath),
-  });
+  // 依赖树从物化节点拷进组装台并就地按本目标剪枝（物化节点本身保持完整，下一个目标照旧从它剪）。
+  materializeProdDeps(spec, pkgDir);
   // T5：pack 期不再覆盖任何内容（delta 已在构建期进产物）。只盖版本戳——`<清单版本>+dshana-<干净版本>`，
   // 由清单版本算出（见 stamp.mts 与 shared/version.mts#patchVersionOf）。
   const stamped = stampIntegrationVersions(join(pkgDir, "node_modules"), manifestSet.packages, version, join(ROOT, "src-integrations"));
@@ -194,18 +196,27 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
   // 式子闸：交付树 = 清单闭包 + 已声明的戳（集成目标带戳、其余逐字等于清单版本）。这是**断言**不是观察。
   const equation = assertVersionEquation(join(pkgDir, "node_modules"), manifestSet, version, join(ROOT, "src-integrations"));
   console.log("[pack] 版本式子成立：" + equation.checked + " 个闭包包（其中集成目标 " + equation.targets + " 个带戳）");
-  // @dshana 子插件落进安装树的 node_modules（与 @deepseek-ai/* 同锚点）：DSH 的 runtime 解析模式
-  // 从安装树 + bundle 依赖图算解析代、不建链接，所以插件不能住在 cordis/ 那种安装树外的位置。
+  // @dshana 一族落进安装树的 node_modules（与 @deepseek-ai/* 同锚点）：DSH 的 runtime 解析模式
+  // 从安装树 + bundle 依赖图算解析代、不建链接，所以它们不能住在 cordis/ 那种安装树外的位置。
   // dist/ 那份原样拷贝已在包根留下 cordis/，这里把它换成 node_modules/@dshana/。
-  // roster patch（dist/cordis.patch.yml）已随 dist 复制到包根，runtime 经 patchFiles 传它。
+  // 含我们自己的 bundle @dshana/app：dshana 预设的 bundles 末层点它，profile 的层解析按安装树锚点
+  // 找它、按它的 dependencies 把 @dshana/* 子插件带进解析代（所以不再需要改上游 web-app 的 manifest）。
   const cordisDist = join(distDir, "cordis");
   if (!fs.pathExistsSync(cordisDist)) throw new Error("dist/cordis 缺失：先跑 pnpm run build 再打包");
   fs.removeSync(join(pkgDir, "cordis"));
   fs.copySync(cordisDist, join(pkgDir, "node_modules", "@dshana"));
-  for (const rel of ["cordis.patch.yml", join("node_modules", "@dshana", "provider", "index.js")]) {
+  for (const rel of [
+    join("node_modules", "@dshana", "app", "package.json"),
+    join("node_modules", "@dshana", "app", "cordis.patch.yml"),
+    join("node_modules", "@dshana", "provider", "index.js"),
+  ]) {
     if (!fs.pathExistsSync(join(pkgDir, rel))) throw new Error(`包内产物缺失：${rel}（拒绝出包）`);
   }
-  console.log("[pack] @dshana 子插件落进 node_modules/@dshana，包根不再有 cordis/")
+  // 旧形态的负向：包根不该再有 cordis.patch.yml（那是启动器 overlay，已被 @dshana/app 取代）。
+  if (fs.pathExistsSync(join(pkgDir, "cordis.patch.yml"))) {
+    throw new Error("包根还有 cordis.patch.yml：启动器 overlay 形态已退场（行变更住 node_modules/@dshana/app/cordis.patch.yml）");
+  }
+  console.log("[pack] @dshana 子插件与 bundle @dshana/app 落进 node_modules/@dshana，包根不再有 cordis/ 与 cordis.patch.yml")
   // @hana/app-sdk 随包：受管 runtime 把它当**外部依赖**（不再构建期内联），运行时从安装树
   // 的 node_modules/@hana/app-sdk 解析。它是我们 vendored 的官方 SDK 包（Apache-2.0，见
   // THIRD_PARTY_NOTICES.md），与 DSH 包集、@dshana/* 同一路子：依赖随包物化，安装即用。
@@ -225,11 +236,16 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
   }
   console.log("[pack] @hana/app-sdk 随包落 node_modules/@hana/app-sdk（受管 runtime 的外部依赖）");
   // 只躺在 node_modules 里不够：DSH 按「安装树 + 被选中 bundle 的依赖图」算解析代，真机上
-  // profile 在数据目录里向上解析走不到安装树，得由被选中 bundle 认领才进解析代（见 bundle-deps.mts）。
-  declareInstallationPlugins(join(pkgDir, "node_modules"));
-  // 暂存树用完即删
-  fs.removeSync(join(STAGING_ROOT, spec.name));
-  console.log(`[pack] ${spec.name}：代码 + 依赖树已就位（${base}），暂存树已清理`);
+  // profile 在数据目录里向上解析走不到安装树，得由被选中 bundle 认领才进解析代。
+  // 认领者就是我们自己的 @dshana/app——它的 dependencies 里写了那三个子插件（随源码一份），
+  // 所以这里不需要再改上游 web-app 的 manifest（bundle-deps.mts 已退场）。
+  const appBundle = assertAppBundle(join(pkgDir, "node_modules"), join(ROOT, "vendor", "deepseek-harness"));
+  console.log(
+    "[pack] @dshana/app：认领随包插件 " + appBundle.claimed.length + " 个（" + appBundle.claimed.join(", ") + "）" +
+      "· 覆盖官方行 " + appBundle.overridden.length + " 条（" + appBundle.overridden.join(", ") + "）" +
+      "· insert 行 " + appBundle.named.length + " 条——声明与落点都对得上",
+  );
+  console.log(`[pack] ${spec.name}：代码 + 依赖树已就位（${base}）`);
   const zipPath = join(relDir, `${base}.zip`);
   fs.removeSync(zipPath);
   const tmpZip = join(relDir, `.${base}.zip.tmp`); // 先写临时文件，rename 原子落位
@@ -257,11 +273,12 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
   console.log(`[pack] ${zipPath}`);
   console.log(`[pack] zip ${(buf.length / 1048576).toFixed(1)} MB · SHA256 ${sha}`);
   fs.writeFileSync(`${zipPath}.sha256`, sha, "utf8");
-  // 铺平目录已入包，即用即清
+  // 铺平目录已入包，即用即清（物化节点是缓存，留着给下一个目标复用）
   fs.removeSync(pkgDir);
-  // 1.10) 锁文件护栏收尾：整条交付链跑完，仓根与 packaging/ 两份都必须一字未动。
+  // 1.10) 锁文件护栏收尾：整条交付链跑完，仓根那份必须一字未动。
   //       历史上正是「pnpm 被隐式自换、目标落到仓里」把仓根锁文件改掉的；这道闸让那种事当场可见。
+  //       （派生出来的交付锁住缓存区、本来归 derive 写，故不在护栏内。）
   assertLockfilesUnchanged(packLockBaseline, "pack " + spec.name);
-  console.log("[pack] 锁文件未动（仓根 pnpm-lock.yaml 与 packaging/pnpm-lock.yaml）");
+  console.log("[pack] 仓根锁文件未动（pnpm-lock.yaml）");
 }
 // 收尾全清 → postpackage 钩子（scripts/release/clean-tmp.mts）

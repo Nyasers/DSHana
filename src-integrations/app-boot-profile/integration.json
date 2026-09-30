@@ -10,8 +10,9 @@
     }
   ],
   "notes": [
-    "批次：预设归属我们（spec §6.6）。在 PROFILE_TEMPLATES 里加一条 dshana，bundle 清单与 web 相同（dsh-base + dsh-web-app）。",
-    "做法与 web 完全同一条路：给出随附模板条目，让 DSH 首次 `--profile dshana` 时自建 $DSH_HOME/profiles/dshana。",
+    "批次：预设归属我们（spec §6.6）。在 PROFILE_TEMPLATES 里加一条 dshana：web 的两层 + **我们自己那层** @dshana/app（顺序即层序）。",
+    "为什么末层是我们的 bundle 而不是启动器 overlay：层序是 bundles → profile 用户层 → 启动器层。我们的行变更住末层，用户层就在它之后，因而能覆盖我们的每一行；旧形态经 runProfile 的 patchFiles 传，层序在所有层之上，用户覆盖不了。",
+    "做法与 web 同一条路：给出随附模板条目，让 DSH 首次 `--profile dshana` 时自建 $DSH_HOME/profiles/dshana。",
     "我们一行 DSH_HOME 都不写——不种子化、不链接、不归一清单。DSH_HOME 可能是用户自己的（数据源切换那一层就指向它），往里写等于跟用户争目录。",
     "买到的：清单里记的根集就是我们的预设；上游改 web 模板不再悄悄改变我们装载的东西。",
     "这是纯加法 delta（一张 const 表加一条），走同一个集成机制与同一道 upstreamSha256 闸。"

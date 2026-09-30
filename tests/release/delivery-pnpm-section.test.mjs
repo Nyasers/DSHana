@@ -76,10 +76,12 @@ test("有段但 specifier 与声明不符：拒（段在、版本错，同属要
   assert.throws(() => assertLockfilePnpmSection(lockWithSection("12.6.0"), d, "锁"), /12\.6\.0/);
 });
 
-test("真实树：仓库两份锁文件的指纹都与当前声明相符（现读声明，不写死版本）", async () => {
+test("真实树：仓根锁文件的指纹与当前声明相符（现读声明，不写死版本）", async () => {
+  // 派生出来的交付锁已搬进 .cache/dsh-build/<键>/（B 节），不在工作树里；它的同一道指纹闸由
+  // derive 的 package-lock 任务在消费侧做（inspect / repair）。
   const { readPnpmDeclaration } = await import("../../scripts/release/pnpm.mts");
   const d = readPnpmDeclaration();
-  for (const rel of ["pnpm-lock.yaml", "packaging/pnpm-lock.yaml"]) {
+  for (const rel of ["pnpm-lock.yaml"]) {
     const text = readFileSync(new URL("../../" + rel, import.meta.url), "utf8");
     // 不抛即通过；顺带把「段的有无」与期望对齐一次。
     assert.doesNotThrow(() => assertLockfilePnpmSection(text, d, rel));

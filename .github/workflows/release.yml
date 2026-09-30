@@ -105,6 +105,11 @@ jobs:
       - name: Build DSH package set
         run: pnpm run build:dsh
 
+      # 清单与交付锁也住这条缓存条目（B 节），随 artifact 一起交给矩阵——各 job 的 derive
+      # 因此不必各自重派生锁（那要跑一次 pnpm install --lockfile-only）。
+      - name: Derive package set manifest and delivery lock
+        run: node scripts/derive/index.mts package-set package-lock
+
       # 同一次运行内交给矩阵各 job：中间产物走 artifact，不走 Release 资产
       - name: Upload package set
         uses: actions/upload-artifact@v7

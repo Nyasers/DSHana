@@ -237,7 +237,7 @@ export function manifestOverrides(set: DshPackageSet): Record<string, string> {
  * spec 才认得出来（实测报 [ERR_PNPM_IGNORED_BUILDS] 并点名…@file:packages/<file>.tgz）。
  * 三方依赖（koffi / node-pty / @google/genai / protobufjs）仍走 registry，键保持裸包名。
  *
- * @param workspaceYaml - 基础配置（packaging/pnpm-workspace.yaml 的内容）。
+ * @param workspaceYaml - 基础配置（scripts/release/pack/pnpm-workspace.yaml 的内容）。
  * @param set - 落盘清单。
  * @returns 改写过 allowBuilds 键的配置。
  */

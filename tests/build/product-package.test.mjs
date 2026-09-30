@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Nyasers
 //
 // tests/build/product-package.test.mjs — 交付树 package.json 的字段契约
-// （scripts/release/pack/assert.mts 的 assertProductPackage + packaging/package.json）
+// （scripts/release/pack/assert.mts 的 assertProductPackage + 派生源 src/product-package.json）
 //
 // 守的是「构建面不进安装包」：仓库那份带着 scripts/devDependencies/packageManager/imports，
 // 装机侧没有消费方，混进去只会让人读出错觉。
@@ -73,9 +73,16 @@ test("文件缺失 / 版本漂移 / type 不是 module 一律拒包", () => {
   });
 });
 
-test("packaging/package.json 自身就在白名单内（实体文件与契约同源）", async () => {
+test("派生出的铭牌（src/product-package.json）就在白名单内，且与根 package.json 一致", async () => {
+  // 铭牌整份由 derive 的 product-package 任务从根 package.json 派生——这里守"派生物没漂"：
+  // 键集合逐字相符 + 三格的值都等于根的对应格。派生物漂了，断言 assertProductPackage 是查不出来的
+  //（它只看形状与版本，不看来源）。
   const fs = await import("node:fs");
-  const real = JSON.parse(fs.readFileSync(new URL("../../packaging/package.json", import.meta.url), "utf8"));
+  const real = JSON.parse(fs.readFileSync(new URL("../../src/product-package.json", import.meta.url), "utf8"));
+  const root = JSON.parse(fs.readFileSync(new URL("../../package.json", import.meta.url), "utf8"));
   assert.deepEqual(Object.keys(real).sort(), [...PRODUCT_PACKAGE_KEYS].sort());
   assert.equal(real.type, "module");
+  assert.equal(real.name, root.name, "铭牌的 name 应等于根 package.json 的 name");
+  assert.equal(real.version, root.version, "铭牌的 version 应等于根 package.json 的 version");
+  assert.equal(real.type, root.type, "铭牌的 type 应等于根 package.json 的 type");
 });

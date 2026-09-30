@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// scripts/derive/package-lock.mts — 交付面锁文件（packaging/pnpm-lock.yaml）的派生。
+// scripts/derive/package-lock.mts — 交付面锁文件的派生（与包集清单同层：T1 缓存条目里）。
 //
 // T3 换源后工位是「包集清单派生出来的安装输入」（见 scripts/release/pack/install-source.mts）：
 // 根 = @deepseek-ai/dsh，每个 @deepseek-ai/* 包名 override 到 file:./packages/<file>。这份锁文件
 // 就是把那个工位按 frozen 解析后的结果，供出包时直接消费——不重解析。
+//
+// B 节起它落进 `.cache/dsh-build/<键>/`（挨着 build-recipe.json / dist-npm / 清单）：这份锁只对
+// 那个键对应的包集成立（file: 条目的 integrity 就是那批 tarball 的字节摘要），所以它**属于**那条
+// 缓存条目，不该住仓库里靠"记得对上"来维持。
 //
 // **local tarball 派的 integrity 从哪来**（这刀的核心问题）：pnpm 自己算。它对 file: 依赖会在
 // packages 段写下 resolution: {integrity: sha512-…, tarball: file:./packages/<file>}，那份 sha512
@@ -17,27 +21,38 @@
 // 种子这一步很关键：从零解析会按 range 取最新（实测 koffi 3.3.0 → 3.3.1、rspack binding
 // 2.2.5 → 2.2.6）；用仓库锁文件当种子，pnpm 复用已有解析，版本一个不动。
 //
-// 为什么把契约落在 packaging/ 而不是 .tmp：工位是临时的，但它的解析结果要**进版本库**——
+// 为什么把契约落在缓存条目里（而不是 .tmp 工位）：工位是临时的，但它的解析结果要**留得住**——
 // 出包机不该在打包时解析依赖（会因 registry 状态漂移），而应消费一份审过的锁文件。
 //
 // 状态型任务（不是文件型）：产物由 pnpm 跑出来，不是我们算出来的。inspect 只读（拿已提交的
 // 锁文件跑 frozen 探针，不动任何东西），repair 才在契约工位里重生成并写回。
 import fs from "fs-extra";
-import { join } from "node:path";
+import path, { join } from "node:path";
 
 import { ROOT } from "../shared/root.mts";
-import { readPackageSet } from "../release/package-set.mts";
+import { packageSetRel, readPackageSet } from "../release/package-set.mts";
+import { currentBuildIdentity } from "../vendor/build.mts";
 import { assertLockfilesUnchanged, assertLockfilePnpmSection, assertLockfileVersion, lockfileSnapshot, readPnpmDeclaration, runDeliveryPnpm } from "../release/pnpm.mts";
 import { PACKAGE_DIR, prepareInstallSource, verifyLockfileIntegrity } from "../release/pack/install-source.mts";
-import { stagingWorkspaceYaml } from "../release/pack/targets.mts";
+import { stagingWorkspaceYaml, UNIVERSAL_SPEC } from "../release/pack/targets.mts";
 
-/** 锁文件相对仓库根的路径（交付面清单的同层）。 */
-export const SHIP_LOCK_REL = "packaging/pnpm-lock.yaml";
-/** 派生工位（.tmp 下，跑完即清；与 pack 的 pkg-root 分开，互不干扰）。 */
-const WORK_DIR = join(ROOT, ".tmp", "pkg-lock");
+/** 锁文件在缓存条目里的文件名（与 build-recipe.json / dsh-package-set.json 同层）。 */
+export const SHIP_LOCK_FILENAME = "pnpm-lock.yaml";
+/** 派生工位（缓存区，跑完即清；与 pack 的物化节点分开，互不干扰）。 */
+const WORK_DIR = join(ROOT, ".cache", "pkg-lock");
+
+/** 锁文件相对仓库根的路径（缓存条目内；日志与报错用它）。 */
+export function shipLockRel(key: string): string {
+  return path.join(".cache", "dsh-build", key, SHIP_LOCK_FILENAME);
+}
 
 /** 一句话说明源 → 目标（日志与 --check 报告用）。 */
-export const ABOUT = "包集清单派生出的工位（file: tarball）→ packaging/pnpm-lock.yaml";
+export const ABOUT = "包集清单派生出的工位（file: tarball）→ .cache/dsh-build/<键>/pnpm-lock.yaml";
+
+/** 现算本机当前的 T1 缓存键（与清单读的是同一把，见 release/package-set.mts#readPackageSet）。 */
+function currentCacheKey(): string {
+  return currentBuildIdentity().key;
+}
 
 /**
  * 在工位里跑一次 pnpm（返回退出码与输出；实际版本由 runDeliveryPnpm 断言）。
@@ -64,12 +79,13 @@ function pnpmInWorkDir(args: string[], label: string) {
  * @param seedLock - 种子来源（仓库锁文件），lockFrom 为 null 时用。
  */
 function prepareWorkDir({ lockFrom }: { lockFrom: string | null }) {
-  const set = readPackageSet();
+  const key = currentCacheKey();
+  const set = readPackageSet(key);
   if (set === null) {
-    throw new Error("找不到 packaging/dsh-package-set.json：先跑 node scripts/derive/index.mts package-set");
+    throw new Error("找不到 " + packageSetRel(key) + "：先跑 node scripts/derive/index.mts package-set");
   }
-  // 工位用全叉乘的平台块（通用兜底包要覆盖所有平台）；出包时按目标窄化。
-  prepareInstallSource(WORK_DIR, set, stagingWorkspaceYaml({ name: "universal", os: ["win32", "darwin", "linux"], cpu: ["x64", "arm64"] }));
+  // 工位用全叉乘的平台块（锁要覆盖所有平台）；物化节点用**同一份**（那是这份 frozen 安装的原配）。
+  prepareInstallSource(WORK_DIR, set, stagingWorkspaceYaml(UNIVERSAL_SPEC));
   fs.copySync(lockFrom ?? join(ROOT, "pnpm-lock.yaml"), join(WORK_DIR, "pnpm-lock.yaml"));
 }
 
@@ -91,13 +107,14 @@ function cleanWorkDir() {
  * 对拍用的是 pack 的同一份实现，口径不会分叉。
  */
 export function inspect(): string[] {
-  const lockAbs = join(ROOT, SHIP_LOCK_REL);
+  const key = currentCacheKey();
+  const lockAbs = join(ROOT, shipLockRel(key));
   if (!fs.pathExistsSync(lockAbs)) {
-    return [SHIP_LOCK_REL + " 不存在（包集清单有了，锁文件还没派生）"];
+    return [shipLockRel(key) + " 不存在（包集清单有了，锁文件还没派生）"];
   }
-  const set = readPackageSet();
+  const set = readPackageSet(key);
   if (set === null) {
-    return ["找不到 packaging/dsh-package-set.json：先跑 node scripts/derive/index.mts package-set"];
+    return ["找不到 " + packageSetRel(key) + "：先跑 node scripts/derive/index.mts package-set"];
   }
   // 第 2 道先做（纯读、不跑进程）：它拦的正是「包集重编了而锁文件没跟」这种静默漂移。
   try {
@@ -113,14 +130,15 @@ export function inspect(): string[] {
     //      frozen 探针看不见它（11.x 整个忽略该段，照旧放行）。
     try {
       const decl = readPnpmDeclaration();
-      assertLockfileVersion(fs.readFileSync(lockAbs, "utf8"), decl, SHIP_LOCK_REL);
-      assertLockfilePnpmSection(fs.readFileSync(lockAbs, "utf8"), decl, SHIP_LOCK_REL);
+      const label = shipLockRel(key);
+      assertLockfileVersion(fs.readFileSync(lockAbs, "utf8"), decl, label);
+      assertLockfilePnpmSection(fs.readFileSync(lockAbs, "utf8"), decl, label);
     } catch (error) {
       return [String(error instanceof Error ? error.message : error)];
     }
     const code = pnpmInWorkDir(["install", "--lockfile-only", "--frozen-lockfile"], "derive-lock-inspect");
     if (code !== 0) {
-      return [SHIP_LOCK_REL + " 与包集清单派生的工位不同步（pnpm install --frozen-lockfile 退出码 " + code + "）——跑 node scripts/derive/index.mts package-lock 重生成"];
+      return [shipLockRel(key) + " 与包集清单派生的工位不同步（pnpm install --frozen-lockfile 退出码 " + code + "）——跑 node scripts/derive/index.mts package-lock 重生成"];
     }
     return [];
   } finally {
@@ -128,26 +146,30 @@ export function inspect(): string[] {
   }
 }
 
-/** 修复：以仓库锁文件为种子在工位里重解析，把结果写回交付面锁文件。 */
+/** 修复：以仓库锁文件为种子在工位里重解析，把结果写进 T1 缓存条目。 */
 export function repair(): void {
-  // 护栏：派生**只许写 packaging/ 那份**。仓根 pnpm-lock.yaml 是构建链的输入，这里绝不许碰
+  // 护栏：派生只许写缓存条目里那份。仓根 pnpm-lock.yaml 是构建链的输入，这里绝不许碰
   // （历史上隐式自换正是把它改掉的那个机制）。前后比一次，变了就拒。
+  const key = currentCacheKey();
+  const target = join(ROOT, shipLockRel(key));
   const locksBefore = lockfileSnapshot();
   try {
     prepareWorkDir({ lockFrom: null });
     const code = pnpmInWorkDir(["install", "--lockfile-only"], "derive-lock-repair");
-    if (code !== 0) throw new Error("工位重生成 " + SHIP_LOCK_REL + " 失败（pnpm 退出码 " + code + "）");
+    if (code !== 0) throw new Error("工位重生成 " + shipLockRel(key) + " 失败（pnpm 退出码 " + code + "）");
     const produced = join(WORK_DIR, "pnpm-lock.yaml");
     if (!fs.pathExistsSync(produced)) throw new Error("工位未产出锁文件：" + produced);
     // 写回前校验两道格式：产出的锁文件必须是声明版本那份形状（不随版本静默改格式，也不静默带/丢
     // packageManagerDependencies 段）。这一道防的是「新派生的锁本身就不符合声明」。
     const decl = readPnpmDeclaration();
-    assertLockfileVersion(fs.readFileSync(produced, "utf8"), decl, "工位产出的 " + SHIP_LOCK_REL);
-    assertLockfilePnpmSection(fs.readFileSync(produced, "utf8"), decl, "工位产出的 " + SHIP_LOCK_REL);
-    fs.copySync(produced, join(ROOT, SHIP_LOCK_REL));
-    console.log("[derive] " + SHIP_LOCK_REL + " 已重生成（以仓库锁文件为种子）");
+    const label = shipLockRel(key);
+    assertLockfileVersion(fs.readFileSync(produced, "utf8"), decl, "工位产出的 " + label);
+    assertLockfilePnpmSection(fs.readFileSync(produced, "utf8"), decl, "工位产出的 " + label);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.copySync(produced, target);
+    console.log("[derive] " + label + " 已重生成（以仓库锁文件为种子）");
   } finally {
-    // packaging/ 那份本来就会被本函数写，故只对**仓根**那份执法。
+    // 那份缓存里的锁本来就会被本函数写，故只对**仓根**那份执法。
     assertLockfilesUnchanged(locksBefore.filter((s) => s.rel === "pnpm-lock.yaml"), "derive package-lock", ROOT);
     cleanWorkDir();
   }

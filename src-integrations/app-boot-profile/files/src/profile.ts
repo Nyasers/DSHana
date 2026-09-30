@@ -183,13 +183,14 @@ export const PROFILE_TEMPLATES: Record<string, ProfileTemplate> = {
   web: {
     bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'],
   },
-  // dshana: our own composition, same bundle layers as `web` (dsh-base + dsh-web-app).
+  // dshana: our own composition — the web surface plus OUR OWN bundle layer last
+  // (dsh-base + dsh-web-app + @dshana/app), so a profile user layer can override every row we change.
   // Shipped by the installation and auto-initialized on first `--profile dshana` use, exactly like
   // the upstream templates above: nothing here seeds, links, or writes into DSH_HOME.
   // Owning the name is the point — upstream changing `web` no longer silently changes what we mount,
   // and the package-set manifest records OUR template's bundle list instead of inferring it from `web`.
   dshana: {
-    bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'],
+    bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@dshana/app'],
   },
   headless: {
     bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless'],
@@ -205,6 +206,9 @@ export const PROFILE_TEMPLATES: Record<string, ProfileTemplate> = {
 /** Installation-owned bundle tuples normalized to the shipped template. */
 const INSTALLATION_OWNED_PROFILE_TUPLES: Record<string, readonly string[]> = {
   headless: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@deepseek-ai/dsh-headless'],
+  // dshana profile 记着上游 web 的两层清单时规范化成我们那份（base + web-app + @dshana/app）；
+  // 其余字段与用户自己的 cordis.patch.yml 都不动。
+  dshana: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'],
 }
 
 /** The bundle list a `dsh plugin` init uses for a name with no shipped template. */

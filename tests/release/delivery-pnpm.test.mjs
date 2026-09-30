@@ -7,7 +7,7 @@
 // packageManager 就自换）。这里把判据钉住——声明怎么读、实际版本怎么判、锁文件怎么护。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -81,15 +81,15 @@ test("deliveryPnpmEnv：三条环境纪律齐上，且不改动其它变量", ()
   assert.equal(env.KEEP, "1");
 });
 
-test("锁文件护栏：两份都在名单里；内容一变就拒，且报出是哪一份", () => {
-  assert.deepEqual([...GUARDED_LOCKFILES], ["pnpm-lock.yaml", "packaging/pnpm-lock.yaml"]);
+test("锁文件护栏：名单只有仓根那份；内容一变就拒，且报出是哪一份", () => {
+  // 派生出来的交付锁已搬进 .cache/dsh-build/<键>/（B 节）：那份本来就归 derive 写，且住缓存区、
+  // 不属于工作树，所以护栏只剩仓根这条。
+  assert.deepEqual([...GUARDED_LOCKFILES], ["pnpm-lock.yaml"]);
   const { dir, done } = fixture({});
   try {
-    mkdirSync(join(dir, "packaging"), { recursive: true });
     writeFileSync(join(dir, "pnpm-lock.yaml"), "lockfileVersion: 9.0\n");
-    writeFileSync(join(dir, "packaging", "pnpm-lock.yaml"), "lockfileVersion: 9.0\n");
     const before = lockfileSnapshot(dir);
-    assert.equal(before.length, 2);
+    assert.equal(before.length, 1);
     assert.doesNotThrow(() => assertLockfilesUnchanged(before, "pack", dir));
     writeFileSync(join(dir, "pnpm-lock.yaml"), "lockfileVersion: 9.0\n# tampered\n");
     assert.throws(() => assertLockfilesUnchanged(before, "pack", dir), /pnpm-lock/);
@@ -113,7 +113,7 @@ test("交付链现读仓库声明：形如 pnpm@<版本>，且与 package.json �
   assert.ok(d.version.startsWith(String(d.major) + "."));
 });
 
-test("交叉校验的事实：仓库两份锁文件的 lockfileVersion 都等于声明版本的应有值", () => {
+test("交叉校验的事实：仓根锁文件的 lockfileVersion 等于声明版本的应有值", () => {
   const decl = readPnpmDeclaration();
   for (const rel of GUARDED_LOCKFILES) {
     const text = readFileSync(new URL("../../" + rel, import.meta.url), "utf8");

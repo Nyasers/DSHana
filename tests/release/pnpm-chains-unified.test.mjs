@@ -41,11 +41,22 @@ test("清单里缺构建链版本：拒（不能因为读不出就默认通过�
   assert.throws(() => assertPnpmChainsUnified(undefined, "11.7.0"), /build\.pnpm/);
 });
 
-test("真实仓库：当前声明与清单的 build.pnpm 一致——本仓此刻确实「统一」", async () => {
+const { packageSetRel, readPackageSet } = await import("../../scripts/release/package-set.mts");
+const { currentBuildIdentity } = await import("../../scripts/vendor/build.mts");
+// 清单住 T1 缓存条目（B 节；键 = tag/配方/node/pnpm/上游锁/delta），按**现算**的键读——
+// 与 pack / derive 同一条读法，不去别的条目里翻。
+const CACHE_KEY = currentBuildIdentity().key;
+const PACKAGE_SET = readPackageSet(CACHE_KEY);
+
+test("真实仓库：当前声明与清单的 build.pnpm 一致——本仓此刻确实「统一」", {
+  // 缺条目不是「不统一」，而是**没东西可判**：干净检出上这条无从成立。CI 与出包前都先跑
+  // build:dsh + derive（那份条目里就有清单），所以真判据不被削弱——这里跳过并点名缺哪一份，
+  // 而不是删掉断言、也不是让它看起来像通过。
+  skip: PACKAGE_SET === null ? `缺 ${packageSetRel(CACHE_KEY)}：先跑 node scripts/vendor/build.mts + derive（缓存键 ${CACHE_KEY}）` : false,
+}, async () => {
   const { readPnpmDeclaration } = await import("../../scripts/release/pnpm.mts");
-  const { readPackageSet } = await import("../../scripts/release/package-set.mts");
-  const set = readPackageSet();
-  assert.notEqual(set, null, "包集清单应存在");
+  const set = PACKAGE_SET;
+  assert.ok(set !== null, `缺 ${packageSetRel(CACHE_KEY)}`);
   const decl = readPnpmDeclaration();
   // 交付链实际版本无从在纯单测里解析（要起进程），但本仓现态是「声明 == 清单构建链版本」，
   // 故这条等价于「清单的那一格 == 声明」。真正的「实际」断言由 pack 的 1.9 用实际解析值做。

@@ -14,11 +14,11 @@
 //      操作报错 + 退出码 3，绝不假装能跑；
 //   3. 设本进程自有 env（DSH_HOME / DSHANA_*，不污染宿主进程环境）；
 //   4. 依赖就位（随包物化在 <installRoot>/node_modules，无运行时安装）；
-//   5. 产物在位（@dshana 子插件在 <installRoot>/node_modules/@dshana，roster patch 在
-//      <installRoot>/cordis.patch.yml——profile 目录不归我们：模板条目 dshana 随包在
-//      @deepseek-ai/dsh-app-boot，由 DSH 首次加载时自建）；
+//   5. 产物在位（@dshana 子插件与我们的 bundle @dshana/app 都在 <installRoot>/node_modules/@dshana
+//      ——profile 目录不归我们：模板条目 dshana 随包在 @deepseek-ai/dsh-app-boot，由 DSH 首次加载时
+//      自建，其 bundles 末层就是 @dshana/app，所以我们的行变更是 profile 层而非启动器 overlay）；
 //   6. 子进程内 boot DSH（locateDsh → appBoot.loadLayeredEnv → profileBoot.runProfile，
-//      profile = 我们的 dshana 预设 + patchFiles = roster patch），webserver 监听配置中的 dshPort；
+//      profile = 我们的 dshana 预设），webserver 监听配置中的 dshPort；
 //   7. 真实监听成功（webServer 服务端口 === 期望端口 + HTTP 探测）才向 stdout 打印约定
 //      readyMarker（独占一行、无前缀）——任何失败路径绝不打印 READY；
 //   8. SIGTERM/SIGINT/父进程 disconnect → 优雅释放：先关 DSH fiber（含 webserver），再
@@ -62,10 +62,12 @@ export const EXIT = {
 export const READY_TIMEOUT_MS = 60000;
 /** 优雅释放时 ctx.fiber.dispose 的最长等待（超时强退；dsh 自身 shutdown 5s 兜底）。 */
 const DISPOSE_TIMEOUT_MS = 4000;
-// 我们自己的预设名（spec §6.6）：bundle 清单与上游 `web` 相同，但**名字归我们**——上游改
-// `web` 模板不再悄悄改变我们装载的东西，清单里记的根集也就是我们的预设。
+// 我们自己的预设名（spec §6.6）：bundle 清单 = 上游 web 两层 + **我们自己那层**（@dshana/app），
+// 名字归我们——上游改 `web` 模板不再悄悄改变我们装载的东西，清单里记的根集也就是我们的预设。
 // 模板条目由交付树里的 @deepseek-ai/dsh-app-boot 自带（src-integrations/app-boot-profile 的 delta），
 // 首次 `--profile dshana` 时由 DSH 自己建 $DSH_HOME/profiles/dshana；我们不写 DSH_HOME 里任何东西。
+// 因为我们的层在 bundles 里、不在启动器 overlay 里，用户层（profile 的 cordis.patch.yml）在它之后
+// 应用——profile 用户能覆盖我们的每一行。
 const PROFILE_NAME = "dshana";
 
 /** 取错误的可读文本。catch 到的值类型未知，字段访问一律经这里。 */
@@ -201,17 +203,23 @@ function makeShutdown(state, exitCodeLog) {
 }
 
 /**
- * 产物在位检查（fail-closed）：@dshana 子插件与我们的 roster patch 都得在。
+ * 产物在位检查（fail-closed）：@dshana 子插件与我们的 bundle @dshana/app 都得在。
  * 缺了就在这里报清楚，而不是等 DSH 自己把「bundle/插件找不到」抛上来。
  * @returns 缺失项（空数组 = 齐备）。
  */
-function missingArtifacts(depsRoot: string, rosterPatch: string): string[] {
+function missingArtifacts(depsRoot: string): string[] {
   const missing: string[] = [];
   for (const name of ["provider", "theme", "clipboard"]) {
     const dir = join(depsRoot, "@dshana", name);
     if (!existsSync(join(dir, "index.js"))) missing.push(dir);
   }
-  if (!existsSync(rosterPatch)) missing.push(rosterPatch);
+  // 我们的 bundle 层：dshana 预设的 bundles 末层点它，profile 的层解析按安装树锚点找它。
+  // 缺了 DSH 会把它记成 skippedBundle（静默少一层：我们的 LLM disable 与 @dshana/* insert 全丢），
+  // 所以这里必须当成硬缺件拦下。
+  const appDir = join(depsRoot, "@dshana", "app");
+  if (!existsSync(join(appDir, "package.json")) || !existsSync(join(appDir, "cordis.patch.yml"))) {
+    missing.push(appDir);
+  }
   return missing;
 }
 
@@ -221,14 +229,14 @@ function missingArtifacts(depsRoot: string, rosterPatch: string): string[] {
  * 首次加载时按随附模板建）。结果写 resultPath（{ok:true} 或 {ok:false,error}，0600）后立即退出。
  * 退出码对齐 classify：0 = 预检通过；4 = deps/locate；5 = 产物缺失。
  */
-async function runPreflight({ opts, dataDir, dshHome, depsRoot, rosterPatch }): Promise<never> {
+async function runPreflight({ opts, dataDir, dshHome, depsRoot }): Promise<never> {
   const write = (payload) => writeFileSync(opts.resultPath, JSON.stringify(payload), { mode: 0o600 });
   try {
     process.env.DSH_HOME = dshHome;
     process.env.DSHANA_HOME = dataDir;
     info(`预检开始：dshHome=${dshHome} depsRoot=${depsRoot}`);
     await locateDsh({ depsRoot, log: (s) => info("locate", s) });
-    const missing = missingArtifacts(depsRoot, rosterPatch);
+    const missing = missingArtifacts(depsRoot);
     if (missing.length > 0) {
       err("preflight", "产物不在位：" + missing.join("、"));
       write({ ok: false, error: `目标环境缺产物（先跑 pnpm run build 再打包）：${missing.join("、")}` });
@@ -298,14 +306,13 @@ export async function main(argv: string[]): Promise<number> {
   }
   const dataDir = resolve(opts.dataDir);
   // 依赖根默认指向 App 安装目录（随包物化的 node_modules）；--deps-root 可覆盖（调试）。
-  // @dshana 插件与 @deepseek-ai/* 同锚点住在这里（运行时解析模式从安装树算解析代，不建链接），
-  // 我们的 roster patch 随包放在安装根（与 manifest.json 并排，经 patchFiles 作启动期 overlay）。
+  // @dshana 插件与我们的 bundle @dshana/app 都与 @deepseek-ai/* 同锚点住在这里
+  //（运行时解析模式从安装树算解析代，不建链接）；我们的行变更随该 bundle 走 profile 层。
   const depsRoot = resolve(opts.depsRoot || join(installRoot, "node_modules"));
-  const rosterPatch = join(installRoot, "cordis.patch.yml");
   const dshHome = opts.dshHome ? resolve(opts.dshHome) : join(dataDir, ".dsh");
   // ---- 0) 预检模式（数据源切换探针）：不连宿主 IPC、不起服务，只验证目标环境可用性 ----
   if (opts.preflight) {
-    return await runPreflight({ opts, dataDir, dshHome, depsRoot, rosterPatch });
+    return await runPreflight({ opts, dataDir, dshHome, depsRoot });
   }
   const state: {
     hana: any;
@@ -364,6 +371,7 @@ export async function main(argv: string[]): Promise<number> {
   // profile 目录本身不归我们：模板条目随包（@deepseek-ai/dsh-app-boot 的 PROFILE_TEMPLATES.dshana），
   // 由 DSH 首次加载时自建自维护（loadProfile 的 template 分支）。我们不写 DSH_HOME 里的任何东西
   // （不种子化、不链接、不归一清单）——DSH_HOME 可能是用户自己的目录，往里写等于跟用户争目录。
+  // 那三条模板 bundles 的末层是 @dshana/app（我们自己的层），由 DSH 按安装树锚点解析到。
   let located;
   try {
     located = await locateDsh({ depsRoot, log: (s) => info("locate", s) });
@@ -373,7 +381,7 @@ export async function main(argv: string[]): Promise<number> {
     reportFatal("deps", e);
     return EXIT.DEPS;
   }
-  const missing = missingArtifacts(depsRoot, rosterPatch);
+  const missing = missingArtifacts(depsRoot);
   if (missing.length > 0) {
     err("artifacts", "产物不在位（先跑 pnpm run build 再打包/运行）：" + missing.join("、"));
     err("exit", "exit=" + EXIT.SEED + " kind=artifacts-missing");
@@ -381,15 +389,19 @@ export async function main(argv: string[]): Promise<number> {
     return EXIT.SEED;
   }
 
-  // ---- 5) 子进程内 boot DSH（我们的 dshana 预设 + 我们的 roster 作启动期 overlay；显式端口）----
+  // ---- 5) 子进程内 boot DSH（我们的 dshana 预设；显式端口）----
+  // 我们的行变更不再经 patchFiles 作启动期 overlay：它们在 dshana 预设的 bundles 末层（@dshana/app），
+  // 于是用户层（profile cordis.patch.yml）与启动器层都排在它们之后，能覆盖我们的每一行。
   const environment = located.appBoot.loadLayeredEnv("dsh");
-  info(`runProfile({ profile: ${PROFILE_NAME}, patchFiles: [${rosterPatch}], port: ${opts.dshPort} }) …`);
+  info(`runProfile({ profile: ${PROFILE_NAME}, patchFiles: [], port: ${opts.dshPort} }) …`);
   let boot;
   try {
     boot = await located.profileBoot.runProfile({
       environment,
       profile: PROFILE_NAME,
-      patchFiles: [rosterPatch],
+      // 上游 composeProfile 无条件做 patchFiles.flatMap(...)，这个字段缺了就抛启动期 TypeError；
+      // 我们的行变更住在 profile 的 bundle 层（@dshana/app），不再需要启动器 overlay，所以是空数组。
+      patchFiles: [],
       args: ["--port", String(opts.dshPort), "--no-open"],
     });
   } catch (e) {

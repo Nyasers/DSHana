@@ -1,7 +1,7 @@
-# @dshana/dshana — 定制 bundle patch。
+# @dshana/app — 这一层的组合补丁。
 #
 # 层序（profile manifest 的 dsh.profile.bundles，后写胜出）：
-#   @deepseek-ai/dsh-base → @deepseek-ai/dsh-web-app → @dshana/dshana（本文件）
+#   @deepseek-ai/dsh-base → @deepseek-ai/dsh-web-app → @dshana/app（本文件）→ profile 用户层
 #
 # 官方两层已经提供：surface 值覆盖（system-prompt / session-query-sqlite / tools）、服务层
 # （session / settings / workspace controller、web-startup / webserver / web-runtime、client-hmr）、
@@ -12,9 +12,9 @@
 #   1) 对官方行的覆盖 / disable（我们自己的值）
 #   2) @dshana/* 定制插件 insert
 #
-# 机制：一切经本 patch 文件声明，runtime 启动时经 runProfile 的 patchFiles 作启动期 overlay 传进去
-# （见 src-cordis/build.ts）；不使用 profile 用户层 cordis.patch.yml，也不使用命令行 --patch 叠加。
-# profile 用我们随附的 `dshana` 预设（模板条目随包在 @deepseek-ai/dsh-app-boot，见 spec §6.6），
+# 本层随包分发到安装树的 node_modules/@dshana/app，由 profile 的 dsh.profile.bundles 选中
+# （我们随附的 `dshana` 预设，模板条目随包在 @deepseek-ai/dsh-app-boot，见 spec §6.6）。
+# 用户层在它之后应用，所以 $DSH_HOME/profiles/dshana/cordis.patch.yml 能覆盖这里的每一行；
 # 我们不往数据目录里的 cordis.yml / cordis.patch.yml 写任何东西。
 
 # ── 1) 对官方行的覆盖 / disable ───────────────────────────────────────────────

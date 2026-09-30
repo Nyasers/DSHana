@@ -15,7 +15,7 @@
 //   version 钩子内做（此时版本号已落盘、git 未动，是唯一能表达完整版的时机）。
 //
 // 版本规则：build metadata 保留且恒为 dsh 依赖段
-//   `+dsh-<packaging/package.json#dependencies.@deepseek-ai/dsh>`（本脚本自动重算，不接受自定义——版本号一眼可见
+//   `+dsh-<根 package.json#devDependencies.@deepseek-ai/dsh>`（本脚本自动重算，不接受自定义——版本号一眼可见
 //   跑在哪个 dsh 上，防手误漂移）；pnpm version 算号剥 build，此处拼回完整版再同步派生。
 //   bump 子命令映射：beta/hotfix 末段递增 = prerelease（裸跑，保留 preid 递增末段）；毕业 =
 //   patch/minor/major（node-semver 语义）；从正式版开 pre 线 =

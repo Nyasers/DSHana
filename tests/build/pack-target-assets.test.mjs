@@ -4,18 +4,43 @@
 // tests/build/pack-target-assets.test.mjs — 出包资产清单与交付锁的一致性闸
 //
 // assets 只在真打包、依赖物化完之后被逐个断言存在，CI 上要到出包那一刻才碰得到。这里把清单
-// 提前对齐到 packaging/pnpm-lock.yaml：名字漂了（上游改包名、换平台切分、或我们写错一个字母）
-// 在 PR 上就拦住，不必等一次完整出包才暴露。
+// 提前对齐到**交付锁**（B 节起它住 T1 缓存条目 .cache/dsh-build/<键>/pnpm-lock.yaml）：名字漂了
+// （上游改包名、换平台切分、或我们写错一个字母）在 PR 上就拦住，不必等一次完整出包才暴露。
+//
+// 缓存条目在干净检出上可能不存在（本仓 CI 会先跑 build:dsh 把包集编出来；本地没编过时这条闸
+// 无从判，跳过而不是伪绿——真正的兜底在出包期（materialize 的资产断言）。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { supportedTargetNames, targetSpec } from "../../scripts/release/pack/targets.mts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const LOCK_LINES = readFileSync(join(ROOT, "packaging", "pnpm-lock.yaml"), "utf8").split(/\r?\n/);
+
+/**
+ * 交付锁的内容（T1 缓存条目里的那份）；一条都没有时返回 null。
+ *
+ * 为什么不现算缓存键（build.mts --print-key）：那要起子进程读 vendor tag，而这条闸只需要
+ * "本机有哪几份交付锁"。缓存目录里通常只有一条（当前键），有多条时取修改时间最新的那条——
+ * 与出包会消费的那份一致（键由同一套输入算出，换了 tag/工具链即换目录）。
+ */
+function readDeliveryLock() {
+  const cacheRoot = join(ROOT, ".cache", "dsh-build");
+  if (!existsSync(cacheRoot)) return null;
+  let best = null;
+  for (const name of readdirSync(cacheRoot)) {
+    const p = join(cacheRoot, name, "pnpm-lock.yaml");
+    if (!existsSync(p)) continue;
+    const mtime = statSync(p).mtimeMs;
+    if (best === null || mtime > best.mtime) best = { path: p, mtime };
+  }
+  return best === null ? null : readFileSync(best.path, "utf8");
+}
+
+const LOCK_TEXT = readDeliveryLock();
+const LOCK_LINES = LOCK_TEXT === null ? [] : LOCK_TEXT.split(/\r?\n/);
 
 /** LibreOffice 转换栈的名字根与四个原生 kit；Linux 没有原生形态，那条是 wasm。 */
 const LO_KIT = "@deepseek-ai/libreoffice-kit";
@@ -72,10 +97,10 @@ test("每个目标的资产清单内部无重复", () => {
   }
 });
 
-test("清单里的每个资产在交付锁里有条目", () => {
+test("清单里的每个资产在交付锁里有条目", { skip: LOCK_TEXT === null ? "本机没有 T1 缓存条目（先跑 pnpm run build:dsh）" : false }, () => {
   for (const { name, spec } of targets) {
     for (const asset of spec.assets) {
-      assert.ok(inLock(asset), `${name} 的资产 ${asset} 不在 packaging/pnpm-lock.yaml 里`);
+      assert.ok(inLock(asset), `${name} 的资产 ${asset} 不在交付锁（.cache/dsh-build/<键>/pnpm-lock.yaml）里`);
     }
   }
 });

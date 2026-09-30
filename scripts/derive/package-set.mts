@@ -3,7 +3,7 @@
 //
 // scripts/derive/package-set.mts — 运行树包集清单的派生化（写回 / --check 只读校验）。
 //
-// 派生方向：T1 缓存里的 dist-npm（源）→ packaging/dsh-package-set.json（目标）。
+// 派生方向：T1 缓存里的 dist-npm（源）→ 同一条目的 dsh-package-set.json（目标）。
 // 根集不落成常量：现算（上游 app-boot 的 web 模板 ∪ OPTIONAL_BUNDLES ∪ 我们那批），
 // 与清单比对；上游改了模板，--check 就报，而不是等发版时人工对账。
 //
@@ -16,10 +16,10 @@ import path from "node:path";
 import { ROOT } from "../shared/root.mts";
 import { isSameOriginAsSet } from "../shared/package-set-digest.mts";
 import {
-  PACKAGE_SET_REL,
   buildPackageSet,
   checkPackageSet,
   checkPackageSetBuild,
+  packageSetRel,
   readBuildRecipe,
   readPackageSet,
 } from "../release/package-set.mts";
@@ -40,10 +40,17 @@ function currentCacheKey(): string {
   return identity.key;
 }
 
-/** 现算包集，作为清单的期望内容。 */
+/**
+ * 现算包集，作为清单的期望内容。
+ *
+ * 目标路径在**缓存条目里**（`.cache/dsh-build/<键>/dsh-package-set.json`）：清单描述的就是那个键
+ * 对应的产物，所以写回即"落到它自己那条目里"。框架的 `rel` 是相对仓库根的完整路径，因此
+ * 这里把它显式算出来，而不是让调用处拼。
+ */
 async function planPackageSet(): Promise<{ rel: string; content: string }[]> {
-  const set = await buildPackageSet(currentCacheKey());
-  return [{ rel: PACKAGE_SET_REL, content: JSON.stringify(set, null, 2) + "\n" }];
+  const key = currentCacheKey();
+  const set = await buildPackageSet(key);
+  return [{ rel: packageSetRel(key), content: JSON.stringify(set, null, 2) + "\n" }];
 }
 
 /**
@@ -56,9 +63,9 @@ async function planPackageSet(): Promise<{ rel: string; content: string }[]> {
  */
 export function verifyPackageSet(): string[] {
   const set = readPackageSet();
-  if (set === null) return ["找不到 " + PACKAGE_SET_REL];
+  if (set === null) return ["找不到 " + packageSetRel(currentCacheKey())];
   const key = set.build.cacheKey;
-  if (!key) return [PACKAGE_SET_REL + " 里没记 cacheKey"];
+  if (!key) return ["清单里没记 cacheKey"];
   let recipe: Record<string, unknown>;
   try {
     recipe = readBuildRecipe(key) as Record<string, unknown>;
@@ -112,14 +119,14 @@ function sameManifest(file: DerivedFile, actual: string): boolean {
 }
 
 /**
- * 任务：package-set —— T1 包集（dist-npm）→ packaging/dsh-package-set.json。
+ * 任务：package-set —— T1 包集（dist-npm）→ 缓存条目里的 dsh-package-set.json。
  *
  * 写回走框架的整份内容比较；--check 时框架另会调用 verify()（见 FileTask.verify）。
  */
 export const packageSetTask: FileTask = {
   kind: "file",
   name: "package-set",
-  about: "T1 dist-npm → packaging/dsh-package-set.json（包名/版本/字节/sha512 + 根集 + 身份）",
+  about: "T1 dist-npm → .cache/dsh-build/<键>/dsh-package-set.json（包名/版本/字节/sha512 + 根集 + 身份）",
   plan: planPackageSet,
   verify: verifyPackageSet,
   same: sameManifest,

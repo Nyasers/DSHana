@@ -5,12 +5,13 @@
 // 布局：领域专用随源码——cordis 域脚本/配置全在 src-cordis/（build/ preset + 每包
 // cordis.config.mjs 描述），共享工具（rspack 本体解析/URL 回写/terser/assert + 共享
 // minify-loader）在 scripts/build/。产物分两处：
-//   dist/cordis/**：3 子插件（provider / theme / clipboard）：service 半 rspack（源 index.ts →
-//     产物 index.js bundle），theme 与 clipboard 另出 client 半（client.ts → client.js，tsdown
-//     closure-factory）；
-//   dist/cordis.patch.yml：我们的 roster patch（对官方行的覆盖 + @dshana/* insert）——
-//     profile 用我们随附的 `dshana` 预设（模板条目随包，DSH 首次加载时自建），我们不改数据目录里的任何东西，
-//     这份文件由 runtime 经 runProfile 的 patchFiles 作**启动期 overlay** 传进去。
+//   dist/cordis/**：3 子插件（provider / theme / clipboard）与我们自己的 bundle @dshana/app：
+//     service 半 rspack（源 index.ts → 产物 index.js bundle），theme 与 clipboard 另出 client 半
+//     （client.ts → client.js，tsdown closure-factory）；@dshana/app 不带编译半，只是
+//     package.json + cordis.patch.yml 两件随包文件（我们的行变更）；
+//   dist/cordis.patch.yml：**没有了**。行变更住 @dshana/app/cordis.patch.yml，作为 profile 的
+//     bundles 末层参与组合（模板条目随包在 @deepseek-ai/dsh-app-boot，DSH 首次加载时自建），
+//     于是用户层在它之后应用、能覆盖它——不再有启动器 overlay 那种"盖过一切"的层。
 // node_modules/@dshana/**：把上面那份 scope 照原样再落一份——仓库树扮演「安装树」，
 //   DSH 的 runtime 解析模式从安装树 + bundle 依赖图算解析代、不建链接。出包时 pack 作同样的事。
 // 用法：node src-cordis/build.ts [RSPACK_ENV=<构建环境目录>]
@@ -50,7 +51,7 @@ const rspack = rspackPkg.rspack ?? rspackPkg.default?.rspack;
 // cordis 域源码收集（plugins/**/*.js；cordis.config/build 为 .mjs 不收集）
 const rewriter = makeUrlRewriter(collectSource(join(SRC_ROOT, "plugins")));
 
-// 静态组装：子插件 package.json/client.js + dshana roster bundle
+// 静态组装：子插件 package.json/client.js + 我们的 bundle @dshana/app
 function buildCordisStatic(outRoot) {
   fs.removeSync(outRoot);
   fs.ensureDirSync(outRoot);
@@ -72,12 +73,32 @@ function buildCordisStatic(outRoot) {
     const clientSrc = join(pkgSrc, "client.js");
     if (fs.pathExistsSync(clientSrc)) fs.copySync(clientSrc, join(pkgOut, "client.js"));
   }
-  // roster patch：随包一份普通文件（profile 的 dsh.profile.bundles 里没有我们的条目），
-  // runtime 经 patchFiles 作启动期 overlay 传进去。
-  const patchSrc = join(SRC_ROOT, "cordis.patch.yml");
-  if (!fs.pathExistsSync(patchSrc)) throw new Error(`roster patch 缺失：${patchSrc}`);
-  fs.copySync(patchSrc, join(dirname(outRoot), "cordis.patch.yml"));
-  console.log("cordis 静态组装 -> dist/cordis/（子插件 " + pkgNames.length + " 包）；roster patch -> dist/cordis.patch.yml");
+  // 我们自己的 bundle 层：两件随包文件进 node_modules/@dshana/app 的同锚点位置（与子插件并排），
+  // 由 dshana 预设的 bundles 末层点中。它**不**往 dist 根写 cordis.patch.yml——那份旧形态已退场。
+  const appSrc = join(SRC_ROOT, "app");
+  const appOut = join(outRoot, "app");
+  fs.ensureDirSync(appOut);
+  let appFiles = 0;
+  for (const f of ["package.json", "cordis.patch.yml"]) {
+    const s = join(appSrc, f);
+    if (!fs.pathExistsSync(s)) throw new Error(`@dshana/app 文件缺失：${s}`);
+    fs.copySync(s, join(appOut, f));
+    appFiles += 1;
+  }
+  // 旧形态的清理：dist/cordis.patch.yml 曾是我们的 roster patch（启动器 overlay）。它不再被生产，
+  // 但上一次构建可能留下它——留着就是"两个来源"。dist/ 是我们的构建产物，删陈旧输出是构建的职责；
+  // 删完再判一次，确认这次构建没有把它又写出来（那才是"构建路径没跟上"）。
+  const legacyPatch = join(dirname(outRoot), "cordis.patch.yml");
+  if (fs.pathExistsSync(legacyPatch)) {
+    fs.removeSync(legacyPatch);
+    console.log("清掉旧形态的 dist/cordis.patch.yml（行变更现住 @dshana/app/cordis.patch.yml）");
+  }
+  if (fs.pathExistsSync(legacyPatch)) {
+    throw new Error("dist/cordis.patch.yml 又出现了：启动器 overlay 形态已退场（行变更住 @dshana/app/cordis.patch.yml）");
+  }
+  console.log(
+    "cordis 静态组装 -> dist/cordis/（子插件 " + pkgNames.length + " 包 + bundle @dshana/app " + appFiles + " 件）",
+  );
 }
 
 // 每包构建描述加载

@@ -4,10 +4,13 @@ node_modules/
 dist/
 releases/
 
-# 临时文件（pack 中间原料 .tmp/pkg、测试产物 .tmp/tests 等）
+# 草稿区（每次重来的东西：pack 组装台 .tmp/pkg、测试产物、调试输出）
 .tmp/
 
-# 树外构建的包集缓存（scripts/vendor/build.mts 的产物，跨 run 复用；键见 build-recipe.json）
+# 缓存区（带键、可复用、可校验的中间产物，跨 run 复用）：
+#   .cache/dsh-build/<键>/   T1 包集（dist-npm + build-recipe.json + 清单 + 交付锁）
+#   .cache/pkg-root/<键>/    物化节点（全叉乘超集，各目标剪枝；recipe 判命中）
+#   .cache/integrations*/    集成 stage / build 产物
 .cache/
 
 # 系统杂项

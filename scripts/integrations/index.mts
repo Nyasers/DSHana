@@ -5,7 +5,7 @@
 //
 // 用法：
 //   node scripts/integrations/index.mts verify          # 镜像版本一致 + 每个 overlay 记录的上游哈希仍成立
-//   node scripts/integrations/index.mts stage           # verify 后把 overlay 落进 .tmp/integrations/<短名>/
+//   node scripts/integrations/index.mts stage           # verify 后把 overlay 落进 .cache/integrations/<短名>/
 //   node scripts/integrations/index.mts hash <仓库相对路径>   # 打印上游该文件的 sha256（写清单时用）
 //   node scripts/integrations/index.mts list
 //
@@ -74,7 +74,7 @@ const COMMANDS = {
   },
   stage: async ({ tag, version }: CommandContext) => {
     const integrations = await gate(tag, version);
-    console.log(`[integrations] 已落盘 ${stageIntegrations(integrations).length} 个文件到 .tmp/integrations/`);
+    console.log(`[integrations] 已落盘 ${stageIntegrations(integrations).length} 个文件到 .cache/integrations/`);
   },
   build: async ({ tag, version }: CommandContext) => {
     const integrations = await gate(tag, version);
@@ -103,7 +103,7 @@ async function main() {
     console.error(`[integrations] 未知子命令：${cmd}（支持 ${Object.keys(COMMANDS).join("/")}）`);
     process.exit(2);
   }
-  // pin 的唯一真源是根 package.json#devDependencies（T3 起 packaging/package.json 是铭牌：
+  // pin 的唯一真源是根 package.json#devDependencies（包根铭牌已改为整份派生、无 dependencies：
   // 物化输入改由包集清单派生，那份不再声明运行时依赖）。vendor tag、集成漂移闸、版本串都读这里。
   const version = dshPin();
   if (!version) {

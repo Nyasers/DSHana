@@ -1,6 +1,6 @@
-# 交付面的 pnpm 配置：出包工位（.tmp/pkg-root/<target>）与锁文件派生（scripts/derive/package-lock.mts）
-# 都用这一份。工位因此是一个自足的项目：package.json + pnpm-lock.yaml + 本文件，不需要仓库根那份
-# 构建面配置。
+# 交付面的 pnpm 配置：物化节点（.cache/pkg-root/<键>，键不含 target）与锁文件派生
+# （scripts/derive/package-lock.mts）都用这一份。工位因此是一个自足的项目：
+# package.json + pnpm-lock.yaml + 本文件，不需要仓库根那份构建面配置。
 #
 # allowBuilds：dsh 运行时树里有 install scripts 的包（不授权就没有原生产物，装出来的包跑不起来）。
 # 与仓库根那份是同一张名单（那边服务本地开发安装，这边服务随包物化）。

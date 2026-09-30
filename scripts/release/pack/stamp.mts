@@ -10,7 +10,7 @@
 // 失效（~15 分钟/版）。戳只由我们的版本号决定，与 delta 内容无关，所以留在 pack 期一处写。
 // 于是 delta 的内容哈希进缓存键、戳不进；同一条目可被多个 dshana 版本复用。
 //
-// 与旧 applyIntegrations 的区别（退场的那个）：它从 .tmp/integrations-built/ 覆盖**整个包目录**
+// 与旧 applyIntegrations 的区别（退场的那个）：它从集成 build 产物里覆盖**整个包目录**
 // （lib/client.js、package.json 等），于是交付树与包集清单在集成目标上不一致——清单记的是我们
 // 编出的 tarball 字节，pack 再覆盖就让那句声明成了谎。现在只写一个 version 字段，且它的值是
 // 从清单版本算出来的（见 shared/version.mts#patchVersionOf），式子成立。
@@ -53,7 +53,7 @@ export function readIntegrationDecls(integrationsDir: string): Array<{ dir: stri
  * 给物化树里的集成目标盖版本戳（写 package.json#version）。
  *
  * fail-closed：声明了集成而目标包不在树里 = 物化没装全，当场拒包（旧 applyIntegrations 的语义）。
- * 注意这里**不**检查 .tmp/integrations-built/——那批产物不再被 pack 消费（delta 已在构建期进产物），
+ * 注意这里**不**检查集成 build 产物（.cache/integrations-built/）——那批产物不再被 pack 消费（delta 已在构建期进产物），
  * 再要求它存在就成了"为已退场的机制守门"，而它恰恰是"交付面与清单不一致"的来源。
  *
  * @param nodeModulesDir - 组装台里的 node_modules（交付树）。

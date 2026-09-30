@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// scripts/vendor/dsh.mts — 让 vendor/deepseek-harness 站在 packaging/package.json 声明版本对应的 dsh tag 上。
+// scripts/vendor/dsh.mts — 让 vendor/deepseek-harness 站在根 package.json#devDependencies 声明版本对应的 dsh tag 上。
 //
 // 为什么 gitlink 与工作树 HEAD 都要对：build 的上游源走 `git show <tag>`（tag），类型解析
 // （mirrorPathEntries）走**工作树**。只对一条，就会重现「同一份上游被读成两个版本」那类

@@ -89,7 +89,7 @@ dshana 版本包集就变，缓存（跨度 ~15 分钟）再也跨不了版本�
 
 同样的道理，包集重编后**锁文件也要跟**（`node scripts/derive/index.mts package-lock`）：
 文件名与 spec 都没变，只是 tarball 字节变了，所以 `pnpm install --frozen-lockfile` 不重新哈希、
-照旧放行。`packaging/pnpm-lock.yaml` 的 `derive --check` 因此额外做一道本地 tarball integrity
+照旧放行。交付锁（`.cache/dsh-build/<键>/pnpm-lock.yaml`）的 `derive --check` 因此额外做一道本地 tarball integrity
 与清单的对拍（用 pack 的同一份实现），否则这处漂移要等到出包才爆。
 
 ## 我们的预设（`dshana`）：随包一个模板条目（spec §6.6）

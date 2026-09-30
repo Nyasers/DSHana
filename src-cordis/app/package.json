@@ -1,0 +1,24 @@
+{
+  "name": "@dshana/app",
+  "version": "1.0.0-rc.29+dsh-0.2.0-rc.2",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@dshana/clipboard": "file:../../@dshana/clipboard",
+    "@dshana/provider": "file:../../@dshana/provider",
+    "@dshana/theme": "file:../../@dshana/theme",
+    "@deepseek-ai/dsh-client-ui-settings-models": "*",
+    "@deepseek-ai/dsh-llm-deepseek-api-key": "*",
+    "@deepseek-ai/dsh-llm-pi-ai": "*",
+    "@deepseek-ai/dsh-web-app": "*"
+  }
+}

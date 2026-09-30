@@ -55,7 +55,9 @@ test("闸不留现场：无论过不过，查完的临时文件都被删掉", ()
 test("路径泄漏闸：冻进产物的源码路径被拒，运行期形态放过", () => {
   const dir = mkdtempSync(join(tmpdir(), "dshana-leak-"));
   try {
-    const stage = join(dir, "integrations-src", "pkg");
+    // stage 树现在住缓存区（.cache/integrations-src/<短名>/）；这里的路径是闸的**判据输入**
+    //（它要比对"产物里的路径属于这棵 stage 树"），所以形状要跟实现对得上。
+    const stage = join(dir, ".cache", "integrations-src", "pkg");
     mkdirSync(stage, { recursive: true });
     // 泄漏形态：解析器把 import.meta.url 静态求值成源码文件 URL
     const leaked = join(dir, "leaked.js");
@@ -67,7 +69,7 @@ test("路径泄漏闸：冻进产物的源码路径被拒，运行期形态放�
     assert.equal(assertNoSourcePathLeak(clean, stage), undefined);
     // 只有相对路径片段（打包器的 CONCATENATED MODULE 注释）不算泄漏：绝对路径才算
     const relative = join(dir, "relative.js");
-    writeFileSync(relative, "// CONCATENATED MODULE: ./.tmp/integrations-src/pkg/src/x.ts\n", "utf8");
+    writeFileSync(relative, "// CONCATENATED MODULE: ./.cache/integrations-src/pkg/src/x.ts\n", "utf8");
     assert.equal(assertNoSourcePathLeak(relative, stage), undefined);
   } finally {
     rmSync(dir, { recursive: true, force: true });
