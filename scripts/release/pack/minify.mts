@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// scripts/release/pack/minify.mts — dist 静态件（cordis 插件 JS）的语法级压缩，覆盖写回。
+// scripts/release/pack/minify.mts — cordis 子插件静态件的语法级压缩，覆盖写回。
 //
-// cordis 插件（dist/cordis/*/index.js，由 build 从 src-cordis 组装）被 dsh 运行时 import()
+// cordis 插件（.cache/cordis/*/index.js，由 build 从 src-cordis 组装）被 dsh 运行时 import()
 // 加载、client.js 被浏览器 ModuleLoader 按 window.__ModuleLoader__.load 注册；均只做语法级压缩。
 import { createRequire } from "node:module";
 import fs from "fs-extra";
@@ -48,12 +48,12 @@ function isEsm(code) {
   return /\b(?:import|export)\s/.test(noComments);
 }
 
-/** 压缩 dist/cordis 下的静态 JS（terser 纯语法级），原地覆盖。 */
-export async function minifyDistStatics(distDir) {
+/** 压缩 cordis 子插件产物下的静态 JS（terser 纯语法级），原地覆盖。 */
+export async function minifyCordisStatics(cordisDir) {
   const terser = resolveTool("terser");
   const minify = terser.minify ?? terser.default?.minify;
   if (typeof minify !== "function") throw new Error("terser 加载失败：未找到 minify");
-  const staticJs = [...collectStaticFiles(join(distDir, "cordis"))];
+  const staticJs = [...collectStaticFiles(cordisDir)];
   console.log(`[pack] minify static js (${staticJs.length} files)...`);
   for (const file of staticJs) {
     const code = fs.readFileSync(file, "utf8");

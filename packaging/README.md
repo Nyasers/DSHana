@@ -26,5 +26,5 @@ pnpm 配置（`pnpm-workspace.yaml`，授权 build、声明 supportedArchitectur
 从本仓安装树取兜底），声明在根即照旧落进根 `node_modules`。两处的版本必须一致，由
 `pnpm run verify:integrations` 这条闸守着，不靠人记得同时改。
 
-`pack` 把清单复制到包根（`dist/package.json` → zip 根），出包前 `assertProductPackage` 校验字段白名单
+`pack` 把清单复制到包根（`.cache/dist/package.json` → zip 根），出包前 `assertProductPackage` 校验字段白名单
 与版本一致；锁文件与 pnpm 配置不随包——安装侧不执行任何 pnpm install。

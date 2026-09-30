@@ -39,7 +39,7 @@ export function serviceBundle({ name, pkgDir, outDir, rules = [], optimization =
       path: outDir,
       filename: "index.js",
       module: true,
-      clean: false, // 前置已整树清空 dist/cordis；clean 会误删同目录 package.json/client.js
+      clean: false, // 前置已整树清空 .cache/cordis；clean 会误删同目录 package.json/client.js
       library: { type: "module" },
     },
     experiments: { outputModule: true },

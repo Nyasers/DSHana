@@ -50,7 +50,7 @@ export function getAppRuntime(): AppRuntime | null {
 /**
  * 当前数据目录解析（工具/业务统一入口）：
  *  ① App v2：ctx.dataDir（权威，宿主 app-data/<id>/）；
- *  ② 兜底（无宿主 apply 的离线/dev 场景，如单测或直接跑 dist 代码）：调用方
+ *  ② 兜底（无宿主 apply 的离线/dev 场景，如单测或直接跑 .cache/dist 里的代码）：调用方
  *     再回落 PLUGIN_ROOT/data（v1 布局，与 state.js 语义一致）。
  * 旧插件数据迁移接缝：未来迁移脚本/只读兜底可在 ① 缺失
  * 所需 DSH_HOME 且 legacy 数据存在时，经此处返回 legacy dataDir 或做导入，勿在各

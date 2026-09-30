@@ -28,6 +28,7 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildClientRequest, parseServerResponse } from "../../src/lib/rpc-envelope.ts";
 import { lastRoundOutput } from "../../src/tools/actions/get.ts";
+import { distDirOf } from "../../scripts/shared/paths.mts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(process.env.DSH_REPO_ROOT || join(here, "..", ".."));
@@ -38,7 +39,7 @@ const promptArg = (() => {
 })();
 const dataDir = resolve(process.env.DSH_DATA_DIR || join(REPO, ".tmp", "probe-data"));
 const depsRoot = resolve(process.env.DSH_DEPS_ROOT || join(REPO, "node_modules"));
-const entry = join(REPO, "dist", "runtime", "dsh-host.mjs");
+const entry = join(distDirOf(REPO), "runtime", "dsh-host.mjs");
 const READY_TIMEOUT_MS = Number(process.env.DSH_PROBE_TIMEOUT_MS || 240000);
 const RUN_TIMEOUT_MS = Number(process.env.DSH_PROBE_RUN_TIMEOUT_MS || 300000);
 

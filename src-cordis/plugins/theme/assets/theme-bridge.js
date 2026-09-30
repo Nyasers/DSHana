@@ -14,7 +14,7 @@
 // color-mix(…) / 字面量），桥只按 hostVars 判空后原样写进覆盖，不重复一份编译逻辑。
 // 其余正文无插值，保持纯浏览器 JS（var/ES5 风格，无 import）。
 // cordis 子插件散装分发（不经 rspack，文件随包复制进
-// dist/cordis/theme/），pack.mjs 静态压缩按 script 语义
+// .cache/cordis/theme/），pack.mjs 静态压缩按 script 语义
 // terser（module=false）。语义与配套见 index.js 头注释（主题注入/明暗/preference）。
 (function () {
   // 适配层规则（全文件唯一插值点：服务端把本行占位符换成 compileRules(TOKEN_MAP) 的序列化

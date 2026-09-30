@@ -10,7 +10,7 @@
 // 用本仓库 node_modules 作 depsRoot（替代随包物化），dataDir 指向临时目录；@dshana 子插件由
 // build:cordis 落进仓库的 node_modules/@dshana（仓库树扮演安装树，与出包后同形）；profile 用官方
 // 随附的 web（DSH 首次加载时自建），我们的 roster patch 由 runtime 经 patchFiles 传入
-// （仓库形态下 installRoot = <repo>/dist，即 dist/cordis.patch.yml）。
+// （仓库形态下 installRoot = <repo>/.cache/dist，即 .cache/dist/cordis.patch.yml）。
 // 经 child_process.fork 建立 IPC 通道（满足 connectAppRuntime 的 process.send 前置）。
 // 就绪判据（boot）= 中继端口对 http://127.0.0.1:<bridgePort>/ 有 HTTP 应答（无 key 得 403 也算
 // 「有服务在听」；中继只在 DSH 就绪后才起，故等价于就绪门）。真机验收仍须装包后由主上下文做。
@@ -30,6 +30,8 @@ import { homedir, tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { distDirOf } from "../../scripts/shared/paths.mts";
+
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(process.env.DSH_REPO_ROOT || join(here, "..", ".."));
 const KEEP = process.argv.includes("--keep");
@@ -45,7 +47,7 @@ const dataDir = resolve(
   (appDir ? join(tmpdir(), `dshana-smoke-${process.pid}`) : join(REPO, ".tmp", "smoke-data")),
 );
 const depsRoot = resolve(process.env.DSH_DEPS_ROOT || join(appDir || REPO, "node_modules"));
-const entry = appDir ? join(appDir, "runtime", "dsh-host.mjs") : join(REPO, "dist", "runtime", "dsh-host.mjs");
+const entry = appDir ? join(appDir, "runtime", "dsh-host.mjs") : join(distDirOf(REPO), "runtime", "dsh-host.mjs");
 const READY_TIMEOUT_MS = Number(process.env.DSH_SMOKE_TIMEOUT_MS || 180000);
 
 /**

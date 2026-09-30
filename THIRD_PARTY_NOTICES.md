@@ -8,7 +8,7 @@ from `packedVersion` in `vendor/hana-app-sdk/source-manifest.json`.
 
 ## Components inlined into the distribution
 
-These are inlined into `dist/` at build time. Their original packages and LICENSE files are
+These are inlined into the built App at build time. Their original packages and LICENSE files are
 **not shipped**, so their notices are reproduced here.
 
 ### @hana/plugin-protocol
@@ -23,7 +23,7 @@ These are inlined into `dist/` at build time. Their original packages and LICENS
 
 - Version: 0.1050.9
 - Purpose: Browser-side App shell surface: `hana.api.fetch` and `hana.api.url` (App-surface session credential injection and runtime proxy path tickets), plus the surface / theme / clipboard / storage faces.
-- Form: devDependency (`file:vendor/hana-app-sdk/hana-plugin-sdk-0.0.0.tgz`), inlined at build time by rspack into `dist/ui/app-shell.js` and `dist/ui/settings.js`; no vendored copy is shipped separately.
+- Form: devDependency (`file:vendor/hana-app-sdk/hana-plugin-sdk-0.0.0.tgz`), inlined at build time by rspack into `ui/app-shell.js` and `ui/settings.js`; no vendored copy is shipped separately.
 - Source: Hana App Creator SDK shipped with the host (snapshot under `vendor/hana-app-sdk`; see `source-manifest.json` in the same directory)
 - License: Apache License 2.0 (full text below)
 
@@ -31,7 +31,7 @@ These are inlined into `dist/` at build time. Their original packages and LICENS
 
 - Version: 0.1050.9
 - Purpose: Host settings components (`@hana/plugin-components/settings` and its `settings.css`), so the settings surface matches the host.
-- Form: devDependency (`file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz`), inlined by rspack into `dist/ui/settings.js`.
+- Form: devDependency (`file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz`), inlined by rspack into `ui/settings.js`.
 - Source: Hana App Creator SDK shipped with the host (snapshot under `vendor/hana-app-sdk`; see `source-manifest.json` in the same directory)
 - License: Apache License 2.0 (full text below)
 
@@ -39,7 +39,7 @@ These are inlined into `dist/` at build time. Their original packages and LICENS
 
 - Version: 0.1050.9
 - Purpose: The `connectAppRuntime()` client runtime for the managed runtime's private IPC (tasks / models / network.fetch / close).
-- Form: devDependency (`file:vendor/hana-app-sdk/hana-app-sdk.tgz`), statically inlined by rspack into `dist/runtime/dsh-host.mjs`.
+- Form: devDependency (`file:vendor/hana-app-sdk/hana-app-sdk.tgz`), statically inlined by rspack into `runtime/dsh-host.mjs`.
 - Source: Hana App Creator SDK shipped with the host (snapshot under `vendor/hana-app-sdk`; see `source-manifest.json` in the same directory)
 - License: Apache License 2.0 (full text below)
 - Copyright: Copyright (c) 2026 Hana App SDK authors (SPDX headers in the source files)

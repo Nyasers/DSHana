@@ -1,10 +1,12 @@
 # 依赖与构建产物
 .pnpm-store
 node_modules/
-dist/
 releases/
 
-# 临时文件（pack 中间原料 .tmp/pkg、测试产物 .tmp/tests 等）
+# 可再生中间产物（.cache/dist = App 交付目录；跨次复用，构建不清它）
+.cache/
+
+# 每次重来的草稿（pack 物化工位 .tmp/pkg-root、组装台 .tmp/pkg、集成摊源树 .tmp/integrations-*）
 .tmp/
 
 # 系统杂项
