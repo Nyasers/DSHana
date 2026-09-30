@@ -4,11 +4,11 @@ on:
   push:
     branches: [master]
 jobs:
-  # 包集先建一次：T1 包集缓存（.cache/dsh-build/<key>）是构建产物、不进仓库，
-  # 而派生闸里的包集清单对拍要读它（清单是提交的产物，对拍得有那次构建的缓存做底）。
-  # 该构建跨平台通用——键由 tag/commit/配方/node/pnpm/上游锁/delta 算出，不含 OS，
-  # 仓库里也只有一份清单，所有出包目标共用——所以一个 job 建、其余 job 用缓存消费，谁都不必重建。
-  # build.mts 本身幂等：命中只打印 cache hit 后返回，缺失才真构建。
+  # 包集先建一次：T1 包集（.cache/dsh-build/<key>）是构建产物、不进仓库，而派生闸里的包集清单
+  # 对拍要读它。构建跨平台通用——键由 tag/commit/配方/node/pnpm/上游锁/delta 算出、不含 OS，
+  # 仓库里也只有一份清单，所有出包目标共用——所以一个 job 建、下游拿。
+  # 同一次运行内用 artifact 交接（cache 的写入是后置的、不保证对下游立刻可见）；Actions cache
+  # 只当**跨运行的纯加速**：命中即免构建，缺席也是正确路径（重新构建一次）。
   dsh-package-set:
     # runner 钉具体版本：镜像换代是 GitHub 侧的静默变化，CI 要可复现的环境
     runs-on: ubuntu-24.04
@@ -26,8 +26,7 @@ jobs:
           node-version-file: ".nvmrc"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # 缓存键用仓库自己算的那个（与清单记的 cacheKey 同口径）：命中即跳过构建，
-      # 未命中则建一次并在这里存下，后续运行与下游 job 直接命中。
+      # 缓存键用仓库自己算的那个（与包集清单记的 cacheKey 同口径）
       - id: dshset
         run: echo "key=$(node scripts/vendor/build.mts --print-key)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v6
@@ -35,6 +34,13 @@ jobs:
           path: .cache/dsh-build
           key: dsh-build-${{ steps.dshset.outputs.key }}
       - run: pnpm run build:dsh
+      # 交给下游 job：artifact（不是 cache）——同一次运行内的中间产物按它的本分走这里
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dsh-package-set-${{ steps.dshset.outputs.key }}
+          retention-days: 7
+          path: .cache/dsh-build/${{ steps.dshset.outputs.key }}
+          if-no-files-found: error
 
   build-and-audit:
     needs: dsh-package-set
@@ -54,13 +60,23 @@ jobs:
           node-version-file: ".nvmrc"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # 取上游 job 建好的包集（同一把键）。缺了不静默降级：下一步会因"缓存条目不存在"硬失败。
       - id: dshset
         run: echo "key=$(node scripts/vendor/build.mts --print-key)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v6
+      - uses: actions/download-artifact@v8
         with:
-          path: .cache/dsh-build
-          key: dsh-build-${{ steps.dshset.outputs.key }}
+          name: dsh-package-set-${{ steps.dshset.outputs.key }}
+          path: .tmp/dsh-set
+      # artifact 的目录层次不做假设：按 build-recipe.json 认出真正的条目目录，再摆进缓存位置
+      - name: Place package set
+        env:
+          KEY: ${{ steps.dshset.outputs.key }}
+        run: |
+          set -e
+          SRC=$(dirname "$(find .tmp/dsh-set -name build-recipe.json -print -quit)")
+          [ -n "$SRC" ] || { echo "::error::artifact 里没有 build-recipe.json"; exit 1; }
+          mkdir -p .cache/dsh-build
+          rm -rf ".cache/dsh-build/$KEY"
+          mv "$SRC" ".cache/dsh-build/$KEY"
       # 派生文件闸：manifest / cordis 子插件版本 / 交付面清单与锁 / 镜像 paths / 包集清单都是派生产物，
       # 本地跑 `node scripts/derive/index.mts` 写回后要一并提交，这一步拦「忘了提交」。
       # 其中包集清单要对拍 T1 缓存（上一步已取到）；缓存缺失时这一步硬失败，不静默跳过。

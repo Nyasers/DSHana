@@ -381,98 +381,6 @@ async function writeClientRecord(
   return { fileCount: record.artifacts.fileCount };
 }
 
-/** 已发布包集的 release tag 前缀（资产见 .github/workflows/dsh-package-set.yml）。 */
-const PUBLISHED_SET_TAG_PREFIX = "dsh-set-";
-
-/** 取仓库 origin 的 `owner/repo`（拼下载地址用）；认不出来返回 null。 */
-function githubRepoSlug(): string | null {
-  const url = gitOut(["remote", "get-url", "origin"], ROOT);
-  if (!url) return null;
-  const m = /github\.com[/:]([^/\s]+)\/([^/\s]+?)(?:\.git)?$/u.exec(url);
-  return m ? `${m[1]}/${m[2]}` : null;
-}
-
-/**
- * 尝试把这次构建的包集从**已发布的资产**取回来（自愈的第一跳）。
- *
- * 为什么有这条路：包集是构建产物、按 key 可寻址，但 `release:pack` 的字节不可跨机复现，
- * 所以“各机器各自重建”必然让清单里的 sha512 在别处对不上。让所有地方都用**同一份** tarball
- * 是唯一站得住的办法：包集按 key 发布一次（`dsh-set-<key>` release 下的
- * `dsh-package-set-<key>.tar`，内部产物、不是发行包），缺缓存时先下载。
- *
- * 校验：解出的每个 tarball 的字节数与 sha512 对照仓库里那份清单（清单描述的就是这份包集）。
- * 任一不符即整体丢弃返回 false——宁可自己重建，也不落一份可疑字节。
- *
- * @param key - T1 缓存键。
- * @param entryDir - 缓存条目目录（`<cache>/<key>`）。
- * @returns 是否已成功落进缓存。
- */
-async function tryFetchPublishedSet(key: string, entryDir: string): Promise<boolean> {
-  const manifestPath = path.join(ROOT, "packaging", "dsh-package-set.json");
-  if (!fs.existsSync(manifestPath)) {
-    console.log("[build-dsh] 取不回包集：仓库里没有 packaging/dsh-package-set.json（直接重建）");
-    return false;
-  }
-  const slug = githubRepoSlug();
-  if (!slug) {
-    console.log("[build-dsh] 取不回包集：origin 不是 GitHub 仓库（直接重建）");
-    return false;
-  }
-  const asset = `dsh-package-set-${key}.tar`;
-  const url = `https://github.com/${slug}/releases/download/${PUBLISHED_SET_TAG_PREFIX}${key}/${asset}`;
-  const partialDir = `${entryDir}.partial`;
-  fs.rmSync(partialDir, { recursive: true, force: true });
-  fs.mkdirSync(partialDir, { recursive: true });
-  try {
-    console.log(`[build-dsh] 取已发布的包集：${url}`);
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const archivePath = path.join(partialDir, asset);
-    fs.writeFileSync(archivePath, Buffer.from(await response.arrayBuffer()));
-    extractTar(archivePath, partialDir);
-    fs.rmSync(archivePath, { force: true });
-    const fetchedDir = path.join(partialDir, key);
-    if (!fs.existsSync(fetchedDir)) throw new Error(`归档里没有 ${key}/ 目录`);
-
-    // 逐包对照清单（bytes + sha512）：清单描述的就是这份包集，比不过就是另一份
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as {
-      packages?: { file?: unknown; bytes?: unknown; sha512?: unknown }[];
-    };
-    const expected = new Map<string, { bytes: number; sha512: string }>();
-    for (const p of manifest.packages ?? []) {
-      if (typeof p.file === "string" && typeof p.bytes === "number" && typeof p.sha512 === "string") {
-        expected.set(p.file, { bytes: p.bytes, sha512: p.sha512 });
-      }
-    }
-    if (expected.size === 0) throw new Error("清单里没有可对照的包条目");
-    const tarDir = path.join(fetchedDir, "dist-npm");
-    const seen = new Set<string>();
-    for (const name of fs.readdirSync(tarDir).filter((n) => n.endsWith(".tgz"))) {
-      const want = expected.get(name);
-      if (!want) throw new Error(`${name} 不在清单里`);
-      const body = fs.readFileSync(path.join(tarDir, name));
-      if (body.length !== want.bytes) throw new Error(`${name} 字节数不符：清单 ${want.bytes} ≠ 实际 ${body.length}`);
-      const digest = "sha512-" + crypto.createHash("sha512").update(body).digest("base64");
-      if (digest !== want.sha512) throw new Error(`${name} sha512 与清单不符`);
-      seen.add(name);
-    }
-    if (seen.size !== expected.size) throw new Error(`tarball 数不符：清单 ${expected.size} ≠ 实际 ${seen.size}`);
-    if (!readCacheEntry(fetchedDir)) throw new Error("取回的条目自身不完整（缺 build-recipe.json / dist-npm）");
-
-    fs.rmSync(entryDir, { recursive: true, force: true });
-    fs.renameSync(fetchedDir, entryDir);
-    const artifact = readCacheEntry(entryDir)?.artifact as { tarballs?: number; bytes?: number } | undefined;
-    console.log(
-      `[build-dsh] 已从发布资产取回并校验：${path.relative(ROOT, entryDir)}（${seen.size} tarball / ${formatBytes(artifact?.bytes ?? 0)}）——跳过全部构建`,
-    );
-    return true;
-  } catch (error) {
-    console.log(`[build-dsh] 取发布资产未成（${error instanceof Error ? error.message : String(error)}）——改为本地重建`);
-    fs.rmSync(partialDir, { recursive: true, force: true });
-    return false;
-  }
-}
-
 async function main(): Promise<void> {
   const checkOnly = process.argv.includes("--check");
   // 只打印现算的缓存键：CI 的 Actions 缓存键与自愈路径的判定都用它，不做任何别的动作。
@@ -542,9 +450,6 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-
-  // 自愈第一跳：先试取已发布的包集（同 key 的可寻址资产），取到并逐包校验后跳过全部构建。
-  if (await tryFetchPublishedSet(key, entryDir)) return;
 
   const scratchDir = path.join(ROOT, SCRATCH_REL, key);
   const checkoutDir = path.join(scratchDir, "harness");
