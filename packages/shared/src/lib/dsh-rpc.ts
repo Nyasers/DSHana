@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/dsh-rpc.ts — 经注入 fetch 的 DSH /api 网关 RPC 调用
+// packages/shared/src/lib/dsh-rpc.ts — 经注入 fetch 的 DSH /api 网关 RPC 调用
 //
 // 背景：「App 主进程 → 受管 runtime DSH web /api」的 loopback Unary RPC 封装起初只在
 // src/lib/session-run.ts 内部（ctx.network.fetch 门）。同一条 RPC 面还出现在
@@ -12,7 +12,7 @@
 //     Node 全局 fetch（127.0.0.1 回环，dshana profile 无 BrowserAuth → 免鉴权）。
 // 信封/网关契约与 session-run.js 完全一致（lib/rpc-envelope.js：client-request +
 // session.* 的 request/_request 包装 + requestId 注入；响应 rpcId 回显 + result.ok）。
-import { buildClientRequest, parseServerResponse, defaultRpcTimeoutMs } from "#/lib/rpc-envelope.ts";
+import { buildClientRequest, parseServerResponse, defaultRpcTimeoutMs } from "./rpc-envelope.ts";
 
 /** 一元 RPC 的公共入参（信封字段 + 超时/中止）。 */
 interface RpcCallInput {

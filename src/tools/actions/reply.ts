@@ -9,7 +9,7 @@
 import { submitDshTask } from "#/lib/session-run.ts";
 import { resolveTarget } from "#/tools/shared/target.ts";
 import { sessionCard } from "#/tools/shared/card.ts";
-import type { ToolCtx } from "#/types/host.ts";
+import type { ToolCtx } from "@dshana/shared/types/host.ts";
 import type { ToolInputBase, ToolResult } from "#/tools/shared/types.ts";
 
 /** reply 入参：task 必填；目标二选一（taskId 句柄 / sessionId 凭证，均在 ToolInputBase）。 */

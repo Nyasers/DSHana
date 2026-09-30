@@ -16,8 +16,8 @@
 //   拒绝剩余审批），approval-bridge watch 同样把 rejected 投给 DSH 等待者——DSH 得到
 //   确定终态，绝不隐式放行。本模块不设本地定时器（不重复宿主语义）。
 import { appCtx } from "#/lib/app-runtime.ts";
-import { taskBindingOf } from "#/lib/task-binding.ts";
-import { errText } from "#/lib/err-text.ts";
+import { taskBindingOf } from "@dshana/shared/lib/task-binding.ts";
+import { errText } from "@dshana/shared/lib/err-text.ts";
 import type { ToolResult } from "#/types/tool.ts";
 
 /** 宿主审批记录（ctx.tasks.respondApproval 的返回值；从 ctx 下钻，勿手抄形状）。 */

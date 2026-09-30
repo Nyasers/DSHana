@@ -14,7 +14,7 @@ import { createRequire } from "node:module";
 import { readdirSync, existsSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { pathToFileURL } from "node:url";
-import { errText } from "#/lib/err-text.ts";
+import { errText } from "@dshana/shared/lib/err-text.ts";
 
 /** 读一个包目录的 package.json version；不存在/解析失败 → null。 */
 export function readPkgVersion(pkgDir) {

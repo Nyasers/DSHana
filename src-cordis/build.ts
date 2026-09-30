@@ -147,8 +147,14 @@ assertNoStaticFileUrl(DIST_DIR);
 // 平铺照原样再放一份到 node_modules/@dshana，与 @deepseek-ai/* 做邻居。这份是一次构建的拷贝而
 // 不是链接：pnpm install 会把它剪掉，重跑构建即回；出包时 pack 把同一份 .cache/cordis 放进包内的
 // node_modules/@dshana（那边是唯一形态）。
+// 只按包名逐个替换：@dshana 这个 scope 下还住着 workspace 链接（@dshana/shared），整树清空会把
+// 它们一起删掉，于是下一轮构建解析不到。
 const scopeDir = join(ROOT, "node_modules", "@dshana");
-fs.removeSync(scopeDir);
-fs.copySync(outRoot, scopeDir);
+fs.ensureDirSync(scopeDir);
+for (const name of fs.readdirSync(outRoot)) {
+  const dst = join(scopeDir, name);
+  fs.removeSync(dst);
+  fs.copySync(join(outRoot, name), dst);
+}
 console.log("cordis scope 落位 -> node_modules/@dshana（仓库树扮演安装树）");
 console.log("build:cordis done ->", outRoot);

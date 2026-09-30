@@ -28,7 +28,7 @@ import * as replyAction from "#/tools/actions/reply.ts";
 import * as closeAction from "#/tools/actions/close.ts";
 import * as getAction from "#/tools/actions/get.ts";
 import * as approveAction from "#/tools/actions/approve.ts";
-import type { ToolCtx } from "#/types/host.ts";
+import type { ToolCtx } from "@dshana/shared/types/host.ts";
 import type { ToolInputBase } from "#/tools/shared/types.ts";
 // 查任务不经本工具：会话靠句柄（宿主 taskId）定位，任务清单由宿主提供给 Agent 的内置任务查询
 // 工具承担（模型侧，本环境是 check_pending_tasks）——dshana 的 open/reply 建的后台任务本来

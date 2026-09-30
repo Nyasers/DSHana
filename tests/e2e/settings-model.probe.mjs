@@ -17,14 +17,14 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { randomBytes, randomInt } from "node:crypto";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildClientRequest, parseServerResponse } from "../../src/lib/rpc-envelope.ts";
+import { buildClientRequest, parseServerResponse } from "@dshana/shared/lib/rpc-envelope.ts";
 import {
   AGENT_DEFAULT_MODEL_NS,
   isSettingsConflict,
   rpcSettingsDescribe,
   rpcSettingsReplace,
   settingsViewOf,
-} from "../../src/lib/dsh-rpc.ts";
+} from "@dshana/shared/lib/dsh-rpc.ts";
 import { distDirOf } from "../../scripts/shared/paths.mts";
 
 const here = dirname(fileURLToPath(import.meta.url));

@@ -13,7 +13,7 @@ import {
   interpretWatchFrame,
   createSseDecoder,
   runWatchReconcile,
-} from "../../src/lib/watch-sse.ts";
+} from "@dshana/shared/lib/watch-sse.ts";
 
 test("recordIsTerminal: 终态集合", () => {
   for (const s of TERMINAL_STATUSES) assert.equal(recordIsTerminal({ status: s }), true);

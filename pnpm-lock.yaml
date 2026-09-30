@@ -181,6 +181,9 @@ importers:
       '@deepseek-ai/dsh-host-open-in-app':
         specifier: 0.2.0-rc.2
         version: 0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-http-proxy@0.2.0-rc.2(@deepseek-ai/cordis@4.0.4))
+      '@dshana/shared':
+        specifier: workspace:*
+        version: link:packages/shared
       '@hana/app-sdk':
         specifier: file:vendor/hana-app-sdk/hana-app-sdk.tgz
         version: file:vendor/hana-app-sdk/hana-app-sdk.tgz(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -259,6 +262,8 @@ importers:
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
+
+  packages/shared: {}
 
 packages:
 

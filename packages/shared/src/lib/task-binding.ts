@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/task-binding.ts — 会话↔Hana 任务的绑定事实（唯一事实源 = 宿主任务记录）
+// packages/shared/src/lib/task-binding.ts — 会话↔Hana 任务的绑定事实（唯一事实源 = 宿主任务记录）
 //
 // 事实源是宿主的任务记录本身：App 主进程在提交前把 DSH 坐标写进 ctx.tasks.create/update 的
 // metadata.dsh；受管 runtime 子进程的 hana client 本来就有 tasks.list/get（自 v2 起就在
@@ -25,8 +25,8 @@
 //
 // 读取失败（宿主不可达、任务面缺失、绑定记录畸形）抛 code TASK_MAP_BROKEN：状态丢了必须
 // 显式失败，绝不降级成"没有绑定"（那会让一条活着的任务丢掉 taskId、结果不回投）。
-import { errText } from "#/lib/err-text.ts";
-import { TERMINAL_STATUSES } from "#/lib/watch-sse.ts";
+import { errText } from "./err-text.ts";
+import { TERMINAL_STATUSES } from "./watch-sse.ts";
 
 /** dshSessionId 形态（防畸形名进宿主查询；与 tools/query 的正则同源）。 */
 export const SESSION_ID_RE = /^session-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

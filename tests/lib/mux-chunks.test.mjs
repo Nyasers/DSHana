@@ -22,7 +22,7 @@ import {
   isMuxControlFrame,
   sliceBytes,
   splitTextMessage,
-} from "../../src/lib/mux-chunks.ts";
+} from "@dshana/shared/lib/mux-chunks.ts";
 
 test("mux-chunks: 分片与重组往返（长文本，逐片喂入）", () => {
   const text = "会话历史 " + "x".repeat(400_000) + " 收尾";

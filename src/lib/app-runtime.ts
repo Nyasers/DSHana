@@ -20,7 +20,7 @@
 //   readConfig (key) => unknown     ctx.config.get 的安全包装（apply 完成后才可读，
 //              工具执行期调用；设置贡献未登记/读取失败返回 undefined，不抛）
 
-import type { HanaPluginContextV2, HanaPluginLoggerV2 } from "#/types/host.ts";
+import type { HanaPluginContextV2, HanaPluginLoggerV2 } from "@dshana/shared/types/host.ts";
 
 /** apply(ctx) 捕获进模块的运行包（字段见文件头；App 进程内唯一）。 */
 export interface AppRuntime {

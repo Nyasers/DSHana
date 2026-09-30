@@ -28,8 +28,8 @@ import { mkdirSync, writeFileSync, chmodSync, rmSync, readFileSync } from "node:
 import { randomInt, randomBytes } from "node:crypto";
 import { appDataDir, appLogger, getAppRuntime } from "#/lib/app-runtime.ts";
 import { currentSource } from "#/lib/data-source.ts";
-import { parseRuntimeFatal, fatalReportText } from "#/lib/runtime-error.ts";
-import type { HanaPluginContextV2 } from "#/types/host.ts";
+import { parseRuntimeFatal, fatalReportText } from "@dshana/shared/lib/runtime-error.ts";
+import type { HanaPluginContextV2 } from "@dshana/shared/types/host.ts";
 // 依赖随包物化在安装目录 <installRoot>/node_modules，
 // 无运行时安装与 spawn。
 
@@ -524,7 +524,7 @@ async function doStartManaged(opts, attempt = 1) {
   const controlKey = randomBytes(24).toString("base64url");
   const readyMarker = makeReadyMarker();
   // 启动失败报告文件：子进程在任一致命路径退出前写下 { ok:false, kind, message, causes }，
-  // 本侧失败时读回并把真实成因（含嵌套层）折叠进用户可见诊断（见 src/lib/runtime-error.ts）。
+  // 本侧失败时读回并把真实成因（含嵌套层）折叠进用户可见诊断（见 packages/shared/src/lib/runtime-error.ts）。
   // 每次启动一份随机名，失败后即删；成功路径不起作用（子进程只在致命时写）。
   const fatalPath = join(dataDir, "runtime-fatal-" + randomBytes(9).toString("hex") + ".json");
   const config = buildRuntimeConfig({

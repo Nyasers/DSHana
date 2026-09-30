@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/watch-sse.ts — Hana tasks/approval watch SSE 消费
+// packages/shared/src/lib/watch-sse.ts — Hana tasks/approval watch SSE 消费
 //
 // 背景与分侧：watch(taskId/approvalId) 返回 SSE，
 // 首条 snapshot（完整当前记录），后续 app-task（增量/终态记录）；缓冲溢出由服务端发 reset
@@ -22,7 +22,7 @@
 // 按指南措辞 snapshot/app-task/reset + AppTaskRecordV2 字段实现），解析层对未知事件名/
 // 畸形 data 一律宽容降级（结构兜底）；断线重连指数退避；reset/断线都先 get() 对账；
 // 记录终态判定与审批 outcome 映射独立成纯函数（可单测）。
-import { errText } from "#/lib/err-text.ts";
+import { errText } from "./err-text.ts";
 
 export const TERMINAL_STATUSES = ["completed", "failed", "canceled", "aborted"];
 

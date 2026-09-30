@@ -1,3 +1,8 @@
+# 多包工作区：我们自己那几个包住在 packages/ 下（@dshana/shared 等），源树内互相引用走
+# workspace 协议。仓库根仍是构建入口所在的项目（scripts/、src-integrations/、packaging/）。
+packages:
+  - "packages/*"
+
 # pnpm 构建脚本白名单。pnpm 11 起 allowBuilds 取代 pnpm 10 的 onlyBuiltDependencies 一族
 # （onlyBuiltDependencies / neverBuiltDependencies / onlyBuiltDependenciesFile / ignoredBuiltDependencies
 # 已被静默忽略），所以旧的数组写法在这里不会生效。

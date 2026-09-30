@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/runtime-error.ts — 受管 runtime 启动失败的诊断归一（纯函数）
+// packages/shared/src/lib/runtime-error.ts — 受管 runtime 启动失败的诊断归一（纯函数）
 //
 // 形态借自官方桌面壳的 startup-error / fatal-recovery：失败面要给用户看的是
 // **成因**（含嵌套 AggregateError 的每一层、以及子进程诊断的末尾若干行），不是一句

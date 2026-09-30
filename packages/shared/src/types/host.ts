@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/types/host.ts — 宿主契约类型面（App 侧唯一入口）
+// packages/shared/src/types/host.ts — 宿主契约类型面（App 侧唯一入口）
 //
 // 为什么单独一份：宿主给的形状要收成一处具名类型，供 lib / tools / routes / runtime 引用
 // （src 域有 TS 语法能力，见 src/rspack.config.mts 的 swc 规则）。形状散在各处靠注释与 JSDoc

@@ -1,0 +1,12 @@
+{
+  "name": "@dshana/shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "App 侧与受管 runtime 侧共用的契约面（mux 帧、WS 帧、RPC 信封、任务绑定、流对账、错误文本）",
+  "license": "MPL-2.0",
+  "type": "module",
+  "exports": {
+    "./lib/*": "./src/lib/*",
+    "./types/*": "./src/types/*"
+  }
+}

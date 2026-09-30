@@ -26,7 +26,7 @@
 import { ensureManagedRuntime } from "#/lib/managed-runtime.ts";
 import { rpcViaControl } from "#/lib/controller.ts";
 import { resolveTarget } from "#/tools/shared/target.ts";
-import type { ToolCtx } from "#/types/host.ts";
+import type { ToolCtx } from "@dshana/shared/types/host.ts";
 import type { ToolInputBase } from "#/tools/shared/types.ts";
 import type { ToolResult } from "#/types/tool.ts";
 

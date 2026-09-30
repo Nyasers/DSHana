@@ -16,7 +16,7 @@ import {
   resolveTaskTimeoutSec,
   resolveApprovalTimeoutMs,
 } from "../../src/lib/cancel-chain.ts";
-import { cancelAccepted } from "../../src/lib/dsh-rpc.ts";
+import { cancelAccepted } from "@dshana/shared/lib/dsh-rpc.ts";
 
 const SID = "session-11111111-2222-3333-4444-555555555555";
 

@@ -23,7 +23,7 @@ import { readAgentCardModel, type CardModel } from "#/lib/agent-models.ts";
 import { bridgeAccess } from "#/lib/managed-runtime.ts";
 import { readDefaultModel, writeDefaultModel } from "#/lib/model-settings.ts";
 import { isModelsChangedEvent } from "#/lib/model-sync.ts";
-import { errText } from "#/lib/err-text.ts";
+import { errText } from "@dshana/shared/lib/err-text.ts";
 import { servedModels, type ServedModel } from "#/lib/host-models.ts";
 
 /** 对账结论：换成哪一条，以及为什么换。 */

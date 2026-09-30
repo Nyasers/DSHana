@@ -33,7 +33,7 @@ import { providerRoutes, listModelsForProvider, resolveModelInfo, supportedEffor
 import { toHanaMessages } from "./lib/messages.ts";
 import { buildDoneChunks, createHanaStreamState } from "./lib/stream.ts";
 import { resolveSessionIdentity, TASK_MAP_BROKEN, BINDING_UNAVAILABLE } from "./lib/identity.ts";
-import { errText } from "./lib/err-text.ts";
+import { errText } from "@dshana/shared/lib/err-text.ts";
 
 // 目录重载钩子的键名：与 dsh-host 入口（src/runtime/main.ts 经 src/lib/provider-hooks.ts）
 // **字面一致**。本插件是独立的 cordis 插件包，读不到 App 侧的 #/ 路径映射，两个 bundle

@@ -17,7 +17,7 @@
 import { readCallerCardModel, type CardModel } from "#/lib/agent-models.ts";
 import { readDshDefaultModel } from "#/lib/config.ts";
 import { readSettingsSync } from "#/lib/data-source.ts";
-import { errText } from "#/lib/err-text.ts";
+import { errText } from "@dshana/shared/lib/err-text.ts";
 import { servedHas, servedModels, type ServedModel } from "#/lib/host-models.ts";
 
 /** 一条选择（provider + model 都非空才算数）。 */

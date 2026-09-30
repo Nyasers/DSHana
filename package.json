@@ -56,6 +56,7 @@
     "@deepseek-ai/cordis": "^4.0.4",
     "@deepseek-ai/dsh": "0.2.0-rc.2",
     "@deepseek-ai/dsh-host-open-in-app": "0.2.0-rc.2",
+    "@dshana/shared": "workspace:*",
     "@hana/app-sdk": "file:vendor/hana-app-sdk/hana-app-sdk.tgz",
     "@hana/plugin-components": "file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz",
     "@hana/plugin-protocol": "file:vendor/hana-app-sdk/hana-plugin-protocol-0.0.0.tgz",

@@ -22,9 +22,9 @@
 // 的 task-bridge 侧实现（watch 宿主任务 SSE），不在此模块（App 进程内看不到 DSH 事件）。
 import { appCtx, appDataDir, appConfig } from "#/lib/app-runtime.ts";
 import { APP_SETTING_DEFAULTS } from "#/lib/config.ts";
-import { errText } from "#/lib/err-text.ts";
-import { createTaskBindingIndex, type TaskBinding } from "#/lib/task-binding.ts";
-import { rpcSessionCancel, cancelAccepted } from "#/lib/dsh-rpc.ts";
+import { errText } from "@dshana/shared/lib/err-text.ts";
+import { createTaskBindingIndex, type TaskBinding } from "@dshana/shared/lib/task-binding.ts";
+import { rpcSessionCancel, cancelAccepted } from "@dshana/shared/lib/dsh-rpc.ts";
 import { rpcViaControl } from "#/lib/controller.ts";
 import { readSettingsSync } from "#/lib/data-source.ts";
 

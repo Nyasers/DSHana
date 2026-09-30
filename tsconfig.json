@@ -37,6 +37,7 @@
     "src/**/*.tsx",
     "src-cordis/**/*.ts",
     "src-cordis/**/*.tsx",
+    "packages/shared/src/**/*.ts",
     "scripts/**/*.mts"
   ]
 }
