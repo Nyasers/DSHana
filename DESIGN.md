@@ -80,7 +80,7 @@ Hana 宿主进程（App 隔离进程内加载 dist/index.js）
 
 - **受管 runtime**：DSH 跑在 `ctx.runtime.start` 拉起的独立 Node 子进程中（不再是宿主进程内 boot）。App 侧与子进程分责：App 管启动/停止/状态，子进程管 DSH 的 cordis 生命周期；崩溃可被父侧识别并重起。
 - **依赖形态（自包含打包）**：DSH 及其依赖树由 `scripts/release/pack/index.mts` 在构建时物化进**安装目录** `node_modules`，运行时**不再安装、不再 spawn pnpm**（v1 的 `ensure-deps` / `lib/pnpm.js` / `lib/bootstrap.js` / `lib/errclass.js` 已删除）。运行时依赖的唯一真源是交付面清单 `packaging/package.json`（根那份只留构建面，另留一条同名 devDependencies 供开发侧安装，两处版本由 integrations 闸守）。
-- **更新 = 装新 App 包 + 重启宿主**：无独立升级通道；升级后需重启宿主以清掉旧模块缓存。
+- **更新 = 装新 App 包 + 重载 App**：无独立升级通道。重载会重新 import App 服务端入口并重新注册工具/路由，受管子进程（DSH）按自动链重起；DSH 跑在受管子进程里，**宿主进程没有它的模块缓存要清**，因此不必重启宿主。已建立的会话握着旧 App 实例的工具对象，需刷新工具（开新会话）才能继续调该 App 的工具。
 - **连接与鉴权交回官方**：`@dshana/bridge` 已退役；`dsh-web-app` 层的官方 connection（BrowserAuth token/cookie）与 frontend-static 各自负责其位，App 侧只经 runtime 中继补 cookie。
 - **DSH Web UI**：DSH 前端以**同文档注入**方式挂进壳页（`dsh-inject.ts`：取 index → 搬 link/script → 装配 `__DSH_TRANSPORT__` + 流 mux），不再用 iframe 内嵌；到 runtime 的请求走宿主代理前缀 + 路径票据。流 mux 的失败按官方**跨 bundle 契约**打结构标记（页半与内核半类身份不通，DSH 只看标记不看 `instanceof`）：载体丢失 `kind:'carrier'`（DSH 侧按可重试的载体丢失处理，自动重连续流），宿主交付的逻辑失败 `kind:'remote'` + 域码（原样重建成带码的 RemoteError）。少了 carrier 标，一次断链会被折成 `gateway/internal` 终态，会话历史流不再自愈。
 
@@ -140,7 +140,7 @@ DSH 的 workspace 选择对话框来自 `directory-picker` seam（宿主半列�
 
 ## 已知限制
 
-- **升级 DSH = 装新 App 包 + 重启宿主**：宿主进程内的模块缓存无法从插件侧豁免。
+- **升级 DSH = 装新 App 包 + 重载 App**：重载会重新 import 服务端入口并重起受管 runtime；宿主进程内没有 DSH 的模块缓存（DSH 在受管子进程里跑），不必重启宿主。遗留一处：已建立的会话握着旧 App 实例的工具对象，重载后要继续调该 App 的工具得刷新工具（开新会话）。
 - **Windows 上的命令执行是 `pwsh`**：base 组合按平台互斥挂载 shell 行（`tool-bash` / `bash-sandbox` 在 win32 停，`tool-pwsh` / `pwsh-sandbox` 只在 win32 开），派给子代理的命令按 PowerShell 写；文件读写仍走文件系统工具。
 - **主题仅在 DSH 偏好为 system 时跟随宿主**（见上，有意为之）。
 - 越界权限请求默认走审批：deferred 通知 → `dshana(action="approve")` 应答；无人应答按 `approvalTimeoutSec` 自动拒绝。
@@ -171,7 +171,7 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 - **形态：DSH 依赖树在打包时逐目标物化进 zip 根 `node_modules/`，运行时零安装（不 spawn pnpm）。** 受管 runtime 的 `depsRoot` 默认 = 安装目录 `<installRoot>/node_modules`，`--deps-root` 可覆盖（调试）。
 - 物化方式（`scripts/release/pack/materialize.mts` + `index.mts`）：逐目标（`package.json` 的 `package:<target>` 脚本 → `pack/targets.mts` 目标表）在 `.tmp/pkg-root/<target>/` 隔离工位跑一次 `pnpm install --prod --frozen-lockfile` 干净安装；工位是一个独立项目——交付面自带的三件（`packaging/package.json` + `packaging/pnpm-lock.yaml` + 按目标替换过 supportedArchitectures 的 `pnpm-workspace.yaml`），交付面的生产闭包由此落进工位根 `node_modules`，得只含该平台资产的 hoisted 树（顶层真实目录、无软链接——软链进 zip 跨机解压即断），`node_modules` 下的点号条目（`.bin` / `.pnpm` / `.pnpm-workspace-state-v1.json` 这类 pnpm 账本）排除后拷入包根。
 - 为什么随包而不在运行时安装：① App 安装目录在运行时只读（App 进程 fs-write 白名单只有 dataDir），`pnpm install` 无处落盘；② native 产物（node-pty/koffi/sharp 等）按平台/ABI 区分，逐平台出包才能各带各的 addon；③ 只物化生产闭包（不含 devDeps），体量可控。
-- 版本单一事实源 = 交付面清单（`packaging/package.json` 的 `@deepseek-ai/dsh`；根 `devDependencies` 里那条同名声明须与它一致，闸守）；无独立 DSH 升级通道，升级 dsh = 装新 App 包 + 重启宿主。
+- 版本单一事实源 = 交付面清单（`packaging/package.json` 的 `@deepseek-ai/dsh`；根 `devDependencies` 里那条同名声明须与它一致，闸守）；无独立 DSH 升级通道，升级 dsh = 装新 App 包 + 重载 App（不必重启宿主）。
 - 定位：`dsh-host.mjs` 在 depsRoot 下经显式路径解析 DSH（`src/runtime/locate.ts`，`createRequire` + `.pnpm` 枚举 + `webpackIgnore` 原生 import）；profile boot 的模块回退 farm（dsh-app-boot `healProfilesModuleFallback`，把 dsh 安装闭包镜像成 `$DSH_HOME/profiles/node_modules` 链接）覆盖官方插件树解析。
 - `@dshana/*` 子插件随包落在安装目录 `node_modules/@dshana`（与 `@deepseek-ai/*` 同锚点）——DSH 的 runtime 解析模式从安装树 + bundle 依赖图算解析代、**不建任何链接**；我们的 roster patch 随包一份 `cordis.patch.yml`，由 runtime 经 `runProfile` 的 `patchFiles` 作启动期 overlay 传入（层序在所有层之上），我们因此不写 DSH_HOME 里的任何东西。
 - Windows native 文件锁（指南 §4）：依赖变更即整包替换，替换前必须先停占用 `.node` 的 DSH 进程/worker/终端——受管形态下 DSH 只跑在单例 runtime，App 卸载/更新/停止统一先 `ctx.runtime.stop`。
