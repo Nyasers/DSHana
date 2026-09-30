@@ -6,10 +6,11 @@
 // 共享工具（collect/walk/terser/assert + minify/template loader）在 scripts/build/。
 // 产物（dist/ = App 安装目录形态；宿主读 dist 根 manifest.json + entry）：
 //   manifest.json       App v2 manifest（entry "index.js" / icon "assets/icon.png"）
-//   index.js            入口壳（rspack 产物；具名导出 apply + default.apply，只转交实现包）
-//   bin/impl.js         实现 bundle（工具 / 路由 / 受管 runtime 编排全在这里）
-//   bin/dsh-host.mjs    受管 Node runtime 入口（见 src/runtime/；
-//                       cordis/ 产物由 build:cordis 另产出 dist/cordis，随包分发）
+//   index.js            入口壳（rspack 产物；具名导出 apply + default.apply，只转交实现入口）
+//   bin/main.mjs        App 实现入口（工具 / 路由 / 受管 runtime 编排）
+//   bin/runtime/main.mjs  受管 Node runtime 入口（见 src/runtime/）
+//   bin/<name>.mjs      共享 / 按需 chunk（可复用的部分只一份，见 rspack.config.mts）
+//                       cordis/ 产物由 build:cordis 另产出 dist/cordis，随包分发
 //   assets/icon.png     App 身份图标（manifest.icon 指向的包内真实图片）
 //   skills/             App skills（dshana，SKILL.md 随包分发）
 //   runtime/dsh-host.mjs  受管 Node runtime 入口（见 src/runtime/；
@@ -25,8 +26,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { basename, dirname, join } from "node:path";
 
 import fs from "fs-extra";
-import config from "#/rspack.config.mts"; // 同目录（src 域配置随源码）
-import runtimeConfig from "#/runtime/rspack.config.mts"; // runtime/ 域（受管 runtime 入口）
+import config from "#/rspack.config.mts"; // 同目录（src 域配置随源码；三个入口都在这里）
 import uiConfig from "#/ui/rspack.config.mts"; // ui/ 域（壳页脚本 bundle；浏览器 SDK 构建期内联）
 import {
   collectSource,
@@ -78,12 +78,11 @@ async function compile(cfg, label) {
   });
 }
 
-// 主 bundle 编译（rspack output.clean 清空 dist 后写入 dist/index.js 壳 + dist/bin/impl.js 实现）
-await compile(config, "build:src 主 bundle（壳 + 实现）");
-
-// 受管 runtime 入口编译（dist/bin/dsh-host.mjs；clean:false 只追加，见 config 头注释）
-await compile(runtimeConfig, "build:src runtime bundle");
-console.log("runtime bundle -> dist/bin/dsh-host.mjs（受管 runtime 入口）");
+// 一次性编译三个入口（壳 / App 实现 / 受管 runtime）：clean 清空 dist 后写入入口与 bin/ 下的 chunk
+await compile(config, "build:src（壳 + 实现 + 受管 runtime）");
+// 根入口改名为 index.js：manifest.entry 钉死这个名字，而打包产物的扩展名统一是 .mjs
+fs.renameSync(join(DIST_DIR, "index.mjs"), join(DIST_DIR, "index.js"));
+console.log("入口壳 -> dist/index.js（manifest.entry）；实现入口 bin/main.mjs；受管入口 bin/runtime.mjs");
 
 // 1) 静态化路径字面量回写（dist 主区）
 rewriter(DIST_DIR);

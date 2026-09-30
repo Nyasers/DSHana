@@ -134,7 +134,9 @@ export function readTarMember(archivePath: string, memberPath: string): Buffer |
 }
 
 export function extractTar(archivePath: string, destination: string): ExtractCounts {
-  const buffer = fs.readFileSync(archivePath);
+  const raw = fs.readFileSync(archivePath);
+  // npm tarball 是 gzip、git archive 是裸 tar：先看魔数再决定解不解（与 readTarMember 同口径）
+  const buffer = raw.length > 2 && raw[0] === 0x1f && raw[1] === 0x8b ? zlib.gunzipSync(raw) : raw;
   fs.mkdirSync(destination, { recursive: true });
   const counts: ExtractCounts = { files: 0, directories: 0, symlinks: 0 };
   let pending = new Map<string, string>();

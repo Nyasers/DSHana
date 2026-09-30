@@ -31,7 +31,7 @@ const REPO = resolve(process.env.DSH_REPO_ROOT || join(here, "..", ".."));
 const KEEP = process.argv.includes("--keep");
 const dataDir = resolve(process.env.DSH_DATA_DIR || join(REPO, ".tmp", "probe-model-data"));
 const depsRoot = resolve(process.env.DSH_DEPS_ROOT || join(REPO, "node_modules"));
-const entry = join(REPO, "dist", "runtime", "dsh-host.mjs");
+const entry = join(REPO, "dist", "bin", "runtime.mjs");
 const READY_TIMEOUT_MS = Number(process.env.DSH_PROBE_TIMEOUT_MS || 240000);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

@@ -47,7 +47,7 @@ const dataDir = resolve(
   (appDir ? join(tmpdir(), `dshana-smoke-${process.pid}`) : join(REPO, ".tmp", "smoke-data")),
 );
 const depsRoot = resolve(process.env.DSH_DEPS_ROOT || join(appDir || REPO, "node_modules"));
-const entry = appDir ? join(appDir, "runtime", "dsh-host.mjs") : join(REPO, "dist", "runtime", "dsh-host.mjs");
+const entry = appDir ? join(appDir, "bin", "runtime.mjs") : join(REPO, "dist", "bin", "runtime.mjs");
 const READY_TIMEOUT_MS = Number(process.env.DSH_SMOKE_TIMEOUT_MS || 180000);
 
 /**
@@ -57,7 +57,7 @@ const READY_TIMEOUT_MS = Number(process.env.DSH_SMOKE_TIMEOUT_MS || 180000);
 function resolvePackedAppDir() {
   const home = process.env.HANA_HOME || join(homedir(), ".hanako");
   const dir = resolve(process.env.DSH_PACKED_APP_DIR || join(home, "apps", "dshana"));
-  const marker = join(dir, "runtime", "dsh-host.mjs");
+  const marker = join(dir, "bin", "runtime.mjs");
   if (!existsSync(marker)) {
     throw new Error("--packed 指向的 App 树里没有 " + marker + "（用 DSH_PACKED_APP_DIR 或 HANA_HOME 指定，先确认 App 已安装）");
   }

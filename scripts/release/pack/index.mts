@@ -34,6 +34,7 @@ import fs from "fs-extra";
 
 import { errText } from "../../shared/err-text.mts";
 import { ROOT } from "../../shared/root.mts";
+import { extractTar } from "../../vendor/tar-extract.mts";
 import { readPackageSet, assertRootSetMatchesManifest } from "../package-set.mts";
 import { assertDeliveryPnpmVersion, assertLockfilesUnchanged, assertPnpmChainsUnified, lockfileSnapshot, readPnpmDeclaration } from "../pnpm.mts";
 import { assertAppEntryLayout, assertCordisDistVersions, assertProductPackage, assertRecipeBakedCurrentDelta, assertUiTree, assertVersionEquation } from "./assert.mts";
@@ -205,6 +206,24 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
     if (!fs.pathExistsSync(join(pkgDir, rel))) throw new Error(`包内产物缺失：${rel}（拒绝出包）`);
   }
   console.log("[pack] @dshana 子插件落进 node_modules/@dshana，包根不再有 cordis/")
+  // @hana/app-sdk 随包：受管 runtime 把它当**外部依赖**（不再构建期内联），运行时从安装树
+  // 的 node_modules/@hana/app-sdk 解析。它是我们 vendored 的官方 SDK 包（Apache-2.0，见
+  // THIRD_PARTY_NOTICES.md），与 DSH 包集、@dshana/* 同一路子：依赖随包物化，安装即用。
+  // 包本身只依赖 node:crypto（无运行时包解析），所以解出来放到位就够了。
+  const sdkTgz = join(ROOT, "vendor", "hana-app-sdk", "hana-app-sdk.tgz");
+  if (!fs.pathExistsSync(sdkTgz)) throw new Error("vendored SDK 缺失：" + sdkTgz + "（拒绝出包）");
+  const sdkTmp = join(pkgDir, ".sdk-unpack");
+  fs.removeSync(sdkTmp);
+  extractTar(sdkTgz, sdkTmp);
+  const sdkRoot = join(sdkTmp, "package");
+  if (!fs.pathExistsSync(join(sdkRoot, "package.json"))) throw new Error("vendored SDK 的 tar 不是 package/ 根结构（拒绝出包）");
+  fs.removeSync(join(pkgDir, "node_modules", "@hana", "app-sdk"));
+  fs.moveSync(sdkRoot, join(pkgDir, "node_modules", "@hana", "app-sdk"));
+  fs.removeSync(sdkTmp);
+  for (const rel of [join("node_modules", "@hana", "app-sdk", "package.json")]) {
+    if (!fs.pathExistsSync(join(pkgDir, rel))) throw new Error("包内产物缺失：" + rel + "（拒绝出包）");
+  }
+  console.log("[pack] @hana/app-sdk 随包落 node_modules/@hana/app-sdk（受管 runtime 的外部依赖）");
   // 只躺在 node_modules 里不够：DSH 按「安装树 + 被选中 bundle 的依赖图」算解析代，真机上
   // profile 在数据目录里向上解析走不到安装树，得由被选中 bundle 认领才进解析代（见 bundle-deps.mts）。
   declareInstallationPlugins(join(pkgDir, "node_modules"));

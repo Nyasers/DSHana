@@ -3,7 +3,7 @@
 //
 // src/runtime/approval-bridge.ts — 受管 runtime 内 DSH 审批 → Hana 审批桥
 //
-// 位置与角色：本模块随 dist/runtime/dsh-host.mjs 打进受管 runtime（与 DSH 同进程），
+// 位置与角色：本模块随 bin/runtime.mjs 打进受管 runtime（与 DSH 同进程），
 // main.js 在 DSH boot 就绪后挂载（先于 readyMarker）。它把 DSH 的审批等待者接到 Hana：
 //
 //   DSH 工具越界/敏感操作（sandbox 升级 approval/policy=ask）
@@ -504,3 +504,4 @@ export function startApprovalBridge({ ctx, hana, bindings, log }: { ctx: any; ha
   } catch { /* 忽略 */ }
   return stop;
 }
+

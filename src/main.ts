@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/index.ts — dshana App v2 入口（模块导出 apply(ctx)）
+// src/main.ts — dshana App v2 入口（具名导出 apply(ctx)）
 //
 // 形态：宿主在隔离 App 进程内加载本文件并调用 apply(ctx)（入口契约兼容具名 apply /
 // default.apply / 默认函数，两种都导出）。apply 完成注册后立即返回，不等任何长活服务结束。

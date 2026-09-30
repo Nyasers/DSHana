@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/runtime/options.ts — 受管 runtime 子进程的私有配置读取（dsh-host 专用）
+// src/runtime/options.ts — 受管 runtime 子进程的私有配置读取（bin/runtime.mjs 专用）
 //
 // 形态（对齐官方样例 hana-dsh）：**入参只有一份私有配置文件的路径**（argv[1]），命令行不带
 // 明文参数——配置由 App 主进程（lib/managed-runtime.js）以 0600 写入 dataDir/.runtime-tmp/，
@@ -37,7 +37,7 @@ export class UsageError extends Error {
   }
 }
 
-export const USAGE = `用法：dsh-host.mjs <runtime-config.json>（dshana App v2 受管 Node runtime 入口）
+export const USAGE = `用法：bin/runtime.mjs <runtime-config.json>（dshana App v2 受管 Node runtime 入口）
   <runtime-config.json>  私有运行时配置文件绝对路径（App 主进程写入，0600，启动即删）；
                          内容见 options.js 头注释 schema（常规形态 / preflight 预检形态）。
   --help                 显示本帮助
@@ -119,7 +119,7 @@ export function parseRuntimeConfig(argv: string[], readFile: (path: string) => s
   if (raw[0] === "--help" || raw[0] === "-h") return { help: true };
   const configPath = raw[0];
   if (typeof configPath !== "string" || !configPath || configPath.startsWith("--")) {
-    throw new UsageError("缺少私有运行时配置文件路径（用法：dsh-host.mjs <runtime-config.json>；--help 查看说明）");
+    throw new UsageError("缺少私有运行时配置文件路径（用法：bin/runtime.mjs <runtime-config.json>；--help 查看说明）");
   }
   if (raw.length > 1) throw new UsageError(`未知参数：${raw[1]}（只接受一个配置文件路径）`);
   let text;
