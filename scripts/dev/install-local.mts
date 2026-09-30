@@ -107,8 +107,15 @@ async function main() {
 
   if (uninstallFirst) {
     log("1/4 卸载旧版 …");
-    const removed = await api("DELETE", "/api/extensions/app:" + appId, undefined, 300000);
-    log("  卸载 ok=" + String(removed && removed.ok === true));
+    // 没装过不是失败：宿主回 404 EXTENSION_NOT_FOUND，卸载这一步是幂等的。
+    try {
+      const removed = await api("DELETE", "/api/extensions/app:" + appId, undefined, 300000);
+      log("  卸载 ok=" + String(removed && removed.ok === true));
+    } catch (e) {
+      const text = errText(e);
+      if (!/HTTP 404|EXTENSION_NOT_FOUND/.test(text)) throw e;
+      log("  本机没装过 " + appId + "，跳过卸载");
+    }
   } else {
     log("1/4 跳过卸载（--no-uninstall）");
   }
