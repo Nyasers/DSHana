@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/runtime/rspack.config.mts — 受管 runtime 入口 bundle 构建配置（runtime/ 域）
-// 产物：dist/runtime/dsh-host.mjs（ESM，宿主 ctx.runtime.start({ runtime:"node", entry:
-// "runtime/dsh-host.mjs" }) 直接以 node 执行；entry 相对 App 安装根）。
+// src/runtime/rspack.config.mts — 受管 runtime 入口 bundle 构建配置（src/runtime/ 域）
+// 产物：dist/bin/dsh-host.mjs（ESM，宿主 ctx.runtime.start({ runtime:"node", entry:
+// "bin/dsh-host.mjs" }) 直接以 node 执行；entry 相对 App 安装根）。
 //
 // 打包纪律：
 //   - @deepseek-ai/*（dsh/cordis/dsh-* 官方插件树）**不静态打进**：它们随包物化在安装目录
@@ -29,10 +29,10 @@ export default {
   target: "node",
   entry: path.join(root, "src", "runtime", "main.ts"),
   output: {
-    path: path.join(DIST_DIR, "runtime"),
+    path: path.join(DIST_DIR, "bin"),
     filename: "dsh-host.mjs",
     module: true,
-    clean: false, // 主 bundle 已 clean 整树；这里只追加 runtime/ 产物
+    clean: false, // 与 bin/impl.js 同目录：主 bundle 已 clean 整树，这里只追加
   },
   experiments: { outputModule: true },
   externalsPresets: { node: true },

@@ -36,7 +36,7 @@ import { errText } from "../../shared/err-text.mts";
 import { ROOT } from "../../shared/root.mts";
 import { readPackageSet, assertRootSetMatchesManifest } from "../package-set.mts";
 import { assertDeliveryPnpmVersion, assertLockfilesUnchanged, assertPnpmChainsUnified, lockfileSnapshot, readPnpmDeclaration } from "../pnpm.mts";
-import { assertCordisDistVersions, assertProductPackage, assertRecipeBakedCurrentDelta, assertUiTree, assertVersionEquation } from "./assert.mts";
+import { assertAppEntryLayout, assertCordisDistVersions, assertProductPackage, assertRecipeBakedCurrentDelta, assertUiTree, assertVersionEquation } from "./assert.mts";
 import { declareInstallationPlugins } from "./bundle-deps.mts";
 import { STAGING_ROOT, materializeProdDeps } from "./materialize.mts";
 import { minifyDistStatics } from "./minify.mts";
@@ -99,6 +99,7 @@ fs.copySync(join(ROOT, "packaging", "package.json"), join(distDir, "package.json
 assertCordisDistVersions(distDir, version);
 assertProductPackage(distDir, version);
 assertUiTree(distDir);
+assertAppEntryLayout(distDir);
 // 1.7) 包集闸：根集在构建期现算（上游 app-boot 的 web 模板 ∪ OPTIONAL_BUNDLES ∪ @dshana/*），
 //      与 packaging/dsh-package-set.json 比对。上游改了名单而清单没跟，出包前就在这里断。
 await assertRootSetMatchesManifest();

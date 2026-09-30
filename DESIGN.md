@@ -62,14 +62,15 @@ CI 直接失败的风险。`engines.node` 不参与 lockfile 解析，改这个�
 ## 架构总览（受管 runtime）
 
 ```text
-Hana 宿主进程（App 隔离进程内加载 dist/index.js）
-  ├─ App 侧：apply(ctx)
+Hana 宿主进程（App 隔离进程加载包根 index.js 壳 → bin/impl.js 实现）
+  ├─ 入口壳 index.js：只 await import ./bin/impl.js 并转交 apply（稳：字节不随实现变）
+  ├─ 实现 bin/impl.js：apply(ctx)
   │    ├─ ctx.tools.register(dshana)                 工具（单工具 + subcommand，六动作）
   │    ├─ ctx.routes.register(/dshana/*)             壳页/诊断面（boot-state|health|start|stop）
-  │    └─ ctx.runtime.start({ runtime:"node", entry:"runtime/dsh-host.mjs",
+  │    └─ ctx.runtime.start({ runtime:"node", entry:"bin/dsh-host.mjs",
   │           cwd:ctx.dataDir, service:{ port:<随机>, readyMarker:"..." } })
   │              ↓ 受管 Node 子进程
-  ├─ runtime/dsh-host.mjs（dist/runtime，rspack 产物）
+  ├─ bin/dsh-host.mjs（rspack 产物）
   │    └─ 原生 import 安装目录 node_modules/@deepseek-ai/dsh/lib/profile-boot-*.js
   │         → runProfile() → cordis Context
   │              → 加载 $DSH_HOME/profiles/dshana（我们随附的预设条目，DSH 首次加载时自建）
@@ -78,6 +79,7 @@ Hana 宿主进程（App 隔离进程内加载 dist/index.js）
   └─ 浏览器面：/api/apps/dshana/routes/_runtime/<runtimeId>/ 由宿主自动代理
 ```
 
+- **交付布局（入口壳 + bin/ 实现）**：包根 `index.js` 是壳，只做一件事——`await import("./bin/impl.js")` 再转交 `apply`；会变的代码（实现 bundle + 受管子进程入口 `bin/dsh-host.mjs`）全在 `bin/`。分家理由：宿主的 app-host 子进程按 `manifest.entry` 的 file:// URL import 入口一次、不带 cache-bust（`app-host-entry.js`），入口保持稳定才不会让“换实现”牵动入口；同一层也给宿主侧将来做「同进程重入」留了位置（那时实现可带 `?v=` 重 import，入口不动）。不做 cache-bust：今天换代码走的是换进程（宿主 reload / 装新包），新子进程的模块缓存本来就是空的。壳厚薄有闸：pack 断言 `index.js` ≤ 20 KB（实现不许被内联回入口）。
 - **受管 runtime**：DSH 跑在 `ctx.runtime.start` 拉起的独立 Node 子进程中（不再是宿主进程内 boot）。App 侧与子进程分责：App 管启动/停止/状态，子进程管 DSH 的 cordis 生命周期；崩溃可被父侧识别并重起。
 - **依赖形态（自包含打包）**：DSH 及其依赖树由 `scripts/release/pack/index.mts` 在构建时物化进**安装目录** `node_modules`，运行时**不再安装、不再 spawn pnpm**（v1 的 `ensure-deps` / `lib/pnpm.js` / `lib/bootstrap.js` / `lib/errclass.js` 已删除）。运行时依赖的唯一真源是交付面清单 `packaging/package.json`（根那份只留构建面，另留一条同名 devDependencies 供开发侧安装，两处版本由 integrations 闸守）。
 - **更新 = 装新 App 包 + 重载 App**：无独立升级通道。重载会重新 import App 服务端入口并重新注册工具/路由，受管子进程（DSH）按自动链重起；DSH 跑在受管子进程里，**宿主进程没有它的模块缓存要清**，因此不必重启宿主。已建立的会话握着上次重建会话状态时解析的工具对象副本，重载/换装后要在那个会话里继续调该 App 的工具得压缩上下文（或开新会话）。
@@ -160,11 +162,11 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 
 **受管 Node runtime：local-machine/external + readyMarker 就绪门（迁移步骤 2）：**
 
-- 受管 runtime 入口 `runtime/dsh-host.mjs`（源码 `src/runtime/`，rspack → `dist/runtime/dsh-host.mjs`，见 `src/runtime/rspack.config.mts`）：App 自有配置解析（唯一 argv = 私有运行时配置文件路径，schema 见 `src/runtime/options.ts`，与 `src/lib/managed-runtime.ts buildRuntimeConfig()` 对偶）→ `connectAppRuntime()`（无父 IPC fd → 可操作报错 + 退出码 3，不假装能跑）→ 进程级 env（`DSH_HOME=<dataDir>/.dsh`、`DSHANA_HOME=<dataDir>`，不改宿主进程环境）→ 依赖随包就位（安装目录 `node_modules`，无运行时安装）→ profile 种子化（`initProfile` + `node_modules/@dshana` scope 链接 → installDir `cordis/`，junction/拷贝回退）→ 动态定位 DSH（`locate.ts`，profile-boot/app-boot，webpackIgnore 原生 import）→ `runProfile`（profile dshana、配置中的 dshPort、`--no-open`）→ **就绪门**（webServer 服务端口 === 期望端口 且 HTTP 探测成功）→ stdout 打 `readyMarker`（唯一出口；失败路径绝不打印 READY）→ SIGTERM/SIGINT/父断连有序释放（关 DSH fiber → 再 `hana.close()`；拿到流式响应不能立刻 close，本步未接流）。退出码契约：2=usage/3=IPC 不可用/4=deps/5=seed/6=boot/7=port。
-- App 侧封装 `src/lib/managed-runtime.ts`：`ensureManagedRuntime()`（单例 single-flight：**一个 App runtime 服务多个 DSH 会话**，首次 create 触发启动——设计见模块头注释与 tools/actions 的提交链）父进程随机选取中继端口与 DSH 内部端口（区间 38000..52000，见 `choosePort`/`pickPorts`；宿主 service 端口契约只收确定整数，故不能交给宿主分配）→ `ctx.runtime.start({ runtime:"node", entry:"runtime/dsh-host.mjs", profile:"local-machine", network:"external", cwd:dataDir, service:{ port:中继端口, readyMarker:带随机 opaque }, args:[私有配置文件路径] })`（契约禁止 readRoots/writeRoots/callToken/taskId，故一律不带） → `ctx.runtime.get` 轮询到 ready（不能把 runtimeId 当就绪；端口占用 port-busy 自动换随机端口重试，上限 3 次）→ 失败归类（`err.code`：port-busy/deps/seed/boot-failed/not-authorized/timeout/unknown，message 带用户指引）+ runtime watch 日志尽力镜像（src=dsht 进 App 会话日志）；每次命中 ready 缓存先经 runtime.get 探活，子进程崩溃/被宿主回收则清单例并重起；失败路径把端口与两把 key 归零（`bridgeAccess()` 不再放出死端口）；`disposeManagedRuntime()`/`stopManagedRuntime()`（App 卸载/更新前停 runtime，Windows .node 锁纪律）；`choosePort`/`pickPorts`/`makeReadyMarker`/`classifyRuntimeFailure` 纯函数可单测。
+- 受管 runtime 入口 `bin/dsh-host.mjs`（源码 `src/runtime/`，rspack → `dist/bin/dsh-host.mjs`，见 `src/runtime/rspack.config.mts`）：App 自有配置解析（唯一 argv = 私有运行时配置文件路径，schema 见 `src/runtime/options.ts`，与 `src/lib/managed-runtime.ts buildRuntimeConfig()` 对偶）→ `connectAppRuntime()`（无父 IPC fd → 可操作报错 + 退出码 3，不假装能跑）→ 进程级 env（`DSH_HOME=<dataDir>/.dsh`、`DSHANA_HOME=<dataDir>`，不改宿主进程环境）→ 依赖随包就位（安装目录 `node_modules`，无运行时安装）→ profile 种子化（`initProfile` + `node_modules/@dshana` scope 链接 → installDir `cordis/`，junction/拷贝回退）→ 动态定位 DSH（`locate.ts`，profile-boot/app-boot，webpackIgnore 原生 import）→ `runProfile`（profile dshana、配置中的 dshPort、`--no-open`）→ **就绪门**（webServer 服务端口 === 期望端口 且 HTTP 探测成功）→ stdout 打 `readyMarker`（唯一出口；失败路径绝不打印 READY）→ SIGTERM/SIGINT/父断连有序释放（关 DSH fiber → 再 `hana.close()`；拿到流式响应不能立刻 close，本步未接流）。退出码契约：2=usage/3=IPC 不可用/4=deps/5=seed/6=boot/7=port。
+- App 侧封装 `src/lib/managed-runtime.ts`：`ensureManagedRuntime()`（单例 single-flight：**一个 App runtime 服务多个 DSH 会话**，首次 create 触发启动——设计见模块头注释与 tools/actions 的提交链）父进程随机选取中继端口与 DSH 内部端口（区间 38000..52000，见 `choosePort`/`pickPorts`；宿主 service 端口契约只收确定整数，故不能交给宿主分配）→ `ctx.runtime.start({ runtime:"node", entry:"bin/dsh-host.mjs", profile:"local-machine", network:"external", cwd:dataDir, service:{ port:中继端口, readyMarker:带随机 opaque }, args:[私有配置文件路径] })`（契约禁止 readRoots/writeRoots/callToken/taskId，故一律不带） → `ctx.runtime.get` 轮询到 ready（不能把 runtimeId 当就绪；端口占用 port-busy 自动换随机端口重试，上限 3 次）→ 失败归类（`err.code`：port-busy/deps/seed/boot-failed/not-authorized/timeout/unknown，message 带用户指引）+ runtime watch 日志尽力镜像（src=dsht 进 App 会话日志）；每次命中 ready 缓存先经 runtime.get 探活，子进程崩溃/被宿主回收则清单例并重起；失败路径把端口与两把 key 归零（`bridgeAccess()` 不再放出死端口）；`disposeManagedRuntime()`/`stopManagedRuntime()`（App 卸载/更新前停 runtime，Windows .node 锁纪律）；`choosePort`/`pickPorts`/`makeReadyMarker`/`classifyRuntimeFailure` 纯函数可单测。
 - `src/tools/actions/*.ts` 接 `src/lib/session-run.ts`（open/reply 提交链）、`src/lib/cancel-chain.ts`（close 取消链）与 `src/lib/approve-respond.ts`（approve 应答）；`get`/`list` 离线可读。`src/index.ts` disposer 接 disposeManagedRuntime。
-- `src/build.ts` 增 runtime bundle 编译（先主 bundle 清 dist，再追加 runtime/，再做 URL 回写/terser/断言）。
-- 单测 `tests/**/*.test.mjs`（node --test，分组见 tests/README.md）：child options parse、managed-runtime 端口/参数/错误归类、readyMarker 构造。本地验证：`node src/build.ts` 通过；`node dist/runtime/dsh-host.mjs` 直跑给出清晰报错（无父 IPC / 缺参）。真机 AppHost 验收仍待装包（边界清单见本节末）。
+- `src/build.ts` 增 runtime bundle 编译（先主 bundle 清 dist，再追加 bin/ 两份，再做 URL 回写/terser/断言）。
+- 单测 `tests/**/*.test.mjs`（node --test，分组见 tests/README.md）：child options parse、managed-runtime 端口/参数/错误归类、readyMarker 构造。本地验证：`node src/build.ts` 通过；`node dist/bin/dsh-host.mjs` 直跑给出清晰报错（无父 IPC / 缺参）。真机 AppHost 验收仍待装包（边界清单见本节末）。
 
 **依赖部署：随包物化（自包含打包）**
 

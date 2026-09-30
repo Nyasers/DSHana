@@ -3,8 +3,8 @@
 //
 // src/runtime/main.ts — dshana 受管 Node runtime 入口主体
 //
-// 打包产物：dist/runtime/dsh-host.mjs（rspack ESM bundle）。宿主以 ctx.runtime.start({ runtime:
-// "node", entry: "runtime/dsh-host.mjs", ... }) 拉起，本进程自持生命周期，不回宿主进程。
+// 打包产物：dist/bin/dsh-host.mjs（rspack ESM bundle）。宿主以 ctx.runtime.start({ runtime:
+// "node", entry: "bin/dsh-host.mjs", ... }) 拉起，本进程自持生命周期，不回宿主进程。
 //
 // 职责：
 //   1. 解析 App 自有配置（唯一 argv = 私有运行时配置文件路径，0600，启动即删；schema 见

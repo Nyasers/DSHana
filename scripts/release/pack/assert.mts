@@ -116,6 +116,32 @@ export function assertUiTree(outDir) {
 }
 
 /**
+ * App 入口布局断言（入口拆分落地后的包根形态）：根 index.js 只该是壳，实现与受管 runtime
+ * 入口同放 bin/。
+ *
+ * 三者缺一 = 装了起不来（壳 import 不到实现 / 受管 runtime 起不来），一律拒包；反向也判：
+ * 旧的 dist/runtime/ 若还在，说明构建路径没跟上来，留着会让两个入口副本漂移。
+ *
+ * @param outDir - 交付目录（dist 或组装树）
+ */
+export function assertAppEntryLayout(outDir) {
+  for (const rel of ["index.js", join("bin", "impl.js"), join("bin", "dsh-host.mjs")]) {
+    if (!fs.pathExistsSync(join(outDir, rel))) {
+      throw new Error(`App 入口布局缺件：${rel}（dist 未构建或入口拆分未落地）——先跑 pnpm run build 再打包`);
+    }
+  }
+  if (fs.pathExistsSync(join(outDir, "runtime"))) {
+    throw new Error("dist/runtime 不该存在：受管 runtime 入口已挪到 bin/dsh-host.mjs");
+  }
+  // 壳必须薄：宿主 import 的就是它，实现不许被内联回入口
+  const shellBytes = fs.statSync(join(outDir, "index.js")).size;
+  if (shellBytes > 20000) {
+    throw new Error(`包根 index.js ${shellBytes} B 过厚：入口只该是壳（转交 bin/impl.js），实现代码别打进入口`);
+  }
+  console.log(`[pack] 入口布局：index.js 壳（${shellBytes} B）+ bin/impl.js + bin/dsh-host.mjs`);
+}
+
+/**
  * **版本式子**（纯函数，T5 的硬约束①）：包内每个闭包包都满足
  *
  *   集成目标：version == `<清单版本>+dshana-<干净版本>`

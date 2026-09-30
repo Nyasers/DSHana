@@ -6,7 +6,10 @@
 // 共享工具（collect/walk/terser/assert + minify/template loader）在 scripts/build/。
 // 产物（dist/ = App 安装目录形态；宿主读 dist 根 manifest.json + entry）：
 //   manifest.json       App v2 manifest（entry "index.js" / icon "assets/icon.png"）
-//   index.js            rspack 单 bundle（入口具名导出 apply + default.apply）
+//   index.js            入口壳（rspack 产物；具名导出 apply + default.apply，只转交实现包）
+//   bin/impl.js         实现 bundle（工具 / 路由 / 受管 runtime 编排全在这里）
+//   bin/dsh-host.mjs    受管 Node runtime 入口（见 src/runtime/；
+//                       cordis/ 产物由 build:cordis 另产出 dist/cordis，随包分发）
 //   assets/icon.png     App 身份图标（manifest.icon 指向的包内真实图片）
 //   skills/             App skills（dshana，SKILL.md 随包分发）
 //   runtime/dsh-host.mjs  受管 Node runtime 入口（见 src/runtime/；
@@ -75,17 +78,18 @@ async function compile(cfg, label) {
   });
 }
 
-// 主 bundle 编译（rspack output.clean 清空 dist 后写入 dist/index.js）
-await compile(config, "build:src 主 bundle");
+// 主 bundle 编译（rspack output.clean 清空 dist 后写入 dist/index.js 壳 + dist/bin/impl.js 实现）
+await compile(config, "build:src 主 bundle（壳 + 实现）");
 
-// 受管 runtime 入口编译（dist/runtime/dsh-host.mjs；clean:false 只追加，见 config 头注释）
+// 受管 runtime 入口编译（dist/bin/dsh-host.mjs；clean:false 只追加，见 config 头注释）
 await compile(runtimeConfig, "build:src runtime bundle");
-console.log("runtime bundle -> dist/runtime/dsh-host.mjs（受管 runtime 入口，migration step 2）");
+console.log("runtime bundle -> dist/bin/dsh-host.mjs（受管 runtime 入口）");
 
 // 1) 静态化路径字面量回写（dist 主区）
 rewriter(DIST_DIR);
 
-// 2) App 交付目录组装（dist 根 = App 安装目录；manifest/skills/icon 与入口 index.js 同层）
+// App 交付目录组装（dist 根 = App 安装目录；manifest/skills/icon 与入口壳 index.js 同层；
+// 实现与受管 runtime 入口同在 bin/，见 src/shell.ts 与 DESIGN.md「交付布局」）
 fs.copySync(join(ROOT, "src", "manifest.json"), join(DIST_DIR, "manifest.json"));
 fs.copySync(join(ROOT, "src", "skills"), join(DIST_DIR, "skills"));
 // App 图标：src/assets/icon.png 为唯一规范源（manifest.icon "assets/icon.png"）；
