@@ -53,8 +53,18 @@ test("resolveModelInfo: 元数据（context/defaultMaxTokens/reasoning/非推理
   assert.equal(i0.context.contextWindow, 262144);
   assert.equal(i0.defaultMaxTokens, 32768);
   assert.equal(i0.reasoning.defaultEffort, "high");
+  // 输入模态：能力门（read_image）读的就是这一份，必须与 listModelsForProvider 同源投影
+  assert.deepEqual(i0.inputModalities, ["text"]);
+  assert.deepEqual(resolveModelInfo(catalog[2]).inputModalities, ["text", "image"]);
+  assert.deepEqual(
+    resolveModelInfo(catalog[2]).inputModalities,
+    listModelsForProvider("deepseek", catalog).find((m) => m.id === "vision").inputModalities,
+  );
   const i1 = resolveModelInfo(catalog[1]);
   assert.equal(i1.reasoning, undefined);
+  assert.deepEqual(i1.inputModalities, ["text"]);
+  // 宿主没声明 input 时不投影该字段（能力门按「未声明」处理）
+  assert.equal(resolveModelInfo({ provider: "p", id: "m", name: "m" }).inputModalities, undefined);
   assert.equal(resolveModelInfo(null), null);
 });
 
