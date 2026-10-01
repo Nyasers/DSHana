@@ -11,8 +11,9 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "build": "pnpm run verify:integrations && pnpm run check:type && pnpm run build:host && pnpm run build:src && pnpm run build:cordis && pnpm run build:integrations",
+    "build": "pnpm run verify:integrations && pnpm run check:type && pnpm run build:host && pnpm run build:ui && pnpm run build:src && pnpm run build:cordis && pnpm run build:integrations",
     "build:host": "node packages/host/src/build.ts",
+    "build:ui": "node packages/ui/src/build.ts",
     "build:src": "node src/build.ts",
     "build:cordis": "node src-cordis/build.ts",
     "build:integrations": "node scripts/integrations/index.mts build",
@@ -59,6 +60,7 @@
     "@deepseek-ai/dsh-host-open-in-app": "0.2.0-rc.2",
     "@dshana/host": "workspace:*",
     "@dshana/shared": "workspace:*",
+    "@dshana/ui": "workspace:*",
     "@hana/app-sdk": "file:vendor/hana-app-sdk/hana-app-sdk.tgz",
     "@hana/plugin-components": "file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz",
     "@hana/plugin-protocol": "file:vendor/hana-app-sdk/hana-plugin-protocol-0.0.0.tgz",

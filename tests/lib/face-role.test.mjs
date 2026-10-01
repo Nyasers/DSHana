@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/lib/face-role.test.mjs — 页面的「面」与 DSH 侧角色词（src/lib/face-role.ts）。
+// tests/lib/face-role.test.mjs — 页面的「面」与 DSH 侧角色词（packages/ui/src/face-role.ts）。
 //
 // 面的事实源是页面自己的静态声明（meta / body[data-dshana-view]），映射表在可单测的模块里。
 // 这里盯两件事：① 词表与映射是封闭可判定的；② 每个角色词在 ui-layout 覆盖层的
@@ -11,10 +11,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { FACE_ROLE, FACE_VIEWS, isFaceView, roleForView } from "../../src/lib/face-role.ts";
+import { FACE_ROLE, FACE_VIEWS, isFaceView, roleForView } from "@dshana/ui/face-role.ts";
 
 test("壳页共用台面样式：三个面都引 face-stage.css，且不再各自拄一份", () => {
-  const ui = (name) => readFileSync(join(here, "..", "..", "src", "ui", name), "utf8");
+  const ui = (name) => readFileSync(join(here, "..", "..", "packages", "ui", "src", name), "utf8");
   const css = ui("face-stage.css");
   for (const rule of ["#dsh-stage {", ".wordmark {", ".diag-progress {", "#dsh-stage button {"]) {
     assert.ok(css.includes(rule), "共用样式里应有 " + rule);
@@ -109,7 +109,7 @@ test("侧栏收起：只在有轨的 default（standalone）面上生效，无�
 });
 
 test("清单与页面：会话卡由 ui/stream.html 承担（聊天卡就是这一页，不注册 manifest 卡）", () => {
-  const html = readFileSync(join(here, "..", "..", "src", "ui", "stream.html"), "utf8");
+  const html = readFileSync(join(here, "..", "..", "packages", "ui", "src", "stream.html"), "utf8");
   assert.match(html, /<meta name="hana-dshana-role" content="stream">/);
   assert.match(html, /data-dshana-view="stream"/);
   const manifest = JSON.parse(readFileSync(join(here, "..", "..", "src", "manifest.json"), "utf8"));

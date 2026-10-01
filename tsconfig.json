@@ -3,7 +3,7 @@
   // （moduleResolution 不读 package.json imports ⇒ `#/` 报找不到；noImplicitAny 打开 ⇒
   // 第三方无类型包报隐式 any）。这份配置让编辑器看到与构建一致的口径。
   //
-  // 与逐域配置的关系：**判定仍以 tsconfig.{src,cordis,scripts}.json 为准**（那是
+  // 与逐域配置的关系：**判定仍以 tsconfig.<域>.json 为准**（那是
   // scripts/check/type.mts 的口径，决定拦不拦）；本文件只负责让编辑器少报假红，不参与
   // 构建，也不改变任何域的实际检查范围。
   "compilerOptions": {
@@ -30,7 +30,7 @@
     "allowImportingTsExtensions": true,
     "jsx": "react-jsx"
   },
-  // 覆盖我们有源码的三个域；src-integrations/ 是覆盖层补丁（引上游包源码，走
+  // 覆盖我们有源码的各域；src-integrations/ 是覆盖层补丁（引上游包源码，走
   // scripts/check/overlay.mts 那条专门通道），不在这里，免得编辑期噪声压住真问题。
   "include": [
     "src/**/*.ts",
@@ -39,6 +39,8 @@
     "src-cordis/**/*.tsx",
     "packages/shared/src/**/*.ts",
     "packages/host/src/**/*.ts",
+    "packages/ui/src/**/*.ts",
+    "packages/ui/src/**/*.tsx",
     "scripts/**/*.mts"
   ]
 }

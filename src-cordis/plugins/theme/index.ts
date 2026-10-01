@@ -11,7 +11,7 @@
 //     回传新值；宿主新增/修改主题无需插件更新（无静态主题表）。
 // 边界：dsh preference 有**两段来源**，都在 DSH 侧语义之内——
 //   ① 启动段：壳页从 DSH index 的 boot-theme 行取 `const preference = "..."`（见
-//      src/ui/app-shell.ts readIndexThemePreference），随主题载荷 postMessage 给桥，桥拿它
+//      packages/ui/src/app-shell.ts readIndexThemePreference），随主题载荷 postMessage 给桥，桥拿它
 //      当自举值。官方注释把这行定位成 "the browser's pre-plugin interval"（每个 index 渲染
 //      都嵌入当前持久偏好，插件树激活后 ThemePresenter 接管同一批 DOM 字段）——不借它，
 //      注入完成到插件就位之间 DSH 会一直穿内置配色（空窗）。
@@ -26,7 +26,7 @@
 //   （压 dsh presenter 的 body inline）。**不再注入任何静态兜底样式**：拿不到宿主主题时
 //   就保持 dsh 内置 token（官方明暗），不从宿主搬一套固定值来充数。
 //   底座一格按面取：壳页在 <html> 上声明 data-dshana-backdrop = 该面可见底那格 token
-//   （源在 src/lib/seed-tokens.ts 的 FACE_BACKDROP；侧栏面是 --dsw-specific-sidebar-fill，
+//   （源在 packages/ui/src/seed-tokens.ts 的 FACE_BACKDROP；侧栏面是 --dsw-specific-sidebar-fill，
 //   其余面是 --dsw-alias-bg-base），桥用它把 base 换成同一张表里那格的宿主变量。
 //   为什么：dsh 的 .frame 与它的启动屏都画 var(--dsw-alias-bg-base, …)，而映射表是一张、
 //   没有面的概念，一律压 --bg 会让侧栏面的启动屏亮一次中列色。

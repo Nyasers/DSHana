@@ -14,7 +14,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createStreamMux } from "../../src/ui/dsh-inject.ts";
+import { createStreamMux } from "@dshana/ui/dsh-inject.ts";
 import {
   MUX_CHUNK_QUERY,
   MUX_CHUNK_QUERY_VALUE,

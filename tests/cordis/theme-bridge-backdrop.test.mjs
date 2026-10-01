@@ -19,15 +19,15 @@ import vm from "node:vm";
 
 import { TOKEN_MAP } from "../../src-cordis/plugins/theme/token-map.ts";
 import { compileRules } from "../../src-cordis/plugins/theme/adapter.ts";
-import { FACE_BACKDROP, VIEW_SEEDS, SEED_TOKEN_KEYS, seedTokensForView, seedsForDshPreference } from "../../src/lib/seed-tokens.ts";
-import { FACE_VIEWS } from "../../src/lib/face-role.ts";
+import { FACE_BACKDROP, VIEW_SEEDS, SEED_TOKEN_KEYS, seedTokensForView, seedsForDshPreference } from "@dshana/ui/seed-tokens.ts";
+import { FACE_VIEWS } from "@dshana/ui/face-role.ts";
 
 const BRIDGE_SRC = readFileSync(
   new URL("../../src-cordis/plugins/theme/assets/theme-bridge.js", import.meta.url),
   "utf8",
 );
-const SHELL_SRC = readFileSync(new URL("../../src/ui/app-shell.ts", import.meta.url), "utf8");
-const HOST_THEME_SRC = readFileSync(new URL("../../src/ui/host-theme.ts", import.meta.url), "utf8");
+const SHELL_SRC = readFileSync(new URL("../../packages/ui/src/app-shell.ts", import.meta.url), "utf8");
+const HOST_THEME_SRC = readFileSync(new URL("../../packages/ui/src/host-theme.ts", import.meta.url), "utf8");
 
 const BG = "#101010";
 const SIDEBAR_BG = "#202020";

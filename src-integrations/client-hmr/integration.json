@@ -14,7 +14,7 @@
     "  upstream:  new EventSource(EVENTS_ENDPOINT)",
     "  样例:      new EventSource(bridge?.runtimeUrl?.(EVENTS_ENDPOINT) ?? EVENTS_ENDPOINT)",
     "  我们:      new EventSource(globalThis.__DSHANA__?.runtimeUrl?.(EVENTS_ENDPOINT) ?? EVENTS_ENDPOINT)",
-    "桥缺席（非 App 文档）回落裸路径，与上游一致。__DSHANA__.runtimeUrl 由 src/ui/dsh-inject.js",
+    "桥缺席（非 App 文档）回落裸路径，与上游一致。__DSHANA__.runtimeUrl 由 packages/ui/src/dsh-inject.ts",
     "在 installTransport 里发布（与 __DSH_TRANSPORT__ 同一处，privateBase 已在手）。",
     "上游路径注意：包名 @deepseek-ai/dsh-client-hmr，镜像目录 packages/client/hmr（不同名）。"
   ]

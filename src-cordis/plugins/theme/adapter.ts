@@ -17,7 +17,7 @@
 //
 // 编译只在服务端做一次，产物是 [token, cssValue, hostVars] 三元组：
 //   · 桥（assets/theme-bridge.js）按 hostVars 判空后原样写进 body 覆盖，不再自带一份编译逻辑；
-//   · 垫片（src/lib/seed-tokens.ts）与测试断言复用同一个 compileTarget。
+//   · 垫片（packages/ui/src/seed-tokens.ts）与测试断言复用同一个 compileTarget。
 // 这样「同一个值由同一处算出」是结构上的事，不靠两处手写保持一致。
 
 /** 一条适配规则的目标。 */

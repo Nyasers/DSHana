@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/ui/stream-stage.tsx — 会话卡（stream 面）的**重型半**：黑板 / 拆窗态下的完整 DSH 现场
+// packages/ui/src/stream-stage.tsx — 会话卡（stream 面）的**重型半**：黑板 / 拆窗态下的完整 DSH 现场
 //
-// 只在 hana.envelope 说 height 是 fixed（黑板 / 拆窗）时由 src/ui/stream-entry.ts 动态 import()，
+// 只在 hana.envelope 说 height 是 fixed（黑板 / 拆窗）时由 packages/ui/src/stream-entry.ts 动态 import()，
 // 因此它带着 React、dsh-inject 与 host-theme——聊天流态的卡**永不**解析到这一份。
 //
 // 为什么这一半用 React：它有一个真的状态机（booting / ready / error 三态 + 轮询 + 注入），
@@ -15,10 +15,10 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { createRoot } from "react-dom/client";
 import { hana } from "@hana/plugin-sdk";
-import { injectDshIndex, installTransport, type DshTransport } from "#/ui/dsh-inject.ts";
-import { roleForView } from "#/lib/face-role.ts";
-import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPreference } from "#/lib/seed-tokens.ts";
-import { followHostTheme } from "#/ui/host-theme.ts";
+import { injectDshIndex, installTransport, type DshTransport } from "./dsh-inject.ts";
+import { roleForView } from "./face-role.ts";
+import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPreference } from "./seed-tokens.ts";
+import { followHostTheme } from "./host-theme.ts";
 import {
   SURFACE_API,
   dropShared,
@@ -27,7 +27,7 @@ import {
   surfaceSession,
   withSurfaceTicket,
   writeShared,
-} from "#/ui/surface-bridge.ts";
+} from "./surface-bridge.ts";
 
 // ---- 轮询节拍（与壳页同一口径）----
 const POLL_FAST_MS = 1500;   // 非就绪：较快轮询（starting 日志滚动）
@@ -165,7 +165,7 @@ function readIndexThemePreference(html: string): string | null {
   return m && /^(system|light|dark)$/.test(m[1]) ? m[1] : null;
 }
 
-// ---- 注入前垫 DSW 底色 token（见 src/lib/seed-tokens.ts）----
+// ---- 注入前垫 DSW 底色 token（见 packages/ui/src/seed-tokens.ts）----
 // 撤垫片：按 token 名单抹自定义属性，另加 body 自身的 background-color（压住 DSH 首帧样式里
 // 那句 body{background-color:#151517}）。
 function clearSeedTokens(): void {
@@ -208,7 +208,7 @@ function startInjection(
   const privatePrefix = withSurfaceTicket(prefix, surfaceSession());
   const base = new URL(privatePrefix, location.origin);
   injected.transport = installTransport(base, {
-    // stream 面 → DSH 侧上游角色词 stream（见 src/lib/face-role.ts）。
+    // stream 面 → DSH 侧上游角色词 stream（见 packages/ui/src/face-role.ts）。
     role: roleForView("stream"),
     bridge: SURFACE_API,
     // 目录桥要的宿主 SDK：它是本文件头顶那个 import（不在 globalThis 上，DSH 侧自己也拿不到）。

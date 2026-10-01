@@ -8,7 +8,8 @@
 //   · .tmp/：每次重来的草稿。依赖物化工位、打包组装台、集成摊源树都属这类，用完即清。
 // .cache 下的键按**产物种类**分：dist 对齐安装态（App 安装目录形态，roster patch 与
 // manifest.json 并排）；host 是受管 runtime 入口 bundle（自己一个键，由 App 域的构建拷进
-// dist/runtime）；cordis 子插件包不是安装态里的东西——pack 按 bundle 认领规则把它们落进
+// dist/runtime）；ui 是壳的文档侧（页面脚本 bundle + 静态面，自己一个键，由 App 域的构建
+// 拷进 dist/ui）；cordis 子插件包不是安装态里的东西——pack 按 bundle 认领规则把它们落进
 // 包内 node_modules/@dshana，另成一个键。
 import path from "node:path";
 
@@ -32,6 +33,13 @@ export function hostDirOf(repoRoot: string): string {
 }
 
 export const HOST_DIR = hostDirOf(ROOT);
+
+/** 壳的文档侧产物目录（packages/ui 构建产出；App 域构建把它拷进 dist/ui）。 */
+export function uiDirOf(repoRoot: string): string {
+  return path.join(repoRoot, CACHE, "ui");
+}
+
+export const UI_DIR = uiDirOf(ROOT);
 
 /** cordis 子插件包（provider / theme / clipboard）：pack 落进包内 node_modules/@dshana。 */
 export const CORDIS_DIR = path.join(ROOT, CACHE, "cordis");

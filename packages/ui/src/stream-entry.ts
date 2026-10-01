@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/ui/stream-entry.ts — 会话卡（stream 面）的**轻半**：认挂载态 + 只画一行入口坐标
+// packages/ui/src/stream-entry.ts — 会话卡（stream 面）的**轻半**：认挂载态 + 只画一行入口坐标
 //
 // 这一半的硬约束：**零 React、不碰 DSH 注入**。聊天流里每一张会话卡都要跑一遍这里，所以它只
-// 能带低层宿主管道（src/ui/surface-bridge.ts）与 SDK 的 envelope / state 两个读面。
+// 能带低层宿主管道（packages/ui/src/surface-bridge.ts）与 SDK 的 envelope / state 两个读面。
 //
 // 两个挂载态（判据 = hana.envelope 的 height.mode，宿主契约见 APPS_EN.md「Mount-mode table」与
 // 「Size envelope」）：
 //   · chat   —— height flexible/unbounded：聊天流。入口行已经是最终内容，这里什么都不装。
 //   · canvas —— height fixed：黑板 / 拆窗。**这时才**动态 import() 重型半
-//                src/ui/stream-stage.tsx（React + dsh-inject + host-theme + 卡状态条）。
+//                packages/ui/src/stream-stage.tsx（React + dsh-inject + host-theme + 卡状态条）。
 //
 // 坐标由 stream.html 的**内联脚本**在求值时就写进 DOM（不依赖 SDK、不依赖任何宿主握手），
 // 而**露不露出**这一行由本模块决定：认到聊天流态才露（取出的卡首帧不许出现坐标行）。
@@ -19,8 +19,8 @@
 // 认不出态就等 envelope 首帧，等到封顶仍没有信号时按聊天流收尾——宁可少画（一行坐标），
 // 也不能把整幅 DSH 现场灌进聊天转录。
 import { hana } from "@hana/plugin-sdk";
-import { apiFetch, cardTicket, readCardState, rememberCardSession, routeSessionId } from "#/ui/surface-bridge.ts";
-import { followHostTheme } from "#/ui/host-theme.ts";
+import { apiFetch, cardTicket, readCardState, rememberCardSession, routeSessionId } from "./surface-bridge.ts";
+import { followHostTheme } from "./host-theme.ts";
 
 // 等 envelope 首帧的封顶时间。宿主在 iframe ready 之后立刻推第一帧，通常远快于此；这一条只为
 // 从不发信号的旧宿主兜底。
@@ -132,7 +132,7 @@ function showLoadFailure(error: unknown): void {
  * 失败因此可见，而不是白屏。
  */
 function mountStage(): void {
-  import("#/ui/stream-stage.tsx").then((mod) => {
+  import("./stream-stage.tsx").then((mod) => {
     const tpl = document.getElementById("tpl-stage") as HTMLTemplateElement | null;
     const stage = tpl && tpl.content && tpl.content.firstElementChild
       ? (tpl.content.firstElementChild.cloneNode(true) as HTMLElement)

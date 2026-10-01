@@ -70,7 +70,7 @@ export async function run(input: OpenInput, ctx: ToolCtx, deps?: SubmitDeps): Pr
     "。任务在后台执行，完成/失败按 " + loc.delivery + " 档投递回本会话（下一个输入点自动贴回，不必为等结果结束回合）；要看执行过程或最终结论用 dshana action=get（taskId " +
     loc.taskId + "）。";
   // 会话卡：一个会话一张把手（reply 不挂，避免叠）。聊天流里只画一行坐标，不注入 iframe；
-  // 用户把这张卡取出到黑板 / 拆窗后，同一页才装配 DSH 现场（见 src/ui/app-shell.ts）。
+  // 用户把这张卡取出到黑板 / 拆窗后，同一页才装配 DSH 现场（见 packages/ui/src/app-shell.ts）。
   return {
     content: [{ type: "text", text }],
     details: {

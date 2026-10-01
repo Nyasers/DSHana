@@ -11,27 +11,26 @@
 //   skills/             App skills（dshana，SKILL.md 随包分发）
 //   runtime/dsh-host.mjs  受管 Node runtime 入口（由 @dshana/host 构建产出，本入口把它拷进
 //                         交付目录的 runtime/；cordis/ 产物由 build:cordis 另产出 .cache/cordis）
-//   ui/                   App ui/ 静态树（migration step 4b/5；cards route 指向壳页，
-//                         见 src/ui/——相对资源路径，宿主以 /api/apps/<id>/ui<route> 服务）
+//   ui/                   壳的文档侧（cards route 指向壳页，见 packages/ui/src/——相对资源路径，
+//                         宿主以 /api/apps/<id>/ui<route> 服务；由 @dshana/ui 构建产出，本入口只拷贝）
 // 路由：v2 走 ctx.routes.register（单个 route app），不生成 .cache/dist/routes/ 目录——宿主只认注册
 // 的 route app，不扫 dist。
 // 用法：node src/build.ts [RSPACK_ENV=<构建环境目录>]
 // 注意：本文件是构建入口，不在 bundle 里（主入口由 rspack.config.mts 指定为 src/index.ts）；
 // 但 collectSource 会把 src/ 下的 .js/.ts 一并收作 URL 回写与静态 URL 断言的扫描面。
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { basename, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 
 import fs from "fs-extra";
 import config from "#/rspack.config.mts"; // 同目录（src 域配置随源码）
-import uiConfig from "#/ui/rspack.config.mts"; // ui/ 域（壳页脚本 bundle；浏览器 SDK 构建期内联）
 import {
   collectSource,
   makeUrlRewriter,
   extraMinify,
   assertNoStaticFileUrl,
 } from "../scripts/build/common.mts";
-// 交付目录常量（.cache/dist、.cache/host）与 Node 版本断言（本入口以 TypeScript 直跑，依赖原生类型剥离）
-import { DIST_DIR, HOST_DIR } from "../scripts/shared/paths.mts";
+// 交付目录常量（.cache/dist、.cache/host、.cache/ui）与 Node 版本断言（本入口以 TypeScript 直跑，依赖原生类型剥离）
+import { DIST_DIR, HOST_DIR, UI_DIR } from "../scripts/shared/paths.mts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), ".."); // src/ → 仓库根
 
@@ -100,27 +99,15 @@ if (!fs.pathExistsSync(iconSrc))
 fs.copySync(iconSrc, join(DIST_DIR, "assets", "icon.png"));
 console.log("manifest.json + skills/ + assets/icon.png -> .cache/dist/（App v2 安装目录形态）");
 
-// App ui/ 静态树（cards contributes 的 route 指向 ui 内相对文件；缺失 = 卡片 404 + manifest
-// 校验失败——fail-fast）。相对资源纪律：壳页内资源一律相对路径，无根绝对 URL。
-const uiSrc = join(ROOT, "src", "ui");
+// 壳的文档侧（ui/ 整树：页面脚本 bundle + 静态面）：由 @dshana/ui 先行构建产出 .cache/ui，
+// 本入口只拷贝。缺件即拒（contributes.cards 的 route 指向 ui 内页面，缺了就是卡片 404 +
+// manifest 校验失败）。
+const uiSrc = UI_DIR;
 if (!fs.pathExistsSync(uiSrc)) {
-  throw new Error("App ui/ 静态树缺失（src/ui）：contributes.cards 的 route 指向 ui 内页面（见 manifest.json）");
+  throw new Error("壳的文档侧产物缺失（" + uiSrc + "）：先跑 pnpm run build:ui");
 }
-// 静态面（*.html 等非脚本资源）直接拷贝；页面脚本是构建源，由 ui bundle 收进
-// .cache/dist/ui/app-shell.js 与 .cache/dist/ui/settings.js（浏览器 SDK 一并内联），不另放源码副本。
-// 静态面拷贝用白名单：只放行已知的静态类型，其余一律不拷。
-// 为何不用黑名单逐个数脚本扩展名：改名那天 .mts 就是没被列上的那个，于是 rspack.config.mts
-// 直接漏进了产物（.cache/dist/ui/）。白名单没有这种缺口，以后多出什么类型都不会漏出源码。
-const STATIC_EXT = [".html", ".css", ".png", ".jpg", ".jpeg", ".svg", ".webp", ".gif", ".ico", ".woff", ".woff2", ".json", ".map"];
-fs.copySync(uiSrc, join(DIST_DIR, "ui"), {
-  // 目录要放行（filter 对目录也会问一次，只看扩展名会把跟目录本身拒掉，整棵拷贝就成了空操作）
-  filter: (src) => fs.statSync(src).isDirectory() || STATIC_EXT.some((ext) => basename(src).endsWith(ext)),
-});
-console.log("ui/ 静态面 -> .cache/dist/ui（白名单 " + STATIC_EXT.join(" ") + "；脚本由 ui bundle 产出）");
-
-// ui bundle 编译（.cache/dist/ui/app-shell.js；clean:false 只写该文件，静态页已被 copy）
-await compile(uiConfig, "build:src ui bundle");
-console.log("ui bundle -> .cache/dist/ui/app-shell.js（浏览器 SDK 构建期内联）");
+fs.copySync(uiSrc, join(DIST_DIR, "ui"));
+console.log("ui/ -> .cache/dist/ui（壳的文档侧整树，来自 .cache/ui）");
 
 // 3) 二次压缩（主区：JS + 静态壳页 HTML）+ 静态 URL 断言
 await extraMinify(DIST_DIR);

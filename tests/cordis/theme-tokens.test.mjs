@@ -17,8 +17,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { TOKEN_MAP, PASSTHROUGH } from "../../src-cordis/plugins/theme/token-map.ts";
 import { compileRules, compileTarget, targetHostVars } from "../../src-cordis/plugins/theme/adapter.ts";
-import { FACE_VIEWS } from "../../src/lib/face-role.ts";
-import { VIEW_SEEDS, FACE_BACKDROP, seedTokensForView } from "../../src/lib/seed-tokens.ts";
+import { FACE_VIEWS } from "@dshana/ui/face-role.ts";
+import { VIEW_SEEDS, FACE_BACKDROP, seedTokensForView } from "@dshana/ui/seed-tokens.ts";
 
 // 宿主主题变量的允许清单（壳页从 hana.theme 拿到的 --* 变量；未选中的颜色绝不发明）
 const HOST_VARS = new Set([
@@ -247,7 +247,7 @@ test("侧栏面的加载底色与注入后同源（同一对规则 + 页面取�
     "--sidebar-bg",
     "“侧栏注入后用哪个色”是页面取色顺序的依据，这条规则变了页面也得改",
   );
-  const html = readFileSync(new URL("../../src/ui/sidebar.html", import.meta.url), "utf8");
+  const html = readFileSync(new URL("../../packages/ui/src/sidebar.html", import.meta.url), "utf8");
   assert.match(
     html,
     /background:\s*var\(--dsw-specific-sidebar-fill,\s*var\(--sidebar-bg,\s*#F5EFE4\)\)/,
