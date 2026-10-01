@@ -1,5 +1,5 @@
 # 多包工作区：我们自己那几个包住在 packages/ 下（@dshana/shared 等），源树内互相引用走
-# workspace 协议。仓库根仍是构建入口所在的项目（scripts/、src-integrations/）。
+# workspace 协议。仓库根仍是构建入口所在的项目（scripts/、integrations/）。
 packages:
   - "packages/*"
 
@@ -31,9 +31,9 @@ overrides:
   "@hana/plugin-components": "file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz"
 
 # >>> pack-targets
-# 打包目标设置（pack.mjs 会按目标替换标记块内的 supportedArchitectures；勿在标记外重复定义）。
+# 打包目标设置（pack 会按目标替换标记块内的 supportedArchitectures；勿在标记外重复定义）。
 # 这一份服务**本地开发安装**：默认全叉乘（win32/darwin/linux × x64/arm64），便于本地随时重打包；
-# 出包时由 pack.mjs 按目标窄化到该目标的 os/cpu，或保留全叉乘出通用兜底包。
+# 出包时由 pack 按目标窄化到该目标的 os/cpu，或保留全叉乘出通用兜底包。
 # 注：pnpm 11+ 不再读 package.json 的 pnpm 字段（会打印 ignored 警告），该设置只能放这里。
 supportedArchitectures:
   os:

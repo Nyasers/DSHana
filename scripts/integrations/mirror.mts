@@ -16,7 +16,7 @@ export const MIRROR = join(REPO_ROOT, "vendor", "deepseek-harness");
 
 /** 读 integrations 下各短名目录的 integration.json，附带 dir 与 root。 */
 export function loadIntegrations(rootDir = REPO_ROOT) {
-  const dir = join(rootDir, "src-integrations");
+  const dir = join(rootDir, "integrations");
   if (!existsSync(dir)) return [];
   const out: any[] = [];
   for (const ent of readdirSync(dir, { withFileTypes: true })) {

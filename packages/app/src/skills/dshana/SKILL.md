@@ -127,7 +127,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 ## 主题
 
 只有 DSH 主题偏好为 **system** 时跟随宿主配色（经 `@dshana/theme` 子插件注入）；在 DSH 内显式选 light/dark 时完全用 DSH 自己的主题，宿主配色不介入。
-外观里这个选项的文案是**「跟随宿主」**（上游原文是「跟随系统」）——偏好值仍是 `system`，只是措辞按我们的形态改了，见 `src-integrations/ui-theme` 的覆盖层。
+外观里这个选项的文案是**「跟随宿主」**（上游原文是「跟随系统」）——偏好值仍是 `system`，只是措辞按我们的形态改了，见 `integrations/ui-theme` 的覆盖层。
 
 ## 排错表
 

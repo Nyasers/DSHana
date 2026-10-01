@@ -19,7 +19,7 @@ export const SHARED_KEY_PREFIX = "dshana.";
 
 /** 跨面共用的当前选中会话（写侧：壳页在本地选中变化时写；读侧：FP 与主卡的对齐，
  * 以及 DSH 侧 ui-session 在「本面没钉住 sid」时跟随它）。消费方见 ui/surface-bridge.ts 与
- * src-integrations/ui-session。会话卡不写也不读它——那张卡钉自己那一段。 */
+ * integrations/ui-session。会话卡不写也不读它——那张卡钉自己那一段。 */
 export const SELECTION_SHARED_KEY = SHARED_KEY_PREFIX + "selection";
 
 /** 会话选中的写入值：意见带写入时刻 at（消费侧只采纳比自己动手更新的）。 */

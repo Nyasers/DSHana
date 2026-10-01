@@ -47,7 +47,7 @@ export function materializeProdDeps(spec, version: string) {
   if (missing.length) {
     throw new Error(`${spec.name} 缺少平台资产（该平台的包会跑不起来）：\n  - ${missing.join("\n  - ")}`);
   }
-  console.log(`[pack] ${spec.name} 物化完成（平台资产 ${spec.assets.length} 项齐备，内核 ${assertKernelAtPin(modules)}，集成目标 ${assertIntegrationTargets(modules, join(ROOT, "src-integrations"))} 项）`);
+  console.log(`[pack] ${spec.name} 物化完成（平台资产 ${spec.assets.length} 项齐备，内核 ${assertKernelAtPin(modules)}，集成目标 ${assertIntegrationTargets(modules, join(ROOT, "integrations"))} 项）`);
   const pruned = pruneNodeModules(modules, spec);
   if (pruned.files > 0) {
     console.log(

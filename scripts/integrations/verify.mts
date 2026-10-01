@@ -78,7 +78,7 @@ export function verifyIntegrations(integrations, readUpstream) {
         problems.push(
           `integration ${name}: overlay ${rel} 已过期 —— 上游 ${upstreamRel} 变了` +
             `（记录 ${recorded.slice(0, 12)}…，实得 ${actual.slice(0, 12)}…）。` +
-            `请把我们的 delta rebase 到 src-integrations/${name}/files/${rel}，` +
+            `请把我们的 delta rebase 到 integrations/${name}/files/${rel}，` +
             `并把 upstreamSha256 更新为 ${actual}`,
         );
         continue;

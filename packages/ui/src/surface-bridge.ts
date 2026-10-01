@@ -288,7 +288,7 @@ export function clipboardWrite(text: string): Promise<boolean> {
 }
 
 // ---- 挂到宿主桥（__DSHANA__）上的跨面接口 ----
-//   设置视图 → src-integrations/ui-settings-general；会话选中 → src-integrations/ui-session；
+//   设置视图 → integrations/ui-settings-general；会话选中 → integrations/ui-session；
 //   主面板选中 → ui-sidebar（FP 发射）与 ui-layout（主卡落地）；
 //   会话坐标 → ui-session 的只读面（readPinnedSession）；
 //   剪贴板 → @dshana/clipboard 的 client 半（同文档，直接调，无消息协议）。

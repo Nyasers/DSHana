@@ -3,7 +3,7 @@
 //
 // scripts/release/pack/overlays.mts — 把集成层编译出的补丁包盖回物化树（单副本）。
 //
-// 机制见 src-integrations/README.md：每个集成是「上游某版文件的整文件拷贝 + 我们的 delta」，
+// 机制见 integrations/README.md：每个集成是「上游某版文件的整文件拷贝 + 我们的 delta」，
 // 编译产物在 .cache/integrations/<短名>/，这里按 integration.json 的 package 字段覆盖进
 // 交付树的对应包目录。版本戳（<上游>+dshana-<干净版本>）由 integrations build 写进补丁包的
 // package.json，此处只原样覆盖。
@@ -18,12 +18,12 @@ import { INTEGRATIONS_DIR } from "../../shared/paths.mts";
  * @param {string} nodeModulesDir 组装台里的 node_modules（交付树，已是 no-link 铺平形态）
  */
 export function applyIntegrations(nodeModulesDir) {
-  const integrationsDir = join(ROOT, "src-integrations");
+  const integrationsDir = join(ROOT, "integrations");
   // fail-closed：目录缺失会让整包官方包回退成上游原版（role 对、主题对，但 ui-layout /
   // ui-sidebar / ui-settings-general 的补丁全丢），而打包照旧成功。任何“声明的补丁没盖上”
   // 都必须让打包失败。
   if (!fs.pathExistsSync(integrationsDir)) {
-    throw new Error(`集成目录不存在：${integrationsDir}（预期 src-integrations/；拒绝产出未打补丁的包）`);
+    throw new Error(`集成目录不存在：${integrationsDir}（预期 integrations/；拒绝产出未打补丁的包）`);
   }
   const builtRoot = INTEGRATIONS_DIR;
   const pending: any[] = [];

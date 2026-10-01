@@ -105,7 +105,7 @@ export function assertUiTree(outDir) {
 /** 集成覆盖的声明（每个 integration.json 的 package 字段与 overlay 数）。 */
 function integrationDecls(integrationsDir) {
   if (!fs.pathExistsSync(integrationsDir)) {
-    throw new Error(`集成目录不存在：${integrationsDir}（预期 src-integrations/；拒绝产出未打补丁的包）`);
+    throw new Error(`集成目录不存在：${integrationsDir}（预期 integrations/；拒绝产出未打补丁的包）`);
   }
   const out: any[] = [];
   for (const e of fs.readdirSync(integrationsDir, { withFileTypes: true })) {

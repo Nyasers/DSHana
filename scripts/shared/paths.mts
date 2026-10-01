@@ -45,7 +45,7 @@ export const UI_DIR = uiDirOf(ROOT);
 /** cordis 子插件包（provider / theme / clipboard）：pack 落进包内 node_modules/@dshana。 */
 export const CORDIS_DIR = path.join(ROOT, CACHE, "cordis");
 
-/** 集成层编译出的补丁包目录（每个集成一个子目录，见 src-integrations/README.md）。 */
+/** 集成层编译出的补丁包目录（每个集成一个子目录，见 integrations/README.md）。 */
 export function integrationsDirOf(repoRoot: string): string {
   return path.join(repoRoot, CACHE, "integrations");
 }
