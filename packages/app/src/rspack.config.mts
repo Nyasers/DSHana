@@ -9,12 +9,12 @@
 //       · 受管 runtime 入口 packages/host/src/main.ts → bin/dsh.mjs（宿主以 node 执行）
 //     主体与 runtime 有公共代码，同一次构建让 rspack 把它切成共享 chunk（splitChunks），
 //     两边不各打一份；切出的 chunk 都归 bin/。
-//   - 产物根 index.mjs **不由本构建产出**：由壳源码 packages/app/src/index.ts 写出两行 re-export
-//     （见 packages/app/src/build.ts）。宿主按 manifest.entry=index.mjs 加载它、且启 App 时
+//   - 产物 bin/index.mjs **不由本构建产出**：由壳源码 packages/app/src/index.ts 写出两行 re-export
+//     （见 packages/app/src/build.ts）。宿主按 manifest.entry=bin/index.mjs 加载它、且启 App 时
 //     会缓存它——静态写出才能跨构建不变（rspack 出的入口会带数字 id/chunk 名，每次都变）。
 //   - 输出 ESM module（纯 ESM 无原生模块，不需要 CJS+loadBundle 沙箱；宿主直接 import）
 //   - library.type=module：入口具名导出（apply）真 emit 成 ESM export，宿主直接 import
-//   - packages/app/src/assets 只有 icon.png（App 图标，由 build.ts 原样 copy，不进 bundle），
+//   - 仓库根 assets/ 只有 icon.png（App 图标，由 build.ts 原样 copy，不进 bundle），
 //     本配置不需要 asset 规则
 //   - externalsPresets.node：node 内置模块保持外部 import（零运行时依赖）
 // rspack 解析路径走 packages/app/src/build.ts 的 resolveRspackEntry（RSPACK_ENV 或本地 node_modules）
@@ -31,7 +31,7 @@ export default {
     "bin/app": path.join(ROOT, "packages", "app", "src", "app.ts"),
     // 受管 runtime 入口（宿主以 node 执行 bin/dsh.mjs）
     "bin/dsh": path.join(ROOT, "packages", "host", "src", "main.ts"),
-    // 产物根 index.mjs 不在这里：它是 build.ts 写出的静态壳（两行 re-export），不参与打包
+    // 产物 bin/index.mjs 不在这里：它是 build.ts 写出的静态壳（两行 re-export），不参与打包
   },
   output: {
     path: DIST_DIR,

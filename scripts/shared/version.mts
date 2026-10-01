@@ -39,10 +39,10 @@ export function cordisPkgPaths() {
   return cordisPkgDirs().map((dir) => `${dir}/package.json`);
 }
 
-// 派生同步目标（随主版本同步的文件）：packages/app/src/manifest.json（app 域构件）+ cordis 包
+// 派生同步目标（随主版本同步的文件）：manifest.json（仓库根，App 契约）+ cordis 包
 //（不含主 package.json——主是事实源，由 bump 阶段改；这里指"跟随"它的文件）
 export function derivedVersionTargets() {
-  return ["packages/app/src/manifest.json", ...cordisPkgPaths()];
+  return ["manifest.json", ...cordisPkgPaths()];
 }
 
 // 版本文件全集（含主 package.json——version-hook 提交范围用：pnpm version 已改主待收口）

@@ -27,10 +27,10 @@ export function assertNoProductPackage(outDir) {
  * cordis 子插件与 roster patch 的产物断言（防回归，与 manifest 校验对称）：子插件（provider /
 theme / clipboard）version 与主 package.json 同批由 derive/version（pnpm version 发版流程）
 同步，pack 时读产物校验一致——手改/漏同步即出包版本漂移。
- * roster patch（.cache/dist/cordis.patch.yml）不是包，只校验在位；子插件住 .cache/cordis，
+ * roster patch（.cache/dist/bin/cordis.patch.yml）不是包，只校验在位；子插件住 .cache/cordis，
  * 与它不同源，两份在交付布局里各就各位。
  * @param cordisDir 子插件产物目录（.cache/cordis）
- * @param patchFile roster patch 文件（.cache/dist/cordis.patch.yml）
+ * @param patchFile roster patch 文件（.cache/dist/bin/cordis.patch.yml 或组装树同级）
  * @param version 本次出包的版本
  */
 export function assertCordisArtifacts(cordisDir, patchFile, version) {

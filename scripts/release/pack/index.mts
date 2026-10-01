@@ -9,7 +9,7 @@
 // 流程：复制交付清单（prepackage 钩子已先行 build）→ 物化生产依赖 → 断言多平台资产 → zip → SHA256。
 // 用法：pnpm run package --target <名字>（prepackage 自动前置 build；单独 node scripts/release/pack/index.mts 要求 .cache/dist 已构建）
 // 产出：releases/dshana-v<version>[-<target>].zip + .sha256。**zip 根 = 包根**：manifest.json、
-//   index.mjs、node_modules/、ui/ 等全部在 zip 根级，不得套一层目录（宿主安装时在包根读 manifest.json）。
+//   bin/、node_modules/、ui/ 等全部在 zip 根级，不得套一层目录（宿主安装时在包根读 manifest.json）。
 // 两个临时目录的分工（都在 .tmp/ 下，起手清残留、用完即清、收尾由 postpackage 钩子清）：
 //   · .tmp/pkg-root/<target>：依赖物化**工位**。要跑一次真 install，就得有个像独立项目的目录——
 //     工位三件都现生成（清单 + 按目标替换过 supportedArchitectures 的 pnpm-workspace.yaml +
@@ -44,18 +44,19 @@ const repoPkg = fs.readJsonSync(join(ROOT, "package.json"));
 const version = repoPkg.version;
 if (!version) throw new Error("package.json version 缺失");
 // 版本一致性校验：打包版本必须同时等于 manifest.json 的 version，只同步一处会出发布包版本与 tag 不一致的包。
-const manifestVersion = fs.readJsonSync(join(ROOT, "packages", "app", "src", "manifest.json")).version;
+const manifestVersion = fs.readJsonSync(join(ROOT, "manifest.json")).version;
 if (version !== manifestVersion)
   throw new Error(
     `版本不一致：package.json ${version} ≠ manifest.json ${manifestVersion}（manifest 未同步，跑 node scripts/derive/index.mts 同步后再打包）`,
   );
 
 // 1. 静态项补齐交付目录。构建阶段（build:app / build:cordis）已写出安装态骨架
-//    （index.mjs / manifest.json / assets/ / skills/ / ui/ / bin/ / cordis.patch.yml），
+//    （bin/（入口 + app 主体 + runtime + roster patch）+ manifest.json / assets/ / skills/ / ui/），
 //    这里只补清单外的文本件；包根即 App 安装目录，不套 dist 这层目录。不在清单里的东西各有其宿主：
 //    · routes/ —— v2 走 ctx.routes.register，route 在 index.mjs 里注册，无目录产物；
 //    · app/（卡片脚本与样式）—— 构建时内联进 index.mjs bundle；
-//    · manifest.json / skills/ —— build:app 从 app 域（packages/app/src/）产出交付目录副本；
+//    · manifest.json / assets/ / skills/ —— 都在仓库根（源码形态与产物形态对齐，App 契约与随包静态件），
+//      由 build:app 产出交付目录副本；
 //    · package.json —— 不生成也不随包：入口是 index.mjs，Node 按扩展名判 ESM，安装树不需要包清单；
 //      仓库那份带 scripts / devDependencies / packageManager / imports，是构建入口（上面的断言拒收）。
 //    · pnpm-workspace.yaml / pnpm-lock.yaml —— 不随包：装机侧不执行 pnpm install（依赖已物化进包）。
@@ -77,7 +78,7 @@ for (const item of staticItems) {
 }
 
 // 1.5 / 1.6) 产物断言：cordis 包版本与完整性、交付树无包清单、App ui/ 静态树（缺失即拒包）
-assertCordisArtifacts(CORDIS_DIR, join(distDir, "cordis.patch.yml"), version);
+assertCordisArtifacts(CORDIS_DIR, join(distDir, "bin", "cordis.patch.yml"), version);
 assertNoProductPackage(distDir);
 assertUiTree(distDir);
 
@@ -141,13 +142,13 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
   // @dshana 子插件落进安装树的 node_modules（与 @deepseek-ai/* 同锚点）：DSH 的 runtime 解析模式
   // 从安装树 + bundle 依赖图算解析代、不建链接，插件因此不能住在安装树外的位置。它们本来就不在
   // 交付面里（产物在 .cache/cordis），到这一步才按交付布局落进 node_modules/@dshana。
-  // roster patch 则随交付面原样到包根（受管 runtime 按 <installRoot>/cordis.patch.yml 读它）。
+  // roster patch 则随交付面原样到 bin/（受管 runtime 按自身入口所在目录取它）。
   if (!fs.pathExistsSync(CORDIS_DIR)) throw new Error(".cache/cordis 缺失：先跑 pnpm run build 再打包");
   fs.copySync(CORDIS_DIR, join(pkgDir, "node_modules", "@dshana"));
-  for (const rel of ["cordis.patch.yml", join("node_modules", "@dshana", "provider", "index.js")]) {
+  for (const rel of [join("bin", "cordis.patch.yml"), join("node_modules", "@dshana", "provider", "index.js")]) {
     if (!fs.pathExistsSync(join(pkgDir, rel))) throw new Error(`包内产物缺失：${rel}（拒绝出包）`);
   }
-  console.log("[pack] cordis 产物就位（子插件 -> node_modules/@dshana，roster patch 随交付面到包根）")
+  console.log("[pack] cordis 产物就位（子插件 -> node_modules/@dshana，roster patch 随交付面到 bin/）")
   // 只躺在 node_modules 里不够：DSH 按「安装树 + 被选中 bundle 的依赖图」算解析代，真机上
   // profile 在数据目录里向上解析走不到安装树，得由被选中 bundle 认领才进解析代（见 bundle-deps.mts）。
   declareInstallationPlugins(join(pkgDir, "node_modules"));

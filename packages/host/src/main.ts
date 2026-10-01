@@ -15,8 +15,8 @@
 //      操作报错 + 退出码 3，绝不假装能跑；
 //   3. 设本进程自有 env（DSH_HOME / DSHANA_*，不污染宿主进程环境）；
 //   4. 依赖就位（随包物化在 <installRoot>/node_modules，无运行时安装）；
-//   5. 产物在位（@dshana 子插件在 <installRoot>/node_modules/@dshana，roster patch 在
-//      <installRoot>/cordis.patch.yml）与自有 profile 就位（<DSH_HOME>/profiles/dshana，壳自己
+//   5. 产物在位（@dshana 子插件在 <installRoot>/node_modules/@dshana，roster patch 与本入口同在
+//      <installRoot>/bin）与自有 profile 就位（<DSH_HOME>/profiles/dshana，壳自己
 //      建并维护，见 ensureOwnProfile）；
 //   6. 子进程内 boot DSH（locateDsh → appBoot.loadLayeredEnv → loadProfileDirectory →
 //      profileBoot.runProfile；resolvedProfile = 自有 profile，patchFiles = roster patch——
@@ -334,9 +334,10 @@ export async function main(argv: string[]): Promise<number> {
   const dataDir = resolve(opts.dataDir);
   // 依赖根默认指向 App 安装目录（随包物化的 node_modules）；--deps-root 可覆盖（调试）。
   // @dshana 插件与 @deepseek-ai/* 同锚点住在这里（运行时解析模式从安装树算解析代，不建链接），
-  // 我们的 roster patch 随包放在安装根（与 manifest.json 并排，经 patchFiles 作启动期 overlay）。
+  // 我们的 roster patch 随包放在本入口旁边（bin/ 下），经 patchFiles 作启动期 overlay——
+  // 按入口自己所在目录取，与安装根布局解耦。
   const depsRoot = resolve(opts.depsRoot || join(installRoot, "node_modules"));
-  const rosterPatch = join(installRoot, "cordis.patch.yml");
+  const rosterPatch = join(dirname(entryFile), "cordis.patch.yml");
   const dshHome = opts.dshHome ? resolve(opts.dshHome) : join(dataDir, ".dsh");
   // ---- 0) 预检模式（数据源切换探针）：不连宿主 IPC、不起服务，只验证目标环境可用性 ----
   if (opts.preflight) {

@@ -1,0 +1,68 @@
+{
+  "manifestVersion": 2,
+  "id": "dshana",
+  "name": "DSHana",
+  "version": "1.0.0-rc.30+dsh-0.2.0-rc.2",
+  "description": "把 DeepSeek Harness 变成 HanaAgent 的子代理",
+  "entry": "bin/index.mjs",
+  "icon": "assets/icon.png",
+  "minAppVersion": "0.1050.9",
+  "capabilities": [
+    "app/tools.expose-to-model",
+    "app/tasks.manage",
+    "app/session.start-turn",
+    "app/models.infer",
+    "app/agents.read",
+    "app/resources.read",
+    "app/runtime.execute",
+    "app/runtime.local-machine",
+    "app/runtime.network",
+    "app/ui.clipboard-write",
+    "app/ui.open-external"
+  ],
+  "network": {
+    "allowedHosts": [
+      "127.0.0.1"
+    ],
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "allowLocalhost": true,
+    "defaultTimeoutMs": 60000,
+    "maxResponseBytes": 8388608
+  },
+  "contributes": {
+    "cards": [
+      {
+        "id": "dshana",
+        "title": "DSHana",
+        "description": "DSHana bootstrap and workspace",
+        "route": "/main.html",
+        "realization": "page",
+        "functionPanel": {
+          "id": "sidebar",
+          "label": "DSHana",
+          "route": "/sidebar.html"
+        },
+        "siteNavEntry": true,
+        "fpFullPanel": true,
+        "closable": false,
+        "detached": {
+          "route": "/default.html"
+        },
+        "cardForm": "flush",
+        "titlebar": "solid",
+        "face": {
+          "image": "assets/cover.png"
+        }
+      }
+    ],
+    "settings": {
+      "title": "DSHana",
+      "ui": {
+        "route": "/settings.html"
+      }
+    }
+  }
+}

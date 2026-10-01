@@ -6,8 +6,8 @@
 // 两个临时区的分工，按「这份东西是不是每轮重来」划线：
 //   · .cache/：带键的、可再生的中间产物。按产物种类分键，跨次复用，构建不清它。
 //   · .tmp/：每次重来的草稿。依赖物化工位、打包组装台、集成摊源树都属这类，用完即清。
-// .cache 下的键按**产物种类**分：dist 对齐安装态（App 安装目录形态，roster patch 与
-// manifest.json 并排，受管 runtime 入口也在这里的 bin/）；ui 是壳的文档侧（页面脚本 bundle
+// .cache 下的键按**产物种类**分：dist 对齐安装态（App 安装目录形态：manifest.json 在根，
+// 受管 runtime 入口与 roster patch 在 bin/）；ui 是壳的文档侧（页面脚本 bundle
 // + 静态面，自己一个键，由 App 域的构建拷进 dist/ui）；cordis 子插件包不是安装态里的东西
 // ——pack 按 bundle 认领规则把它们落进包内 node_modules/@dshana，另成一个键；integrations
 // 是集成层编译出的补丁包（每个集成一个子目录），pack 按 integration.json 的 package 字段
@@ -25,7 +25,7 @@ export function distDirOf(repoRoot: string): string {
   return path.join(repoRoot, CACHE, "dist");
 }
 
-/** App 交付目录：dist 根 = App 安装目录形态（含 cordis.patch.yml），pack 逐份拷进包根。 */
+/** App 交付目录：dist 根 = App 安装目录形态（契约件在根，代码与 roster patch 在 bin/），pack 逐份拷进包根。 */
 export const DIST_DIR = distDirOf(ROOT);
 
 /** 壳的文档侧产物目录（packages/ui 构建产出；App 域构建把它拷进 dist/ui）。 */
