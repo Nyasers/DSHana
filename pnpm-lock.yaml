@@ -190,6 +190,9 @@ importers:
       '@dshana/runtime':
         specifier: workspace:*
         version: link:packages/runtime
+      '@dshana/session':
+        specifier: workspace:*
+        version: link:packages/session
       '@dshana/shared':
         specifier: workspace:*
         version: link:packages/shared
@@ -295,6 +298,18 @@ importers:
 
   packages/runtime:
     dependencies:
+      '@dshana/shared':
+        specifier: workspace:*
+        version: link:../shared
+
+  packages/session:
+    dependencies:
+      '@dshana/models':
+        specifier: workspace:*
+        version: link:../models
+      '@dshana/runtime':
+        specifier: workspace:*
+        version: link:../runtime
       '@dshana/shared':
         specifier: workspace:*
         version: link:../shared

@@ -1,0 +1,29 @@
+{
+  // packages/session 域（会话编排：提交链、串行化、取消链、审批应答、任务归属）的类型检查配置。
+  // 与 tsconfig.host.json 同形；口径与失败清单见 scripts/shared/ts-diagnostics.mts。
+  // 路径相对本文件（仓库根）解析，不写绝对路径。
+  "compilerOptions": {
+    "noEmit": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    // 本仓直接依赖住在 pnpm 隐藏目录：不指这里，cordis / dsh / hana 那批包解析不到，
+    // 报错会落在"包没装"而不是我们的代码上。
+    "paths": { "*": ["./node_modules/.pnpm/node_modules/*"] },
+    "typeRoots": ["./node_modules/@types", "./node_modules/.pnpm/node_modules/@types"],
+    "strict": true,
+    "noImplicitAny": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "jsx": "react-jsx",
+    // 相对 import 显式写 .ts（Node ESM 可直跑、bundler 能解、官方 DSH 源码同款）。
+    "allowImportingTsExtensions": true
+  },
+  "include": ["packages/session/src/**/*.ts"]
+}

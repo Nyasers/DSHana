@@ -5,8 +5,8 @@
 //
 // 语义对齐 subagent_reply（用句柄续同一个实例）：task 必填；目标二选一——taskId 句柄
 // （open/reply 返回，工具自己解析会话并校验归属）或 sessionId 凭证（显式 = 我要跨对话）。
-// 同会话多次 reply 由 App 侧串行化（lib/session-serialize.ts），按提交顺序排队。
-import { submitDshTask } from "#/lib/session-run.ts";
+// 同会话多次 reply 由 App 侧串行化（packages/session/src/session-serialize.ts），按提交顺序排队。
+import { submitDshTask } from "@dshana/session/session-run.ts";
 import { resolveTarget } from "#/tools/shared/target.ts";
 import { sessionCard } from "#/tools/shared/card.ts";
 import type { ToolCtx } from "@dshana/shared/host.ts";

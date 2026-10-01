@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/lib/task-ownership.test.mjs — src/lib/task-ownership.js（归属校验通则）
+// tests/lib/task-ownership.test.mjs — packages/session/src/task-ownership.ts（归属校验通则）
 //
 // 锁死四条：
 //   ① 显式 sessionId ⇒ 凭证路径，跳过校验（故意跨对话的能力保留）
@@ -10,7 +10,7 @@
 //   ④ 拿不到 context.sessionPath（按钮通道）⇒ 放行；记录缺 parentSessionPath ⇒ 拒绝（fail-closed）
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { taskOwnership, ownershipRefusalText } from "../../src/lib/task-ownership.ts";
+import { taskOwnership, ownershipRefusalText } from "@dshana/session/task-ownership.ts";
 
 const HERE = "/home/u/.hanako/sessions/aaaa.jsonl";
 const OTHER = "/home/u/.hanako/sessions/bbbb.jsonl";
