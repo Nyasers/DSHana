@@ -8,7 +8,7 @@
 //   manifest.json       App v2 manifest（entry "index.js" / icon "assets/icon.png"）
 //   index.js            壳：只 import ./bin/main.mjs 并重新导出 apply/default（宿主启 App 时会缓存它）
 //   bin/main.mjs        App 主体（含它自己切出的 chunk）
-//   bin/dsh-host.mjs    受管 Node runtime 入口（宿主以 node 执行；与主体同一次构建、共享 chunk）
+//   bin/dsh.mjs          受管 Node runtime 入口（宿主以 node 执行；与主体同一次构建、共享 chunk）
 //   assets/icon.png     App 身份图标（manifest.icon 指向的包内真实图片）
 //   skills/             App skills（dshana，SKILL.md 随包分发）
 //   ui/                   壳的文档侧（cards route 指向壳页，见 packages/ui/src/——相对资源路径，
@@ -79,7 +79,7 @@ async function compile(cfg, label) {
 await compile(config, "build:app 主 bundle");
 
 // 受管 runtime 入口已随本次 rspack 构建落到交付目录 bin/（三入口一次构建，见 rspack.config.mts）
-const runtimeEntry = join(DIST_DIR, "bin", "dsh-host.mjs");
+const runtimeEntry = join(DIST_DIR, "bin", "dsh.mjs");
 if (!fs.pathExistsSync(runtimeEntry)) {
   throw new Error("受管 runtime 入口缺失（" + runtimeEntry + "）：拒绝出一份没有 runtime 的 App");
 }

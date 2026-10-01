@@ -39,7 +39,7 @@ These are inlined into the built App at build time. Their original packages and 
 
 - Version: 0.1050.9
 - Purpose: The `connectAppRuntime()` client runtime for the managed runtime's private IPC (tasks / models / network.fetch / close).
-- Form: devDependency (`file:vendor/hana-app-sdk/hana-app-sdk.tgz`), statically inlined by rspack into `bin/dsh-host.mjs`.
+- Form: devDependency (`file:vendor/hana-app-sdk/hana-app-sdk.tgz`), statically inlined by rspack into `bin/dsh.mjs`.
 - Source: Hana App Creator SDK shipped with the host (snapshot under `vendor/hana-app-sdk`; see `source-manifest.json` in the same directory)
 - License: Apache License 2.0 (full text below)
 - Copyright: Copyright (c) 2026 Hana App SDK authors (SPDX headers in the source files)

@@ -3,7 +3,7 @@
 //
 // packages/host/src/task-bridge.ts — 受管 runtime 内 DSH 事件 → Hana task 回投
 //
-// 位置与角色：本模块随 .cache/dist/bin/dsh-host.mjs 打进受管 runtime（与 DSH 同进程），
+// 位置与角色：本模块随 .cache/dist/bin/dsh.mjs 打进受管 runtime（与 DSH 同进程），
 // main.js 在 DSH boot 就绪后挂载。它订阅 DSH cordis ctx 的会话事件（进程内 ctx.on——
 // `$events` 广播层只带 api-session/*，turn 生命周期在 ctx 事件源直订才可见），按**宿主任务
 // 记录**里的 metadata.dsh.sessionId（App 主进程提交前写入；本进程的 hana.tasks 直接读，

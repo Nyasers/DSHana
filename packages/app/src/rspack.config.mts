@@ -6,7 +6,7 @@
 // 与 hana-remote-dev 的 rspack.config.mts 对齐，按 dshana 实际适配：
 //   - 三入口一次构建：
 //       · 主体 packages/app/src/index.ts → bin/main.mjs
-//       · 受管 runtime 入口 packages/host/src/main.ts → bin/dsh-host.mjs（宿主以 node 执行）
+//       · 受管 runtime 入口 packages/host/src/main.ts → bin/dsh.mjs（宿主以 node 执行）
 //       · 壳 packages/app/src/shell.ts → 产物根 index.js（宿主按 manifest.entry=index.js
 //         加载，且启 App 时会缓存它——所以这个文件只做壳、保持稳定；用 entry dependOn 依赖
 //         主体，产物就是一层 import ./bin/main.mjs）
@@ -29,14 +29,14 @@ export default {
   entry: {
     // App 主体（宿主在隔离进程内加载）
     "bin/main": path.join(ROOT, "packages", "app", "src", "index.ts"),
-    // 受管 runtime 入口（宿主以 node 执行 bin/dsh-host.mjs）
-    "bin/dsh-host": path.join(ROOT, "packages", "host", "src", "main.ts"),
+    // 受管 runtime 入口（宿主以 node 执行 bin/dsh.mjs）
+    "bin/dsh": path.join(ROOT, "packages", "host", "src", "main.ts"),
     // 壳依赖主体：不重复实现，产物就是一层 import ./bin/main.mjs
     index: { import: path.join(ROOT, "packages", "app", "src", "shell.ts"), dependOn: "bin/main" },
   },
   output: {
     path: DIST_DIR,
-    // 壳落产物根 index.js（manifest.entry，保持稳定）；入口（bin/main、bin/dsh-host）与
+    // 壳落产物根 index.js（manifest.entry，保持稳定）；入口（bin/main、bin/dsh）与
     // 它们共享的 chunk 都归 bin/
     filename: (pathData) => {
       const name = String(pathData.chunk?.name ?? "");

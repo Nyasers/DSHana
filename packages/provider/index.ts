@@ -5,7 +5,7 @@
 //
 // 本 adapter 不持有 apiKey/baseURL/直连：**推理在受管
 // runtime 内经 connectAppRuntime().models 发起**（受管子进程与 DSH 同进程，hana client
-// 由 dsh-host.mjs 挂 globalThis.__dshanaHana，见 packages/host/src/main.ts）：
+// 由 bin/dsh.mjs 挂 globalThis.__dshanaHana，见 packages/host/src/main.ts）：
 //   · 目录：hana.models.list() → 显式 provider/model 选择（id 原样透传，不二次映射）；
 //   · 推理：hana.models.stream({ requestId, provider, model, messages, systemPrompt, tools,
 //     reasoningEffort?, maxTokens?, temperature?, taskId? })——requestId 由本 adapter 自管
@@ -413,7 +413,7 @@ export function buildHanaAdapter(LlmAdapter, LlmError, deps) {
 
 export async function apply(ctx, config) {
   try {
-    // 1. hana client 句柄（dsh-host.mjs 在 connectAppRuntime 后、runProfile 前设置；
+    // 1. hana client 句柄（bin/dsh.mjs 在 connectAppRuntime 后、runProfile 前设置；
     // 插件加载晚于该点；仍给窗口兜底轮询）
     let hana: any = null;
     try {
