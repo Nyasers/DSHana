@@ -4,7 +4,7 @@
 // packages/app/src/shared-state.ts — UI 跨面共享通道在 App 侧的收尾（每次 apply 清空整批键）。
 //
 // 词表（键前缀、值构造、读侧挑选）在 @dshana/shared/shared-state.ts，页面侧与 App 侧共用；
-// 这里只放副作用那一半，由 packages/app/src/index.ts 的 apply 调用。
+// 这里只放副作用那一半，由 packages/app/src/main.ts 的 apply 调用。
 //
 // 收尾只有一件事：每次 apply 把这批键清空。进程被杀、页面被替换时，页面来不及删自己的键，
 // 而上次生命周期留下的键没有消费方：按前缀一次清空，不看键里的值。
