@@ -9,7 +9,7 @@
 // 流程：复制交付清单（prepackage 钩子已先行 build）→ 物化生产依赖 → 断言多平台资产 → zip → SHA256。
 // 用法：pnpm run package --target <名字>（prepackage 自动前置 build；单独 node scripts/release/pack/index.mts 要求 .cache/dist 已构建）
 // 产出：releases/dshana-v<version>[-<target>].zip + .sha256。**zip 根 = 包根**：manifest.json、
-//   index.js、node_modules/、ui/ 等全部在 zip 根级，不得套一层目录（宿主安装时在包根读 manifest.json）。
+//   index.mjs、node_modules/、ui/ 等全部在 zip 根级，不得套一层目录（宿主安装时在包根读 manifest.json）。
 // 两个临时目录的分工（都在 .tmp/ 下，起手清残留、用完即清、收尾由 postpackage 钩子清）：
 //   · .tmp/pkg-root/<target>：依赖物化**工位**。要跑一次真 install，就得有个像独立项目的目录——
 //     工位三件都现生成（清单 + 按目标替换过 supportedArchitectures 的 pnpm-workspace.yaml +
@@ -31,12 +31,11 @@ import fs from "fs-extra";
 import { errText } from "../../shared/err-text.mts";
 import { CORDIS_DIR, DIST_DIR } from "../../shared/paths.mts";
 import { ROOT } from "../../shared/root.mts";
-import { assertCordisArtifacts, assertProductPackage, assertUiTree } from "./assert.mts";
+import { assertCordisArtifacts, assertNoProductPackage, assertUiTree } from "./assert.mts";
 import { declareInstallationPlugins } from "./bundle-deps.mts";
 import { STAGING_ROOT, materializeProdDeps } from "./materialize.mts";
 import { minifyCordisStatics } from "./minify.mts";
 import { applyIntegrations } from "./overlays.mts";
-import { shipManifest } from "./ship-manifest.mts";
 import { failUsage, targetSpec } from "./targets.mts";
 
 // 版本单一事实源：package.json（唯一来源；不支持命令行传版本，显式传的版本会与 manifest 不同步）。
@@ -52,13 +51,13 @@ if (version !== manifestVersion)
   );
 
 // 1. 静态项补齐交付目录。构建阶段（build:app / build:cordis）已写出安装态骨架
-//    （index.js / manifest.json / assets/ / skills/ / ui/ / runtime/ / cordis.patch.yml），
+//    （index.mjs / manifest.json / assets/ / skills/ / ui/ / bin/ / cordis.patch.yml），
 //    这里只补清单外的文本件；包根即 App 安装目录，不套 dist 这层目录。不在清单里的东西各有其宿主：
-//    · routes/ —— v2 走 ctx.routes.register，route 在 index.js 里注册，无目录产物；
-//    · app/（卡片脚本与样式）—— 构建时内联进 index.js bundle；
+//    · routes/ —— v2 走 ctx.routes.register，route 在 index.mjs 里注册，无目录产物；
+//    · app/（卡片脚本与样式）—— 构建时内联进 index.mjs bundle；
 //    · manifest.json / skills/ —— build:app 从 app 域（packages/app/src/）产出交付目录副本；
-//    · package.json —— ship-manifest.mts 现生成（只带 name / version / type）；仓库那份带
-//      scripts / devDependencies / packageManager / imports，是构建入口，不进包；
+//    · package.json —— 不生成也不随包：入口是 index.mjs，Node 按扩展名判 ESM，安装树不需要包清单；
+//      仓库那份带 scripts / devDependencies / packageManager / imports，是构建入口（上面的断言拒收）。
 //    · pnpm-workspace.yaml / pnpm-lock.yaml —— 不随包：装机侧不执行 pnpm install（依赖已物化进包）。
 const staticItems = ["NOTICE", "THIRD_PARTY_NOTICES.md"];
 const distDir = DIST_DIR;
@@ -77,13 +76,9 @@ for (const item of staticItems) {
   });
 }
 
-// 1.2) 交付树的 package.json：现生成（name / version / type: module；内核声明住 host，包根无依赖）。
-//      字段白名单与版本一致由下面的 assertProductPackage 把关。
-fs.writeFileSync(join(distDir, "package.json"), JSON.stringify(shipManifest(version), null, 2) + "\n");
-
-// 1.5 / 1.6) 产物断言：cordis 包版本与完整性、交付树 package.json、App ui/ 静态树（缺失即拒包）
+// 1.5 / 1.6) 产物断言：cordis 包版本与完整性、交付树无包清单、App ui/ 静态树（缺失即拒包）
 assertCordisArtifacts(CORDIS_DIR, join(distDir, "cordis.patch.yml"), version);
-assertProductPackage(distDir, version);
+assertNoProductPackage(distDir);
 assertUiTree(distDir);
 
 // 目标选择：`--target <名字>`（必须显式给，无默认）。

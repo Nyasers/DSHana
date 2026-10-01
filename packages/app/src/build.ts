@@ -5,8 +5,9 @@
 // 布局：领域专用脚本随各自源码——rspack.config.mts（本目录，配置源）与本入口放 packages/app/src/，
 // 共享工具（collect/walk/terser/assert + minify/template loader）在 scripts/build/。
 // 产物（.cache/dist = App 安装目录形态；宿主读该根 manifest.json + entry）：
-//   manifest.json       App v2 manifest（entry "index.js" / icon "assets/icon.png"）
-//   index.js            壳：由壳源 packages/app/src/index.ts 写出，只 re-export ./bin/app.mjs（宿主启 App 时会缓存它）
+//   manifest.json       App v2 manifest（entry "index.mjs" / icon "assets/icon.png"）
+//   index.mjs           壳：由壳源 packages/app/src/index.ts 写出，只 re-export ./bin/app.mjs（宿主启 App 时会缓存它）
+//                       入口用 .mjs：Node 按扩展名就判 ESM，安装树不必再带一份 package.json 定 type
 //   bin/app.mjs         App 主体（含它自己切出的 chunk）
 //   bin/dsh.mjs          受管 Node runtime 入口（宿主以 node 执行；与主体同一次构建、共享 chunk）
 //   assets/icon.png     App 身份图标（manifest.icon 指向的包内真实图片）
@@ -83,7 +84,7 @@ const runtimeEntry = join(DIST_DIR, "bin", "dsh.mjs");
 if (!fs.pathExistsSync(runtimeEntry)) {
   throw new Error("受管 runtime 入口缺失（" + runtimeEntry + "）：拒绝出一份没有 runtime 的 App");
 }
-// 产物根 index.js = 壳：直接由壳源 packages/app/src/index.ts 写出（去行注释 + 把源内的 ./main.ts
+// 产物根 index.mjs = 壳：直接由壳源 packages/app/src/index.ts 写出（去行注释 + 把源内的 ./app.ts
 // 换成产物路径 ./bin/app.mjs）。不由 rspack 产出——静态两行、跨构建字面不变，宿主缓存它才稳
 // （rspack 出的入口会带 ESM chunk 运行时与数字 id，每次都变）。
 if (!fs.pathExistsSync(join(DIST_DIR, "bin", "app.mjs"))) {
@@ -93,12 +94,12 @@ const shellJs = fs.readFileSync(join(SRC_ROOT, "index.ts"), "utf8")
   .replace(/^[ \t]*\/\/.*$/gm, "")
   .replace(/\.\/app\.ts/g, "./bin/app.mjs")
   .trim() + "\n";
-fs.writeFileSync(join(DIST_DIR, "index.js"), shellJs, "utf8");
+fs.writeFileSync(join(DIST_DIR, "index.mjs"), shellJs, "utf8");
 
 // 1) 静态化路径字面量回写（dist 主区）
 rewriter(DIST_DIR);
 
-// 2) App 交付目录组装（dist 根 = App 安装目录；manifest/skills/icon 与入口 index.js 同层）
+// 2) App 交付目录组装（dist 根 = App 安装目录；manifest/skills/icon 与入口 index.mjs 同层）
 fs.copySync(join(SRC_ROOT, "manifest.json"), join(DIST_DIR, "manifest.json"));
 fs.copySync(join(SRC_ROOT, "skills"), join(DIST_DIR, "skills"));
 // App 图标：packages/app/src/assets/icon.png 为唯一规范源（manifest.icon "assets/icon.png"）；

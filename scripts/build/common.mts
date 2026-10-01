@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { minifyJs, minifyHtml, minifyCss } from "./minify-assets.mts";
+import { minifyJs, minifyHtml, minifyCss, minifyJson } from "./minify-assets.mts";
 import { errText } from "../shared/err-text.mts";
 
 // 收集目录下全部 .js 的 file:// URL（rspack 会把 import.meta.url 静态化为构建机源码
@@ -55,8 +55,8 @@ export function makeUrlRewriter(staticUrlToMeta) {
   };
 }
 
-// 产物二次 terser：rspack（swc）已压一轮，这里压字符串资产（HTML/CSS/JS 内联）；须在
-// URL 回写（makeUrlRewriter）之后——先压会改写引号导致回写锚点失配。跳过
+// 产物二次 terser：rspack（swc）已压一轮，这里压字符串资产（HTML/CSS/JS 内联）与交付面 JSON；
+// 须在 URL 回写（makeUrlRewriter）之后——先压会改写引号导致回写锚点失配。跳过
 // node_modules（npm 自带产物）与 dsh-plugin（归 pack 静态压缩步）。
 export async function extraMinify(root) {
   const files: string[] = [];
@@ -65,7 +65,7 @@ export async function extraMinify(root) {
       const p = join(dir, name);
       if (name === "node_modules" || name === "dsh-plugin") continue;
       if (statSync(p).isDirectory()) collect(p);
-      else if (/\.(js|mjs|html|css)$/.test(name)) files.push(p);
+      else if (/\.(js|mjs|html|css|json)$/.test(name)) files.push(p);
     }
   };
   collect(root);
@@ -76,9 +76,11 @@ export async function extraMinify(root) {
     let out;
     try {
       // .html 是静态壳页（React 不参与，它们是原样拷进交付目录的）：去注释、收空白并压行内块；
-      // .css 是原样拷来的静态样式（如 face-stage.css），rspack 不产出它、pack 也不管它。
+      // .css 是原样拷来的静态样式（如 face-stage.css），rspack 不产出它、pack 也不管它；
+      // .json 是交付面契约（manifest），只重排版、不动内容。
       out = file.endsWith(".html") ? await minifyHtml(code)
         : file.endsWith(".css") ? minifyCss(code)
+        : file.endsWith(".json") ? minifyJson(code)
         : await minifyJs(code);
     } catch (err) {
       throw new Error("extra minify 失败（" + file + "）：" + errText(err));

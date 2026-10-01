@@ -35,6 +35,11 @@ export function minifyCss(content) {
   return r.styles;
 }
 
+/** JSON 压缩：解析后重排版（去缩进换行）。交付面的 .json（manifest / 包清单）是机器读的契约，格式无意义。 */
+export function minifyJson(content) {
+  return JSON.stringify(JSON.parse(content));
+}
+
 /**
  * 文档的标签名序列（用于压缩前后结构比对）。用 parse5（规范级 HTML 解析器）解析后遍历取
  * 标签名：<script>/<style> 的内容由解析器当**文本**，不会被误认成标签。

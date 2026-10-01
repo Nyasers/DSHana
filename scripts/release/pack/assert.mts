@@ -8,41 +8,18 @@ import fs from "fs-extra";
 import { join } from "node:path";
 
 /**
- * 交付树 package.json 允许出现的键。
- * name / type / version 都由 scripts/release/pack/ship-manifest.mts 现生成（内核声明住 host，
- * 包根不列 dependencies）：装机侧不跑 pnpm（依赖已物化进安装树），这台只用于给包根 index.js
- * 定 ESM 解析。其余（scripts / devDependencies / packageManager / imports / private）是构建面，不进包。
- */
-export const PRODUCT_PACKAGE_KEYS = ["name", "type", "version"];
-
-/**
- * 交付树 package.json 校验：字段白名单 + 版本一致 + type: module。
- * 那份文件由 pack 现生成（ship-manifest.mts，见 scripts/release/pack/index.mts），而非从树里复制——
- * 但它被改坏/漏写就直接拒包。
+ * 交付树不得出现 package.json（fail-closed）。
+ * App 入口是 index.mjs，Node 按扩展名就判 ESM，安装树不需要「最近一份 package.json 的 type」，
+ * 也就没有留在包根的理由；出现它只可能是构建面字段（scripts / devDependencies / packageManager /
+ * imports / 内核声明）被混进安装包。
  * @param outDir - 交付目录（.cache/dist 或组装树）
- * @param version - 本次出包的版本
  */
-export function assertProductPackage(outDir, version) {
+export function assertNoProductPackage(outDir) {
   const p = join(outDir, "package.json");
-  if (!fs.pathExistsSync(p)) {
-    throw new Error("交付树的 package.json 缺失（pack 未生成）：拒绝出包");
-  }
-  const j = fs.readJsonSync(p);
-  const keys = Object.keys(j).sort();
-  const allowed = [...PRODUCT_PACKAGE_KEYS].sort();
-  const extra = keys.filter((k) => !allowed.includes(k));
-  if (extra.length || keys.length !== allowed.length) {
+  if (fs.pathExistsSync(p)) {
     throw new Error(
-      "交付树 package.json 字段不对：只允许 " + allowed.join("/") + "（多出 " + extra.join("/") + "）——构建面字段不进安装包",
+      "交付树出现了 package.json（" + p + "）：入口是 index.mjs，安装树不带包清单；出现即构建面字段混进包，拒绝出包",
     );
-  }
-  if (j.version !== version) {
-    throw new Error(
-      `交付树 package.json version ${j.version} ≠ 本次出包版本 ${version}（跑 node scripts/derive/index.mts 同步后再打包）`,
-    );
-  }
-  if (j.type !== "module") {
-    throw new Error('交付树 package.json 必须 type: "module"（包根 index.js 是 ESM，缺了它宿主按 CommonJS 解析）');
   }
 }
 
