@@ -9,6 +9,7 @@
 import { minify } from "terser";
 import CleanCSS from "clean-css";
 import { minify as minifyHtmlSource } from "html-minifier-terser";
+import { parse } from "parse5";
 
 /** JS 压缩：terser，module 语义（保留 ESM 语法，普通脚本同样适用） */
 export async function minifyJs(content) {
@@ -16,24 +17,47 @@ export async function minifyJs(content) {
   return r.code;
 }
 
-/** CSS 压缩：clean-css level 2，出错即抛（fail-closed） */
+/** CSS 压缩：clean-css level 2，出错即抛（fail-closed）。
+ * level 2 默认已开合并/去重/重构；另显式打开三项非默认的深度去重。
+ * 不用 removeUnusedAtRules：它在含未知 at-rule 的样式上会自己抛回（clean-css 5.3 的 bug）。 */
 export function minifyCss(content) {
-  const r = new CleanCSS({ level: 2 }).minify(content);
+  const r = new CleanCSS({
+    level: {
+      1: {},
+      2: {
+        mergeSemantically: true,
+        removeDuplicateMediaBlocks: true,
+        removeDuplicateFontRules: true,
+      },
+    },
+  }).minify(content);
   if (r.errors.length) throw new Error(`clean-css: ${r.errors.join("; ")}`);
   return r.styles;
 }
 
-/** 标签名序列（用于压缩前后结构比对）：先把注释剥掉——注释里的例样标签本就应该消失。 */
+/**
+ * 文档的标签名序列（用于压缩前后结构比对）。用 parse5（规范级 HTML 解析器）解析后遍历取
+ * 标签名：<script>/<style> 的内容由解析器当**文本**，不会被误认成标签。
+ * 手写正则做不到这点——JS 里的比较符、字符串里的 HTML 片段会冒充标签名，
+ * 一压行内块就误判成「改了结构」。
+ */
 function tagsOf(html) {
-  const bare = html.replace(/<!--[\s\S]*?-->/g, "");
-  return (bare.match(/<[a-zA-Z][a-zA-Z0-9-]*/g) || []).map((s) => s.toLowerCase().slice(1)).join(",");
+  const out: string[] = [];
+  const walk = (node) => {
+    if (typeof node.tagName === "string") out.push(node.tagName);
+    if (node.content) walk(node.content); // <template> 的内容挂在 content 上
+    for (const child of node.childNodes || []) walk(child);
+  };
+  walk(parse(html));
+  return out.join(",");
 }
 
 /**
- * HTML 压缩：只做去注释与收空白。
+ * HTML 压缩：去注释、收空白、压缩行内 <style>/<script>。
  *
- * 不动内联 <style>/<script>（它们由 minifyCss/minifyJs 各自负责，在这里顺手动它们容易改语义），
- * 也不动属性引号、标签顺序；空白按保守方式收（留一个空格），不冒把行内文字粘起来的脸。
+ * 行内块不能交给别人：静态壳页里的 <style>/<script> 是手写文本，不经任何打包器，
+ * 本器内嵌的 clean-css / terser 就在这里把它们压了（minifyCSS / minifyJS），
+ * 否则它们会原样落进产物。空白整体收掉（不留标签间的多余空格）；属性引号、标签顺序都不动。
  * 压缩前后标签名序列必须一致，变了就是动了结构，当场失败（壳页里跑的是 DSH 的 UI，
  * 少一个标签就是另一个页面）。
  */
@@ -41,10 +65,12 @@ export async function minifyHtml(content) {
   const out = await minifyHtmlSource(content, {
     removeComments: true,
     collapseWhitespace: true,
-    conservativeCollapse: true,
-    minifyCSS: false,
-    minifyJS: false,
-    removeAttributeQuotes: false,
+    minifyCSS: { level: 2 },
+    minifyJS: true,
+    // 属性引号能省则省、doctype 用短形（html-minifier 只在安全时才去引号）。
+    // 结构守护靠 parse5 看标签名，与属性引号/顺序无关。
+    removeAttributeQuotes: true,
+    useShortDoctype: true,
     sortAttributes: false,
     sortClassName: false,
   });

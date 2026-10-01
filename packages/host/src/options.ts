@@ -24,7 +24,6 @@
 //   · bridgeKey     中继鉴权 key（header x-hana-dsh-bridge / 路径 /_hana/<key>/）
 //   · readyMarker   就绪标记（须与 start.service.readyMarker 完全一致，整行匹配）
 //
-// 仍接受 --help（无配置文件时打印用法）。
 import { isAbsolute } from "node:path";
 import { errText } from "@dshana/shared/err-text.ts";
 
@@ -36,14 +35,6 @@ export class UsageError extends Error {
     this.name = "UsageError";
   }
 }
-
-export const USAGE = `用法：dsh-host.mjs <runtime-config.json>（dshana App v2 受管 Node runtime 入口）
-  <runtime-config.json>  私有运行时配置文件绝对路径（App 主进程写入，0600，启动即删）；
-                         内容见 options.js 头注释 schema（常规形态 / preflight 预检形态）。
-  --help                 显示本帮助
-
-说明：本入口只能由 Hana ctx.runtime.start({ runtime:"node" }) 启动（宿主注入父进程 IPC）。
-端口/凭据一律走私有配置文件，不经 argv／环境变量／日志传递。`;
 
 const LOOPBACK_PORT = (value, field) => {
   const n = typeof value === "number" ? value : Number(value);
@@ -110,16 +101,15 @@ export function normalizeRuntimeConfig(input) {
 }
 
 /**
- * 解析入口参数：argv[0] === "--help" 返回 { help:true }；否则视 argv[0] 为配置文件路径。
+ * 解析入口参数：argv[0] 即私有配置文件路径。
  * @param argv 纯参数数组（不含 node/script）
  * @param readFile 读取注入（默认 node 同步读；便于单测）
  */
 export function parseRuntimeConfig(argv: string[], readFile: (path: string) => string) {
   const raw = Array.isArray(argv) ? argv : [];
-  if (raw[0] === "--help" || raw[0] === "-h") return { help: true };
   const configPath = raw[0];
   if (typeof configPath !== "string" || !configPath || configPath.startsWith("--")) {
-    throw new UsageError("缺少私有运行时配置文件路径（用法：dsh-host.mjs <runtime-config.json>；--help 查看说明）");
+    throw new UsageError("缺少私有运行时配置文件路径（本入口由 Hana ctx.runtime.start 拉起，只接受一个配置文件路径）");
   }
   if (raw.length > 1) throw new UsageError(`未知参数：${raw[1]}（只接受一个配置文件路径）`);
   let text;

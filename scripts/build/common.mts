@@ -9,7 +9,7 @@
 import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { minifyJs, minifyHtml } from "./minify-assets.mts";
+import { minifyJs, minifyHtml, minifyCss } from "./minify-assets.mts";
 import { errText } from "../shared/err-text.mts";
 
 // 收集目录下全部 .js 的 file:// URL（rspack 会把 import.meta.url 静态化为构建机源码
@@ -65,7 +65,7 @@ export async function extraMinify(root) {
       const p = join(dir, name);
       if (name === "node_modules" || name === "dsh-plugin") continue;
       if (statSync(p).isDirectory()) collect(p);
-      else if (/\.(js|mjs|html)$/.test(name)) files.push(p);
+      else if (/\.(js|mjs|html|css)$/.test(name)) files.push(p);
     }
   };
   collect(root);
@@ -75,8 +75,11 @@ export async function extraMinify(root) {
     const before = Buffer.byteLength(code, "utf8");
     let out;
     try {
-      // .html 是静态壳页（React 不参与，它们是原样拷进交付目录的）：只去注释与收空白。
-      out = file.endsWith(".html") ? await minifyHtml(code) : await minifyJs(code);
+      // .html 是静态壳页（React 不参与，它们是原样拷进交付目录的）：去注释、收空白并压行内块；
+      // .css 是原样拷来的静态样式（如 face-stage.css），rspack 不产出它、pack 也不管它。
+      out = file.endsWith(".html") ? await minifyHtml(code)
+        : file.endsWith(".css") ? minifyCss(code)
+        : await minifyJs(code);
     } catch (err) {
       throw new Error("extra minify 失败（" + file + "）：" + errText(err));
     }

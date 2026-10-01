@@ -20,6 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { basename, dirname, join } from "node:path";
 
 import fs from "fs-extra";
+import * as YAML from "yaml";
 import { serviceBundle } from "./cordis/service-config.mts"; // preset 层（本目录 cordis/）
 import { buildClientBundle } from "./cordis/client-config.mts";
 import { collectSource, makeUrlRewriter, assertNoStaticFileUrl } from "../../../scripts/build/common.mts"; // scripts/build/ 共享
@@ -29,6 +30,27 @@ import { cordisPkgDirs } from "../../../scripts/shared/version.mts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", ".."); // packages/app/src → 仓库根
 const PATCH_SRC = join(ROOT, "packages", "app", "src", "cordis.patch.yml");
+
+// DSH 私有标签 !!js（值是一段 JS 表达式，由 runtime 求值）：声明为文本 passthrough，
+// 让 yaml 库原样保留（不是不漏警告就会把标签当普通字符串洗掉）。
+const DSH_JS_TAG = {
+  tag: "tag:yaml.org,2002:js",
+  resolve: (v: string) => v,
+  stringify: (v: unknown) => String(v),
+};
+
+/** roster patch 的说明注释只服务读源文件的人；产物只需数据，落交付面时用 yaml 库去掉注释。 */
+function stripYamlComments(text: string): string {
+  const doc = YAML.parseDocument(text, { customTags: [DSH_JS_TAG] });
+  YAML.visit(doc, {
+    Node(_key, node) {
+      node.comment = null;
+      node.commentBefore = null;
+    },
+  });
+  doc.comment = null;
+  return doc.toString();
+}
 
 // rspack 解析（同 build-src：RSPACK_ENV 或本地 node_modules）
 function resolveRspackEntry(coreDir) {
@@ -82,7 +104,7 @@ function buildCordisStatic(outRoot) {
   // runtime 经 patchFiles 作启动期 overlay 传进去。落交付面根：受管 runtime 读的是
   // <installRoot>/cordis.patch.yml，交付面根就是安装态的根。
   if (!fs.pathExistsSync(PATCH_SRC)) throw new Error(`roster patch 缺失：${PATCH_SRC}`);
-  fs.copySync(PATCH_SRC, join(DIST_DIR, "cordis.patch.yml"));
+  fs.writeFileSync(join(DIST_DIR, "cordis.patch.yml"), stripYamlComments(fs.readFileSync(PATCH_SRC, "utf8")), "utf8");
   console.log("cordis 静态组装 -> .cache/cordis/（子插件 " + pkgNames.length + " 包）；roster patch -> .cache/dist/cordis.patch.yml");
 }
 

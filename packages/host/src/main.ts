@@ -30,7 +30,7 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import http from "node:http";
-import { parseRuntimeConfig, UsageError, USAGE } from "./options.ts";
+import { parseRuntimeConfig, UsageError } from "./options.ts";
 import { startDshBridge } from "./bridge.ts";
 import { checkCwd } from "./cwd-check.ts";
 import { info, warn, err } from "./log.ts";
@@ -297,14 +297,10 @@ export async function main(argv: string[]): Promise<number> {
     opts = parseRuntimeConfig(argv, (p) => readFileSync(p, "utf8"));
   } catch (e) {
     if (e instanceof UsageError) {
-      process.stderr.write(e.message + "\n\n" + USAGE);
+      process.stderr.write(e.message + "\n");
       return EXIT.USAGE;
     }
     throw e;
-  }
-  if (opts.help) {
-    process.stdout.write(USAGE);
-    return EXIT.OK;
   }
   /**
    * 致命路径统一出口：先把结构化失败报告写到 opts.fatalPath（App 据此把真实成因呈现给

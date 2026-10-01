@@ -3,11 +3,11 @@
 //
 // tests/host/options.test.mjs — packages/host/src/options.ts 纯函数单测（node --test）
 // 覆盖：私有配置文件形态（argv[1] = config 路径）、配置 schema 校验（dataDir 必填、
-// dshPort/bridgePort 1..65535 且不相同、bridgeKey 长度、readyMarker 换行）、--help 豁免、
+// dshPort/bridgePort 1..65535 且不相同、bridgeKey 长度、readyMarker 换行）、
 // 非法 JSON / 读取失败。读取经注入的 readFile 打桩，不触盘。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseRuntimeConfig, normalizeRuntimeConfig, UsageError, USAGE } from "@dshana/host/options.ts";
+import { parseRuntimeConfig, normalizeRuntimeConfig, UsageError } from "@dshana/host/options.ts";
 
 const GOOD = {
   dataDir: "/hana/app-data/dshana",
@@ -113,8 +113,6 @@ test("parseRuntimeConfig: 缺配置文件路径 / 多参数 / 非法 JSON / 读�
   assert.throws(() => parseRuntimeConfig(["/tmp/x"], () => { throw new Error("ENOENT"); }), (e) => e instanceof UsageError);
 });
 
-test("parseRuntimeConfig: --help 豁免", () => {
-  const o = parseRuntimeConfig(["--help"]);
-  assert.equal(o.help, true);
-  assert.match(USAGE, /runtime-config\.json/);
+test("parseRuntimeConfig: --help 不再豁免（入口只收一个配置文件路径）", () => {
+  assert.throws(() => parseRuntimeConfig(["--help"]), (e) => e instanceof UsageError && /配置文件路径/.test(e.message));
 });

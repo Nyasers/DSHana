@@ -83,10 +83,15 @@
     "corepack": "0.36.0",
     "fs-extra": "^11.4.1",
     "html-minifier-terser": "^7.2.0",
+    "parse5": "^8.0.1",
+    "postcss": "^8.5.28",
+    "postcss-selector-parser": "^7.1.6",
+    "postcss-value-parser": "^4.2.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "terser": "^5.51.2",
     "tsdown": "^0.23.0",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "yaml": "^2.9.1"
   }
 }
