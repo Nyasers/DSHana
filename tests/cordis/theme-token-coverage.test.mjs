@@ -22,8 +22,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { TOKEN_MAP, PASSTHROUGH } from "../../src-cordis/plugins/theme/token-map.ts";
-import { dshVersionOf, tagForVersion } from "../../scripts/integrations/verify.mts";
-import { ROOT, readShipPkg } from "../../scripts/shared/version.mts";
+import { tagForVersion } from "../../scripts/integrations/verify.mts";
+import { ROOT, dshPin } from "../../scripts/shared/version.mts";
 
 const MIRROR = join(ROOT, "vendor", "deepseek-harness");
 const EXTENSIONS = ["css", "ts", "tsx", "js", "mjs", "html"];
@@ -75,7 +75,7 @@ function scanUpstreamTokens(tag) {
 }
 
 test("主题适配：上游在用的 --dsw-* 每个都有归宿（接了，或 PASSTHROUGH 里写明不接）", () => {
-  const tag = tagForVersion(dshVersionOf(readShipPkg()));
+  const tag = tagForVersion(dshPin());
   const sites = scanUpstreamTokens(tag);
   assert.ok(
     sites.size >= TOKEN_FLOOR,

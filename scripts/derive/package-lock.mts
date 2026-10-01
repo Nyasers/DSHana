@@ -8,6 +8,8 @@
 // 只装交付面的生产闭包——不需要把仓库根那份清单（构建面，带 devDependencies）搬进工位。
 //
 // 派生规则：以**仓库锁文件**为种子，把 `packaging/package.json` 当唯一 manifest 重解析。
+// 清单的 dependencies 本身派生自 packages/host（见 scripts/derive/index.mts 的 product-package
+// 任务），所以这里只是跟随它重解析。
 // 种子这一步很关键：从零解析会按 range 取最新，把传递版本顶新（实测 koffi 3.3.0 → 3.3.1、
 // rspack binding 2.2.5 → 2.2.6）；用仓库锁文件当种子，pnpm 复用已有解析，只剪掉交付面到不了的
 // 分支（devDependencies 那一片），版本一个不动。
@@ -26,7 +28,7 @@ export const SHIP_LOCK_REL = "packaging/pnpm-lock.yaml";
 const WORK_DIR = join(ROOT, ".tmp", "pkg-lock");
 
 /** 一句话说明源 → 目标（日志与 --check 报告用）。 */
-export const ABOUT = "packaging/package.json + 仓库锁文件的解析 → packaging/pnpm-lock.yaml";
+export const ABOUT = "packages/host/package.json#dependencies（派生进 packaging/package.json）+ 仓库锁文件的解析 → packaging/pnpm-lock.yaml";
 
 /** 在工位里跑一次 pnpm（返回退出码；输出直通）。inspect 用 frozen，repair 不用。
  *   cwd 留在仓库根、用 `--dir` 指工位：corepack 因此读到根 `package.json#packageManager` 钉的

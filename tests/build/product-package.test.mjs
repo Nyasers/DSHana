@@ -6,7 +6,7 @@
 //
 // 守的是「构建面不进安装包」：仓库那份带着 scripts/devDependencies/packageManager/imports，
 // 装机侧没有消费方，混进去只会让人读出错觉。交付树那份只有 name/version/type + dependencies
-// （后者是交付清单自己的运行时依赖声明，**唯一真源**；见 packaging/README.md）。
+// （后者是交付清单自己的运行时依赖声明，派生自 packages/host，见 packaging/README.md）。
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -69,4 +69,17 @@ test("packaging/package.json 自身就在白名单内（实体文件与契约同
   const real = JSON.parse(fs.readFileSync(new URL("../../packaging/package.json", import.meta.url), "utf8"));
   assert.deepEqual(Object.keys(real).sort(), [...PRODUCT_PACKAGE_KEYS].sort());
   assert.equal(real.type, "module");
+});
+
+test("packaging/package.json 的 dependencies 与 host 派生一致（product-package 任务的两条不变量）", async () => {
+  const fs = await import("node:fs");
+  const { readPkg, readShipPkg, shipDependencies, dshPin } = await import("../../scripts/shared/version.mts");
+  const real = readShipPkg();
+  // ① dependencies 是 host 运行时依赖的派生（剔除 workspace 在仓项）
+  assert.deepEqual(real.dependencies, shipDependencies());
+  // ② version 跟随仓库版本
+  assert.equal(real.version, readPkg("package.json").version);
+  // ③ 内核声明住 host，且派生进了交付清单
+  assert.ok(dshPin(), "packages/host/package.json 应声明 @deepseek-ai/dsh");
+  assert.equal(real.dependencies["@deepseek-ai/dsh"], dshPin());
 });

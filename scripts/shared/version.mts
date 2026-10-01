@@ -5,7 +5,7 @@
 // 布局原则：跨脚本共享/流程性构件放 scripts/shared/，领域特有随各自域或源码（src-cordis/build）。
 // 提供 cordis 包清单（src-cordis 顶层 roster bundle + plugins/*）与派生同步目标
 // （manifest + cordis 包）——版本号两个写手各管一段：主号归 `pnpm version`（唯一入口），
-// build metadata 段（`+dsh-…`）归 derive 从交付面清单的 dsh 声明派生（见
+// build metadata 段（`+dsh-…`）归 derive 从 host 声明的内核版本派生（见
 // scripts/derive/version-metadata.mts；派生同步见 scripts/derive/index.mts，
 // git 收口见 scripts/release/version.mts）。
 import fs from "node:fs";
@@ -59,8 +59,8 @@ export function patchVersion(upstreamVersion) {
   return `${cleanVersion(upstreamVersion)}+dshana-${cleanVersion(readPkg("package.json").version)}`;
 }
 
-// 完整版号：主号（剥掉既有 build 段）+ build metadata 段 `+dsh-<交付面 pin>`。
-// 这段 metadata 的来源只有一处——packaging/package.json 的 @deepseek-ai/dsh 声明；pnpm version
+// 完整版号：主号（剥掉既有 build 段）+ build metadata 段 `+dsh-<内核 pin>`。
+// 这段 metadata 的来源只有一处——packages/host/package.json 的 @deepseek-ai/dsh 声明；pnpm version
 // 算号会把 build 段剥掉，所以 bump 时由 version 钩子拼回，平时由 derive 的 version-metadata
 // 任务守着（pin 一动版号就跟，不等到下次 bump）。pin 未声明时只剩主号。
 export function fullVersion(version, dsh = dshPin()) {
@@ -68,17 +68,42 @@ export function fullVersion(version, dsh = dshPin()) {
   return dsh ? `${base}+dsh-${dsh}` : base;
 }
 
+// ---- 内核声明（packages/host/package.json）----
+// 内核 @deepseek-ai/dsh 的声明住 host：壳（@dshana/app）不声明内核，声明它的是 @dshana/host。
+// 这里是全链唯一的编程入口——派生、vendor 镜像 tag、集成漂移闸的 tag、产物版本串里的 `+dsh-…`
+// 都从 dshPin() 取。根 package.json 另留一条同名 devDependencies 供开发侧装那棵树，由 integrations
+// 闸守一致。
+export const HOST_PKG_REL = "packages/host/package.json";
+
+/** 内核宿主包清单（packages/host/package.json）。 */
+export const readHostPkg = () => readPkg(HOST_PKG_REL);
+
+/** 声明的 DSH 版本（未声明返回 null）。 */
+export function dshPin() {
+  const v = readHostPkg()?.dependencies?.["@deepseek-ai/dsh"];
+  return typeof v === "string" && v ? v : null;
+}
+
 // ---- 交付面清单（packaging/package.json）----
-// 运行时依赖的唯一真源：pack 物化按它做一次干净安装（工位 = 根 package.json + 这份 + 锁文件 +
-// 按目标生成的 workspace yaml）；vendor 镜像 tag、集成漂移闸的 tag、产物版本串里的 `+dsh-…`
-// 都从这里读。根 package.json 只留构建面（devDependencies），不声明运行时依赖。
+// 交付树的包根那份：pack 物化按它做一次干净安装（工位 = 这份 + 它的锁文件 + 按目标生成的
+// workspace yaml）。version 与 dependencies 都是派生物（derive 的 product-package 任务），
+// 实体只剩 name / type。dependencies 从 host 的内核声明派生，见 shipDependencies()。
 export const SHIP_PKG_REL = "packaging/package.json";
 
 /** 交付面清单（packaging/package.json）。 */
 export const readShipPkg = () => readPkg(SHIP_PKG_REL);
 
-/** 声明的 DSH 版本（未声明返回 null）。 */
-export function dshPin() {
-  const v = readShipPkg()?.dependencies?.["@deepseek-ai/dsh"];
-  return typeof v === "string" && v ? v : null;
+/**
+ * 交付面清单的运行时依赖：从 host 的 dependencies 派生，剔除 workspace 在仓项。
+ * 仓内包（@dshana/*）在构建期被 rspack 内联进各自 bundle，安装树里没有对应物，也解析不了
+ * workspace 协议；交付清单只列能物化的 registry 依赖。
+ */
+export function shipDependencies() {
+  const deps = readHostPkg()?.dependencies ?? {};
+  const out: Record<string, string> = {};
+  for (const [name, spec] of Object.entries(deps)) {
+    if (typeof spec === "string" && spec.startsWith("workspace:")) continue;
+    out[name] = spec as string;
+  }
+  return out;
 }
