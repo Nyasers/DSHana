@@ -18,7 +18,8 @@
 //   · NDJSON 逐行解析（lib/ndjson.js），done.assistant 完整保存回放（含 text/reasoning/
 //     toolCall 续接签名，lib/stream.js buildDoneChunks + 回放信封）；error 事件=失败不算成功；
 //   · 图片：DSH 消息含 ImageBlock 时经 attachment store 读字节 → base64+MIME（不传路径），
-//     缺 store 时报 UNSUPPORTED_CONTENT（边界见 DESIGN）。
+//     目标尺寸由附件原始尺寸按像素预算投影（lib/image-target.ts）；缺 store 时报
+//     UNSUPPORTED_CONTENT（边界见 DESIGN）。
 // DSH 侧工具循环不变：Hana 不替 DSH 执行传入工具 schema（tools 仅声明）；DSH 执行工具后把
 // role:toolResult 消息放回 messages（lib/messages.js 转换）。
 //
@@ -32,6 +33,7 @@ import { readNdjsonEvents } from "./lib/ndjson.ts";
 import { providerRoutes, listModelsForProvider, resolveModelInfo, supportedEfforts, modelPublishedMaxTokens, sameCatalog, HOST_MAX_OUTPUT_TOKENS } from "./lib/catalog.ts";
 import { toHanaMessages } from "./lib/messages.ts";
 import { buildDoneChunks, createHanaStreamState } from "./lib/stream.ts";
+import { imageRequestTarget } from "./lib/image-target.ts";
 import { resolveSessionIdentity, TASK_MAP_BROKEN, BINDING_UNAVAILABLE } from "./lib/identity.ts";
 import { errText } from "@dshana/shared/err-text.ts";
 
@@ -184,7 +186,7 @@ async function prepareImages(store, messages, signal) {
   const loaded = new Map();
   for (const [attId, ref] of out) {
     try {
-      const img = await store.readImageRequest(ref, { maxPixels: 4194304, maxBytes: 4000000 }, signal);
+      const img = await store.readImageRequest(ref, imageRequestTarget(ref), signal);
       const data = img && img.data ? img.data : null;
       if (!data) throw new Error("readImageRequest 未返回字节");
       loaded.set(attId, { data: Buffer.from(data).toString("base64"), mimeType: mimeOf(ref.mediaType) });

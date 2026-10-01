@@ -10,8 +10,9 @@
 // 因此 DSH 侧 provider route 与 model id 原样透传宿主字符串（不做二次命名/映射）。
 //
 // DSH LlmAdapter 目录语义（@deepseek-ai/dsh-llm types）：listModels 返回 { provider, id,
-// name, inputModalities? }；resolveModel 返回 LlmResolvedModelInfo 追加 context/
-// defaultMaxTokens/reasoning{efforts,defaultEffort}。reasoning effort 是 adapter 自有
+// name, inputModalities? }；resolveModel 返回 LlmResolvedModelInfo 追加 inputModalities/
+// context/defaultMaxTokens/reasoning{efforts,defaultEffort}。read_image 的能力门读的就是这一份
+// inputModalities（缺字段按「未声明图像输入」拒），所以两处同源投影。reasoning effort 是 adapter 自有
 // 词汇，但**透传到宿主** models.stream.reasoningEffort 会被宿主按模型 thinking levels 校验
 // （Loe 归一 + UNSUPPORTED_REASONING）——本模块只声明宿主接受面内的 effort。
 // 零依赖纯函数（node --test 可直接 import）。
@@ -145,6 +146,7 @@ export function resolveModelInfo(item) {
     provider: string;
     id: string;
     name: string;
+    inputModalities?: string[];
     context?: { contextWindow: number };
     defaultMaxTokens?: number;
     reasoning?: { efforts: { id: string; name: string }[]; defaultEffort?: string };
@@ -153,6 +155,11 @@ export function resolveModelInfo(item) {
     id: item.id,
     name: typeof item.name === "string" && item.name ? item.name : item.id,
   };
+  // 输入模态与 listModelsForProvider 同源投影：能力门（read_image）读的就是这里，
+  // 缺字段会被当成「模型未声明图像输入」而一律拒。
+  if (Array.isArray(item.input) && item.input.length) {
+    info.inputModalities = item.input.filter((x) => x === "text" || x === "image");
+  }
   if (Number.isInteger(item.contextWindow) && item.contextWindow > 0) {
     info.context = { contextWindow: item.contextWindow };
   }
