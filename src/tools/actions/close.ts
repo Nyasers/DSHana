@@ -5,11 +5,11 @@
 //
 // 语义对齐 subagent_close 的「收工」，但只到「取消当前活动工作」为止：DSH 会话是持久的、
 // 随时可 resume，没有实例槽位这回事，所以这里不假装释放实例。只停本工作，不影响共享
-// runtime 上的其他会话。取消编排见 lib/cancel-chain.ts（写 cancel 标记 → DSH session.cancel
+// runtime 上的其他会话。取消编排见 packages/session/src/cancel-chain.ts（写 cancel 标记 → DSH session.cancel
 // → 终态结算放后台：等 DSH 真中止；超窗未确认就升级宿主 cancel）。
 // **异步语义**：本动作只发请求就返回，不等确认窗口（15s 不进工具回调——占着回调等确认会
 // 堵住宿主通道）；确认或升级的证据随后台任务通知（投递回本会话）与 App 日志落定。
-import { requestCancel } from "#/lib/cancel-chain.ts";
+import { requestCancel } from "@dshana/session/cancel-chain.ts";
 import { resolveTarget } from "#/tools/shared/target.ts";
 import type { ToolCtx } from "@dshana/shared/host.ts";
 import type { ToolInputBase, ToolResult } from "#/tools/shared/types.ts";

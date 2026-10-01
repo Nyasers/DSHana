@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/lib/cancel-chain.test.mjs — src/lib/cancel-chain.js 纯函数单测（计划/超时解析）
+// tests/lib/cancel-chain.test.mjs — packages/session/src/cancel-chain.ts 纯函数单测（计划/超时解析）
 // 执行器依赖宿主 ctx（app-runtime 注入），仅在无宿主时验证纯面与设置注入路径。
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -15,7 +15,7 @@ import {
   settleCancelTerminal,
   resolveTaskTimeoutSec,
   resolveApprovalTimeoutMs,
-} from "../../src/lib/cancel-chain.ts";
+} from "@dshana/session/cancel-chain.ts";
 import { cancelAccepted } from "@dshana/shared/dsh-rpc.ts";
 
 const SID = "session-11111111-2222-3333-4444-555555555555";

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/approve-respond.ts — dshana approve 应答编排（App 主进程侧）
+// packages/session/src/approve-respond.ts — dshana approve 应答编排（App 主进程侧）
 //
 // 职责：
 //   用户/Agent 经 dshana(action=approve, sessionId, approvalId, outcome) 应答 →
@@ -18,7 +18,7 @@
 import { appCtx } from "@dshana/runtime/app-runtime.ts";
 import { taskBindingOf } from "@dshana/shared/task-binding.ts";
 import { errText } from "@dshana/shared/err-text.ts";
-import type { ToolResult } from "#/types/tool.ts";
+import type { ToolResult } from "./tool-result.ts";
 
 /** 宿主审批记录（ctx.tasks.respondApproval 的返回值；从 ctx 下钻，勿手抄形状）。 */
 type SettledApproval = Awaited<

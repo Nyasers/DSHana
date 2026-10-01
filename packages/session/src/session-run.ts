@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/session-run.ts — dshana open/reply 提交链（内部 action 词汇沿用 create/send）
+// packages/session/src/session-run.ts — dshana open/reply 提交链（内部 action 词汇沿用 create/send）
 //
 // 职责：execute（工具执行，App 主进程）内完成：
 //   ① ctx.tasks.create({ callToken, label, metadata }) —— callToken 只在这里消费，
 //      不落盘、不落日志；
 //   ② ensureManagedRuntime（未起则启动到 ready；单例，一个 runtime 服务多会话）；
-//   ③ 经 loopback HTTP Unary RPC（同一信封协议，见 lib/rpc-envelope.js）把
+//   ③ 经 loopback HTTP Unary RPC（同一信封协议，见 @dshana/shared/rpc-envelope.ts）把
 //      session.create / prompt 提交给受管 runtime 内的 DSH web 服务（模型选择随这两个请求
 //      一起下传，见集成 api-session-controller）；
 //   ④ 把 DSH 坐标（metadata.dsh：action/cwd/sessionId/rpcId/timeoutSec/approvalTimeoutMs）
 //      回写宿主任务记录（ctx.tasks.update）——绑定事实源就是这份记录，受管 runtime 的
 //      task-bridge / approval-bridge（packages/host/src/*）与 provider 身份判定直接读它
-//      （见 lib/task-binding.ts），没有私有映射文件；
-//   ⑤ 同 DSH session 串行化（lib/session-serialize.js）：锁持有到任务终态，不同 session
+//      （见 @dshana/shared/task-binding.ts），没有私有映射文件；
+//   ⑤ 同 DSH session 串行化（packages/session/src/session-serialize.ts）：锁持有到任务终态，不同 session
 //      互不干扰——否则同一 session 的两个任务会互相消费对方的终态事件。
 //
 // 提交是 fire-and-forget：submitDshTask 返回 { promise, ready }——ready 在 prompt 被 DSH
@@ -31,12 +31,12 @@ import { currentDshHome } from "@dshana/runtime/data-source.ts";
 import { ensureManagedRuntime } from "@dshana/runtime/managed-runtime.ts";
 import { nextRpcId } from "@dshana/shared/rpc-envelope.ts";
 import { isValidSessionId, dshMetadataFor } from "@dshana/shared/task-binding.ts";
-import { withSessionTurn, enterSessionTurn } from "#/lib/session-serialize.ts";
+import { withSessionTurn, enterSessionTurn } from "./session-serialize.ts";
 import { readDshDefaultModel } from "@dshana/runtime/config.ts";
 import { callerPlanDeps, resolveCallerPlan } from "@dshana/models/caller-model.ts";
 import { serviceBase } from "@dshana/runtime/service-base.ts";
 import { rpcViaControl, invokeControl } from "@dshana/runtime/controller.ts";
-import { resolveTaskTimeoutSec, resolveApprovalTimeoutMs, cancelSessionWork } from "#/lib/cancel-chain.ts";
+import { resolveTaskTimeoutSec, resolveApprovalTimeoutMs, cancelSessionWork } from "./cancel-chain.ts";
 
 /** 取错误的可读文本。catch 到的值类型未知，字段访问一律经这里。 */
 const errText = (e: unknown): string => ((e as any)?.message as string) || String(e);

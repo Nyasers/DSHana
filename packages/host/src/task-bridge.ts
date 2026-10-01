@@ -13,7 +13,7 @@
 //   终态（失败）  → hana.tasks.fail(taskId, message)
 // 终态判定语义（api-session/status false / session/event turn/end + reason.kind=error；
 // api-session/error 记 pendingFailure 不即终态）——同会话已由 App 侧串行化（一个会话同时
-// 只跑一个任务，见 lib/session-serialize.js），
+// 只跑一个任务，见 packages/session/src/session-serialize.ts），
 // 事件按 sessionId 路由到唯一当前任务，无跨任务串扰。
 //
 // 取消链：

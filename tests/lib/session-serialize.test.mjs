@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/lib/session-serialize.test.mjs — src/lib/session-serialize.js 同会话串行化单测
+// tests/lib/session-serialize.test.mjs — packages/session/src/session-serialize.ts 同会话串行化单测
 // 覆盖：同 session 后到任务等前任务退出、不同 session 并行、create 槽位先占后放。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { withSessionTurn, enterSessionTurn } from "../../src/lib/session-serialize.ts";
+import { withSessionTurn, enterSessionTurn } from "@dshana/session/session-serialize.ts";
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));

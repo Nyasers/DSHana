@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/cancel-chain.ts — dshana close / 执行超时取消编排（App 主进程侧）
+// packages/session/src/cancel-chain.ts — dshana close / 执行超时取消编排（App 主进程侧）
 //
 // 职责：
 //   ① 触发：dshana(action=close)（本模块 cancelDshTask）或执行超时看门狗

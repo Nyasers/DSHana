@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/lib/session-run.test.mjs — open 的 cwd 契约（src/lib/session-run.ts）
+// tests/lib/session-run.test.mjs — open 的 cwd 契约（packages/session/src/session-run.ts）
 //
 // 两段各钉各的：App 侧只判「绝对」（纯字符串，按平台语义）；「存在 / 是目录 / 有但用不了」是受管
 // runtime 的 cwd-check 回执，在 sessionCwdRejection 里翻成拒绝理由。errno 决定文案——「不存在」与
@@ -12,7 +12,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { assertAbsoluteSessionCwd, sessionCwdRejection } from "../../src/lib/session-run.ts";
+import { assertAbsoluteSessionCwd, sessionCwdRejection } from "@dshana/session/session-run.ts";
 
 // 路径的「绝对」是平台语义：/srv/work 在两边都算绝对，盘符路径只在 Windows 上算。
 test("绝对路径放过", () => {

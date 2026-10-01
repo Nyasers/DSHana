@@ -75,7 +75,7 @@ export function appLogger(): HanaPluginLoggerV2 | null {
 }
 
 /** 取 apply(ctx) 收到的宿主 ctx（HanaPluginContextV2；apply 未运行/已卸载返回 null）。
- * 业务模块（tools/<action>.ts → lib/session-run.js 等）需要 ctx.tasks/ctx.network/
+ * 业务模块（tools/<action>.ts → packages/session/src/session-run.ts 等）需要 ctx.tasks/ctx.network/
  * ctx.storage 等宿主能力时统一经此取，避免直接 import 业务模块形成环。 */
 export function appCtx(): HanaPluginContextV2 | null {
   const app = getAppRuntime();

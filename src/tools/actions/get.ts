@@ -28,7 +28,7 @@ import { rpcViaControl } from "@dshana/runtime/controller.ts";
 import { resolveTarget } from "#/tools/shared/target.ts";
 import type { ToolCtx } from "@dshana/shared/host.ts";
 import type { ToolInputBase } from "#/tools/shared/types.ts";
-import type { ToolResult } from "#/types/tool.ts";
+import type { ToolResult } from "@dshana/session/tool-result.ts";
 
 export const command = "get";
 export const summary = "回看某个 DSH 子代理最近一轮的最终结论（taskId 句柄或 sessionId 凭证）";
