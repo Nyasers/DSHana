@@ -14,18 +14,24 @@ import { ROOT } from "./root.mts";
 
 export { ROOT };
 
-// cordis 子插件包的目录清单（相对 ROOT；随包发布、随主版本同步，不独立发版）。
-// 判据是包内有自持构建描述 cordis.config.mjs——组装器（packages/app/src/cordis.ts）用同一条判据。
-// roster patch 是一份 cordis.patch.yml 文件（不是包），不在这里。
+// cordis 子插件包目录清单（相对 ROOT；随包发布、随主版本同步，不独立发版）。
+// 判据是包内有自持构建描述 cordis.config.mjs，而依赖方向由包图声明：@dshana/app 必须把这几个
+// 包写进自己的 dependencies（spec §2 的 app → clipboard / provider / theme 那条边），漏声明
+// 直接抛——否则它会被静默漏构建。roster patch 是一份 cordis.patch.yml 文件（不是包），不在这里。
 export function cordisPkgDirs() {
-  const out: string[] = [];
-  const packages = path.join(ROOT, "packages");
-  for (const name of fs.readdirSync(packages)) {
-    const p = path.join(packages, name);
-    if (!fs.statSync(p).isDirectory()) continue;
-    if (fs.existsSync(path.join(p, "cordis.config.mjs"))) out.push(`packages/${name}`);
+  const declared = new Set(Object.keys(readPkg("packages/app/package.json")?.dependencies ?? {}));
+  const dirs: string[] = [];
+  const packagesDir = path.join(ROOT, "packages");
+  for (const name of fs.readdirSync(packagesDir)) {
+    const dir = `packages/${name}`;
+    if (!fs.existsSync(path.join(ROOT, dir, "cordis.config.mjs"))) continue;
+    if (!declared.has(`@dshana/${name}`)) {
+      throw new Error(`${dir} 是 cordis 子插件，但 packages/app/package.json 未声明 @dshana/${name}`);
+    }
+    dirs.push(dir);
   }
-  return out.sort();
+  if (dirs.length === 0) throw new Error("没找到 cordis 子插件包（判据：packages/*/cordis.config.mjs）");
+  return dirs.sort();
 }
 
 /** 上面那批包各自的 package.json（版本同步的写回目标）。 */

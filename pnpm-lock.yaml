@@ -286,15 +286,24 @@ importers:
 
   packages/app:
     dependencies:
+      '@dshana/clipboard':
+        specifier: workspace:*
+        version: link:../clipboard
       '@dshana/models':
         specifier: workspace:*
         version: link:../models
+      '@dshana/provider':
+        specifier: workspace:*
+        version: link:../provider
       '@dshana/runtime':
         specifier: workspace:*
         version: link:../runtime
       '@dshana/shared':
         specifier: workspace:*
         version: link:../shared
+      '@dshana/theme':
+        specifier: workspace:*
+        version: link:../theme
       '@dshana/tools':
         specifier: workspace:*
         version: link:../tools
