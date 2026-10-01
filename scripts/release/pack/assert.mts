@@ -10,7 +10,7 @@ import { join } from "node:path";
 /**
  * 交付树 package.json 允许出现的键。
  * name / type / version 都由 scripts/release/pack/ship-manifest.mts 现生成（内核声明住 host，
- * 包根不再抄一份 dependencies）：装机侧不跑 pnpm（依赖已物化进安装树），这台只用于给包根 index.js
+ * 包根不列 dependencies）：装机侧不跑 pnpm（依赖已物化进安装树），这台只用于给包根 index.js
  * 定 ESM 解析。其余（scripts / devDependencies / packageManager / imports / private）是构建面，不进包。
  */
 export const PRODUCT_PACKAGE_KEYS = ["name", "type", "version"];

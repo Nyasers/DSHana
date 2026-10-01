@@ -39,41 +39,34 @@ import { applyIntegrations } from "./overlays.mts";
 import { shipManifest } from "./ship-manifest.mts";
 import { failUsage, targetSpec } from "./targets.mts";
 
-// 版本单一事实源：package.json（唯一来源，不支持命令行传版本——显式传版本容易与
-// manifest 不同步（历史教训）；版本同步走 pnpm version 发版流程，scripts/release/version.mts 收口）
+// 版本单一事实源：package.json（唯一来源；不支持命令行传版本，显式传的版本会与 manifest 不同步）。
+// 版本同步走 pnpm version 发版流程，由 scripts/release/version.mts 收口。
 const repoPkg = fs.readJsonSync(join(ROOT, "package.json"));
 const version = repoPkg.version;
 if (!version) throw new Error("package.json version 缺失");
-// 防回归：版本一致性强制校验（历史曾手改只 bump package.json，manifest.json version 停在
-// 旧值，发布包内版本与 tag 不一致）。打包版本必须同时等于 manifest.json 的 version。
+// 版本一致性校验：打包版本必须同时等于 manifest.json 的 version，只同步一处会出发布包版本与 tag 不一致的包。
 const manifestVersion = fs.readJsonSync(join(ROOT, "packages", "app", "src", "manifest.json")).version;
 if (version !== manifestVersion)
   throw new Error(
     `版本不一致：package.json ${version} ≠ manifest.json ${manifestVersion}（manifest 未同步，跑 node scripts/derive/index.mts 同步后再打包）`,
   );
 
-// 1. 静态项复制进交付目录 —— 它即 App 安装态（bundle + manifest + skills + roster patch），
-//    包根结构 = 标准插件形态（根 index.js + routes/ 壳，无 dist 这层目录）。
-//    app/（card.js/css 已 asset/source 内联进 bundle）与 routes/（壳由 build 生成）不再复制。
-const staticItems = [
-  "NOTICE",
-  "THIRD_PARTY_NOTICES.md",
-  // manifest.json 与 skills 已随 app 域（packages/app/src/manifest.json、packages/app/src/skills/，build:app 产出
-  // 交付目录副本），不再经根级静态复制
-  // 注：package.json 也不在清单里：仓库那份带 scripts/devDependencies/packageManager/imports
-  // （构建入口），包根那份由 ship-manifest.mts 现生成（只带 name / version / type）。
-  // 注：pnpm-workspace.yaml / pnpm-lock.yaml 不随包——安装侧不执行任何 pnpm install
-  // （依赖已物化进包），两份文件在本流程里没有消费方
-];
+// 1. 静态项补齐交付目录。构建阶段（build:app / build:cordis）已写出安装态骨架
+//    （index.js / manifest.json / assets/ / skills/ / ui/ / runtime/ / cordis.patch.yml），
+//    这里只补清单外的文本件；包根即 App 安装目录，不套 dist 这层目录。不在清单里的东西各有其宿主：
+//    · routes/ —— v2 走 ctx.routes.register，route 在 index.js 里注册，无目录产物；
+//    · app/（卡片脚本与样式）—— 构建时内联进 index.js bundle；
+//    · manifest.json / skills/ —— build:app 从 app 域（packages/app/src/）产出交付目录副本；
+//    · package.json —— ship-manifest.mts 现生成（只带 name / version / type）；仓库那份带
+//      scripts / devDependencies / packageManager / imports，是构建入口，不进包；
+//    · pnpm-workspace.yaml / pnpm-lock.yaml —— 不随包：装机侧不执行 pnpm install（依赖已物化进包）。
+const staticItems = ["NOTICE", "THIRD_PARTY_NOTICES.md"];
 const distDir = DIST_DIR;
 for (const item of staticItems) {
   const src = join(ROOT, item);
   if (!fs.pathExistsSync(src)) throw new Error(`静态项不存在：${item}`);
-  // dereference: true —— 历史为内置 pnpm 的符号链接复制（node_modules/pnpm →
-  // .pnpm/pnpm@…/node_modules/pnpm，zip 内置 pnpm）；现版本起 pnpm 改运行时引导
-  // （tools/lib/pnpm.js ensurePnpm 下载单文件到数据目录 pnpm-dist/），不再打包
-  // node_modules/pnpm——其余静态项（NOTICE / THIRD_PARTY_NOTICES.md 等）均为真实实体，
-  // dereference 恒为 no-op，保留无害。
+  // dereference: true —— 静态项都是真实文件，无符号链接，该选项不改变复制结果。包内不含 pnpm
+  // 二进制：依赖在打包时物化进安装树，装机侧不执行 pnpm。
   fs.copySync(src, join(distDir, item), {
     dereference: true,
     filter: (srcPath) => {
@@ -84,8 +77,8 @@ for (const item of staticItems) {
   });
 }
 
-// 1.2) 交付树的 package.json：现生成（name / version / type: module；内核声明住 host，包根不再
-//      抄一份依赖）。字段白名单与版本一致由下面的 assertProductPackage 把关。
+// 1.2) 交付树的 package.json：现生成（name / version / type: module；内核声明住 host，包根无依赖）。
+//      字段白名单与版本一致由下面的 assertProductPackage 把关。
 fs.writeFileSync(join(distDir, "package.json"), JSON.stringify(shipManifest(version), null, 2) + "\n");
 
 // 1.5 / 1.6) 产物断言：cordis 包版本与完整性、交付树 package.json、App ui/ 静态树（缺失即拒包）
@@ -95,8 +88,7 @@ assertUiTree(distDir);
 
 // 目标选择：`--target <名字>`（必须显式给，无默认）。
 // 用 node:util 的 parseArgs 结构化解析（strict + 禁位置参数）：未知选项、缺值、多余位置参数
-// 由它直接报错，不再手写字符串扫描——上一版手扫以 startsWith("--target") 判「认识的参数」，
-// 把 `--targets=x` 漏成了合法值，静默回落跑了一整次通用包。
+// 由它直接报错。手写字符串扫描会把 `--targets=x` 这类拼错的选项漏成合法值，静默回落去跑通用包。
 const spec = (() => {
   let parsed;
   try {
@@ -125,7 +117,7 @@ await minifyCordisStatics(CORDIS_DIR);
 //    GNU tar（Linux）不认 .zip 后缀会静默产出 tar 伪 zip
 const relDir = join(ROOT, "releases");
 fs.ensureDirSync(relDir);
-// 临时目录纪律（曾因多目标连跑堆积 2.2 GB 把宿主压崩）：
+// 临时目录纪律（多目标连跑会堆积数 GB）：
 //   · 起手清残留（上次运行/中途崩溃留下的）；
 //   · 用完即清（暂存树 + 铺平目录）；
 //   · 收尾全清由 package.json 的 postpackage 钩子承担（scripts/release/clean-tmp.mts），CI 里也可单独调。
@@ -180,10 +172,9 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
     archive.on("error", reject);
   });
   archive.pipe(output);
-  // 第二参数必须为 false：把 pkgDir 的**内容**放在 zip 根。
-  // 曾写成 archive.directory(pkgDir, base)，于是整包被套进一层 `<base>/`，宿主安装时在包根读
-  // manifest.json 读不到（manifest.json 落在 `<base>/manifest.json`），报 INVALID_MANIFEST 拒绝安装：
-  //   宿主校验器 `validate-app.mjs --archive <zip>` 会明确判 "ENOENT ... '<app>\\manifest.json'"。
+  // 第二参数必须为 false：把 pkgDir 的**内容**放在 zip 根。传 base 会把整包套进一层 `<base>/`，
+  // 宿主安装时在包根读 manifest.json 读不到（落在 `<base>/manifest.json`），报 INVALID_MANIFEST 拒装：
+  // 宿主校验器 `validate-app.mjs --archive <zip>` 会判 "ENOENT ... '<app>\\manifest.json'"。
   // 参照物：装得上的样例包 zip 根级就是 manifest.json / node_modules / ui / dist。
   archive.directory(pkgDir, false);
   await archive.finalize();
