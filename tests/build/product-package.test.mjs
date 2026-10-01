@@ -34,10 +34,10 @@ test("交付树 package.json：四件齐全且版本一致时放行", () => {
 
 test("构建面字段混进来就拒包（scripts/devDependencies/packageManager/imports/private）", () => {
   for (const extra of [
-    { scripts: { build: "node src/build.ts" } },
+    { scripts: { build: "node packages/app/src/build.ts" } },
     { devDependencies: { typescript: "^7.0.2" } },
     { packageManager: "pnpm@12.3.4" },
-    { imports: { "#/*": "./src/*" } },
+    { imports: {} },
     { private: true },
   ]) {
     withDist({ name: "dshana", version: VERSION, type: "module", dependencies: {}, ...extra }, (dir) => {

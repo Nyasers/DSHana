@@ -177,7 +177,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # package 作业在 job 内跑 prepackage（derive + build）后才打包，**derive 的结果不提交**；
-      # 而本作业要按版本号筛归档，读的是仓库里已提交的 src/manifest.json。若 tag 上那份 manifest
+      # 而本作业要按版本号筛归档，读的是仓库里已提交的 packages/app/src/manifest.json。若 tag 上那份 manifest
       # 落后于 package.json（历史出现过只 bump package.json 的情况），这里会按旧版本号筛空、
       # 连带把 publish 拖住。故先同步一次——manifest 任务只做 package.json#version → manifest，
       # 纯文件改写，不碰 submodule / git / build。

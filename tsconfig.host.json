@@ -1,6 +1,6 @@
 {
   // packages/host 域（受管 runtime 的宿主半）的类型检查配置。
-  // 与 tsconfig.src.json 同形；口径与失败清单见 scripts/shared/ts-diagnostics.mts。
+  // 口径与失败清单见 scripts/shared/ts-diagnostics.mts。
   // 路径相对本文件（仓库根）解析，不写绝对路径。
   "compilerOptions": {
     "noEmit": true,

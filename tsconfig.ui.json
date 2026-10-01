@@ -1,6 +1,6 @@
 {
   // packages/ui 域（壳的文档侧：壳页 / 会话卡 / 设置页脚本）的类型检查配置。
-  // 与 tsconfig.host.json 同形；口径与失败清单见 scripts/shared/ts-diagnostics.mts。
+  // 口径与失败清单见 scripts/shared/ts-diagnostics.mts。
   // 路径相对本文件（仓库根）解析，不写绝对路径。
   "compilerOptions": {
     "noEmit": true,

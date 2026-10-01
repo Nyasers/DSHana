@@ -1,0 +1,17 @@
+{
+  "name": "@dshana/app",
+  "version": "0.0.0",
+  "private": true,
+  "description": "壳：App v2 入口与交付面组装（main bundle、manifest 资产、构建链）",
+  "license": "MPL-2.0",
+  "type": "module",
+  "exports": {
+    "./*": "./src/*"
+  },
+  "dependencies": {
+    "@dshana/models": "workspace:*",
+    "@dshana/runtime": "workspace:*",
+    "@dshana/shared": "workspace:*",
+    "@dshana/tools": "workspace:*"
+  }
+}

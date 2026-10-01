@@ -2,11 +2,11 @@
 // Copyright (c) 2026 Nyasers
 //
 // tests/lib/shared-state.test.mjs — UI 跨面共享通道的键挑选（@dshana/shared/shared-state.ts）
-// 与 App 侧生命周期收尾（src/lib/shared-state.ts）
+// 与 App 侧生命周期收尾（packages/app/src/shared-state.ts）
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { SHARED_KEY_PREFIX, listSharedKeys } from "@dshana/shared/shared-state.ts";
-import { renewSharedState } from "../../src/lib/shared-state.ts";
+import { renewSharedState } from "@dshana/app/shared-state.ts";
 
 test("只认本通道前缀（广播键 dshana:settings 不是视图状态）", () => {
   const entries = {

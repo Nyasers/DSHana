@@ -181,6 +181,9 @@ importers:
       '@deepseek-ai/dsh-host-open-in-app':
         specifier: 0.2.0-rc.2
         version: 0.2.0-rc.2(@deepseek-ai/cordis@4.0.4)(@deepseek-ai/dsh-http-proxy@0.2.0-rc.2(@deepseek-ai/cordis@4.0.4))
+      '@dshana/app':
+        specifier: workspace:*
+        version: link:packages/app
       '@dshana/host':
         specifier: workspace:*
         version: link:packages/host
@@ -280,6 +283,21 @@ importers:
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
+
+  packages/app:
+    dependencies:
+      '@dshana/models':
+        specifier: workspace:*
+        version: link:../models
+      '@dshana/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      '@dshana/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@dshana/tools':
+        specifier: workspace:*
+        version: link:../tools
 
   packages/host:
     dependencies:

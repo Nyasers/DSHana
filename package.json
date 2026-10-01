@@ -7,14 +7,11 @@
     "node": "^22.22.2 || ^24.15.0 || ^26.8.1"
   },
   "type": "module",
-  "imports": {
-    "#/*": "./src/*"
-  },
   "scripts": {
-    "build": "pnpm run verify:integrations && pnpm run check:type && pnpm run build:host && pnpm run build:ui && pnpm run build:src && pnpm run build:cordis && pnpm run build:integrations",
+    "build": "pnpm run verify:integrations && pnpm run check:type && pnpm run build:host && pnpm run build:ui && pnpm run build:app && pnpm run build:cordis && pnpm run build:integrations",
     "build:host": "node packages/host/src/build.ts",
     "build:ui": "node packages/ui/src/build.ts",
-    "build:src": "node src/build.ts",
+    "build:app": "node packages/app/src/build.ts",
     "build:cordis": "node src-cordis/build.ts",
     "build:integrations": "node scripts/integrations/index.mts build",
     "verify:integrations": "node scripts/integrations/index.mts verify",
@@ -58,6 +55,7 @@
     "@deepseek-ai/cordis": "^4.0.4",
     "@deepseek-ai/dsh": "0.2.0-rc.2",
     "@deepseek-ai/dsh-host-open-in-app": "0.2.0-rc.2",
+    "@dshana/app": "workspace:*",
     "@dshana/host": "workspace:*",
     "@dshana/models": "workspace:*",
     "@dshana/runtime": "workspace:*",

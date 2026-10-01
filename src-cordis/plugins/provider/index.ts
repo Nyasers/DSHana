@@ -38,7 +38,7 @@ import { resolveSessionIdentity, TASK_MAP_BROKEN, BINDING_UNAVAILABLE } from "./
 import { errText } from "@dshana/shared/err-text.ts";
 
 // 目录重载钩子的键名：与 dsh-host 入口（packages/host/src/main.ts 经 packages/host/src/provider-hooks.ts）
-// **字面一致**。本插件是独立的 cordis 插件包，读不到 App 侧的 #/ 路径映射，两个 bundle
+// **字面一致**。本插件是独立的 cordis 插件包，与 App 侧的模块图不通，两个 bundle
 // 同进程不能互相 import（与 ACTIVE_MODEL_KEY / __dshanaHana 同款约定）。
 const PROVIDER_RELOAD_GLOBAL_KEY = "__dshanaReloadModels";
 

@@ -1,6 +1,6 @@
 {
   // packages/session 域（会话编排：提交链、串行化、取消链、审批应答、任务归属）的类型检查配置。
-  // 与 tsconfig.host.json 同形；口径与失败清单见 scripts/shared/ts-diagnostics.mts。
+  // 口径与失败清单见 scripts/shared/ts-diagnostics.mts。
   // 路径相对本文件（仓库根）解析，不写绝对路径。
   "compilerOptions": {
     "noEmit": true,
