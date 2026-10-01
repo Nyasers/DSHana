@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/runtime/approval-bridge.test.mjs — src/runtime/approval-bridge.js 的纯函数部分
+// tests/runtime/approval-bridge.test.mjs — packages/host/src/approval-bridge.ts 的纯函数部分
 //
 // 这里锁的是**归属校验通则**的第一半（审批侧）：宿主审批记录自带 parentTaskId，
 // 它和我们映射里以为的 taskId 必须一致，否则 fail-closed 拒绝（绝不放行）。
@@ -20,7 +20,7 @@ import {
   summarizeOperation,
   describeEscalation,
   buildApprovalLabel,
-} from "../../src/runtime/approval-bridge.ts";
+} from "@dshana/host/approval-bridge.ts";
 
 test("approvalOwnsTask：parentTaskId 一致才放行", () => {
   assert.equal(approvalOwnsTask({ parentTaskId: "task-1" }, "task-1"), true);

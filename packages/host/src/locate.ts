@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/runtime/locate.ts — DSH 依赖定位（受管 runtime 子进程侧，dsh-host 专用）
+// packages/host/src/locate.ts — DSH 依赖定位（受管 runtime 子进程侧，dsh-host 专用）
 //
 // depsRoot（默认 App dataDir
 // runtime/node_modules）下定位

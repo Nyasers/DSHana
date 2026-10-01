@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/lib/watch-sse.test.mjs — src/lib/watch-sse.js 单测（SSE 解码/帧解释/终态与审批映射/
+// tests/lib/watch-sse.test.mjs — packages/shared/src/watch-sse.ts 单测（SSE 解码/帧解释/终态与审批映射/
 // watch 对账循环）
 import { test } from "node:test";
 import assert from "node:assert/strict";

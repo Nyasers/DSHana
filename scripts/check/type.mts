@@ -22,6 +22,11 @@ import { errText } from "../shared/err-text.mts";
 /** 逐域清单：tsconfig 在仓库根（相对路径相对它解析），ours 判定"哪些诊断算我们的"。 */
 const DOMAINS = [
   {
+    name: "host",
+    config: "tsconfig.host.json",
+    ours: (file) => file.startsWith("packages/host/"),
+  },
+  {
     name: "shared",
     config: "tsconfig.shared.json",
     ours: (file) => file.startsWith("packages/shared/"),

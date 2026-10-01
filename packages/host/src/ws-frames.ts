@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/ws-frames.ts — 极小的 WebSocket 帧编解码（中继的帧搬运与测试共用）
+// packages/host/src/ws-frames.ts — 极小的 WebSocket 帧编解码（中继的帧搬运与测试共用）
 //
-// 为什么自持：中继的运行时依赖纪律是零第三方包（见 src/runtime/bridge.ts 的说明），而
+// 为什么自持：中继的运行时依赖纪律是零第三方包（见 packages/host/src/bridge.ts 的说明），而
 // 帧搬运只需要「读头 / 原样转发 / 组一帧」这三件事，用不着完整的 ws 实现。本模块只做
 // 这三件，且刻意不碰任何未改动的帧——原样转发的帧保持字节级不变，协议细节（掩码、
 // 分片、ping/pong/close）交给两端自己协商。

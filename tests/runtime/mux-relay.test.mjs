@@ -10,8 +10,8 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { createHash } from "node:crypto";
 
-import { startDshBridge } from "../../src/runtime/bridge.ts";
-import { OPCODE, framePayload, readFrameHeader, serializeFrame } from "../../src/lib/ws-frames.ts";
+import { startDshBridge } from "@dshana/host/bridge.ts";
+import { OPCODE, framePayload, readFrameHeader, serializeFrame } from "../../packages/host/src/ws-frames.ts";
 import {
   ChunkAssembler,
   MUX_CHUNK_BYTES,

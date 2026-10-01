@@ -6,7 +6,7 @@
 // v1（0.1.2）形态：消费宿主 provider 路由（models.json + apiKey）注册官方 PiAiAdapter 直连
 // 各 provider 端点。本 adapter 不再有 apiKey/baseURL/直连：**推理在受管
 // runtime 内经 connectAppRuntime().models 发起**（受管子进程与 DSH 同进程，hana client
-// 由 dsh-host.mjs 挂 globalThis.__dshanaHana，见 src/runtime/main.ts）：
+// 由 dsh-host.mjs 挂 globalThis.__dshanaHana，见 packages/host/src/main.ts）：
 //   · 目录：hana.models.list() → 显式 provider/model 选择（id 原样透传，不二次映射）；
 //   · 推理：hana.models.stream({ requestId, provider, model, messages, systemPrompt, tools,
 //     reasoningEffort?, maxTokens?, temperature?, taskId? })——requestId 由本 adapter 自管
@@ -35,7 +35,7 @@ import { buildDoneChunks, createHanaStreamState } from "./lib/stream.ts";
 import { resolveSessionIdentity, TASK_MAP_BROKEN, BINDING_UNAVAILABLE } from "./lib/identity.ts";
 import { errText } from "@dshana/shared/err-text.ts";
 
-// 目录重载钩子的键名：与 dsh-host 入口（src/runtime/main.ts 经 src/lib/provider-hooks.ts）
+// 目录重载钩子的键名：与 dsh-host 入口（packages/host/src/main.ts 经 packages/host/src/provider-hooks.ts）
 // **字面一致**。本插件是独立的 cordis 插件包，读不到 App 侧的 #/ 路径映射，两个 bundle
 // 同进程不能互相 import（与 ACTIVE_MODEL_KEY / __dshanaHana 同款约定）。
 const PROVIDER_RELOAD_GLOBAL_KEY = "__dshanaReloadModels";
@@ -102,7 +102,7 @@ function warn(ctx, msg) {
 }
 
 // ---- 活动模型 requestId 注册表（globalThis 与 dsh-host bundle 共享）----
-// 键名与 src/lib/model-requests.ts MODEL_REQUEST_GLOBAL_KEY 字面一致（本插件与 task-bridge
+// 键名与 packages/host/src/model-requests.ts MODEL_REQUEST_GLOBAL_KEY 字面一致（本插件与 task-bridge
 // 分属 cordis 插件 bundle / dsh-host bundle，不能互相 import——同进程 globalThis 约定，
 // 与 __dshanaHana 同款）。结构：Map<dshSessionId, Set<requestId>>；取消消费侧只读。
 const ACTIVE_MODEL_KEY = "__dshanaActiveModelRequests";
@@ -351,7 +351,7 @@ export function buildHanaAdapter(LlmAdapter, LlmError, deps) {
         }
       }
       // 活动模型流注册（task-bridge 的取消/审批链按会话定向 models.cancel，
-      // 只停本工作不误停他人会话；键契约见 src/lib/model-requests.ts MODEL_REQUEST_GLOBAL_KEY）
+      // 只停本工作不误停他人会话；键契约见 packages/host/src/model-requests.ts MODEL_REQUEST_GLOBAL_KEY）
       registerActiveModelRequest(sessionId, requestId);
       try {
         const response = await deps.hana.models.stream(request);

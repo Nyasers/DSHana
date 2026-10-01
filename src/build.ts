@@ -9,8 +9,8 @@
 //   index.js            rspack 单 bundle（入口具名导出 apply + default.apply）
 //   assets/icon.png     App 身份图标（manifest.icon 指向的包内真实图片）
 //   skills/             App skills（dshana，SKILL.md 随包分发）
-//   runtime/dsh-host.mjs  受管 Node runtime 入口（见 src/runtime/；
-//                         cordis/ 产物由 build:cordis 另产出 .cache/cordis，随包分发）
+//   runtime/dsh-host.mjs  受管 Node runtime 入口（由 @dshana/host 构建产出，本入口把它拷进
+//                         交付目录的 runtime/；cordis/ 产物由 build:cordis 另产出 .cache/cordis）
 //   ui/                   App ui/ 静态树（migration step 4b/5；cards route 指向壳页，
 //                         见 src/ui/——相对资源路径，宿主以 /api/apps/<id>/ui<route> 服务）
 // 路由：v2 走 ctx.routes.register（单个 route app），不生成 .cache/dist/routes/ 目录——宿主只认注册
@@ -23,7 +23,6 @@ import { basename, dirname, join } from "node:path";
 
 import fs from "fs-extra";
 import config from "#/rspack.config.mts"; // 同目录（src 域配置随源码）
-import runtimeConfig from "#/runtime/rspack.config.mts"; // runtime/ 域（受管 runtime 入口）
 import uiConfig from "#/ui/rspack.config.mts"; // ui/ 域（壳页脚本 bundle；浏览器 SDK 构建期内联）
 import {
   collectSource,
@@ -31,8 +30,8 @@ import {
   extraMinify,
   assertNoStaticFileUrl,
 } from "../scripts/build/common.mts";
-// 交付目录常量（.cache/dist）与 Node 版本断言（本入口以 TypeScript 直跑，依赖原生类型剥离）
-import { DIST_DIR } from "../scripts/shared/paths.mts";
+// 交付目录常量（.cache/dist、.cache/host）与 Node 版本断言（本入口以 TypeScript 直跑，依赖原生类型剥离）
+import { DIST_DIR, HOST_DIR } from "../scripts/shared/paths.mts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), ".."); // src/ → 仓库根
 
@@ -77,9 +76,14 @@ async function compile(cfg, label) {
 // 主 bundle 编译（rspack output.clean 清空 .cache/dist 后写入 index.js）
 await compile(config, "build:src 主 bundle");
 
-// 受管 runtime 入口编译（.cache/dist/runtime/dsh-host.mjs；clean:false 只追加，见 config 头注释）
-await compile(runtimeConfig, "build:src runtime bundle");
-console.log("runtime bundle -> .cache/dist/runtime/dsh-host.mjs（受管 runtime 入口，migration step 2）");
+// 受管 runtime 入口就位（由 @dshana/host 先行构建产出；本入口只负责把它摆进交付目录的 runtime/，
+// 好让下面的静态 URL 回写、二次压缩与断言覆盖到它。缺件即拒，不出一份没有 runtime 的 App）。
+const hostEntry = join(HOST_DIR, "dsh-host.mjs");
+if (!fs.pathExistsSync(hostEntry)) {
+  throw new Error("受管 runtime 入口缺失（" + hostEntry + "）：先跑 pnpm run build:host");
+}
+fs.copySync(hostEntry, join(DIST_DIR, "runtime", "dsh-host.mjs"));
+console.log("runtime bundle -> .cache/dist/runtime/dsh-host.mjs（受管 runtime 入口，来自 .cache/host）");
 
 // 1) 静态化路径字面量回写（dist 主区）
 rewriter(DIST_DIR);

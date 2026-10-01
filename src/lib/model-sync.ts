@@ -20,7 +20,7 @@ import { errText } from "@dshana/shared/err-text.ts";
 
 /** 宿主 app 事件里本模块关心的类型。 */
 export const MODELS_CHANGED_EVENT = "models-changed";
-/** runtime 控制面上重拉目录的动作名（处理见 src/runtime/main.ts）。 */
+/** runtime 控制面上重拉目录的动作名（处理见 packages/host/src/main.ts）。 */
 export const MODELS_REFRESH_ACTION = "models-refresh";
 
 /**

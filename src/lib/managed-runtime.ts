@@ -20,7 +20,7 @@
 //     stdout/stderr 归宿主 runtime 日志（有界，可经 ctx.runtime.watch/info 取），不由
 //     App 自己落盘。
 //
-// 参数契约（与 src/runtime/options.ts 对偶；增删需两处同步 + tests/）：
+// 参数契约（与 packages/host/src/options.ts 对偶；增删需两处同步 + tests/）：
 //   唯一的子进程入参是私有运行时配置文件路径（argv[1]），由 writeRuntimeConfigFile 落盘、
 //   buildRuntimeConfig 生产 schema；命令行不带明文参数（凭据/端口不进 argv）。
 import { join } from "node:path";
@@ -175,7 +175,7 @@ interface RuntimeConfig {
 }
 
 /**
- * 私有运行时配置构造（与 src/runtime/options.js normalizeRuntimeConfig 对偶）。opts:
+ * 私有运行时配置构造（与 packages/host/src/options.ts normalizeRuntimeConfig 对偶）。opts:
  * { dataDir, dshHome?, dshPort, bridgePort, bridgeKey, controlKey, depsRoot?, readyMarker? }
  * dshHome = 当前数据源的 DSH_HOME；缺省时子进程回落 dataDir/.dsh。
  * 敏感项（bridgeKey）只进本对象→写 0600 文件→argv 只传路径，不出现在 argv/日志。
@@ -229,7 +229,7 @@ export function classifyRuntimeFailure(info) {
   if (!info || typeof info !== "object") return { kind: "unknown", userText: START_ERROR_HINTS.unknown };
   const code = typeof info.exitCode === "number" ? info.exitCode : null;
   const state = info.state || "";
-  // 子进程退出码由 src/runtime/main.ts EXIT 约定：7=port/boot/ready 失败、4=deps、5=seed…
+  // 子进程退出码由 packages/host/src/main.ts EXIT 约定：7=port/boot/ready 失败、4=deps、5=seed…
   if (code === 7 || /port/i.test(String(info.signal || ""))) {
     return { kind: "port-busy", userText: START_ERROR_HINTS["port-busy"] };
   }
@@ -394,7 +394,7 @@ export async function preflightSource({ dataDir, dshHome, profile }) {
     return { ok: false, error: "宿主 runtime 不可用，无法预检新数据源" };
   }
   const resultPath = join(dataDir, RUNTIME_HANDOFF_DIR, "preflight-" + randomBytes(9).toString("hex") + ".json");
-  // 预检形态不需要端口/凭据：只给目标 home 与结果路径（见 src/runtime/options.ts 的 preflight 支）
+  // 预检形态不需要端口/凭据：只给目标 home 与结果路径（见 packages/host/src/options.ts 的 preflight 支）
   const configPath = writeRuntimeConfigFile(dataDir, { dataDir, dshHome, profile, preflight: true, resultPath });
   const cleanup = () => {
     try { rmSync(configPath, { force: true }); } catch { /* 忽略 */ }

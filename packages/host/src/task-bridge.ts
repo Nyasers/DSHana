@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/runtime/task-bridge.ts — 受管 runtime 内 DSH 事件 → Hana task 回投
+// packages/host/src/task-bridge.ts — 受管 runtime 内 DSH 事件 → Hana task 回投
 //
 // 位置与角色：本模块随 .cache/dist/runtime/dsh-host.mjs 打进受管 runtime（与 DSH 同进程），
 // main.js 在 DSH boot 就绪后挂载。它订阅 DSH cordis ctx 的会话事件（进程内 ctx.on——
@@ -34,7 +34,7 @@
 import { createTaskBindingIndex, type TaskBinding, type TaskBindingIndex } from "@dshana/shared/task-binding.ts";
 import { runWatchReconcile } from "@dshana/shared/watch-sse.ts";
 import { rpcSessionCancel } from "@dshana/shared/dsh-rpc.ts";
-import { cancelSessionModelRequests } from "#/lib/model-requests.ts";
+import { cancelSessionModelRequests } from "./model-requests.ts";
 import { errText } from "@dshana/shared/err-text.ts";
 
 // 事件白名单（与 v1 dsh-events 的会话事件子集一致；其余事件不订阅）

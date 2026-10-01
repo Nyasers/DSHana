@@ -9,7 +9,7 @@
 //
 // 只进类型层：本文件被 `import type` 引用，swc 剥掉后 bundle 里不留 @hana/app-sdk 的运行时
 // 依赖（该包是 devDependency，运行时由宿主提供；运行时真需要的那处值导入见
-// src/runtime/main.ts 的 connectAppRuntime）。
+// packages/host/src/main.ts 的 connectAppRuntime）。
 //
 // 我们自己的形状不在这里：归属某个模块的语义形状（如归属校验结论、解析出的目标）由该模块
 // 自己导出，就近可读，避免把这里做成什么都装的桶。

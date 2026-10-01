@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/runtime/mux-relay.ts — 中继的 WS 帧搬运（分片模式）
+// packages/host/src/mux-relay.ts — 中继的 WS 帧搬运（分片模式）
 //
 // 只在页面声明支持分片时启用（见 lib/mux-chunks.ts 的 MUX_CHUNK_QUERY）；未声明的连接走
 // bridge.ts 的原始 socket 双向透传，两侧各自成立。
@@ -23,7 +23,7 @@
 //
 // 上游侧不掩码（它是 ws 服务端）；本中继发给客户端的方向同样不掩码（我们对宿主是服务端）。
 import { ChunkWindow, MUX_CHUNK_BYTES, decodeMuxControlFrame, encodeChunk, sliceBytes } from "@dshana/shared/mux-chunks.ts";
-import { OPCODE, framePayload, readFrameHeader, serializeFrame, type WsFrameHeader } from "#/lib/ws-frames.ts";
+import { OPCODE, framePayload, readFrameHeader, serializeFrame, type WsFrameHeader } from "./ws-frames.ts";
 
 const OP_CONTINUATION = OPCODE.CONTINUATION;
 const OP_TEXT = OPCODE.TEXT;
