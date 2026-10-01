@@ -1,0 +1,14 @@
+{
+  "name": "@dshana/runtime",
+  "version": "0.0.0",
+  "private": true,
+  "description": "App 侧运行环境：受管 runtime 管理（启动与中继访问面）与数据源、切换链、旧数据迁移",
+  "license": "MPL-2.0",
+  "type": "module",
+  "exports": {
+    "./*": "./src/*"
+  },
+  "dependencies": {
+    "@dshana/shared": "workspace:*"
+  }
+}

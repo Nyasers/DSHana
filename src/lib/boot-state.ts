@@ -16,7 +16,7 @@
 //     代理前缀为「路径」形态（相对同源），
 //     壳页在同源下拼 `origin + proxyPrefix` 使用。
 //
-// 阶段（phase，来自 src/lib/managed-runtime.ts 单例）：
+// 阶段（phase，来自 packages/runtime/src/managed-runtime.ts 单例）：
 //   idle（未启动）/ starting（启动中：runtime 拉起 + 插件就位 + 服务监听）/ ready（就绪）/
 //   error（上次启动失败，含 code+userText 供重试指引）/ stopped（已停止）
 export const APP_ID = "dshana";

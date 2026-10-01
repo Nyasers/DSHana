@@ -20,13 +20,13 @@
 //
 // 与宿主「取消 UI」的反向触发（host task canceled/aborted → DSH cancel）在受管 runtime
 // 的 task-bridge 侧实现（watch 宿主任务 SSE），不在此模块（App 进程内看不到 DSH 事件）。
-import { appCtx, appDataDir, appConfig } from "#/lib/app-runtime.ts";
-import { APP_SETTING_DEFAULTS } from "#/lib/config.ts";
+import { appCtx, appDataDir, appConfig } from "@dshana/runtime/app-runtime.ts";
+import { APP_SETTING_DEFAULTS } from "@dshana/runtime/config.ts";
 import { errText } from "@dshana/shared/err-text.ts";
 import { createTaskBindingIndex, type TaskBinding } from "@dshana/shared/task-binding.ts";
 import { rpcSessionCancel, cancelAccepted } from "@dshana/shared/dsh-rpc.ts";
-import { rpcViaControl } from "#/lib/controller.ts";
-import { readSettingsSync } from "#/lib/data-source.ts";
+import { rpcViaControl } from "@dshana/runtime/controller.ts";
+import { readSettingsSync } from "@dshana/runtime/data-source.ts";
 
 /** 宿主任务记录（ctx.tasks.get 的返回值；从 ctx 下钻，勿手抄形状）。 */
 type HostTaskRecord = Awaited<

@@ -4,7 +4,7 @@
 // packages/host/src/options.ts — 受管 runtime 子进程的私有配置读取（dsh-host 专用）
 //
 // 形态（对齐官方样例 hana-dsh）：**入参只有一份私有配置文件的路径**（argv[1]），命令行不带
-// 明文参数——配置由 App 主进程（lib/managed-runtime.js）以 0600 写入 dataDir/.runtime-tmp/，
+// 明文参数——配置由 App 主进程（packages/runtime/src/managed-runtime.ts）以 0600 写入 dataDir/.runtime-tmp/，
 // 子进程读后立即 unlink。bridgeKey 这类「不能让回环端口变成第二个无鉴权面」的凭据绝不出现在
 // argv（进程列表可见）、环境变量或日志里。
 //

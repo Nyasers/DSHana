@@ -14,8 +14,8 @@
 // 订阅面按 APPS.md 的承诺用：ctx.bus.subscribe(callback, filter) 的 filter.types 不做额外
 // 类型过滤（app_event 也在可观察范围内），回调拿到的是只读投影、至少隔一个异步回合才到。
 // runtime 未就绪时不动：它启动时本来就要重新拉一次目录。
-import { bridgeAccess } from "#/lib/managed-runtime.ts";
-import { invokeControl } from "#/lib/controller.ts";
+import { bridgeAccess } from "@dshana/runtime/managed-runtime.ts";
+import { invokeControl } from "@dshana/runtime/controller.ts";
 import { errText } from "@dshana/shared/err-text.ts";
 
 /** 宿主 app 事件里本模块关心的类型。 */

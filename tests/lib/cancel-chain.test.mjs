@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { initAppRuntime } from "../../src/lib/app-runtime.ts";
+import { initAppRuntime } from "@dshana/runtime/app-runtime.ts";
 import {
   planCancel,
   requestCancel,

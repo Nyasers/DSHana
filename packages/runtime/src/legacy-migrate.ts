@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/legacy-migrate.ts — dsh-hanako 旧插件（v1）数据迁移逻辑（纯 node 内置依赖）
+// packages/runtime/src/legacy-migrate.ts — dsh-hanako 旧插件（v1）数据迁移逻辑（纯 node 内置依赖）
 //
 // 目标：旧插件数据布局
 //   <hanakoHome>/plugin-data/dsh-hanako/{dsh-home, logs, config.json, node_modules, pnpm-dist}
@@ -35,7 +35,7 @@
 import { readFileSync, writeFileSync, renameSync, existsSync, statSync, mkdirSync, readdirSync } from "node:fs";
 import path from "node:path";
 // 目标私有源目录名与运行时实际读取处同源（data-source.js）；本模块不再自带一份字面值
-import { PRIVATE_HOME_NAME } from "#/lib/data-source.ts";
+import { PRIVATE_HOME_NAME } from "./data-source.ts";
 import { errText } from "@dshana/shared/err-text.ts";
 
 export const LEGACY_SUBDIR = "dsh-hanako"; // plugin-data 下的旧插件数据目录名

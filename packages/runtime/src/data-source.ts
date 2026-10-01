@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/data-source.ts — DSH 数据来源（private / shared）解析与自持设置存储
+// packages/runtime/src/data-source.ts — DSH 数据来源（private / shared）解析与自持设置存储
 //
 // 为什么自持一份设置文件而不是用宿主 contributes.settings / ctx.storage：
 //   · 切换数据源是**生命周期动作**（要停旧 runtime、起新 runtime），不是"一组值"；
@@ -22,8 +22,8 @@ import { homedir } from "node:os";
 import { readFileSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { isAbsolute, join, normalize } from "node:path";
-import { appDataDir, getAppRuntime } from "#/lib/app-runtime.ts";
-import { APP_SETTING_DEFAULTS, resolveApprovalTimeoutSec, resolveDefaultTimeoutSec } from "#/lib/config.ts";
+import { appDataDir, getAppRuntime } from "./app-runtime.ts";
+import { APP_SETTING_DEFAULTS, resolveApprovalTimeoutSec, resolveDefaultTimeoutSec } from "./config.ts";
 
 export const SETTINGS_VERSION = 1;
 export const SOURCE_MODES = Object.freeze(["private", "shared"]);

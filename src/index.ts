@@ -5,10 +5,10 @@
 //
 // 形态：宿主在隔离 App 进程内加载本文件并调用 apply(ctx)（入口契约兼容具名 apply /
 // default.apply / 默认函数，两种都导出）。apply 完成注册后立即返回，不等任何长活服务结束。
-// 宿主进程内单例不存在：运行包（dataDir / ctx）由 lib/app-runtime.js 在 apply 期注入。
+// 宿主进程内单例不存在：运行包（dataDir / ctx）由 packages/runtime/src/app-runtime.ts 在 apply 期注入。
 //
 // 启动模型：apply **不**启动 DSH，只注册工具/路由并返回。受管 runtime 走「工具首调兜底 +
-// 需要时自启」（lib/managed-runtime.js 的 ensureManagedRuntime 单例，single-flight 幂等）；
+// 需要时自启」（packages/runtime/src/managed-runtime.ts 的 ensureManagedRuntime 单例，single-flight 幂等）；
 // apply 级自动链在注册完成后后台拉起，所以壳页打开时通常已是 ready/starting。list/get 经
 // 控制面读官方查询面，需要 runtime 就绪。
 //
@@ -22,9 +22,9 @@
 // 同锚点：DSH 的 runtime 解析模式从安装树算解析代，不建链接）；受管子进程入口 = runtime/dsh-host.mjs。
 //
 // 日志：只走宿主 ctx.logger；ctx.logger 缺失或抛错时回落 stderr（宁可吵，不静默丢日志）。
-import { initAppRuntime, toolCtxFrom } from "#/lib/app-runtime.ts";
+import { initAppRuntime, toolCtxFrom } from "@dshana/runtime/app-runtime.ts";
 // 受管 DSH runtime：启动封装 + 释放（disposer 负责收尾）
-import { disposeManagedRuntime, ensureManagedRuntime } from "#/lib/managed-runtime.ts";
+import { disposeManagedRuntime, ensureManagedRuntime } from "@dshana/runtime/managed-runtime.ts";
 // 工具模块（导出 name/description/parameters/execute；v2 工具名即注册名，无自动前缀）
 import * as dshanaTool from "#/tools/index.ts";
 // 壳页/诊断面单 registrar（ctx.routes.register 只挂本 App 后端面；到受管 runtime 的服务
@@ -59,7 +59,7 @@ export function apply(ctx) {
     try { console.error(`[dshana] [${level}]`, ...args); } catch { /* 忽略 */ }
   };
   log("info", "app apply（App v2 会话开始；日志走 ctx.logger，App 侧不写文件日志）");
-  // App v2 运行包（module-scope；工具执行经 lib/app-runtime.js 读取）
+  // App v2 运行包（module-scope；工具执行经 packages/runtime/src/app-runtime.ts 读取）
   const app = {
     ctx,
     dataDir,

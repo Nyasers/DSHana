@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/app-runtime.ts — dshana App v2 运行包持有者
+// packages/runtime/src/app-runtime.ts — dshana App v2 运行包持有者
 //
 // 为什么存在（替代 v1 的 globalThis.__dshHanako 宿主单例）：
 // v1 时代工具代码通过 globalThis.__dshHanako 存取「宿主进程内」共享状态（dataDir、

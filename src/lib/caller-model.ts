@@ -15,8 +15,8 @@
 // agent 来续话就把模型换掉。
 
 import { readCallerCardModel, type CardModel } from "#/lib/agent-models.ts";
-import { readDshDefaultModel } from "#/lib/config.ts";
-import { readSettingsSync } from "#/lib/data-source.ts";
+import { readDshDefaultModel } from "@dshana/runtime/config.ts";
+import { readSettingsSync } from "@dshana/runtime/data-source.ts";
 import { errText } from "@dshana/shared/err-text.ts";
 import { servedHas, servedModels, type ServedModel } from "#/lib/host-models.ts";
 

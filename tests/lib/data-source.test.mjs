@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/lib/data-source.test.mjs — src/lib/data-source.js 数据来源解析与自持设置存储单测
+// tests/lib/data-source.test.mjs — packages/runtime/src/data-source.ts 数据来源解析与自持设置存储单测
 // 覆盖：设置校验（未知键/模式/shared 绝对路径/profile）、路径归一与 sourceId 稳定性、
 // 存储读默认/往返/原子写/lastShared/损坏与版本拒绝、shared 目录校验（含 canonical 回写）。
 // 注：期望值一律经 path.normalize 生成，测试在 win32/darwin/linux 下同义。
@@ -21,7 +21,7 @@ import {
   privateHomeOf,
   sourceOf,
   validateSettings,
-} from "../../src/lib/data-source.ts";
+} from "@dshana/runtime/data-source.ts";
 
 /** 临时目录夹具（await 回调体，退出时清理）。 */
 const withTempDir = async (fn) => {

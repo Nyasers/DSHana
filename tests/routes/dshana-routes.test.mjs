@@ -13,8 +13,8 @@ import {
   DASHANA_ROUTE_PREFIX,
   dshanaRoutesTable,
 } from "../../src/routes/dshana-routes.ts";
-import { initAppRuntime } from "../../src/lib/app-runtime.ts";
-import { resetDataSourceStore } from "../../src/lib/data-source.ts";
+import { initAppRuntime } from "@dshana/runtime/app-runtime.ts";
+import { resetDataSourceStore } from "@dshana/runtime/data-source.ts";
 
 function makeFakeApp() {
   const routes = [];
@@ -304,7 +304,7 @@ test("GET /dshana/models: 宿主目录读取失败 → ok=false + error（不假
   assert.match(ctx.body.error, /app\/models\.infer/);
 });
 
-// ---- 数据源切换：入口暂时撤下（实现留在 lib/source-switch.ts 与其单测里）----
+// ---- 数据源切换：入口暂时撤下（实现留在 packages/runtime/src/source-switch.ts 与其单测里）----
 
 test("POST /dshana/settings/restart: 入口暂撤 → 一律 503 SWITCH_DISABLED，不碰切换链", async () => {
   const { app, routes } = makeFakeApp();

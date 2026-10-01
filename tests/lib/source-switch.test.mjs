@@ -9,7 +9,7 @@
 //   3. 回滚：停过就按旧源重起，只冻过就解冻；落盘失败要把半成品停掉。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createSourceSwitcher, controlAccepted } from "../../src/lib/source-switch.ts";
+import { createSourceSwitcher, controlAccepted } from "@dshana/runtime/source-switch.ts";
 
 const PRIVATE = { mode: "private", path: null, profile: "dshana", approvalTimeoutSec: 30, defaultTimeoutSec: 1800 };
 const SHARED = { mode: "shared", path: "D:/dsh", profile: "web", approvalTimeoutSec: 30, defaultTimeoutSec: 1800 };

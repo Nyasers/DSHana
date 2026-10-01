@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/runtime/mux-relay.test.mjs — 中继分片模式的端到端契约（真起中继 + 真 socket）
+// tests/host/mux-relay.test.mjs — 中继分片模式的端到端契约（真起中继 + 真 socket）
 // 覆盖：超限帧被切成多片且客户端重组逐字相同；回执驱动窗口（1 MiB 消息能全部走完）；
 // 不回执时在窗口处停住且不断链；控制帧（ping/pong）不被大消息吞掉；
 // 未声明分片时仍走原样透传（不切片、无回执）。

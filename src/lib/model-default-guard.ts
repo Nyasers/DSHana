@@ -20,7 +20,7 @@
 // 时机：受管 runtime 就绪那一次（apply 自动链完成时），以及宿主 `models-changed` 之后。
 // runtime 未就绪、宿主目录取不到、段只读时一律只记日志——不重试、不阻塞 App 加载。
 import { readAgentCardModel, type CardModel } from "#/lib/agent-models.ts";
-import { bridgeAccess } from "#/lib/managed-runtime.ts";
+import { bridgeAccess } from "@dshana/runtime/managed-runtime.ts";
 import { readDefaultModel, writeDefaultModel } from "#/lib/model-settings.ts";
 import { isModelsChangedEvent } from "#/lib/model-sync.ts";
 import { errText } from "@dshana/shared/err-text.ts";

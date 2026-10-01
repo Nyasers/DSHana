@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/service-base.ts — 受管 runtime 服务访问面（叶子模块，供 App 侧多模块共用）
+// packages/runtime/src/service-base.ts — 受管 runtime 服务访问面（叶子模块，供 App 侧多模块共用）
 //
-// 从 session-run.js 拆出（cancel-chain 与 session-run 都要用、互为消费者时避免环依赖）。
+// 独立成模块的理由：cancel-chain 与 session-run 都要用它，同在 session-run 里会互为消费者成环。
 //
 // 形态：App 主进程不直连 DSH 端口（DSH 鉴权面
 // 已交回官方 connection，宿主代理剥 cookie，直连必 401），而是访问 runtime 内的中继——
 // base = http://127.0.0.1:<bridgePort>（中继端口由父进程随机选取、随启动注册给宿主，
 // 无 servicePort 设置项），请求带 header `x-hana-dsh-bridge: <bridgeKey>`
 // （中继转发时注入 DSH cookie）。
-import { bridgeAccess } from "#/lib/managed-runtime.ts";
+import { bridgeAccess } from "./managed-runtime.ts";
 
 /**
  * 受管 runtime 服务 base = 中继地址（http://127.0.0.1:<随机中继端口>）。

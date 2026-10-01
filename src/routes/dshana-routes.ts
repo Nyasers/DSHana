@@ -28,13 +28,13 @@
 //                            可直接换进 DOM 的状态行 HTML。卡页在非终态期间慢轮询，终态即停）
 //
 // 依赖注入（可测性）：deps = { appId, version, getSnapshot(), start(), stop(), log() }。
-// 默认实现经 src/lib/managed-runtime.ts 读取真实单例；测试注入 fake。
+// 默认实现经 packages/runtime/src/managed-runtime.ts 读取真实单例；测试注入 fake。
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { managedRuntimeDetails, ensureManagedRuntime, stopManagedRuntime, bridgeAccess } from "#/lib/managed-runtime.ts";
+import { managedRuntimeDetails, ensureManagedRuntime, stopManagedRuntime, bridgeAccess } from "@dshana/runtime/managed-runtime.ts";
 import { buildBootSnapshot, APP_ID } from "#/lib/boot-state.ts";
-import { dataSources, sourceOf } from "#/lib/data-source.ts";
-// 数据源切换（lib/source-switch.ts）的入口暂时撤下：链未在真机验证过，见 POST /dshana/settings/restart。
+import { dataSources, sourceOf } from "@dshana/runtime/data-source.ts";
+// 数据源切换（packages/runtime/src/source-switch.ts）的入口暂时撤下：链未在真机验证过，见 POST /dshana/settings/restart。
 import { groupHostCatalog } from "#/lib/model-catalog-view.ts";
 import {
   createTaskBindingIndex,
@@ -46,7 +46,7 @@ export const DASHANA_ROUTE_PREFIX = "/dshana";
 
 // ---- 应用设置（GET/POST /dshana/settings）----
 // 两个超时与数据模式同栈：一份设置（dataDir/settings.json）、一个 revision，
-// 缺省值由 lib/config.ts 的 APP_SETTING_DEFAULTS 单点持有（30 / 1800）。
+// 缺省值由 packages/runtime/src/config.ts 的 APP_SETTING_DEFAULTS 单点持有（30 / 1800）。
 // 为什么不用 schema 门：设置标签页直接渲染本 App 自己的页
 // （contributes.settings.ui.route），配置经 App 自己的后端读写，宿主不再代画表单。
 // 写带 expectedRevision：不匹配回 409，不静默覆盖。
@@ -368,7 +368,7 @@ export function registerDshanaRoutes(app, deps) {
     });
 
     // ---- POST /dshana/settings/restart：数据源切换（入口暂撤）----
-    // 切换链（lib/source-switch.ts）还没跑通：停旧、起新、失败回滚这条链没有在真机上验证过，
+    // 切换链（packages/runtime/src/source-switch.ts）还没跑通：停旧、起新、失败回滚这条链没有在真机上验证过，
     // 而它第一步就会停掉正在跑的 runtime。为避免半成品被误触发，这里先只回一句明确的
     // 「未启用」，不碰任何状态。实现原地保留，等切换做完把这层闸去掉即可恢复原状。
     app.post(DASHANA_ROUTE_PREFIX + "/settings/restart", (c) =>

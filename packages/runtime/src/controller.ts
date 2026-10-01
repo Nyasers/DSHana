@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/controller.ts — DSH 控制面客户端（App 侧；对齐官方样例 hana-dsh 的 controller.invoke）
+// packages/runtime/src/controller.ts — DSH 控制面客户端（App 侧；对齐官方样例 hana-dsh 的 controller.invoke）
 //
 // 落点：App 工具（dshana）**不直接访问 DSH HTTP**，而是经宿主 `ctx.runtime.fetch(runtimeId,
 // "/_control")` 打到 runtime 内中继的控制面（packages/host/src/bridge.ts 的 /_control，controlKey 鉴权），
@@ -10,8 +10,8 @@
 //   · DSH 凭据只存在于 runtime 进程内；
 //   · 单一入口，便于收据/超时/取消统一治理。
 //
-// 信封契约复用 lib/rpc-envelope.js（client-request + server-response），与 runtime 侧转发一致。
-import { bridgeAccess } from "#/lib/managed-runtime.ts";
+// 信封契约复用 @dshana/shared/rpc-envelope.ts（client-request + server-response），与 runtime 侧转发一致。
+import { bridgeAccess } from "./managed-runtime.ts";
 import { buildClientRequest, parseServerResponse } from "@dshana/shared/rpc-envelope.ts";
 
 /** 低层控制面调用：invoke("rpc", { body }) → runtime 转发 → DSH 的 server-response 原文。 */

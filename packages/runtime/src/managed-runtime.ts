@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/managed-runtime.ts — dshana 受管 DSH runtime 启动封装
+// packages/runtime/src/managed-runtime.ts — dshana 受管 DSH runtime 启动封装
 //
 // 职责：
 //   managedStart/ensureManagedRuntime：父进程随机选取「中继端口（注册给宿主的 service.port）
@@ -26,8 +26,8 @@
 import { join } from "node:path";
 import { mkdirSync, writeFileSync, chmodSync, rmSync, readFileSync } from "node:fs";
 import { randomInt, randomBytes } from "node:crypto";
-import { appDataDir, appLogger, getAppRuntime } from "#/lib/app-runtime.ts";
-import { currentSource } from "#/lib/data-source.ts";
+import { appDataDir, appLogger, getAppRuntime } from "./app-runtime.ts";
+import { currentSource } from "./data-source.ts";
 import { parseRuntimeFatal, fatalReportText } from "@dshana/shared/runtime-error.ts";
 import type { HanaPluginContextV2 } from "@dshana/shared/host.ts";
 // 依赖随包物化在安装目录 <installRoot>/node_modules，

@@ -41,7 +41,7 @@ export type { AppTaskApprovalOutcome } from "@hana/app-sdk";
 
 /**
  * 工具侧统一日志出口：抹平「宿主 ctx.logger」与「App 入口 ctx.log」的名字差异
- * （见 lib/app-runtime.ts toolCtxFrom 与 index.ts 的 toolLog）。
+ * （见 packages/runtime/src/app-runtime.ts toolCtxFrom 与 index.ts 的 toolLog）。
  */
 export interface ToolLogger {
   debug(...args: unknown[]): void;
