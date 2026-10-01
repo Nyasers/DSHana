@@ -3,7 +3,7 @@
 //
 // tests/e2e/session-read.probe.mjs — 官方会话读面真机探测（开发者本机用，非 node --test 默认集）
 //
-// 目的：验证 get 的取数（tools/actions/get）走官方读面时**入参形状与取数策略**是否成立。已经证实的结论（本脚本
+// 目的：验证 get 的取数（packages/tools/src/actions/get）走官方读面时**入参形状与取数策略**是否成立。已经证实的结论（本脚本
 // 每次运行都会复核）：
 //   ① session/list 走一元 HTTP 的 `_request` 信封；items[].projections.values 带 title /
 //      tokenUsage / sessionStats，projections.asOfSeq 是投影折叠到的 seq；
@@ -27,7 +27,7 @@ import { randomBytes, randomInt } from "node:crypto";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildClientRequest, parseServerResponse } from "@dshana/shared/rpc-envelope.ts";
-import { lastRoundOutput } from "../../src/tools/actions/get.ts";
+import { lastRoundOutput } from "@dshana/tools/actions/get.ts";
 import { distDirOf } from "../../scripts/shared/paths.mts";
 
 const here = dirname(fileURLToPath(import.meta.url));

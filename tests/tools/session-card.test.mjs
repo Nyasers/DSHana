@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/tools/session-card.test.mjs — 会话卡字面量（src/tools/shared/card.ts）与工具回执的形状。
+// tests/tools/session-card.test.mjs — 会话卡字面量（packages/tools/src/shared/card.ts）与工具回执的形状。
 //
 // open 挂一张会话卡（route = ui/stream.html：聊天流里画一行入口，取出到黑板 / 拆窗后同一页
 // 注入完整 DSH 现场），reply 不挂——一个会话一张把手就够。卡字面量的字段规则由宿主定：
@@ -12,8 +12,8 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { doExecute } from "../../src/tools/index.ts";
-import { SESSION_CARD_ROUTE, sessionCard } from "../../src/tools/shared/card.ts";
+import { doExecute } from "@dshana/tools/index.ts";
+import { SESSION_CARD_ROUTE, sessionCard } from "@dshana/tools/shared/card.ts";
 
 const SID = "session-0f0e0d0c-0b0a-4009-0807-060504030201";
 const here = dirname(fileURLToPath(import.meta.url));

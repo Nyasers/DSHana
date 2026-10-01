@@ -12,7 +12,7 @@ import {
   textFromMessageBlocks,
   titleFromProjections,
   titleFromRecords,
-} from "../../src/tools/actions/get.ts";
+} from "@dshana/tools/actions/get.ts";
 
 const SID = "session-11111111-2222-3333-4444-555555555555";
 

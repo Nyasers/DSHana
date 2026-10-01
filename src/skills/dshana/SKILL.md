@@ -37,7 +37,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 
 ## 工具手册：`dshana(action, …)`
 
-宿主 Agent 面**仅此一个工具**（一个插件一个同名工具，动作以顶层 `action` 区分），装配见 `src/tools/index.ts`，各动作见 `src/tools/actions/<action>.ts`，每个文件 = 一个同名操作。
+宿主 Agent 面**仅此一个工具**（一个插件一个同名工具，动作以顶层 `action` 区分），装配见 `packages/tools/src/index.ts`，各动作见 `packages/tools/src/actions/<action>.ts`，每个文件 = 一个同名操作。
 
 语义对齐 subagent：`open` ≈ `subagent`（创建即带任务）、`reply` ≈ `subagent_reply`（按句柄续同一个）、`close` ≈ `subagent_close`（收工）；`get` / `list` / `approve` 是本项目特色（subagent 没有）。
 

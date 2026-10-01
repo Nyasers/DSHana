@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/tools/index.ts — dshana 工具统一入口（一个插件一个同名工具 + subcommand）
+// packages/tools/src/index.ts — dshana 工具统一入口（一个插件一个同名工具 + subcommand）
 //
 // 形态：一个插件只暴露一个与插件同名的工具（name = "dshana"），动作以顶层 action
 // （subcommand）区分；parameters 用 oneOf 为每个子命令单独声明参数字段集，模型的参数面因此
@@ -23,17 +23,17 @@
 //
 // 数据目录取 ctx.dataDir（宿主 app-data/<id>/）；工具名以本文件 name 为单一事实源
 // （v2 注册不自动加前缀，重名会被宿主当场拒掉）。
-import * as openAction from "#/tools/actions/open.ts";
-import * as replyAction from "#/tools/actions/reply.ts";
-import * as closeAction from "#/tools/actions/close.ts";
-import * as getAction from "#/tools/actions/get.ts";
-import * as approveAction from "#/tools/actions/approve.ts";
+import * as openAction from "./actions/open.ts";
+import * as replyAction from "./actions/reply.ts";
+import * as closeAction from "./actions/close.ts";
+import * as getAction from "./actions/get.ts";
+import * as approveAction from "./actions/approve.ts";
 import type { ToolCtx } from "@dshana/shared/host.ts";
-import type { ToolInputBase } from "#/tools/shared/types.ts";
+import type { ToolInputBase } from "./shared/types.ts";
 // 查任务不经本工具：会话靠句柄（宿主 taskId）定位，任务清单由宿主提供给 Agent 的内置任务查询
 // 工具承担（模型侧，本环境是 check_pending_tasks）——dshana 的 open/reply 建的后台任务本来
 // 就在那份清单里，本工具面不开“先列清单再操作”的门。
-// 官方 session/list 仍被 get 用来定位读位点（见 tools/actions/get.ts）。
+// 官方 session/list 仍被 get 用来定位读位点（见 packages/tools/src/actions/get.ts）。
 
 /** subcommand 注册表（顺序即 description 的列举顺序）。 */
 const ACTIONS = [openAction, replyAction, closeAction, getAction, approveAction];

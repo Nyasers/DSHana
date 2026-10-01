@@ -26,10 +26,10 @@ import { initAppRuntime, toolCtxFrom } from "@dshana/runtime/app-runtime.ts";
 // 受管 DSH runtime：启动封装 + 释放（disposer 负责收尾）
 import { disposeManagedRuntime, ensureManagedRuntime } from "@dshana/runtime/managed-runtime.ts";
 // 工具模块（导出 name/description/parameters/execute；v2 工具名即注册名，无自动前缀）
-import * as dshanaTool from "#/tools/index.ts";
+import * as dshanaTool from "@dshana/tools/index.ts";
 // 壳页/诊断面单 registrar（ctx.routes.register 只挂本 App 后端面；到受管 runtime 的服务
 // 由宿主按 /api/apps/<id>/routes/_runtime/<runtimeId>/ 自动代理，本文件不转发）
-import { registerDshanaRoutes, defaultDshanaRouteDeps } from "#/routes/dshana-routes.ts";
+import { registerDshanaRoutes, defaultDshanaRouteDeps } from "@dshana/tools/routes/dshana-routes.ts";
 // 宿主模型/提供商变更 → 受管 runtime 重拉目录（见 packages/models/src/model-sync.ts 的动因）
 import { installHostModelSync } from "@dshana/models/model-sync.ts";
 // 默认模型对账：DSH 缺省模型必须落在宿主目录里（见 packages/models/src/model-default-guard.ts 的动因）

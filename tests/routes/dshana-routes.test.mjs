@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/routes/dshana-routes.test.mjs — src/routes/dshana-routes.js 挂载/响应单测（fake app/ctx）
+// tests/routes/dshana-routes.test.mjs — packages/tools/src/routes/dshana-routes.ts 挂载/响应单测（fake app/ctx）
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -12,7 +12,7 @@ import {
   defaultDshanaRouteDeps,
   DASHANA_ROUTE_PREFIX,
   dshanaRoutesTable,
-} from "../../src/routes/dshana-routes.ts";
+} from "@dshana/tools/routes/dshana-routes.ts";
 import { initAppRuntime } from "@dshana/runtime/app-runtime.ts";
 import { resetDataSourceStore } from "@dshana/runtime/data-source.ts";
 

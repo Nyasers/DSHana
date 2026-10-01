@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/tools/shared/card.ts — 会话卡字面量（工具返回值 details.card）
+// packages/tools/src/shared/card.ts — 会话卡字面量（工具返回值 details.card）
 //
 // 一张卡，两个挂载态（页 = ui/stream.html，见 packages/ui/src/stream.html 与 packages/ui/src/app-shell.ts）：
 //   · 聊天流里：只画一行入口（会话坐标）；不注入 DSH、不带票据，所以不叠也不冻结。
@@ -16,7 +16,7 @@
 //   · aspectRatio 是 "宽:高" 字符串（渲染端按它 split 出比例），不是数字；聊天卡的
 //     aspectRatio 与 cardForm 会在「取出」时复制到黑板绑定上，形态随过去。
 // 查询串在提交时快照（卡页不做轮询，只取一次状态），?ts= 防缓存。
-import { APP_ID } from "#/lib/boot-state.ts";
+import { APP_ID } from "@dshana/runtime/boot-state.ts";
 
 /** 会话卡页（App ui/ 静态树内的 stream 面）。 */
 export const SESSION_CARD_ROUTE = "/stream.html";

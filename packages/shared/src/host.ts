@@ -52,6 +52,6 @@ export interface ToolLogger {
 
 /**
  * 工具执行上下文：apply 期宿主入口 ctx 的浅拷贝 + 统一日志出口。
- * tools/actions/<action>.ts 的 `run(input, ctx, deps)` 收到的就是它。
+ * packages/tools/src/actions/<action>.ts 的 `run(input, ctx, deps)` 收到的就是它。
  */
 export type ToolCtx = AppEntryContext & { log: ToolLogger };
