@@ -36,8 +36,8 @@ integrations/<短名>/
 
 `node scripts/integrations/index.mts verify`（已接进 `pnpm run build`，在 build:app 之前）：
 
-1. **镜像版本一致**：`vendor/deepseek-harness` 必须含 tag `dsh-v<版本>`，版本取自交付面清单
-   `packaging/package.json` 的 `dependencies["@deepseek-ai/dsh"]`（仓库根那份 devDependencies 里的
+1. **镜像版本一致**：`vendor/deepseek-harness` 必须含 tag `dsh-v<版本>`，版本取自
+   `packages/host/package.json` 的 `dependencies["@deepseek-ai/dsh"]`（仓库根那份 devDependencies 里的
    同名声明的版本必须与它一致，闸会当场比）；
 2. **overlay 未过期**：对每个 `files[].path`，重算**当前镜像该 tag 下同名文件**的 sha256，
    与清单里记录的比对。不一致 = 上游动过 → **构建失败**，并指出该 rebase 哪个文件、更新哪个哈希。

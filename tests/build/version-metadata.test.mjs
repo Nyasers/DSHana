@@ -31,7 +31,7 @@ test("完整版号幂等：拿已完整的版号再拼一次不变", () => {
   assert.equal(cleanVersion(once), "1.0.0-rc.26");
 });
 
-test("当前树的 version metadata 段与交付面 pin 一致（derive --check 的同一条判断）", () => {
-  assert.ok(dshPin(), "packaging/package.json 未声明 dependencies['@deepseek-ai/dsh']");
+test("当前树的 version metadata 段与 host 声明的内核版本一致（derive --check 的同一条判断）", () => {
+  assert.ok(dshPin(), "packages/host/package.json 未声明 dependencies['@deepseek-ai/dsh']");
   assert.deepEqual(inspect(), []);
 });

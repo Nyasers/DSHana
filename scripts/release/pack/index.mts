@@ -83,8 +83,8 @@ for (const item of staticItems) {
   });
 }
 
-// 1.2) 交付树的 package.json：复制 packaging/package.json（手写实体，只有 version 由 derive 的
-//      product-package 任务同步；不复制仓库根那份——它是构建入口，见 packaging/README.md）。
+// 1.2) 交付树的 package.json：复制 packaging/package.json（实体只有 name / type，version 与
+//      dependencies 由 derive 的 product-package 任务同步；不复制仓库根那份——它是构建入口，见 packaging/README.md）。
 //      字段白名单与版本一致由下面的 assertProductPackage 把关。
 fs.copySync(join(ROOT, "packaging", "package.json"), join(distDir, "package.json"));
 
