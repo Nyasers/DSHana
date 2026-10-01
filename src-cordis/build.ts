@@ -10,7 +10,7 @@
 //     产物 index.js bundle），theme 与 clipboard 另出 client 半（client.ts → client.js，tsdown
 //     closure-factory）；
 //   .cache/dist/cordis.patch.yml：我们的 roster patch（对官方行的覆盖 + @dshana/* insert）——
-//     profile 由壳自己建并维护（<DSH_HOME>/profiles/web，层列钉在 packages/host/src/main.ts），
+//     profile 由壳自己建并维护（<DSH_HOME>/profiles/dshana，层列钉在 packages/host/src/main.ts），
 //     这份文件由 runtime 经 runProfile 的 patchFiles 作**启动期 overlay** 传进去（排在所有层之上）。
 // node_modules/@dshana/**：把上面那份 scope 照原样再落一份——仓库树扮演「安装树」，
 //   DSH 的 runtime 解析模式从安装树 + bundle 依赖图算解析代、不建链接。出包时 pack 作同样的事。

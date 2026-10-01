@@ -15,7 +15,7 @@
 //   3. 设本进程自有 env（DSH_HOME / DSHANA_*，不污染宿主进程环境）；
 //   4. 依赖就位（随包物化在 <installRoot>/node_modules，无运行时安装）；
 //   5. 产物在位（@dshana 子插件在 <installRoot>/node_modules/@dshana，roster patch 在
-//      <installRoot>/cordis.patch.yml）与自有 profile 就位（<DSH_HOME>/profiles/web，壳自己
+//      <installRoot>/cordis.patch.yml）与自有 profile 就位（<DSH_HOME>/profiles/dshana，壳自己
 //      建并维护，见 ensureOwnProfile）；
 //   6. 子进程内 boot DSH（locateDsh → appBoot.loadLayeredEnv → loadProfileDirectory →
 //      profileBoot.runProfile；resolvedProfile = 自有 profile，patchFiles = roster patch——
@@ -65,11 +65,10 @@ export const READY_TIMEOUT_MS = 60000;
 const DISPOSE_TIMEOUT_MS = 4000;
 /**
  * 自有 profile 名（目录落在 <DSH_HOME>/profiles/<这个名字>）。
- * 名字沿用 v2 一直用的 `web`，**不能改叫 `dshana`**：v1 插件当年就在 <源 home>/profiles/dshana
- * 留了一本目录（后者里有指向 v1 插件安装目录的 junction），共享数据源下会被我们的 boot 读到，
- * 见 packages/runtime/src/legacy-migrate.ts 的头注释；那本旧目录不迁移，也不该被接回来。
+ * 用 app 自己的名字，与上游 desktop 的 `profiles/desktop` 同一规矩。目录里已有别的文件时
+ * `initProfile` 不覆盖：那份 `cordis.patch.yml`（用户层，DSH 设置面在写）照旧参与层序。
  */
-const PROFILE_NAME = "web";
+const PROFILE_NAME = "dshana";
 /**
  * 自有 profile 的 bundle 层列——**钉住的值，不跟上游模板漂**：
  *   `@deepseek-ai/dsh-base`（共享底座）→ `@deepseek-ai/dsh-web-app`（浏览器面：roster / 传输层 /
