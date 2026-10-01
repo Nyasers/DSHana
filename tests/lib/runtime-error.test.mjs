@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/lib/runtime-error.test.mjs — packages/shared/src/lib/runtime-error.ts 纯函数单测（node --test）
+// tests/lib/runtime-error.test.mjs — packages/shared/src/runtime-error.ts 纯函数单测（node --test）
 // 覆盖：嵌套 AggregateError 展开、诊断尾巴的有界与截断标记、结构化失败报告的解析与合成。
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -11,7 +11,7 @@ import {
   parseRuntimeFatal,
   fatalReportText,
   DIAGNOSTIC_TRUNCATED,
-} from "@dshana/shared/lib/runtime-error.ts";
+} from "@dshana/shared/runtime-error.ts";
 
 test("runtimeErrorState: 普通 Error / 字符串 / 未知值", () => {
   assert.deepEqual(runtimeErrorState(new Error("boom")), { message: "boom" });

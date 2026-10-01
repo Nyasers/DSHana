@@ -12,7 +12,7 @@
 //
 // 信封契约复用 lib/rpc-envelope.js（client-request + server-response），与 runtime 侧转发一致。
 import { bridgeAccess } from "#/lib/managed-runtime.ts";
-import { buildClientRequest, parseServerResponse } from "@dshana/shared/lib/rpc-envelope.ts";
+import { buildClientRequest, parseServerResponse } from "@dshana/shared/rpc-envelope.ts";
 
 /** 低层控制面调用：invoke("rpc", { body }) → runtime 转发 → DSH 的 server-response 原文。 */
 export async function invokeControl(ctx, action, args, opts: { timeoutMs?: number } = {}) {

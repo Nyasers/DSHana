@@ -9,7 +9,7 @@
 // 该 approvalId 对应的 DSH 等待者）。
 import { respondApprovalAction } from "#/lib/approve-respond.ts";
 import { resolveTarget } from "#/tools/shared/target.ts";
-import type { ToolCtx } from "@dshana/shared/types/host.ts";
+import type { ToolCtx } from "@dshana/shared/host.ts";
 import type { ToolInputBase, ToolResult } from "#/tools/shared/types.ts";
 
 /** approve 入参：approvalId 是唯一句柄（必填），outcome 缺省按 DSH 侧语义处理。 */

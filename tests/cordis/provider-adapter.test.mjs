@@ -11,7 +11,7 @@
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { buildHanaAdapter } from "../../src-cordis/plugins/provider/index.ts";
-import { TASK_BINDING_GLOBAL_KEY } from "@dshana/shared/lib/task-binding.ts";
+import { TASK_BINDING_GLOBAL_KEY } from "@dshana/shared/task-binding.ts";
 
 const SID = "session-11111111-2222-3333-4444-555555555555";
 // big = 现实里那种“1M 上下文 / 384k 输出”的模型（published 上限远大于宿主的请求闸 65536）

@@ -8,7 +8,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { classifyDshEvent, BRIDGE_EVENTS, SessionBridge, startTaskBridge } from "../../src/runtime/task-bridge.ts";
-import { createTaskBindingIndex } from "@dshana/shared/lib/task-binding.ts";
+import { createTaskBindingIndex } from "@dshana/shared/task-binding.ts";
 
 test("classifyDshEvent: api-session/status true/false", () => {
   assert.deepEqual(classifyDshEvent("api-session/status", ["s1", false]), { kind: "status", sessionId: "s1", running: false });

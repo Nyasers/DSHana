@@ -11,10 +11,10 @@
 // 注意 models.stream **不接受** scope 字段（scope:"app" 是 models.utility 的参数）。
 //
 // 绑定事实源是**宿主任务记录**的 metadata.dsh（taskId / dshSessionId / status），由
-// 受管 runtime 的 packages/shared/src/lib/task-binding.ts 建索引，经 globalThis.__dshanaTaskBindings
+// 受管 runtime 的 packages/shared/src/task-binding.ts 建索引，经 globalThis.__dshanaTaskBindings
 // 暴露给本插件（provider 是 cordis 子插件 bundle，dsh-host 是 runtime bundle，两者同进程
 // 但不同 bundle，不能互相 import——与 __dshanaHana / __dshanaActiveModelRequests 同款约定；
-// 键名字面与 packages/shared/src/lib/task-binding.ts 的 TASK_BINDING_GLOBAL_KEY 一致）。
+// 键名字面与 packages/shared/src/task-binding.ts 的 TASK_BINDING_GLOBAL_KEY 一致）。
 //
 // 三态判定（**App 身份仅限“用户直接在 WebUI 使用”**）：
 //   ① 无绑定            ⇒ App 身份。**只有**这里与下一条才允许 App 身份。
@@ -31,7 +31,7 @@
 // 判定函数是纯函数（可被 node --test 直接 import）；宿主读取单独一层，只在 adapter 运行期用。
 import { errText } from "./err-text.ts";
 
-/** 绑定索引的 globalThis 键（与 packages/shared/src/lib/task-binding.ts 的 TASK_BINDING_GLOBAL_KEY 一致）。 */
+/** 绑定索引的 globalThis 键（与 packages/shared/src/task-binding.ts 的 TASK_BINDING_GLOBAL_KEY 一致）。 */
 export const TASK_BINDING_GLOBAL_KEY = "__dshanaTaskBindings";
 
 /** 绑定读取失败（宿主不可达/记录损坏）的 code。 */

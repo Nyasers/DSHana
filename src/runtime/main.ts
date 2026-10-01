@@ -32,7 +32,7 @@ import { parseRuntimeConfig, UsageError, USAGE } from "#/runtime/options.ts";
 import { startDshBridge } from "#/runtime/bridge.ts";
 import { checkCwd } from "#/runtime/cwd-check.ts";
 import { info, warn, err } from "#/runtime/log.ts";
-import { runtimeErrorState } from "@dshana/shared/lib/runtime-error.ts";
+import { runtimeErrorState } from "@dshana/shared/runtime-error.ts";
 // @hana/app-sdk 为 devDependencies（file:vendor/hana-app-sdk/hana-app-sdk.tgz，版本随宿主
 // 0.946.2 App 契约）；connectAppRuntime 运行时实现经 rspack 构建时静态内联进本 bundle（只
 // 依赖 node:crypto，无运行时包解析——见 rspack.config.mts 打包纪律注释）。升级 = 换 vendor
@@ -40,7 +40,7 @@ import { runtimeErrorState } from "@dshana/shared/lib/runtime-error.ts";
 import { connectAppRuntime } from "@hana/app-sdk";
 import { startTaskBridge } from "#/runtime/task-bridge.ts"; // DSH 事件 → Hana task 回投
 import { startApprovalBridge } from "#/runtime/approval-bridge.ts"; // DSH 审批 → Hana requestApproval / watch 对账
-import { createTaskBindingIndex, publishTaskBindingIndex } from "@dshana/shared/lib/task-binding.ts"; // 绑定事实源 = 宿主任务记录
+import { createTaskBindingIndex, publishTaskBindingIndex } from "@dshana/shared/task-binding.ts"; // 绑定事实源 = 宿主任务记录
 import { PROVIDER_RELOAD_GLOBAL_KEY } from "#/lib/provider-hooks.ts"; // 目录重载钩子键（provider 插件装）
 import { resolveInstallRoot, locateDsh } from "#/runtime/locate.ts";
 

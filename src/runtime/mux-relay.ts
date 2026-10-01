@@ -22,7 +22,7 @@
 // 首帧字节，按剩余量交给帧解析）。
 //
 // 上游侧不掩码（它是 ws 服务端）；本中继发给客户端的方向同样不掩码（我们对宿主是服务端）。
-import { ChunkWindow, MUX_CHUNK_BYTES, decodeMuxControlFrame, encodeChunk, sliceBytes } from "@dshana/shared/lib/mux-chunks.ts";
+import { ChunkWindow, MUX_CHUNK_BYTES, decodeMuxControlFrame, encodeChunk, sliceBytes } from "@dshana/shared/mux-chunks.ts";
 import { OPCODE, framePayload, readFrameHeader, serializeFrame, type WsFrameHeader } from "#/lib/ws-frames.ts";
 
 const OP_CONTINUATION = OPCODE.CONTINUATION;

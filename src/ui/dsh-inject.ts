@@ -23,7 +23,7 @@ import {
   decodeMuxControlFrame,
   decodeUtf8,
   encodeAck,
-} from "@dshana/shared/lib/mux-chunks.ts";
+} from "@dshana/shared/mux-chunks.ts";
 
 const DSH_INTERNAL_ORIGIN = "http://dsh.internal";
 

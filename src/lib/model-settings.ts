@@ -19,7 +19,7 @@ import {
   rpcSettingsDescribe,
   rpcSettingsReplace,
   settingsViewOf,
-} from "@dshana/shared/lib/dsh-rpc.ts";
+} from "@dshana/shared/dsh-rpc.ts";
 
 /** 归一化模型选择：provider/model 必填，reasoningEffort 可选。 */
 function normalizeSelection(input) {

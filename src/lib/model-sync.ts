@@ -16,7 +16,7 @@
 // runtime 未就绪时不动：它启动时本来就要重新拉一次目录。
 import { bridgeAccess } from "#/lib/managed-runtime.ts";
 import { invokeControl } from "#/lib/controller.ts";
-import { errText } from "@dshana/shared/lib/err-text.ts";
+import { errText } from "@dshana/shared/err-text.ts";
 
 /** 宿主 app 事件里本模块关心的类型。 */
 export const MODELS_CHANGED_EVENT = "models-changed";

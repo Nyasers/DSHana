@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// packages/shared/src/lib/task-binding.ts — 会话↔Hana 任务的绑定事实（唯一事实源 = 宿主任务记录）
+// packages/shared/src/task-binding.ts — 会话↔Hana 任务的绑定事实（唯一事实源 = 宿主任务记录）
 //
 // 事实源是宿主的任务记录本身：App 主进程在提交前把 DSH 坐标写进 ctx.tasks.create/update 的
 // metadata.dsh；受管 runtime 子进程的 hana client 本来就有 tasks.list/get（自 v2 起就在

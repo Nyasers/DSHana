@@ -6,7 +6,6 @@
   "license": "MPL-2.0",
   "type": "module",
   "exports": {
-    "./lib/*": "./src/lib/*",
-    "./types/*": "./src/types/*"
+    "./*": "./src/*"
   }
 }

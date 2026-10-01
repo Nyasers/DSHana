@@ -38,14 +38,14 @@ import {
   createTaskBindingIndex,
   isValidSessionId,
   type TaskBindingIndex,
-} from "@dshana/shared/lib/task-binding.ts";
-import { approvalOutcomeOf, runWatchReconcile } from "@dshana/shared/lib/watch-sse.ts";
+} from "@dshana/shared/task-binding.ts";
+import { approvalOutcomeOf, runWatchReconcile } from "@dshana/shared/watch-sse.ts";
 // 宿主审批契约类型只进类型层（swc / Node 剥类型后不留运行时 import）
 import type {
   AppTaskApprovalOutcome,
   AppTaskApprovalRecordV2,
   AppTaskApprovalRequestV2,
-} from "@dshana/shared/types/host.ts";
+} from "@dshana/shared/host.ts";
 
 // 审批超时：**30s 是我们自己的策略，不是宿主默认**。APPS.md（0.951.4，后台任务与审批节）明写
 // `requestApproval({…, timeoutMs})` 的 `timeoutMs: 0` 禁用超时，**默认也是 0**；父任务结束会拒绝剩余

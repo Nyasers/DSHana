@@ -26,7 +26,7 @@
 //
 // 仍接受 --help（无配置文件时打印用法）。
 import { isAbsolute } from "node:path";
-import { errText } from "@dshana/shared/lib/err-text.ts";
+import { errText } from "@dshana/shared/err-text.ts";
 
 export class UsageError extends Error {
   /** 进程退出码（入口据此区分用法错与运行错）。 */

@@ -11,7 +11,7 @@
 // 堵住宿主通道）；确认或升级的证据随后台任务通知（投递回本会话）与 App 日志落定。
 import { requestCancel } from "#/lib/cancel-chain.ts";
 import { resolveTarget } from "#/tools/shared/target.ts";
-import type { ToolCtx } from "@dshana/shared/types/host.ts";
+import type { ToolCtx } from "@dshana/shared/host.ts";
 import type { ToolInputBase, ToolResult } from "#/tools/shared/types.ts";
 
 export const command = "close";

@@ -19,7 +19,7 @@ import { appDataDir, appLogger, getAppRuntime } from "#/lib/app-runtime.ts";
 import { dataSources, sourceOf } from "#/lib/data-source.ts";
 import { ensureManagedRuntime, preflightSource, stopManagedRuntime } from "#/lib/managed-runtime.ts";
 import { invokeControl } from "#/lib/controller.ts";
-import { errText } from "@dshana/shared/lib/err-text.ts";
+import { errText } from "@dshana/shared/err-text.ts";
 
 /** 步骤名（页面可直接显示；rolling-back 只在失败时出现）。 */
 export const SWITCH_STEPS = ["preflight", "freeze", "stopping", "starting", "saving", "rolling-back"];

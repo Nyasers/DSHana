@@ -26,8 +26,8 @@
 import { createServer, type IncomingHttpHeaders } from "node:http";
 import { connect as netConnect } from "node:net";
 import { timingSafeEqual } from "node:crypto";
-import { errText } from "@dshana/shared/lib/err-text.ts";
-import { MUX_CHUNK_QUERY, MUX_CHUNK_QUERY_VALUE } from "@dshana/shared/lib/mux-chunks.ts";
+import { errText } from "@dshana/shared/err-text.ts";
+import { MUX_CHUNK_QUERY, MUX_CHUNK_QUERY_VALUE } from "@dshana/shared/mux-chunks.ts";
 import { startFrameRelay } from "#/runtime/mux-relay.ts";
 
 const MAX_WS_BUFFER = 1024 * 1024;

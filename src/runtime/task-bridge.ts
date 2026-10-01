@@ -7,7 +7,7 @@
 // main.js 在 DSH boot 就绪后挂载。它订阅 DSH cordis ctx 的会话事件（进程内 ctx.on——
 // `$events` 广播层只带 api-session/*，turn 生命周期在 ctx 事件源直订才可见），按**宿主任务
 // 记录**里的 metadata.dsh.sessionId（App 主进程提交前写入；本进程的 hana.tasks 直接读，
-// 见 packages/shared/src/lib/task-binding.ts 的绑定索引）把事件回投宿主：
+// 见 packages/shared/src/task-binding.ts 的绑定索引）把事件回投宿主：
 //   running 进度 → hana.tasks.update(taskId, { status:"running", progress })
 //   终态（成功）  → hana.tasks.complete(taskId, minimal 定位结果)
 //   终态（失败）  → hana.tasks.fail(taskId, message)
@@ -31,11 +31,11 @@
 // 容错纪律：订阅/回投失败只记日志不阻断 runtime；宿主记录里没有绑定
 // （非 dshana 发起的会话，如 DSH Web UI 直开）的事件直接忽略；绑定**读取失败**与
 // "没有绑定"是两回事——前者记日志并放弃该帧，不把它当成用户自建会话。
-import { createTaskBindingIndex, type TaskBinding, type TaskBindingIndex } from "@dshana/shared/lib/task-binding.ts";
-import { runWatchReconcile } from "@dshana/shared/lib/watch-sse.ts";
-import { rpcSessionCancel } from "@dshana/shared/lib/dsh-rpc.ts";
+import { createTaskBindingIndex, type TaskBinding, type TaskBindingIndex } from "@dshana/shared/task-binding.ts";
+import { runWatchReconcile } from "@dshana/shared/watch-sse.ts";
+import { rpcSessionCancel } from "@dshana/shared/dsh-rpc.ts";
 import { cancelSessionModelRequests } from "#/lib/model-requests.ts";
-import { errText } from "@dshana/shared/lib/err-text.ts";
+import { errText } from "@dshana/shared/err-text.ts";
 
 // 事件白名单（与 v1 dsh-events 的会话事件子集一致；其余事件不订阅）
 export const BRIDGE_EVENTS = [

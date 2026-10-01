@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/lib/task-binding.test.mjs — packages/shared/src/lib/task-binding.ts 单测
+// tests/lib/task-binding.test.mjs — packages/shared/src/task-binding.ts 单测
 //
 // 锁死的是**绑定事实源 = 宿主任务记录**这条路：
 //   · 归一：metadata.dsh 里有什么算绑定、什么不算（无绑定 vs 记录畸形）；
@@ -20,7 +20,7 @@ import {
   taskBindingBroken,
   TASK_MAP_BROKEN,
   TASK_BINDING_GLOBAL_KEY,
-} from "@dshana/shared/lib/task-binding.ts";
+} from "@dshana/shared/task-binding.ts";
 
 const SID = "session-11111111-2222-3333-4444-555555555555";
 const OTHER = "session-bbbbbbbb-cccc-dddd-eeee-ffffffffffff";

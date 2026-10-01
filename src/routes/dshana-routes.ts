@@ -41,7 +41,7 @@ import {
   isValidSessionId,
   isTerminalTaskStatus,
   type TaskBinding,
-} from "@dshana/shared/lib/task-binding.ts";
+} from "@dshana/shared/task-binding.ts";
 export const DASHANA_ROUTE_PREFIX = "/dshana";
 
 // ---- 应用设置（GET/POST /dshana/settings）----
