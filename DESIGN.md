@@ -72,7 +72,8 @@ Hana 宿主进程（App 隔离进程内加载 .cache/dist/index.js）
   ├─ runtime/dsh-host.mjs（.cache/dist/runtime，rspack 产物）
   │    └─ 原生 import 安装目录 node_modules/@deepseek-ai/dsh/lib/profile-boot-*.js
   │         → runProfile() → cordis Context
-  │              → 加载 $DSH_HOME/profiles/web（官方随附模板，DSH 首次加载时自建）
+  │              → 加载自有 profile $DSH_HOME/profiles/dshana（壳建并维护：层列钉住 base → web-app，
+  │                 我们的强制配置以 patchFiles 排在所有层之上）
   │                   → dsh-* 官方插件 + @dshana/* 子插件（后者在安装目录 node_modules/@dshana）
   │         → HTTP 服务监听本地端口（宿主按 readyMarker 判定就绪）
   └─ 浏览器面：/api/apps/dshana/routes/_runtime/<runtimeId>/ 由宿主自动代理
@@ -375,8 +376,9 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
   settings.yaml,.anonymous-user-id} 与 logs、config.json（参考拷贝
   legacy-config.json + 设置建议输出；不代写宿主 preferences）→ 校验（会话数/workspace.json
   可解析/marker 落位，verifyMigration）→ 幂等标记 `dataDir/dshana/migrated.json`
-  {source,at,stats,backupDir}。**profiles/ 不迁移**（那是 DSH 自己的目录：v2 用官方随附的 web
-  profile，由 DSH 首次加载时自建自维护，我们不写它也不重命名它）；node_modules/.node 不迁移
+  {source,at,stats,backupDir}。**profiles/ 不迁移**（v2 的 profile 由壳自己建并维护：
+  <DSH_HOME>/profiles/dshana 的层列钉在壳里，见 packages/host/src/main.ts；旧数据里那份同名
+  目录不从源复制，也不替它清理）；node_modules/.node 不迁移
   （App 依赖随包物化在安装目录，无需迁移）。源只读不删（回退材料 = 旧插件数据原地保留）；--apply 打印停机指引
   （先停旧插件写入，主上下文与姐姐协调）。Windows：path.join 原生分隔符、junction 在跳过
   列表、reparse 不入复制。

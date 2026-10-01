@@ -12,9 +12,9 @@
 //   · logs/* **不迁移**：App 侧日志走宿主 ctx.logger，旧日志无落点
 //   · config.json（v1 全局设置）→ 参考拷贝 dataDir/legacy-config.json + 映射建议输出
 //     （v2 设置存宿主 preferences（contributes.settings 经 ctx.config），脚本不代写宿主态）
-//   · profiles/dshana **不复制**：profile 是 DSH 自己的目录（v2 用官方随附的 web profile，
-//     首次加载时由 DSH 自建）；旧 profile 里的 node_modules/@dsh** 是指向 v1 插件安装目录的
-//     junction/拷贝（已过时），留着也不被读取，但没必要搬进新家。
+//   · profiles/dshana **不复制**：v1 插件当年也在这个路径下建过 profile（里面的 node_modules/@dsh**
+//     是指向 v1 插件安装目录的 junction/拷贝，已过时）；v2 的 profile 同样叫 `dshana`，但由壳自己
+//     建并维护（<DSH_HOME>/profiles/dshana，层列钉在 packages/host/src/main.ts），所以不从源 copy。
 //
 // 纪律：
 //   · 源（旧插件数据）只读——备份是"复制到目标数据区的独立备份"，绝不删/改旧数据
@@ -205,7 +205,7 @@ export function planLegacyMigration({ legacyRoot, dataDir, force = false }) {
     steps,
     warnings,
     sourceInfo,
-    skip: { profiles: "profile 是 DSH 自己的目录（v2 用官方随附的 web profile，由 DSH 首次加载时自建），不迁移；旧 profile 里的 junction 也不搬", nodeModules: "App 依赖随包物化在安装目录（不复制）；.node 文件锁不迁移" },
+    skip: { profiles: "profiles/ 不复制：v2 的 profile 由壳自己建并维护，见 packages/host/src/main.ts；旧 profile 里的 junction 也不搬", nodeModules: "App 依赖随包物化在安装目录（不复制）；.node 文件锁不迁移" },
   };
 }
 

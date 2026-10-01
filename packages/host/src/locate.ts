@@ -104,8 +104,11 @@ export async function locateDsh({ depsRoot, log = (..._args) => {} }) {
     throw new Error("无法解析 @deepseek-ai/dsh-app-boot（dsh 依赖缺失？createRequire 与 .pnpm 枚举均未命中）");
   }
   const appBoot = await import(/* webpackIgnore: true */ pathToFileURL(appBootEntry).href);
-  if (typeof appBoot.loadLayeredEnv !== "function" || typeof appBoot.initProfile !== "function") {
-    throw new Error(`@deepseek-ai/dsh-app-boot 缺 loadLayeredEnv/initProfile 导出（${appBootEntry}）`);
+  // 壳自己建并维护 profile：这几个导出缺一个就没法按 desktop 的形状起（宁可在定位阶段就拒）。
+  const required = ["loadLayeredEnv", "initProfile", "removeLinkProjections", "resolveProfileDir", "readProfileManifest", "writeProfileManifest", "loadProfileDirectory"] as const;
+  const missingExports = required.filter((name) => typeof appBoot[name] !== "function");
+  if (missingExports.length > 0) {
+    throw new Error(`@deepseek-ai/dsh-app-boot 缺导出 ${missingExports.join("/")}（${appBootEntry}）`);
   }
   log(`dsh 定位：${bootEntry} + ${appBootEntry}`);
   return { profileBoot, bootEntry, appBoot, appBootEntry, dshPkgDir: dshPkg, version: readPkgVersion(dshPkg) };

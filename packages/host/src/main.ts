@@ -15,9 +15,11 @@
 //   3. 设本进程自有 env（DSH_HOME / DSHANA_*，不污染宿主进程环境）；
 //   4. 依赖就位（随包物化在 <installRoot>/node_modules，无运行时安装）；
 //   5. 产物在位（@dshana 子插件在 <installRoot>/node_modules/@dshana，roster patch 在
-//      <installRoot>/cordis.patch.yml——profile 不归我们：官方 web 模板由 DSH 首次加载时自建）；
-//   6. 子进程内 boot DSH（locateDsh → appBoot.loadLayeredEnv → profileBoot.runProfile，
-//      profile = 官方 web + patchFiles = roster patch），webserver 监听配置中的 dshPort；
+//      <installRoot>/cordis.patch.yml）与自有 profile 就位（<DSH_HOME>/profiles/dshana，壳自己
+//      建并维护，见 ensureOwnProfile）；
+//   6. 子进程内 boot DSH（locateDsh → appBoot.loadLayeredEnv → loadProfileDirectory →
+//      profileBoot.runProfile；resolvedProfile = 自有 profile，patchFiles = roster patch——
+//      与上游 desktop-host 同形），webserver 监听配置中的 dshPort；
 //   7. 真实监听成功（webServer 服务端口 === 期望端口 + HTTP 探测）才向 stdout 打印约定
 //      readyMarker（独占一行、无前缀）——任何失败路径绝不打印 READY；
 //   8. SIGTERM/SIGINT/父进程 disconnect → 优雅释放：先关 DSH fiber（含 webserver），再
@@ -61,7 +63,19 @@ export const EXIT = {
 export const READY_TIMEOUT_MS = 60000;
 /** 优雅释放时 ctx.fiber.dispose 的最长等待（超时强退；dsh 自身 shutdown 5s 兜底）。 */
 const DISPOSE_TIMEOUT_MS = 4000;
-const PROFILE_NAME = "web";
+/**
+ * 自有 profile 名（目录落在 <DSH_HOME>/profiles/<这个名字>）。
+ * 用 app 自己的名字，与上游 desktop 的 `profiles/desktop` 同一规矩。目录里已有别的文件时
+ * `initProfile` 不覆盖：那份 `cordis.patch.yml`（用户层，DSH 设置面在写）照旧参与层序。
+ */
+const PROFILE_NAME = "dshana";
+/**
+ * 自有 profile 的 bundle 层列——**钉住的值，不跟上游模板漂**：
+ *   `@deepseek-ai/dsh-base`（共享底座）→ `@deepseek-ai/dsh-web-app`（浏览器面：roster / 传输层 /
+ *   前端服务）。上游把 `PROFILE_TEMPLATES.web` 改成什么，都不会静默改变这里：层列表是部署决定。
+ * 我们的强制配置不在这张表里，走启动期 `patchFiles`（排在所有层之上，不会被用户层翻回去）。
+ */
+const PROFILE_BUNDLES = ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"];
 
 /** 取错误的可读文本。catch 到的值类型未知，字段访问一律经这里。 */
 const errText = (e: unknown): string => ((e as any)?.message as string) || String(e);
@@ -211,9 +225,38 @@ function missingArtifacts(depsRoot: string, rosterPatch: string): string[] {
 }
 
 /**
+ * 自有 profile 的就位（对齐上游 desktop：壳自己建并维护那本目录，再把它交给 runProfile）。
+ *
+ * 目录落在 <DSH_HOME>/profiles/<名>。initProfile 只补缺、不覆盖已存在的文件，所以层列表的增删由
+ * 这里显式归一——这也是 PROFILE_BUNDLES 被钉住的地方：上游换模板不影响它，我们改层列表也不会
+ * 被旧目录挡住。
+ * @returns profile 目录绝对路径
+ */
+function ensureOwnProfile(appBoot, dshHome: string): string {
+  const dir = appBoot.resolveProfileDir(PROFILE_NAME, dshHome);
+  appBoot.initProfile(dir, PROFILE_BUNDLES);
+  // 我们不再走 loadProfile，替掉它那几道自愈：旧版 DSH 的链接后端会把包投影进 profile 的
+  // node_modules（.dsh-module-fallback，可能是旧版本留下的悬空链接），不清理会挡住安装树的真包。
+  appBoot.removeLinkProjections(dir);
+  const manifest = appBoot.readProfileManifest("dsh", dir);
+  const current = manifest?.dsh?.profile?.bundles;
+  const same = Array.isArray(current) && current.length === PROFILE_BUNDLES.length
+    && current.every((name, index) => name === PROFILE_BUNDLES[index]);
+  if (!same) {
+    appBoot.writeProfileManifest(dir, {
+      ...manifest,
+      dsh: { ...manifest?.dsh, profile: { ...manifest?.dsh?.profile, bundles: [...PROFILE_BUNDLES] } },
+    });
+    const before = Array.isArray(current) && current.length > 0 ? current.join(" → ") : "(无)";
+    info(`profile 层列表归一：${before} → ${PROFILE_BUNDLES.join(" → ")}`);
+  }
+  return dir;
+}
+
+/**
  * 预检模式（数据源切换探针）：只验证「依赖就位 → 定位 DSH → 产物在位」能否在目标 DSH_HOME 上
- * 成立，不连宿主 IPC、不 boot DSH、不起中继，也不往目标 home 写任何东西（profile 由 DSH 自己在
- * 首次加载时按随附模板建）。结果写 resultPath（{ok:true} 或 {ok:false,error}，0600）后立即退出。
+ * 成立，不连宿主 IPC、不 boot DSH、不起中继，也不往目标 home 写任何东西（profile 由正式启动时
+ * 的 ensureOwnProfile 建，预检不碰）。结果写 resultPath（{ok:true} 或 {ok:false,error}，0600）后立即退出。
  * 退出码对齐 classify：0 = 预检通过；4 = deps/locate；5 = 产物缺失。
  */
 async function runPreflight({ opts, dataDir, dshHome, depsRoot, rosterPatch }): Promise<never> {
@@ -356,8 +399,7 @@ export async function main(argv: string[]): Promise<number> {
   info(`依赖区：${depsRoot}（随包物化，无 ensure）`);
 
   // ---- 4) 定位 DSH + 产物在位检查 ----
-  // profile 不归我们：官方随附模板 `web` 由 DSH 首次加载时自建自维护（loadProfile 的
-  // template 分支），我们不写 DSH_HOME 里的任何东西（不种子化、不链接、不归一清单）。
+  // profile 归我们：自有目录 + 钉住的层列（见 ensureOwnProfile），boot 前就位再交给 runProfile。
   let located;
   try {
     located = await locateDsh({ depsRoot, log: (s) => info("locate", s) });
@@ -375,14 +417,31 @@ export async function main(argv: string[]): Promise<number> {
     return EXIT.SEED;
   }
 
-  // ---- 5) 子进程内 boot DSH（官方 web profile + 我们的 roster 作启动期 overlay；显式端口）----
+  // ---- 5) 子进程内 boot DSH（自有 profile + 我们的 roster 作启动期 overlay；显式端口）----
   const environment = located.appBoot.loadLayeredEnv("dsh");
-  info(`runProfile({ profile: ${PROFILE_NAME}, patchFiles: [${rosterPatch}], port: ${opts.dshPort} }) …`);
+  const installAnchor = join(depsRoot, "@deepseek-ai", "dsh", "package.json");
+  let profile;
+  let profileDir;
+  try {
+    profileDir = ensureOwnProfile(located.appBoot, dshHome);
+    profile = located.appBoot.loadProfileDirectory("dsh", profileDir, installAnchor);
+  } catch (e) {
+    err("profile", "自有 profile 准备失败：" + errText(e));
+    err("exit", "exit=" + EXIT.SEED + " kind=profile");
+    reportFatal("profile", e);
+    return EXIT.SEED;
+  }
+  // 层被 skip 不 fail-closed：官方两层缺一层时 webserver 就起不来，下面的就绪门会拦住。
+  for (const skipped of profile.skippedBundles ?? []) {
+    warn("profile", `bundle 被跳过：${skipped.packageName}（${skipped.reason}）`);
+  }
+  info(`runProfile({ profile: ${PROFILE_NAME}, bundles: [${PROFILE_BUNDLES.join(", ")}], patchFiles: [${rosterPatch}], port: ${opts.dshPort} }) …`);
   let boot;
   try {
     boot = await located.profileBoot.runProfile({
       environment,
       profile: PROFILE_NAME,
+      resolvedProfile: { profile, installAnchor },
       patchFiles: [rosterPatch],
       args: ["--port", String(opts.dshPort), "--no-open"],
     });
