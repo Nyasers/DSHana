@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<!-- 本页的面（role）的事实源：静态声明。stream 面 = **只读会话流**——
-     复用 DSH 前端、只留中列那一段转录，DSH 侧栏、右列与输入卡（composer card）全部收起。
-     语义：看，不参与。输入与打断仍走 dshana 工具链，这一面不提供任何写入口。 -->
+<!-- 本页的面（role）的事实源：静态声明。stream 面 = **会话流**——
+     复用 DSH 前端、只留中列那一段转录，DSH 侧栏与右列收起；输入卡保留：
+     在这里打的字进的是这个 DSH 会话自己的一轮，不走 dshana 工具链（那条链是模型侧的委派）。 -->
 <meta name="hana-dshana-role" content="stream">
 <title>DSHana 会话</title>
 <!-- src/ui/stream.html — dshana 的会话卡，同一页两个挂载态（由 stream-entry.ts 认）：
