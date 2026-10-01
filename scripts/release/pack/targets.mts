@@ -76,10 +76,10 @@ const PT_START = "# >>> pack-targets";
 const PT_END = "# <<< pack-targets";
 
 /** 生成该目标的 pnpm-workspace.yaml（只替换标记块内的 supportedArchitectures）。
- * 源是**交付面**那份（packaging/pnpm-workspace.yaml）：工位只吃交付面的配置（allowBuilds 等），
- * 与仓库根那份（服务本地开发安装）分开。 */
+ * 源是**仓库根**那份：工位只留服务出包的那部分配置（allowBuilds / 平台块），`packages` 这些
+ * 工作区字段随文件带过去也不生效（工位里没有 packages/），不必另维护第二份名单。 */
 export function stagingWorkspaceYaml(spec) {
-  const repoWs = fs.readFileSync(join(ROOT, "packaging", "pnpm-workspace.yaml"), "utf8");
+  const repoWs = fs.readFileSync(join(ROOT, "pnpm-workspace.yaml"), "utf8");
   const block = [
     "supportedArchitectures:",
     "  os:",

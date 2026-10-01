@@ -25,7 +25,6 @@
     "derive:vendor": "node scripts/derive/index.mts vendor",
     "derive:manifest": "node scripts/derive/index.mts manifest",
     "derive:thirdparty": "node scripts/derive/index.mts thirdparty",
-    "derive:product-package": "node scripts/derive/index.mts product-package",
     "sync": "pnpm run sync:vendor",
     "postsync": "pnpm run derive",
     "sync:vendor": "pnpm run sync:vendor:sdk && pnpm run sync:vendor:dsh",
