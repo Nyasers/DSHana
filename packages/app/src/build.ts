@@ -5,10 +5,10 @@
 // 布局：领域专用脚本随各自源码——rspack.config.mts（本目录，配置源）与本入口放 packages/app/src/，
 // 共享工具（collect/walk/terser/assert + minify/template loader）在 scripts/build/。
 // 产物（.cache/dist = App 安装目录形态；宿主读该根 manifest.json + entry）：根下只放宿主读的契约件与
-// 目录（manifest.json / assets / skills / ui / node_modules / 声明文本），代码全在 bin/。
-// 源码侧同形：App 契约与随包静态件在仓库根（manifest.json / assets / skills），壳源与主体在
-// packages/app/src/。
-//   manifest.json       App v2 manifest（entry "bin/index.mjs" / icon "assets/icon.png"）
+// 目录（manifest.json / icon.png / skills / ui / node_modules / 声明文本），代码全在 bin/。
+// 源码侧同形：App 契约与随包静态件在仓库根（manifest.json / skills）与 assets/，壳源与主体在
+// packages/app/src/；assets/ 下的相对路径就是产物里相对包根的路径（见下面的静态件组装）。
+//   manifest.json       App v2 manifest（entry "bin/index.mjs" / icon "icon.png"）
 //   bin/index.mjs       壳：由壳源 packages/app/src/index.ts 写出，只 re-export 同目录的 ./app.mjs（宿主启 App 时会缓存它）
 //                       入口用 .mjs：Node 按扩展名就判 ESM，安装树不必再带一份 package.json 定 type
 //   bin/app.mjs         App 主体（含它自己切出的 chunk）
@@ -104,17 +104,11 @@ fs.writeFileSync(join(DIST_DIR, "bin", "index.mjs"), shellJs, "utf8");
 // 1) 静态化路径字面量回写（dist 主区）
 rewriter(DIST_DIR);
 
-// 2) App 交付目录组装（dist 根 = App 安装目录；根下是 manifest/skills/icon/ui 这类契约件与目录，入口在 bin/）
+// 2) App 交付目录组装（dist 根 = App 安装目录；根下是 manifest/icon/skills/ui 这类契约件与目录，入口在 bin/）
 fs.copySync(join(ROOT, "manifest.json"), join(DIST_DIR, "manifest.json"));
 fs.copySync(join(ROOT, "skills"), join(DIST_DIR, "skills"));
-// App 图标：仓库根 assets/icon.png 为唯一规范源（manifest.icon "assets/icon.png"）；
 // 依赖部署（自包含打包）：DSH 依赖由 scripts/release/pack/index.mts 物化进安装目录 node_modules，
 // dist = App 安装目录形态（含 cordis 产物）；依赖随包物化，dist 保持轻量壳。
-const iconSrc = join(ROOT, "assets", "icon.png");
-if (!fs.pathExistsSync(iconSrc))
-  throw new Error("App 图标缺失（assets/icon.png，仓库根）：manifest.icon 指向 assets/icon.png，需真实可解码图片");
-fs.copySync(iconSrc, join(DIST_DIR, "assets", "icon.png"));
-console.log("manifest.json + skills/ + assets/icon.png -> .cache/dist/（App v2 安装目录形态）");
 
 // 壳的文档侧（ui/ 整树：页面脚本 bundle + 静态面）：由 @dshana/ui 先行构建产出 .cache/ui，
 // 本入口只拷贝。缺件即拒（contributes.cards 的 route 指向 ui 内页面，缺了就是卡片 404 +
@@ -125,6 +119,23 @@ if (!fs.pathExistsSync(uiSrc)) {
 }
 fs.copySync(uiSrc, join(DIST_DIR, "ui"));
 console.log("ui/ -> .cache/dist/ui（壳的文档侧整树，来自 .cache/ui）");
+
+// 随包静态件：源码 assets/ 下的相对路径 = 产物里相对包根的路径（assets 这一段在产物里不出现）。
+// 两个字段的基址不同（icon 相对包根、face.image 相对 ui/），落位靠这条规则对齐，不靠人肉推导：
+//   assets/icon.png     -> 产物根 icon.png    （manifest.icon）
+//   assets/ui/cover.png -> 产物 ui/cover.png  （contributes.cards[].face.image）
+// 目录按同名目录合并：产物 ui/ 是 ui 域的整树（上一步刚拷入），这一步只补我们自备的静态件。
+const assetsSrc = join(ROOT, "assets");
+if (!fs.pathExistsSync(join(assetsSrc, "icon.png")))
+  throw new Error("App 图标缺失（assets/icon.png）：manifest.icon 指向 icon.png，需真实可解码图片");
+const copyInto = (from, to) => {
+  if (fs.statSync(from).isDirectory()) {
+    fs.ensureDirSync(to);
+    for (const name of fs.readdirSync(from)) copyInto(join(from, name), join(to, name));
+  } else fs.copySync(from, to);
+};
+for (const name of fs.readdirSync(assetsSrc)) copyInto(join(assetsSrc, name), join(DIST_DIR, name));
+console.log("manifest.json + skills/ + assets/** -> .cache/dist/（App v2 安装目录形态）");
 
 // 3) 二次压缩（主区：JS + 静态壳页 HTML）+ 静态 URL 断言
 await extraMinify(DIST_DIR);

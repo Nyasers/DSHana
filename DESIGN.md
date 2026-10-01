@@ -157,7 +157,7 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 - 工具注册：`ctx.tools.register`，工具名 `dshana`（一个插件一个同名工具 + subcommand；v2 不自动加 `pluginId_` 前缀、重名被宿主当场拒）。动作五个：`open`/`reply`/`get`/`close`/`approve`，装配见 `packages/tools/src/index.ts`、手册见 `skills/dshana/SKILL.md`。
 - 设置：`contributes.settings` 的 UI 由 App 自绘设置页承担（`ui.route: /settings.html`，宿主设置区渲染）；键与缺省以 `packages/runtime/src/config.ts` 为准，读写落 `dataDir/settings.json`（旧 `config.json` 只在两键缺位时作读侧兼容）。
 - 数据读路径迁到 `ctx.dataDir`（宿主 `app-data/<id>/`）：list/get 读当前源的 `<DSH_HOME>/...`（projcache + jsonl zstd）；旧插件数据迁移见 `packages/runtime/src/legacy-migrate.ts` 与 `scripts/migrate/legacy.mts`。
-- 构建：`node packages/app/src/build.ts` 产物 `.cache/dist/` = App 安装目录形态（根只放宿主读的契约件与目录：`manifest.json` + `assets/` + `skills/` + `ui/`；代码与 roster patch 全在 `bin/`：入口 `index.mjs` + 主体 `app.mjs` + runtime `dsh.mjs` + `cordis.patch.yml`）。源码形态与交付形态同形：`manifest.json` / `assets/` / `skills/` 在仓库根，`packages/app/src/` 放壳源与主体。壳的文档侧另出 `.cache/ui/`（`node packages/ui/src/build.ts`），App 域构建整树拷进 `ui/`。cordis 子插件包另出 `.cache/cordis/`（`node packages/app/src/cordis.ts`）：它们不是安装态里的东西，出包时由 pack 落进包内 `node_modules/@dshana`。
+- 构建：`node packages/app/src/build.ts` 产物 `.cache/dist/` = App 安装目录形态（根只放宿主读的契约件与目录：`manifest.json` + `icon.png` + `skills/` + `ui/`；代码与 roster patch 全在 `bin/`：入口 `index.mjs` + 主体 `app.mjs` + runtime `dsh.mjs` + `cordis.patch.yml`）。源码形态与交付形态同形：`manifest.json` / `skills/` 与随包静态件都在仓库根（静态件在 `assets/` 下，其相对路径 = 产物里相对包根的路径：`assets/icon.png` → 产物根 `icon.png`，`assets/ui/cover.png` → 产物 `ui/cover.png`）；`packages/app/src/` 放壳源与主体。壳的文档侧另出 `.cache/ui/`（`node packages/ui/src/build.ts`），App 域构建整树拷进 `ui/`。cordis 子插件包另出 `.cache/cordis/`（`node packages/app/src/cordis.ts`）：它们不是安装态里的东西，出包时由 pack 落进包内 `node_modules/@dshana`。
 
 **受管 Node runtime：local-machine/external + readyMarker 就绪门（迁移步骤 2）：**
 
@@ -392,7 +392,7 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
   版本线语义见 scripts/shared/version.mts 头注释。
 - pack（scripts/release/pack/index.mts）：静态项补 THIRD_PARTY_NOTICES.md；cordis 产物断言按清单校验（现 3 包）；
   新增 ui/ 静态树断言（route 资源 fail-closed）；zip 根级 = manifest.json + bin/（index.mjs / app.mjs /
-  dsh.mjs / cordis.patch.yml）+ assets/ + skills/ + ui/ + NOTICE/THIRD_PARTY_NOTICES.md + 物化的 node_modules/
+  dsh.mjs / cordis.patch.yml）+ icon.png + skills/ + ui/ + NOTICE/THIRD_PARTY_NOTICES.md + 物化的 node_modules/
   （不带 package.json：入口以 .mjs 定 ESM）。
 
 ### 交付 6：@dshana/* 子插件 v2 收敛判断（落到 DESIGN；代码侧不动 roster，防 boot 破坏）
