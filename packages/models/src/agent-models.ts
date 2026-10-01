@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/agent-models.ts — 读宿主角色卡配的模型（agents/<id>/config.yaml 的 models.chat）
+// packages/models/src/agent-models.ts — 读宿主角色卡配的模型（agents/<id>/config.yaml 的 models.chat）
 //
 // 「这个 agent 用什么模型」宿主早有答案：每张角色卡自己配着 models.chat，主角色就是用户在用的
 // 那个。本模块是这份事实的唯一读取口——bus 的 agent:list + agent:config（能力面 app/agents.read，

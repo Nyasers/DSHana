@@ -8,7 +8,7 @@
 // 信封，别把别的 app_event（agent-updated / locale-changed / plugin_config_changed…）当变更。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isModelsChangedEvent, MODELS_CHANGED_EVENT, MODELS_REFRESH_ACTION } from "../../src/lib/model-sync.ts";
+import { isModelsChangedEvent, MODELS_CHANGED_EVENT, MODELS_REFRESH_ACTION } from "@dshana/models/model-sync.ts";
 
 /** 宿主真实信封形状。 */
 function appEvent(type, payload = { agentId: null }) {

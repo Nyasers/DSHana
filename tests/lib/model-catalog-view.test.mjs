@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Nyasers
 //
 // tests/lib/model-catalog-view.test.mjs — 宿主目录 → 设置页候选视图的纯函数契约
-// （src/lib/model-catalog-view.ts）
+// （packages/models/src/model-catalog-view.ts）
 //
 // 这一段管两件事：
 //   · 一条目录项的可用推理档：宿主声明的档位 ∩ off..max 词表；声明了 reasoning 但档位
@@ -10,7 +10,7 @@
 //   · 分组视图：按 provider 成组、组内按显示名排序，缺 provider/id 的条目与重复 id 不进列表。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CANONICAL_EFFORT_IDS, groupHostCatalog, supportedEfforts } from "../../src/lib/model-catalog-view.ts";
+import { CANONICAL_EFFORT_IDS, groupHostCatalog, supportedEfforts } from "@dshana/models/model-catalog-view.ts";
 
 test("supportedEfforts: 按声明取与词表的交集（升序，不按声明顺序）", () => {
   const item = { reasoning: true, thinkingLevels: ["high", "off", "max"], defaultThinkingLevel: "high" };

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/caller-model.ts — 工具建的 DSH 会话用哪个模型（按调用方角色卡补）
+// packages/models/src/caller-model.ts — 工具建的 DSH 会话用哪个模型（按调用方角色卡补）
 //
 // 会话的模型跟着「谁开的」走：open 建的会话，缺省模型取调用方那张角色卡配的 models.chat，
 // 与宿主 subagent 拿上一级的模型是同一个意思。App 设置里可以改成「自定义模型」（固定一条），
@@ -14,11 +14,11 @@
 // 只在 create 上补：send 的会话已经带着自己的选择（会话内的 durable 选择），不该因为换个
 // agent 来续话就把模型换掉。
 
-import { readCallerCardModel, type CardModel } from "#/lib/agent-models.ts";
+import { readCallerCardModel, type CardModel } from "./agent-models.ts";
 import { readDshDefaultModel } from "@dshana/runtime/config.ts";
 import { readSettingsSync } from "@dshana/runtime/data-source.ts";
 import { errText } from "@dshana/shared/err-text.ts";
-import { servedHas, servedModels, type ServedModel } from "#/lib/host-models.ts";
+import { servedHas, servedModels, type ServedModel } from "./host-models.ts";
 
 /** 一条选择（provider + model 都非空才算数）。 */
 export interface ModelPick {

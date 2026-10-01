@@ -1,0 +1,15 @@
+{
+  "name": "@dshana/models",
+  "version": "0.0.0",
+  "private": true,
+  "description": "模型面：宿主模型目录、默认模型守卫、调用方模型、目录同步与设置页候选视图",
+  "license": "MPL-2.0",
+  "type": "module",
+  "exports": {
+    "./*": "./src/*"
+  },
+  "dependencies": {
+    "@dshana/runtime": "workspace:*",
+    "@dshana/shared": "workspace:*"
+  }
+}

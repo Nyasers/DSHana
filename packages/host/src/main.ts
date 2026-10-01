@@ -488,7 +488,7 @@ export async function main(argv: string[]): Promise<number> {
           return result;
         }
         if (action === "models-refresh") {
-          // 宿主模型/提供商变更：App 侧（lib/model-sync.js）订阅 app_event/models-changed 后
+          // 宿主模型/提供商变更：App 侧（packages/models/src/model-sync.ts）订阅 app_event/models-changed 后
           // 打进来，让 provider 子插件重拉目录并按差异重注册路由。两个 bundle 同进程不能互相
           // import，约定键名见 lib/provider-hooks.ts；插件不在场（未激活/已退场）就是空操作。
           const g = globalThis as unknown as Record<string, unknown>;

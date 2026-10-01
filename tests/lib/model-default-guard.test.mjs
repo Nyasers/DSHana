@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Nyasers
 //
 // tests/lib/model-default-guard.test.mjs — 对账「用户设的默认模型」的挑选逻辑
-// （src/lib/model-default-guard.ts）
+// （packages/models/src/model-default-guard.ts）
 //
 // 这一段只管一件事：用户层有值、且它不在宿主目录里时换一条。四条规矩：
 //   · 现值在目录里 → 不改（不许动用户的选择）；
@@ -11,7 +11,7 @@
 //   · 角色卡读不到或它自己也不在目录里 → 目录第一条；目录为空则谁也不猜。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { planDefaultRepair } from "../../src/lib/model-default-guard.ts";
+import { planDefaultRepair } from "@dshana/models/model-default-guard.ts";
 
 const CATALOG = [
   { provider: "sensenova", id: "deepseek-flash" },

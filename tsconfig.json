@@ -39,6 +39,7 @@
     "src-cordis/**/*.tsx",
     "packages/shared/src/**/*.ts",
     "packages/host/src/**/*.ts",
+    "packages/models/src/**/*.ts",
     "packages/runtime/src/**/*.ts",
     "packages/ui/src/**/*.ts",
     "packages/ui/src/**/*.tsx",

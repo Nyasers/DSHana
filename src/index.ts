@@ -30,10 +30,10 @@ import * as dshanaTool from "#/tools/index.ts";
 // 壳页/诊断面单 registrar（ctx.routes.register 只挂本 App 后端面；到受管 runtime 的服务
 // 由宿主按 /api/apps/<id>/routes/_runtime/<runtimeId>/ 自动代理，本文件不转发）
 import { registerDshanaRoutes, defaultDshanaRouteDeps } from "#/routes/dshana-routes.ts";
-// 宿主模型/提供商变更 → 受管 runtime 重拉目录（见 lib/model-sync.ts 的动因）
-import { installHostModelSync } from "#/lib/model-sync.ts";
-// 默认模型对账：DSH 缺省模型必须落在宿主目录里（见 lib/model-default-guard.ts 的动因）
-import { installModelDefaultGuard, runModelDefaultGuard } from "#/lib/model-default-guard.ts";
+// 宿主模型/提供商变更 → 受管 runtime 重拉目录（见 packages/models/src/model-sync.ts 的动因）
+import { installHostModelSync } from "@dshana/models/model-sync.ts";
+// 默认模型对账：DSH 缺省模型必须落在宿主目录里（见 packages/models/src/model-default-guard.ts 的动因）
+import { installModelDefaultGuard, runModelDefaultGuard } from "@dshana/models/model-default-guard.ts";
 // 应用态存储收尾：清掉 UI 跨面共享通道在本生命周期之外的键（见 lib/shared-state.ts）
 import { renewSharedState } from "#/lib/shared-state.ts";
 
@@ -175,7 +175,7 @@ export function apply(ctx) {
     log("warn", "模型变更订阅安装异常（忽略，改宿主提供商需重启 runtime 生效）：" + ((e as any)?.message || e));
   }
 
-  // ---- 默认模型对账（见 lib/model-default-guard.ts 的动因）：runtime 就绪那一次在自动链里跑，
+  // ---- 默认模型对账（见 packages/models/src/model-default-guard.ts 的动因）：runtime 就绪那一次在自动链里跑，
   //      此后跟随宿主的 models-changed。缺省模型不能写死在 roster patch 里（宿主配了哪些提供商
   //      每台 Hana 不同），只能按运行时事实修：现值不在宿主目录里就换成目录里第一条可服务的。
   let uninstallModelGuard: () => void = () => {};

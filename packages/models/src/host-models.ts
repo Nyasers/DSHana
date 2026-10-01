@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/host-models.ts — 宿主模型目录（ctx.models.list）的归一化与查询
+// packages/models/src/host-models.ts — 宿主模型目录（ctx.models.list）的归一化与查询
 //
 // 宿主目录是「这条路走不走得通」的唯一事实源：受管 runtime 里的 provider 路由由
 // @dshana/provider 按它注册，目录里没有的 provider/model 选下去只会在提交时报

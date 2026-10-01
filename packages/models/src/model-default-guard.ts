@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/model-default-guard.ts — 用户设的默认模型不能指向没人服务的路由（对账 + 就地修）
+// packages/models/src/model-default-guard.ts — 用户设的默认模型不能指向没人服务的路由（对账 + 就地修）
 //
 // DSH 的 `agent-default-model` 分两层：base 层由 DSH 自己的配置给（官方 adapter 那条路由
 // `deepseek-official/deepseek-flash`），用户层来自「在 models 页选过模型」。本形态里 llm 路由
@@ -16,15 +16,15 @@
 // 自己配着模型（agents/<id>/config.yaml），读它要 `app/agents.read`（manifest 已声明），
 // 没授权就退到目录第一条。
 //
-// 写回走 lib/model-settings.ts 的既有路径（带 revision 闸，冲突由 DSH 拒），每次都记日志。
+// 写回走 packages/models/src/model-settings.ts 的既有路径（带 revision 闸，冲突由 DSH 拒），每次都记日志。
 // 时机：受管 runtime 就绪那一次（apply 自动链完成时），以及宿主 `models-changed` 之后。
 // runtime 未就绪、宿主目录取不到、段只读时一律只记日志——不重试、不阻塞 App 加载。
-import { readAgentCardModel, type CardModel } from "#/lib/agent-models.ts";
+import { readAgentCardModel, type CardModel } from "./agent-models.ts";
 import { bridgeAccess } from "@dshana/runtime/managed-runtime.ts";
-import { readDefaultModel, writeDefaultModel } from "#/lib/model-settings.ts";
-import { isModelsChangedEvent } from "#/lib/model-sync.ts";
+import { readDefaultModel, writeDefaultModel } from "./model-settings.ts";
+import { isModelsChangedEvent } from "./model-sync.ts";
 import { errText } from "@dshana/shared/err-text.ts";
-import { servedModels, type ServedModel } from "#/lib/host-models.ts";
+import { servedModels, type ServedModel } from "./host-models.ts";
 
 /** 对账结论：换成哪一条，以及为什么换。 */
 export interface DefaultRepair {

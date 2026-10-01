@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/model-sync.ts — 宿主模型/提供商变更 → 受管 runtime 重拉目录
+// packages/models/src/model-sync.ts — 宿主模型/提供商变更 → 受管 runtime 重拉目录
 //
 // 为什么要有这一层：DSH 侧的 provider 路由与模型目录是**启动快照**——@dshana/provider 在
 // 插件激活时读一次 hana.models.list()。宿主改了提供商（设置页加/改凭据、models.json、
