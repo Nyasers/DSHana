@@ -3,11 +3,11 @@
 //
 // packages/ui/src/dsh-inject.ts — 把 DSH 前端注入当前文档 + 提供 __DSH_TRANSPORT__（浏览器 ESM）
 //
-// 形态对齐官方样例 hana-dsh（它 runtime/bootstrap.js 的 src/ui/main.ts）：不再用 iframe 内嵌
-// DSH，而是把 DSH 的 index.html 解析后注入本页——<base href> 指向中继前缀，DSH 的所有相对
-// 资源（./assets/*、manifest、favicon）与绝对路径请求都经 __DSH_TRANSPORT__ 重写到该前缀。
-// 这样 DSH 前端的 SPA 基址问题（绝对路径绕开代理前缀）不再存在，也不再需要 iframe 的
-// surface 票据兜底。
+// 形态对齐官方样例 hana-dsh（它 runtime/bootstrap.js 的 src/ui/main.ts）：DSH 的 index.html
+// 解析后注入本页（不用 iframe）——<base href> 指向中继前缀，DSH 的所有相对资源
+// （./assets/*、manifest、favicon）与绝对路径请求都经 __DSH_TRANSPORT__ 重写到该前缀。
+// 这消掉了 iframe 的两处代价：DSH 前端的 SPA 基址问题（绝对路径绕开代理前缀），以及
+// iframe 的 surface 票据兜底。
 //
 // 宿主（DSH 内核）在 packages/client/connection 读 globalThis.__DSH_TRANSPORT__：
 //   { fetch, openStream?, loadBundle?, ownsHost? }
@@ -607,7 +607,7 @@ export function installDirectoryPickerBridge(sdk) {
  *
  * 一处接管：installRequestTakeover 直接包住本页的 fetch / XMLHttpRequest / EventSource /
  * WebSocket / sendBeacon，凡「发给本页 origin、且不在宿主前缀 /api/apps/ 下」的 URL 一律改指中继前缀。
- * 上面两处逐包补丁保留（同一目标、互为兼容，不再新增第三处）；__DSH_TRANSPORT__ 仍是内核 connection
+ * 上面两处逐包补丁保留（同一目标、互为兼容，不另增第三处）；__DSH_TRANSPORT__ 仍是内核 connection
  * 客户端的 opt-in 通道，语义不变（它对外部 origin 抛错，接管层则原样放行）。
  */
 export interface DshTransport {

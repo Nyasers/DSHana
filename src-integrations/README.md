@@ -1,20 +1,20 @@
-# integrations/ — hana 对官方 DSH 包的集成层（样例路线）
+# src-integrations/ — hana 对官方 DSH 包的集成层（样例路线）
 
 本目录承载「hana 对 DSH 的改动」，形态与官方样例 hana-dsh 一致：**薄集成贴上游版本**，
 不是自研插件接管上游角色。
 
 ## 为什么要有这一层
 
-我们曾在 `@dshana/view` 里 **vendor 了一份 0.1.2 的官方 ui-layout 源码**再改。
-拷贝那一刻它就冻结了：0.1.5 把 root 子槽从 `conversation/details` 改成 `sidebar + main(keyed)`，
-我们那份 frame 没跟上 → 官方 occupant 挂不上、根钩子无人提供 → **真机全页黑屏**。
+改动贴着上游当前版本的源码走，不 vendor 冻结一份拷贝。vendor 的拷贝在落盘那一刻就冻结：
+上游把 root 子槽从 `conversation/details` 改成 `sidebar + main(keyed)` 时，那份 frame 跟不上
+→ 官方 occupant 挂不上、根钩子无人提供 → **真机全页黑屏**。
 
 结论：hana 的改动必须**贴着上游当前版本的源码**，并且**有版本戳、有构建期闸**。
 
 ## 形态
 
 ```
-integrations/<短名>/
+src-integrations/<短名>/
   integration.json          # 清单：对应官方包、上游目录、overlay 文件与其「基于的上游哈希」
   files/<上游相对路径>       # overlay：整文件拷贝 = 上游该文件 + 我们的 delta
 ```
@@ -34,7 +34,7 @@ integrations/<短名>/
 
 ## 闸怎么响
 
-`node scripts/integrations/index.mts verify`（已接进 `pnpm run build`，在 build:app 之前）：
+`node scripts/integrations/index.mts verify`（已接进 `pnpm run build`，在最前）：
 
 1. **镜像版本一致**：`vendor/deepseek-harness` 必须含 tag `dsh-v<版本>`，版本取自
    `packages/host/package.json` 的 `dependencies["@deepseek-ai/dsh"]`（仓库根那份 devDependencies 里的
@@ -47,7 +47,7 @@ integrations/<短名>/
 
 ## 加一个集成
 
-1. `integrations/<短名>/integration.json` 写好包名、上游目录；
+1. `src-integrations/<短名>/integration.json` 写好包名、上游目录；
 2. 把「上游该文件 + 我们的 delta」整文件拷进 `files/<相对路径>`；
 3. 记录上游同名文件的 sha256（`node scripts/integrations/index.mts hash packages/client/ui-layout/src/client/index.ts` 打印）；
 4. `pnpm run build` —— 闸会替你验证镜像与哈希。

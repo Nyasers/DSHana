@@ -139,7 +139,7 @@ function clearRuntimeIdentity() {
 /**
  * 端口选取（纯函数，可注入 rng 便于单测）：[PORT_MIN, PORT_MAX) 内的确定整数。
  * 宿主 runtime service 端口契约要求显式整数（1024..65535，禁 0/随机哨兵），故只能由父进程
- * 自选后传入，不能交给宿主分配；区间随机使端口不再需要用户配置。
+ * 自选后传入，不能交给宿主分配；区间随机使端口无需用户配置。
  */
 export function choosePort(rng = randomInt) {
   return rng(PORT_MIN, PORT_MAX);

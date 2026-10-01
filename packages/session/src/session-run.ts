@@ -100,7 +100,7 @@ export function resolveModelSelection(parsed, dshHome): ModelSelection | null {
   }
   if (!provider || !model) {
     throw new Error(
-      "需要 provider/model：请显式传 provider/model，或在 DSH 自己的模型选择器里选一条（本 App 不再提供默认模型的设置入口）",
+      "需要 provider/model：请显式传 provider/model，或在 DSH 自己的模型选择器里选一条（App 设置页只列候选，不设默认模型）",
     );
   }
   return { provider, model, ...(e ? { reasoningEffort: e } : {}) };

@@ -24,7 +24,7 @@
 #     `pnpm run package --target=<名字>` 也照样出包（见 package.json 的 package:* 别名）。
 #
 # 产物命名与单一事实源：`dshana-v<version>[-<target>].zip`；version 取自 package.json，
-# pack.mts 会断言 manifest 与 cordis 包版本一致，不一致直接拒包（fail-closed）。
+# scripts/release/pack/index.mts 会断言 manifest 与 cordis 包版本一致，不一致直接拒包（fail-closed）。
 #
 # runner 一律钉 ubuntu-24.04，不用 ubuntu-latest：镜像换代是 GitHub 侧的静默变化，
 # 发版流水线要的是可复现的构建地基，不能让 latest 在某个发版日悄悄换掉它。

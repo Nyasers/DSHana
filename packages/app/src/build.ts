@@ -91,7 +91,7 @@ rewriter(DIST_DIR);
 fs.copySync(join(SRC_ROOT, "manifest.json"), join(DIST_DIR, "manifest.json"));
 fs.copySync(join(SRC_ROOT, "skills"), join(DIST_DIR, "skills"));
 // App 图标：packages/app/src/assets/icon.png 为唯一规范源（manifest.icon "assets/icon.png"）；
-// 依赖部署（自包含打包）：DSH 依赖由 pack.mts 物化进安装目录 node_modules，
+// 依赖部署（自包含打包）：DSH 依赖由 scripts/release/pack/index.mts 物化进安装目录 node_modules，
 // dist = App 安装目录形态（含 cordis 产物）；依赖随包物化，dist 保持轻量壳。
 const iconSrc = join(SRC_ROOT, "assets", "icon.png");
 if (!fs.pathExistsSync(iconSrc))

@@ -22,10 +22,10 @@
 //     把宿主任务结算成 hana.tasks.cancel——绝不先标
 //     canceled 而 DSH 还在跑。
 //   · 宿主侧取消反向触发（Hana task canceled/aborted，来源会话停止按钮/App 生命周期）：
-//     本桥对已 running 的任务经 hana.tasks.watch(taskId) SSE（watch-sse.js：snapshot 首条
+//     本桥对已 running 的任务经 hana.tasks.watch(taskId) SSE（@dshana/shared/watch-sse.ts：snapshot 首条
 //     + app-task；断线 get() 对账；reset 重读快照）观察宿主任务状态，取消到达时向本进程
 //     DSH 发 session.cancel（rpcSessionCancel，127.0.0.1 回环）+ 定向中止该会话活动模型
-//     requestId（model-requests.js）——只停本工作资源，单例 runtime 内不误停他人会话。
+//     requestId（model-requests.ts）——只停本工作资源，单例 runtime 内不误停他人会话。
 //   · 宿主取消路径可能先于 DSH turn/end 到达：DSH 回合随后中止事件照常到，settle 幂等。
 //
 // 容错纪律：订阅/回投失败只记日志不阻断 runtime；宿主记录里没有绑定
@@ -37,7 +37,7 @@ import { rpcSessionCancel } from "@dshana/shared/dsh-rpc.ts";
 import { cancelSessionModelRequests } from "./model-requests.ts";
 import { errText } from "@dshana/shared/err-text.ts";
 
-// 事件白名单（与 v1 dsh-events 的会话事件子集一致；其余事件不订阅）
+// 事件白名单（会话事件子集；其余事件不订阅）
 export const BRIDGE_EVENTS = [
   "api-session/status", // [sessionId, running] —— 整轮排空终态信号（false）
   "api-session/error", // [sessionId, message] —— 错误记录（不即终态，终态时判失败）
@@ -407,7 +407,7 @@ class SessionBridge {
  * @param opts { ctx, hana, bindings?, log, serviceBaseUrl?, cancelModelRequests? }
  *   serviceBaseUrl —— 受管 DSH web 回环基址（宿主任务取消反向触发 session.cancel 用；
  *   缺省 = 不做反向 watch）；cancelModelRequests —— (sessionId) 定向模型取消（缺省回落
- *   lib/model-requests.js 实现）；bindings —— 绑定索引（缺省用 hana.tasks 建一个）。
+ *   model-requests.ts 实现）；bindings —— 绑定索引（缺省用 hana.tasks 建一个）。
  * @returns 卸载函数（幂等）
  */
 const BRIDGE_PRUNE_AT = 128; // bridges 有界（已终态条目在超限时清理）

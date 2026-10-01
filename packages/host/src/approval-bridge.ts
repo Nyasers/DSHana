@@ -9,13 +9,13 @@
 //   DSH 工具越界/敏感操作（sandbox 升级 approval/policy=ask）
 //     → ApprovalService.request → ctx.waterfall(scopeTarget(agent), 'approval/request', …)
 //     → 本桥以 ctx.on('approval/request', …, { global: true, prepend: true }) 认领
-//       （v1 实证：无 scope 的 ctx.on 因 context filter 收不到 agent-scope 瀑布事件，
-//       EventOptions.global = true 无视 context filter 收所有 agent——见 v1 acp-mount）
+//       （无 scope 的 ctx.on 因 context filter 收不到 agent-scope 瀑布事件；
+//       EventOptions.global = true 无视 context filter，收所有 agent）
 //     → 按宿主任务记录定位宿主 task（metadata.dsh.sessionId → taskId；绑定读取见
-//       lib/task-binding.ts）
+//       @dshana/shared/task-binding.ts）
 //     → hana.tasks.requestApproval({ taskId, label, details, timeoutMs })
 //     → 挂起 ApprovalOutcome 承诺，经 watch(approvalId) SSE（snapshot 首条 + app-task；
-//       断线 get() 对账；reset 重读快照——lib/watch-sse.js）等宿主终态：
+//       断线 get() 对账；reset 重读快照——@dshana/shared/watch-sse.ts）等宿主终态：
 //          outcome=allowed-once → 'allowed-once'（仅本次放行）
 //          outcome=rejected     → 'rejected'
 //          终态无 outcome（父任务结束/撤销）→ 'rejected'（fail closed，绝不隐式放行）

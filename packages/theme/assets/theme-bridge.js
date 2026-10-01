@@ -50,7 +50,7 @@
     return bootPref;
   }
   // 这一面声明的底座 token（壳页写在 <html> 的 data-dshana-backdrop 上，值 = 该面可见底那格
-  // DSW token 名）。壳页那侧的同源实现在 src/lib/seed-tokens.ts。
+  // DSW token 名）。壳页那侧的同源实现在 packages/ui/src/seed-tokens.ts。
   function backdropKey() {
     try {
       var k = document.documentElement.getAttribute("data-dshana-backdrop");
@@ -62,7 +62,7 @@
     // 底座那一格按面取：DSH 的 .frame 与它的启动屏都画 var(--dsw-alias-bg-base, …)，而规则表是
     // 一张、没有面的概念——一律把 base 压成 --bg，侧栏面（可见底是 --dsw-specific-sidebar-fill）
     // 的启动屏就会先亮一次中列色。这里取那一格规则**依赖的第一个宿主变量**（垫片用的是同一处
-    // 事实：src/lib/seed-tokens.ts）。
+    // 事实：packages/ui/src/seed-tokens.ts）。
     var baseKey = "--dsw-alias-bg-base";
     var back = backdropKey();
     var baseCss = "";
@@ -95,15 +95,15 @@
       st.remove();
     }
   }
-  // 壳页写在 <html> 的宿主明暗（light | dark，见 src/ui/app-shell.ts）。
+  // 壳页写在 <html> 的宿主明暗（light | dark，见 packages/ui/src/app-shell.ts）。
   function hostAppearance() {
     try {
       var a = document.documentElement.getAttribute("data-appearance");
       return a === "light" || a === "dark" ? a : null;
     } catch (e) { return null; }
   }
-  // 壳页垫片在 body 内联样式上写过的 token（src/lib/seed-tokens.ts 的 VIEW_SEEDS）：它垫的是
-  // 宿主底色，为的是注入前不闪白。一旦 dsh 自己选了 light/dark（我们不再跟随），必须一并抹掉，
+  // 壳页垫片在 body 内联样式上写过的 token（packages/ui/src/seed-tokens.ts 的 VIEW_SEEDS）：它垫的是
+  // 宿主底色，为的是注入前不闪白。一旦 dsh 自己选了 light/dark（不跟随宿主），必须一并抹掉，
   // 否则 dsh 自己的主题切不干净（body 内联钉着宿主色，桥的 <style> 撤了也没用）。
   // 名单与 seed-tokens 同源，由单测盯着（"桥退出时抹的名单 = 壳页垫过的 token"）。
   var seedKeys = ["--dsw-alias-bg-base", "--dsw-specific-sidebar-fill", "--dsh-boot-bg"];

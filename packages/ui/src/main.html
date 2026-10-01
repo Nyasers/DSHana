@@ -13,7 +13,7 @@
      小字，报错时下方直接一块 <pre>（唯一保留的诊断面）。ready 后整块让给注入的 DSH Web UI
      （同文档注入，不是 iframe）。无 emoji、无渐变/阴影光效。
      自举台面的样式与 default / stream 两个面共用（./face-stage.css）：底色、#root、台面、
-     日志块、台面按钮都在那份里，本页不再自带 <style>。
+     日志块、台面按钮都在那份里，本页不自带 <style>。
      到本 App 后端路由一律 hana.api.fetch（surface session 凭据，见 app-shell.js）。
      body 上的 data-dshana-shell 是壳脚本的根锚（app-shell.js boot() 取它，缺失则不轮询）；
      data-dshana-view="main" 决定 role（workspace）。侧栏归本卡的功能面板 /sidebar.html。 -->

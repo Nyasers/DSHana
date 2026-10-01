@@ -163,7 +163,7 @@ import {
   // 低层宿主管道（到 App 后端路由的取数面、surface 凭据、跨面共享状态、卡实例态、剪贴板）
   // 已抽到 packages/ui/src/surface-bridge.ts：会话卡的轻半（stream-entry.ts）也要这一层，但不该为此
   // 背上下面的 DSH 注入与 React。本文件从那里 import，别名不变、调用点不动。
-  // ---- DSH 注入（对齐官方样例：同文档注入 + __DSH_TRANSPORT__，不再用 iframe）----
+  // ---- DSH 注入（对齐官方样例：同文档注入 + __DSH_TRANSPORT__，不用 iframe）----
   // 一次装配：标记视图参数（DSH 侧 view 插件读 ?dshana-view=）→ 装 transport → 取回 DSH
   // index 注入本页。私有前缀 = 中继前缀 + surface 路径票据（DSH 前端经原生 fetch 发出的
   // 请求带不了 header，票据必须在路径里）。

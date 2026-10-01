@@ -37,7 +37,7 @@ export async function invokeControl(ctx, action, args, opts: { timeoutMs?: numbe
 
 /**
  * 一元 RPC（经控制面）：{ method, payload, rpcId? } → DSH 的 result（parseServerResponse 解包）。
- * 与 lib/dsh-rpc.js 的 rpcCallWithFetch 同信封，但载体改为控制面。
+ * 与 @dshana/shared/dsh-rpc.ts 的 rpcCallWithFetch 同信封，但载体改为控制面。
  */
 export async function rpcViaControl(
   ctx,

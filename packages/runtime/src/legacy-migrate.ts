@@ -30,11 +30,11 @@
 //     无需迁移，旧文件锁不构成迁移阻塞）。日志/会话文件拷贝遇 native 文件锁只在旧插件
 //     仍在跑时可能出现——同"停机指引"。
 //
-// 本模块 = 纯逻辑/只读验证（plan/verify/suggestion/marker），可单测；真实拷贝只发生在
-// CLI（scripts/migrate/legacy.mts --apply）——本刀不真跑（旧插件数据是活的）。
+// 本模块 = 纯逻辑/只读验证（plan/verify/suggestion/marker），可单测；真实拷贝只在 CLI
+// （scripts/migrate/legacy.mts --apply）里发生。
 import { readFileSync, writeFileSync, renameSync, existsSync, statSync, mkdirSync, readdirSync } from "node:fs";
 import path from "node:path";
-// 目标私有源目录名与运行时实际读取处同源（data-source.js）；本模块不再自带一份字面值
+// 目标私有源目录名从 data-source.ts 取，与运行时实际读取处同源（不另存一份字面值）
 import { PRIVATE_HOME_NAME } from "./data-source.ts";
 import { errText } from "@dshana/shared/err-text.ts";
 

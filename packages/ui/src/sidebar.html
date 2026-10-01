@@ -13,7 +13,7 @@
      就绪后同文档注入 DSH 侧栏（data-dshana-view="sidebar" → app-shell.js 取它 → role=navigation），
      同时收起本页自带的标题/状态/按钮 chrome（[data-dsh-chrome]），整块让给侧栏（DSH sidebar
      自带 brand 行，叠一层会重复）；未就绪时才露 chrome 充当占位（启动按钮 + 日志尾）。
-     旧 iframe 壳（#frame-wrap / [data-dsh-frame]）已删除：同文档注入取代了它。 -->
+     页面无 iframe 壳（#frame-wrap / [data-dsh-frame]）：DSH 以同文档注入挂进本页。 -->
 <style>
   html, body { margin: 0; padding: 0; height: 100%; }
   html { color-scheme: light dark; }

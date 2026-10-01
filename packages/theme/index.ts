@@ -23,7 +23,7 @@
 //
 // 机制：经 dsh-host-webserver 的 tapIndex 扩展点，向每个 index 响应注入动态桥脚本：
 //   桥向壳页索取主题变量（preference 为 system 时），写 body 层 !important 覆盖
-//   （压 dsh presenter 的 body inline）。**不再注入任何静态兜底样式**：拿不到宿主主题时
+//   （压 dsh presenter 的 body inline）。**不注入静态兜底样式**：拿不到宿主主题时
 //   就保持 dsh 内置 token（官方明暗），不从宿主搬一套固定值来充数。
 //   底座一格按面取：壳页在 <html> 上声明 data-dshana-backdrop = 该面可见底那格 token
 //   （源在 packages/ui/src/seed-tokens.ts 的 FACE_BACKDROP；侧栏面是 --dsw-specific-sidebar-fill，
@@ -60,7 +60,7 @@ import { errText } from "./err-text.ts";
 // 动态脚本：宿主声明（壳桥 vars + preference）直接应用。正文在
 // assets/theme-bridge.js（自包含浏览器 JS），唯一动态点 = 规则表注入——占位符
 // __DSH_THEME_TOKENS__ 在模块初始化时替换为 **编译后的三元组**（token / CSS 值 / 依赖的宿主
-// 变量）。编译只在这里做一次，桥不再自带第二份取值逻辑。
+// 变量）。编译只在这里做一次，桥不另带取值逻辑。
 const BRIDGE = `<script id="@dshana/theme-bridge">
 ${bridgeBody.replace("__DSH_THEME_TOKENS__", JSON.stringify(compileRules(TOKEN_MAP)))}
 </script>`;

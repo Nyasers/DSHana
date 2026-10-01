@@ -14,12 +14,11 @@
 // 响应 ServerResponse JSON：rpcId 回显 + result.ok/value 或 result.ok=false + error。
 // 本模块零宿主状态（不 import 单例/运行包），调用方自备 base URL 与 fetch。
 //
-// 复用纪律：v1 callUnaryBus 曾以 ACP 优先、HTTP 兑底；v2 没有 ACP（DSH 在受管子进程），
-// HTTP 信封即唯一指令面——只保留 v1 HTTP 兑底形态的协议常数与包装逻辑，去掉 ACP 分支。
+// 指令面纪律：DSH 在受管子进程里，无 ACP，HTTP 信封即唯一指令面——协议常数与包装逻辑只覆盖这一形态。
 
 const RPC_TIMEOUT_MS = 60000;
 
-/** rpcId 生成（与 v1 nextRpcId 同形：时间基 + 随机尾巴，跨调用唯一）。 */
+/** rpcId 生成（时间基 + 随机尾巴，跨调用唯一）。 */
 export function nextRpcId(): string {
   return `r_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -57,9 +56,8 @@ export interface BuildClientRequestInput {
 
 /**
  * 构造 client-request 信封。
- * DSH web /api 网关校验 body.method === 端点路径段（斜杠形态，official rpc-host 与
- * @dshana/bridge 同款，见迁移后核对记录）——method 传 'session.create' 或
- * 'session/create' 均可，信封内统一写斜杠形态。
+ * DSH web /api 网关校验 body.method === 端点路径段（斜杠形态，official rpc-host 同款）
+ * ——method 传 'session.create' 或 'session/create' 均可，信封内统一写斜杠形态。
  */
 export function buildClientRequest(
   { method, payload, rpcId }: BuildClientRequestInput,

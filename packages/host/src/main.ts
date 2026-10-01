@@ -235,8 +235,8 @@ function missingArtifacts(depsRoot: string, rosterPatch: string): string[] {
 function ensureOwnProfile(appBoot, dshHome: string): string {
   const dir = appBoot.resolveProfileDir(PROFILE_NAME, dshHome);
   appBoot.initProfile(dir, PROFILE_BUNDLES);
-  // 我们不再走 loadProfile，替掉它那几道自愈：旧版 DSH 的链接后端会把包投影进 profile 的
-  // node_modules（.dsh-module-fallback，可能是旧版本留下的悬空链接），不清理会挡住安装树的真包。
+  // profile 初始化用 initProfile，并就地清链接投影：.dsh-module-fallback 会把包投到 profile 的
+  // node_modules，悬空链接会挡住安装树的真包，故 removeLinkProjections 必须跟着 initProfile。
   appBoot.removeLinkProjections(dir);
   const manifest = appBoot.readProfileManifest("dsh", dir);
   const current = manifest?.dsh?.profile?.bundles;
