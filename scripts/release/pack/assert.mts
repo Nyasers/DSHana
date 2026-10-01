@@ -9,24 +9,23 @@ import { join } from "node:path";
 
 /**
  * 交付树 package.json 允许出现的键。
- * name / type / version 是实体（version 与 dependencies 由 derive 的 product-package 任务同步），
- * dependencies 是交付清单自己的运行时依赖声明（派生自 packages/host）：装机侧不跑 pnpm（依赖已物化
- * 进安装树），这个字段在运行期是惰性的，留着只为「这包依赖什么」有据可查。其余（scripts /
- * devDependencies / packageManager / imports / private）是构建面，不进包。
+ * name / type / version 都由 scripts/release/pack/ship-manifest.mts 现生成（内核声明住 host，
+ * 包根不再抄一份 dependencies）：装机侧不跑 pnpm（依赖已物化进安装树），这台只用于给包根 index.js
+ * 定 ESM 解析。其余（scripts / devDependencies / packageManager / imports / private）是构建面，不进包。
  */
-export const PRODUCT_PACKAGE_KEYS = ["name", "type", "version", "dependencies"];
+export const PRODUCT_PACKAGE_KEYS = ["name", "type", "version"];
 
 /**
  * 交付树 package.json 校验：字段白名单 + 版本一致 + type: module。
- * 那份文件是 packaging/package.json（实体只有 name / type，version 与 dependencies 由 derive 的
- * product-package 任务同步），pack 复制成包根的 package.json。它被改坏/抄了旧版就直接拒包。
+ * 那份文件由 pack 现生成（ship-manifest.mts，见 scripts/release/pack/index.mts），而非从树里复制——
+ * 但它被改坏/漏写就直接拒包。
  * @param outDir - 交付目录（.cache/dist 或组装树）
  * @param version - 本次出包的版本
  */
 export function assertProductPackage(outDir, version) {
   const p = join(outDir, "package.json");
   if (!fs.pathExistsSync(p)) {
-    throw new Error("交付树的 package.json 缺失（packaging/package.json 没复制进来）：拒绝出包");
+    throw new Error("交付树的 package.json 缺失（pack 未生成）：拒绝出包");
   }
   const j = fs.readJsonSync(p);
   const keys = Object.keys(j).sort();

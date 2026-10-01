@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/build/pack-target-assets.test.mjs — 出包资产清单与交付锁的一致性闸
+// tests/build/pack-target-assets.test.mjs — 出包资产清单与仓库锁的一致性闸
 //
 // assets 只在真打包、依赖物化完之后被逐个断言存在，CI 上要到出包那一刻才碰得到。这里把清单
-// 提前对齐到 packaging/pnpm-lock.yaml：名字漂了（上游改包名、换平台切分、或我们写错一个字母）
-// 在 PR 上就拦住，不必等一次完整出包才暴露。
+// 提前对齐到**仓库锁文件**（pnpm-lock.yaml）：交付面的物化以它为种子解析，它就是交付闭包的解析
+// 记录；名字漂了（上游改包名、换平台切分，或我们写错一个字母）在 PR 上就拦住，不必等一次
+// 完整出包才暴露。
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -15,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import { supportedTargetNames, targetSpec } from "../../scripts/release/pack/targets.mts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const LOCK_LINES = readFileSync(join(ROOT, "packaging", "pnpm-lock.yaml"), "utf8").split(/\r?\n/);
+const LOCK_LINES = readFileSync(join(ROOT, "pnpm-lock.yaml"), "utf8").split(/\r?\n/);
 
 /** LibreOffice 转换栈的名字根与四个原生 kit；Linux 没有原生形态，那条是 wasm。 */
 const LO_KIT = "@deepseek-ai/libreoffice-kit";
@@ -72,10 +73,10 @@ test("每个目标的资产清单内部无重复", () => {
   }
 });
 
-test("清单里的每个资产在交付锁里有条目", () => {
+test("清单里的每个资产在仓库锁里有条目", () => {
   for (const { name, spec } of targets) {
     for (const asset of spec.assets) {
-      assert.ok(inLock(asset), `${name} 的资产 ${asset} 不在 packaging/pnpm-lock.yaml 里`);
+      assert.ok(inLock(asset), `${name} 的资产 ${asset} 不在 pnpm-lock.yaml 里`);
     }
   }
 });

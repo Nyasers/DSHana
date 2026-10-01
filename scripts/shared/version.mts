@@ -28,11 +28,10 @@ export function cordisPkgPaths() {
   return out.sort();
 }
 
-// 派生同步目标（随主版本同步的文件）：packages/app/src/manifest.json（app 域构件）+ packaging/package.json
-//（交付树包根，derive 的 product-package 任务）+ cordis 包（不含主 package.json——主是事实源，
-// 由 bump 阶段改；这里指"跟随"它的文件）
+// 派生同步目标（随主版本同步的文件）：packages/app/src/manifest.json（app 域构件）+ cordis 包
+//（不含主 package.json——主是事实源，由 bump 阶段改；这里指"跟随"它的文件）
 export function derivedVersionTargets() {
-  return ["packages/app/src/manifest.json", "packaging/package.json", ...cordisPkgPaths()];
+  return ["packages/app/src/manifest.json", ...cordisPkgPaths()];
 }
 
 // 版本文件全集（含主 package.json——version-hook 提交范围用：pnpm version 已改主待收口）
@@ -84,19 +83,15 @@ export function dshPin() {
   return typeof v === "string" && v ? v : null;
 }
 
-// ---- 交付面清单（packaging/package.json）----
-// 交付树的包根那份：pack 物化按它做一次干净安装（工位 = 这份 + 它的锁文件 + 按目标生成的
-// workspace yaml）。version 与 dependencies 都是派生物（derive 的 product-package 任务），
-// 实体只剩 name / type。dependencies 从 host 的内核声明派生，见 shipDependencies()。
-export const SHIP_PKG_REL = "packaging/package.json";
-
-/** 交付面清单（packaging/package.json）。 */
-export const readShipPkg = () => readPkg(SHIP_PKG_REL);
+// ---- 交付面（构建期生成，不进树）----
+// 交付树包根那份 package.json 与它的锁文件都由 pack 在工位里现生成（对齐上游 desktop 的
+// runtime 树：清单按内核声明写、锁以仓库锁文件为种子重解析），树里不再留手写的交付面清单与锁。
+// 内核声明住 host（见 dshPin），工位清单的运行时依赖从它派生（见 shipDependencies）。
 
 /**
- * 交付面清单的运行时依赖：从 host 的 dependencies 派生，剔除 workspace 在仓项。
+ * 交付面的运行时依赖：从 host 的 dependencies 派生，剔除 workspace 在仓项。
  * 仓内包（@dshana/*）在构建期被 rspack 内联进各自 bundle，安装树里没有对应物，也解析不了
- * workspace 协议；交付清单只列能物化的 registry 依赖。
+ * workspace 协议；交付面只列能物化的 registry 依赖。
  */
 export function shipDependencies() {
   const deps = readHostPkg()?.dependencies ?? {};

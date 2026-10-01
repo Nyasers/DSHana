@@ -12,8 +12,8 @@
 //   index.js、node_modules/、ui/ 等全部在 zip 根级，不得套一层目录（宿主安装时在包根读 manifest.json）。
 // 两个临时目录的分工（都在 .tmp/ 下，起手清残留、用完即清、收尾由 postpackage 钩子清）：
 //   · .tmp/pkg-root/<target>：依赖物化**工位**。要跑一次真 install，就得有个像独立项目的目录——
-//     交付面自带的三件（packaging/package.json + packaging/pnpm-lock.yaml + 按目标替换过
-//     supportedArchitectures 的 pnpm-workspace.yaml）落进去跑 `pnpm install --prod --frozen-lockfile`。
+//     工位三件都现生成（清单 + 按目标替换过 supportedArchitectures 的 pnpm-workspace.yaml +
+//     以仓库锁文件为种子重解析出的锁）落进去跑 `pnpm install --prod --frozen-lockfile`。
 //     隔离在 .tmp 下，仓库自身的 node_modules 与锁文件不被污染。
 //   · .tmp/pkg：交付**组装台**。只放要进包的东西（.cache/dist/ + .cache/cordis/ + 物化依赖树），
 //     不带 pnpm 的中间物（lockfile、workspace yaml、.modules.yaml 这些是构建输入，不是交付物）。
@@ -36,6 +36,7 @@ import { declareInstallationPlugins } from "./bundle-deps.mts";
 import { STAGING_ROOT, materializeProdDeps } from "./materialize.mts";
 import { minifyCordisStatics } from "./minify.mts";
 import { applyIntegrations } from "./overlays.mts";
+import { shipManifest } from "./ship-manifest.mts";
 import { failUsage, targetSpec } from "./targets.mts";
 
 // 版本单一事实源：package.json（唯一来源，不支持命令行传版本——显式传版本容易与
@@ -60,7 +61,7 @@ const staticItems = [
   // manifest.json 与 skills 已随 app 域（packages/app/src/manifest.json、packages/app/src/skills/，build:app 产出
   // 交付目录副本），不再经根级静态复制
   // 注：package.json 也不在清单里：仓库那份带 scripts/devDependencies/packageManager/imports
-  // （构建入口），交付面那份（packaging/package.json，单独复制）才是包根要的——见 packaging/README.md。
+  // （构建入口），包根那份由 ship-manifest.mts 现生成（只带 name / version / type）。
   // 注：pnpm-workspace.yaml / pnpm-lock.yaml 不随包——安装侧不执行任何 pnpm install
   // （依赖已物化进包），两份文件在本流程里没有消费方
 ];
@@ -71,8 +72,8 @@ for (const item of staticItems) {
   // dereference: true —— 历史为内置 pnpm 的符号链接复制（node_modules/pnpm →
   // .pnpm/pnpm@…/node_modules/pnpm，zip 内置 pnpm）；现版本起 pnpm 改运行时引导
   // （tools/lib/pnpm.js ensurePnpm 下载单文件到数据目录 pnpm-dist/），不再打包
-  // node_modules/pnpm——其余静态项（NOTICE/package.json/manifest/pnpm-workspace/
-  // pnpm-lock/skills）均为真实实体，dereference 恒为 no-op，保留无害。
+  // node_modules/pnpm——其余静态项（NOTICE / THIRD_PARTY_NOTICES.md 等）均为真实实体，
+  // dereference 恒为 no-op，保留无害。
   fs.copySync(src, join(distDir, item), {
     dereference: true,
     filter: (srcPath) => {
@@ -83,10 +84,9 @@ for (const item of staticItems) {
   });
 }
 
-// 1.2) 交付树的 package.json：复制 packaging/package.json（实体只有 name / type，version 与
-//      dependencies 由 derive 的 product-package 任务同步；不复制仓库根那份——它是构建入口，见 packaging/README.md）。
-//      字段白名单与版本一致由下面的 assertProductPackage 把关。
-fs.copySync(join(ROOT, "packaging", "package.json"), join(distDir, "package.json"));
+// 1.2) 交付树的 package.json：现生成（name / version / type: module；内核声明住 host，包根不再
+//      抄一份依赖）。字段白名单与版本一致由下面的 assertProductPackage 把关。
+fs.writeFileSync(join(distDir, "package.json"), JSON.stringify(shipManifest(version), null, 2) + "\n");
 
 // 1.5 / 1.6) 产物断言：cordis 包版本与完整性、交付树 package.json、App ui/ 静态树（缺失即拒包）
 assertCordisArtifacts(CORDIS_DIR, join(distDir, "cordis.patch.yml"), version);
@@ -133,7 +133,7 @@ fs.ensureDirSync(relDir);
 const pkgRoot = join(ROOT, ".tmp", "pkg");
 for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
 {
-  const modules = materializeProdDeps(spec);
+  const modules = materializeProdDeps(spec, version);
   // 命名：通用包无后缀（既有 CI/脚本按 dshana-v<ver>.zip 取件），平台包带目标后缀
   const base = spec.name === "universal" ? `dshana-v${version}` : `dshana-v${version}-${spec.name}`;
   const pkgDir = join(pkgRoot, base); // 组装暂存目录（内容原样进 zip 根，此目录名不出现在包里）

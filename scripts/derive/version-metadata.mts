@@ -11,7 +11,7 @@
 //
 // 与 version 钩子的分工：钩子在 bump 时经 shared/version.mts#fullVersion 拼回完整版（pnpm 算号
 // 会剥掉 build 段，那是唯一能表达完整版的时机），本任务负责"平时也对"。写回只动主版本，
-// 派生链（manifest / cordis / packaging）由同一次 derive 里排在后面的任务跟上——所以本任务
+// 派生链（manifest / cordis 包）由同一次 derive 里排在后面的任务跟上——所以本任务
 // 在 TASKS 里排第一。
 import { fullVersion, readPkg, writePkg } from "../shared/version.mts";
 

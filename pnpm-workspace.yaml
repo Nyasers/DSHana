@@ -1,5 +1,5 @@
 # 多包工作区：我们自己那几个包住在 packages/ 下（@dshana/shared 等），源树内互相引用走
-# workspace 协议。仓库根仍是构建入口所在的项目（scripts/、src-integrations/、packaging/）。
+# workspace 协议。仓库根仍是构建入口所在的项目（scripts/、src-integrations/）。
 packages:
   - "packages/*"
 
