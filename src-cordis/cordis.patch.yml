@@ -46,8 +46,8 @@
 # 缺省模型不在这里写死：base 层给的是官方路由 deepseek-official/deepseek-flash，上面那行停掉
 # 之后这条路由没人服务。写死一个宿主 provider/model 也不行——宿主配了哪些提供商、它们叫什么
 # 名字，是每台 Hana 各自的配置。模型从哪来由 App 定：工具建的会话按**调用方那张角色卡**配的
-# models.chat 开（src/lib/caller-model.ts；App 设置里可改成固定一条），用户手设的默认则对所有
-# 会话生效、它若指向宿主目录里没有的路由，由 src/lib/model-default-guard.ts 就地换一条可服务的。
+# models.chat 开（packages/models/src/caller-model.ts；App 设置里可改成固定一条），用户手设的默认则对所有
+# 会话生效、它若指向宿主目录里没有的路由，由 packages/models/src/model-default-guard.ts 就地换一条可服务的。
 
 # web-runtime（官方 @deepseek-ai/dsh-web-app 行）：App 内嵌场景不开系统浏览器、不打印 URL
 # （由宿主卡片 / iframe 承载），surfaceContext 保留（模型可见 Web 面说明）。trustedHosts 沿用

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/model-catalog-view.ts — 宿主模型目录（ctx.models.list）→ 设置页要的分组视图
+// packages/models/src/model-catalog-view.ts — 宿主模型目录（ctx.models.list）→ 设置页要的分组视图
 //
-// 设置页的模型候选只认宿主目录：宿主目录是「这条路走不走得通」的唯一事实源（见 lib/host-models.ts），
+// 设置页的模型候选只认宿主目录：宿主目录是「这条路走不走得通」的唯一事实源（见 packages/models/src/host-models.ts），
 // 页面按它列 provider / 模型 / 推理档，不读 DSH 自己的目录，也不依赖 DSH 运行。
 //
 // 目录条目是宿主的不透明投影（AppModelInfoV2 = Record<string, unknown>）：这里只取展示与选择用得上

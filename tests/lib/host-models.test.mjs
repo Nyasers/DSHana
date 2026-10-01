@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/lib/host-models.test.mjs — 宿主目录的归一化与查询（src/lib/host-models.ts）
+// tests/lib/host-models.test.mjs — 宿主目录的归一化与查询（packages/models/src/host-models.ts）
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { servedHas, servedModels } from "../../src/lib/host-models.ts";
+import { servedHas, servedModels } from "@dshana/models/host-models.ts";
 
 test("servedModels: 只留 provider/id 都非空的条目，留白修掉", () => {
   assert.deepEqual(

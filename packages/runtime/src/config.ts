@@ -84,7 +84,7 @@ export const APP_SETTING_DEFAULTS = {
   defaultTimeoutSec: 1800,
   // 会话模型（工具建的会话用哪个模型）：caller = 复用调用方角色卡配的（缺省），
   // custom = 用下面固定的 provider/model（reasoningEffort 空串 = 不指定，由 DSH 决定）。
-  // 见 src/lib/caller-model.ts。
+  // 见 packages/models/src/caller-model.ts。
   sessionModelMode: "caller",
   sessionModelProvider: "",
   sessionModelModel: "",

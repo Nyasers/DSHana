@@ -33,7 +33,7 @@ import { nextRpcId } from "@dshana/shared/rpc-envelope.ts";
 import { isValidSessionId, dshMetadataFor } from "@dshana/shared/task-binding.ts";
 import { withSessionTurn, enterSessionTurn } from "#/lib/session-serialize.ts";
 import { readDshDefaultModel } from "@dshana/runtime/config.ts";
-import { callerPlanDeps, resolveCallerPlan } from "#/lib/caller-model.ts";
+import { callerPlanDeps, resolveCallerPlan } from "@dshana/models/caller-model.ts";
 import { serviceBase } from "@dshana/runtime/service-base.ts";
 import { rpcViaControl, invokeControl } from "@dshana/runtime/controller.ts";
 import { resolveTaskTimeoutSec, resolveApprovalTimeoutMs, cancelSessionWork } from "#/lib/cancel-chain.ts";

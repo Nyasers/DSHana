@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/lib/caller-model.test.mjs — 工具建的会话按调用方角色卡补模型（src/lib/caller-model.ts）
+// tests/lib/caller-model.test.mjs — 工具建的会话按调用方角色卡补模型（packages/models/src/caller-model.ts）
 //
 // 决策的优先序是这一段的全部内容：显式入参 > 用户设的默认 > 调用方角色卡（且它得在宿主目录里）。
 // resolveCallerPlan 另外守一件事：任何一步取数失败都只记一行、按最保守的结果收场（不补），
 // 不能因为读不到角色卡就让整个提交链失败。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pickOf, planCallerSelection, resolveCallerPlan, sessionModelSettingOf } from "../../src/lib/caller-model.ts";
+import { pickOf, planCallerSelection, resolveCallerPlan, sessionModelSettingOf } from "@dshana/models/caller-model.ts";
 
 const SERVED = [
   { provider: "deepseek", id: "deepseek-flash" },

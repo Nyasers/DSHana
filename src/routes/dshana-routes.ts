@@ -35,7 +35,7 @@ import { managedRuntimeDetails, ensureManagedRuntime, stopManagedRuntime, bridge
 import { buildBootSnapshot, APP_ID } from "#/lib/boot-state.ts";
 import { dataSources, sourceOf } from "@dshana/runtime/data-source.ts";
 // 数据源切换（packages/runtime/src/source-switch.ts）的入口暂时撤下：链未在真机验证过，见 POST /dshana/settings/restart。
-import { groupHostCatalog } from "#/lib/model-catalog-view.ts";
+import { groupHostCatalog } from "@dshana/models/model-catalog-view.ts";
 import {
   createTaskBindingIndex,
   isValidSessionId,

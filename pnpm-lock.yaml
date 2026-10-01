@@ -184,6 +184,9 @@ importers:
       '@dshana/host':
         specifier: workspace:*
         version: link:packages/host
+      '@dshana/models':
+        specifier: workspace:*
+        version: link:packages/models
       '@dshana/runtime':
         specifier: workspace:*
         version: link:packages/runtime
@@ -277,6 +280,15 @@ importers:
       '@deepseek-ai/dsh':
         specifier: 0.2.0-rc.2
         version: 0.2.0-rc.2(7104fb317bb89ba3ae7bf24a06a6b98a)
+      '@dshana/shared':
+        specifier: workspace:*
+        version: link:../shared
+
+  packages/models:
+    dependencies:
+      '@dshana/runtime':
+        specifier: workspace:*
+        version: link:../runtime
       '@dshana/shared':
         specifier: workspace:*
         version: link:../shared
