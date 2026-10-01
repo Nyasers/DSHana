@@ -34,7 +34,7 @@ integrations/<短名>/
 
 ## 闸怎么响
 
-`node scripts/integrations/index.mts verify`（已接进 `pnpm run build`，在 build:src 之前）：
+`node scripts/integrations/index.mts verify`（已接进 `pnpm run build`，在 build:app 之前）：
 
 1. **镜像版本一致**：`vendor/deepseek-harness` 必须含 tag `dsh-v<版本>`，版本取自交付面清单
    `packaging/package.json` 的 `dependencies["@deepseek-ai/dsh"]`（仓库根那份 devDependencies 里的

@@ -1,6 +1,6 @@
 {
   // 编辑器入口：IDE 从"打开的文件"向上找 tsconfig，根上缺这份时它会按默认口径猜
-  // （moduleResolution 不读 package.json imports ⇒ `#/` 报找不到；noImplicitAny 打开 ⇒
+  // （moduleResolution 不认 package exports ⇒ 包说明符报找不到；noImplicitAny 打开 ⇒
   // 第三方无类型包报隐式 any）。这份配置让编辑器看到与构建一致的口径。
   //
   // 与逐域配置的关系：**判定仍以 tsconfig.<域>.json 为准**（那是
@@ -10,7 +10,7 @@
     "noEmit": true,
     "target": "ES2022",
     "module": "ESNext",
-    // bundler：认 package.json imports（`#/` 别名）、认 ESM 的 `.js` → `.ts` 映射。
+    // bundler：认 package exports（`@dshana/*` 的 `./*` 子路径）、认 ESM 的 `.js` → `.ts` 映射。
     "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["node"],
@@ -33,8 +33,7 @@
   // 覆盖我们有源码的各域；src-integrations/ 是覆盖层补丁（引上游包源码，走
   // scripts/check/overlay.mts 那条专门通道），不在这里，免得编辑期噪声压住真问题。
   "include": [
-    "src/**/*.ts",
-    "src/**/*.tsx",
+    "packages/app/src/**/*.ts",
     "src-cordis/**/*.ts",
     "src-cordis/**/*.tsx",
     "packages/shared/src/**/*.ts",

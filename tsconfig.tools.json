@@ -1,6 +1,6 @@
 {
   // packages/tools 域（工具面 + 路由：dshana 单工具的装配与各 action、壳页/诊断面的 App 路由）
-  // 的类型检查配置。与 tsconfig.host.json 同形；口径与失败清单见 scripts/shared/ts-diagnostics.mts。
+  // 的类型检查配置。口径与失败清单见 scripts/shared/ts-diagnostics.mts。
   // 路径相对本文件（仓库根）解析，不写绝对路径。
   "compilerOptions": {
     "noEmit": true,

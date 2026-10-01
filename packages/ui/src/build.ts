@@ -4,10 +4,10 @@
 // packages/ui/src/build.ts — ui 域构建入口（壳的文档侧）
 // 产物：.cache/ui/，即交付目录里 ui/ 那一棵树的完整内容——页面脚本 bundle（app-shell / stream /
 // settings 与它们的 css、动态 chunk）加上静态面（*.html 与图片、样式等）。
-// App 域的构建（src/build.ts）把它拷进交付目录的 ui/，缺件即拒。
+// App 域的构建（packages/app/src/build.ts）把它拷进交付目录的 ui/，缺件即拒。
 // 用法：node packages/ui/src/build.ts [RSPACK_ENV=<构建环境目录>]
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { basename, dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 
 import fs from "fs-extra";
 import config from "./rspack.config.mts";
@@ -54,12 +54,24 @@ await new Promise<void>((resolvePromise, reject) => {
 // 静态面拷贝（白名单：只放行已知的静态类型，其余一律不拷）。
 // 为何不用黑名单逐个数脚本扩展名：改名那天 .mts 就是没被列上的那个，于是 rspack.config.mts
 // 与 build.ts 直接漏进了产物。白名单没有这种缺口，以后多出什么类型都不会漏出源码。
+// 逐文件拷（不整棵拷目录）：非静态子目录（例如只放 .d.ts 的 types/）整棵带过来会落一个
+// 空目录进交付面，逐文件写就不会——空目录没有代表文件，自然不出现。
 const STATIC_EXT = [".html", ".css", ".png", ".jpg", ".jpeg", ".svg", ".webp", ".gif", ".ico", ".woff", ".woff2", ".json", ".map"];
-fs.copySync(SRC_ROOT, UI_DIR, {
-  // 目录要放行（filter 对目录也会问一次，只看扩展名会把跟目录本身拒掉，整棵拷贝就成了空操作）
-  filter: (src) => fs.statSync(src).isDirectory() || STATIC_EXT.some((ext) => basename(src).endsWith(ext)),
-});
-console.log("ui/ 静态面 -> " + UI_DIR + "（白名单 " + STATIC_EXT.join(" ") + "；脚本由 ui bundle 产出）");
+let staticCount = 0;
+const copyStatic = (dir) => {
+  for (const name of fs.readdirSync(dir)) {
+    const src = join(dir, name);
+    if (fs.statSync(src).isDirectory()) {
+      copyStatic(src);
+      continue;
+    }
+    if (!STATIC_EXT.some((ext) => name.endsWith(ext))) continue;
+    fs.copySync(src, join(UI_DIR, relative(SRC_ROOT, src)));
+    staticCount += 1;
+  }
+};
+copyStatic(SRC_ROOT);
+console.log("ui/ 静态面 -> " + UI_DIR + "（" + staticCount + " 个文件，白名单 " + STATIC_EXT.join(" ") + "；脚本由 ui bundle 产出）");
 
 // 完整性断言：cards route 的页面与三个入口脚本缺一即拒（产物不完整不交给 App 域）。
 // 页面脚本名与 rspack.config.mts 的 entry 同名，页面文件名与 manifest 的 route 同名。

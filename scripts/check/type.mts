@@ -57,14 +57,14 @@ const DOMAINS = [
     ours: (file) => file.startsWith("packages/ui/"),
   },
   {
+    name: "app",
+    config: "tsconfig.app.json",
+    ours: (file) => file.startsWith("packages/app/"),
+  },
+  {
     name: "src-cordis",
     config: "tsconfig.cordis.json",
     ours: (file) => file.startsWith("src-cordis/"),
-  },
-  {
-    name: "src",
-    config: "tsconfig.src.json",
-    ours: (file) => file.startsWith("src/"),
   },
   {
     name: "scripts",

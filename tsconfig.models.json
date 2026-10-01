@@ -1,6 +1,6 @@
 {
   // packages/models 域（模型面：宿主目录、默认模型守卫、调用方模型、目录同步）的类型检查配置。
-  // 与 tsconfig.host.json 同形；口径与失败清单见 scripts/shared/ts-diagnostics.mts。
+  // 口径与失败清单见 scripts/shared/ts-diagnostics.mts。
   // 路径相对本文件（仓库根）解析，不写绝对路径。
   "compilerOptions": {
     "noEmit": true,

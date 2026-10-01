@@ -45,7 +45,7 @@ const version = repoPkg.version;
 if (!version) throw new Error("package.json version 缺失");
 // 防回归：版本一致性强制校验（历史曾手改只 bump package.json，manifest.json version 停在
 // 旧值，发布包内版本与 tag 不一致）。打包版本必须同时等于 manifest.json 的 version。
-const manifestVersion = fs.readJsonSync(join(ROOT, "src", "manifest.json")).version;
+const manifestVersion = fs.readJsonSync(join(ROOT, "packages", "app", "src", "manifest.json")).version;
 if (version !== manifestVersion)
   throw new Error(
     `版本不一致：package.json ${version} ≠ manifest.json ${manifestVersion}（manifest 未同步，跑 node scripts/derive/index.mts 同步后再打包）`,
@@ -57,7 +57,7 @@ if (version !== manifestVersion)
 const staticItems = [
   "NOTICE",
   "THIRD_PARTY_NOTICES.md",
-  // manifest.json 与 skills 已随 src 域（src/manifest.json、src/skills/，build:src 产出
+  // manifest.json 与 skills 已随 app 域（packages/app/src/manifest.json、packages/app/src/skills/，build:app 产出
   // 交付目录副本），不再经根级静态复制
   // 注：package.json 也不在清单里：仓库那份带 scripts/devDependencies/packageManager/imports
   // （构建入口），交付面那份（packaging/package.json，单独复制）才是包根要的——见 packaging/README.md。

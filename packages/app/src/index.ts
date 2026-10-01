@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/index.ts — dshana App v2 入口（模块导出 apply(ctx)）
+// packages/app/src/index.ts — dshana App v2 入口（模块导出 apply(ctx)）
 //
 // 形态：宿主在隔离 App 进程内加载本文件并调用 apply(ctx)（入口契约兼容具名 apply /
 // default.apply / 默认函数，两种都导出）。apply 完成注册后立即返回，不等任何长活服务结束。
@@ -35,7 +35,7 @@ import { installHostModelSync } from "@dshana/models/model-sync.ts";
 // 默认模型对账：DSH 缺省模型必须落在宿主目录里（见 packages/models/src/model-default-guard.ts 的动因）
 import { installModelDefaultGuard, runModelDefaultGuard } from "@dshana/models/model-default-guard.ts";
 // 应用态存储收尾：清掉 UI 跨面共享通道在本生命周期之外的键（见 lib/shared-state.ts）
-import { renewSharedState } from "#/lib/shared-state.ts";
+import { renewSharedState } from "./shared-state.ts";
 
 // ---- 统一日志：只走宿主 ctx.logger ----
 // App 侧不写自己的文件日志；ctx.logger 缺失（旧 host）或宿主抛错时回落 stderr。

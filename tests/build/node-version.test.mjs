@@ -70,7 +70,7 @@ test("每个 CLI 入口的 import 闭包都触达 shared/root.mts（版本断言
   const pkg = JSON.parse(readFileSync(join(REPO, "package.json"), "utf8"));
   const entries = new Set();
   for (const cmd of Object.values(pkg.scripts)) {
-    for (const m of String(cmd).matchAll(/node\s+((?:src|src-cordis|scripts)\/[\w./-]+\.(?:ts|mts))/g)) {
+    for (const m of String(cmd).matchAll(/node\s+((?:src-cordis|scripts|packages)\/[\w./-]+\.(?:ts|mts))/g)) {
       entries.add(m[1]);
     }
   }

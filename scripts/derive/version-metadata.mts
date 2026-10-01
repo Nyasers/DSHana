@@ -6,7 +6,7 @@
 //
 // 为什么进派生表：这段值任何时刻都能从 packaging/package.json#dependencies[@deepseek-ai/dsh]
 // 推出来，而 `pnpm version` 只是恰好会写它的那个入口。pin 一动、bump 还没到，树里的
-// package.json 与 src/manifest.json（宿主读的 App 版本）就报旧 dsh，pack 也可能落在这个窗口里。
+// package.json 与 packages/app/src/manifest.json（宿主读的 App 版本）就报旧 dsh，pack 也可能落在这个窗口里。
 // 挂进派生表之后 derive --check 成了闸：pin 动了而版号没跟上，CI 当场红。
 //
 // 与 version 钩子的分工：钩子在 bump 时经 shared/version.mts#fullVersion 拼回完整版（pnpm 算号

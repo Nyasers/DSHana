@@ -12,7 +12,7 @@
 // 一个任务 = 一类读者（再细就成"一个文件一个任务"，derive: 后面排长队反而难用）：
 //   version-metadata 交付面清单的 dsh 依赖    → package.json#version 的 +dsh- 段（状态型；
 //                                             排第一，因为它改的是后面几个任务的源）
-//   manifest     主 package.json#version + SDK 快照 packedVersion → src/manifest.json（宿主读的 App 契约）
+//   manifest     主 package.json#version + SDK 快照 packedVersion → packages/app/src/manifest.json（宿主读的 App 契约）
 //   cordis       主 package.json#version         → src-cordis/**/package.json（profile loader 读的 bundle 层）
 //   product-package 主 package.json#version    → packaging/package.json（交付树的包根那份）
 //   thirdparty   vendor/hana-app-sdk 的 manifest → THIRD_PARTY_NOTICES.md（分发合规）
@@ -102,12 +102,12 @@ function versionFiles(rels: string[]): DerivedFile[] {
 const manifestTask: FileTask = {
   kind: "file",
   name: "manifest",
-  about: "package.json#version + vendor SDK 的 packedVersion → src/manifest.json",
+  about: "package.json#version + vendor SDK 的 packedVersion → packages/app/src/manifest.json",
   plan: () => {
-    const j = readPkg("src/manifest.json");
+    const j = readPkg("packages/app/src/manifest.json");
     j.version = readPkg("package.json").version;
     j.minAppVersion = packedVersion();
-    return [{ rel: "src/manifest.json", content: jsonText(j) }];
+    return [{ rel: "packages/app/src/manifest.json", content: jsonText(j) }];
   },
 };
 

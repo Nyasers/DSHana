@@ -6,7 +6,7 @@
 // `<script type="module" src="./app-shell.js">`）、.cache/ui/stream.js（会话卡轻半，
 // stream.html 引它）、.cache/ui/settings.js（App 自己的设置页脚本），
 // 以及被 import 的样式 .cache/ui/<name>.css（页面用 <link> 引入）。
-// App 域的构建（src/build.ts）把 .cache/ui 整树拷进交付目录的 ui/，缺件即拒。
+// App 域的构建（packages/app/src/build.ts）把 .cache/ui 整树拷进交付目录的 ui/，缺件即拒。
 //
 // 会话卡的重型半（stream-stage.tsx：React + DSH 注入）是 stream-entry.ts 里**动态 import()** 的
 // 结果，rspack 按需切出独立 chunk（output.chunkFilename）——聊天流态的卡只解析 stream.js，
