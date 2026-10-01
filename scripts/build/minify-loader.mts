@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Nyasers
 //
 // scripts/build/minify-loader.mts — rspack loader：asset/source 内联前压缩前端资源
-// src-cordis/plugins/*/assets 下的 js/css 以字符串进 bundle，rspack 压缩器不碰字符串内容，
+// packages/*/assets 下的 js/css 以字符串进 bundle，rspack 压缩器不碰字符串内容，
 // 故在 asset/source 之前经本 loader 压缩：
 //   *.js  → terser（浏览器注入脚本/桥脚本）
 //   *.css → clean-css

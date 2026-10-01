@@ -12,7 +12,7 @@
     "build:host": "node packages/host/src/build.ts",
     "build:ui": "node packages/ui/src/build.ts",
     "build:app": "node packages/app/src/build.ts",
-    "build:cordis": "node src-cordis/build.ts",
+    "build:cordis": "node packages/app/src/cordis.ts",
     "build:integrations": "node scripts/integrations/index.mts build",
     "verify:integrations": "node scripts/integrations/index.mts verify",
     "check:type": "node scripts/check/type.mts",

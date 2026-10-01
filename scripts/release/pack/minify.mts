@@ -3,7 +3,7 @@
 //
 // scripts/release/pack/minify.mts — cordis 子插件静态件的语法级压缩，覆盖写回。
 //
-// cordis 插件（.cache/cordis/*/index.js，由 build 从 src-cordis 组装）被 dsh 运行时 import()
+// cordis 插件（.cache/cordis/*/index.js，由 build 从 packages/ 下的子插件包组装）被 dsh 运行时 import()
 // 加载、client.js 被浏览器 ModuleLoader 按 window.__ModuleLoader__.load 注册；均只做语法级压缩。
 import { createRequire } from "node:module";
 import fs from "fs-extra";

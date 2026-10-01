@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src-cordis/plugins/theme/err-text.ts — 抛出值 → 可读文本
+// packages/theme/err-text.ts — 抛出值 → 可读文本
 // （与 packages/shared/src/err-text.ts 同款；本包自有 package 作用域，不跨包 import src/lib）
 //
 // `catch (e)` 的 e 在 strict 下是 unknown：`e?.message` 之类字段访问会被收窄成 `{}`

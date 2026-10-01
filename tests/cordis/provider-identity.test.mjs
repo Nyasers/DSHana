@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/cordis/provider-identity.test.mjs — src-cordis/plugins/provider/lib/identity.ts 单测
+// tests/cordis/provider-identity.test.mjs — packages/provider/lib/identity.ts 单测
 //
 // 锁死的是**三态判定**（App 身份仅限“用户直接在 WebUI 使用”）：
 //   ① 无绑定            ⇒ App 身份（用户自建会话）
@@ -18,7 +18,7 @@ import {
   TASK_MAP_BROKEN,
   BINDING_UNAVAILABLE,
   TASK_BINDING_GLOBAL_KEY,
-} from "../../src-cordis/plugins/provider/lib/identity.ts";
+} from "../../packages/provider/lib/identity.ts";
 
 const SID = "session-11111111-2222-3333-4444-555555555555";
 

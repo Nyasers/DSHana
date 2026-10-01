@@ -15,7 +15,7 @@
 // 就绪判据（boot）= 中继端口对 http://127.0.0.1:<bridgePort>/ 有 HTTP 应答（无 key 得 403 也算
 // 「有服务在听」；中继只在 DSH 就绪后才起，故等价于就绪门）。真机验收仍须装包后由主上下文做。
 //
-// 用法（仓库根，先 node packages/app/src/build.ts && node src-cordis/build.ts）：
+// 用法（仓库根，先 node packages/app/src/build.ts && node packages/app/src/cordis.ts）：
 //   node tests/e2e/runtime-boot.smoke.mjs [--keep] [--preflight] [--packed]
 // 环境（缺省已指向本仓库）：DSH_REPO_ROOT、DSH_DATA_DIR、DSH_DEPS_ROOT、
 //   DSH_SMOKE_TIMEOUT_MS、DSH_PACKED_APP_DIR、HANA_HOME

@@ -299,6 +299,8 @@ importers:
         specifier: workspace:*
         version: link:../tools
 
+  packages/clipboard: {}
+
   packages/host:
     dependencies:
       '@deepseek-ai/dsh':
@@ -316,6 +318,8 @@ importers:
       '@dshana/shared':
         specifier: workspace:*
         version: link:../shared
+
+  packages/provider: {}
 
   packages/runtime:
     dependencies:
@@ -336,6 +340,8 @@ importers:
         version: link:../shared
 
   packages/shared: {}
+
+  packages/theme: {}
 
   packages/tools:
     dependencies:

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src-cordis/build/server-config.mts — 集成层的 server 半共享 preset（rspack + swc）
+// packages/app/src/cordis/server-config.mts — 集成层的 server 半共享 preset（rspack + swc）
 //
 // 上游的 api 包发布的是**单个 ESM bundle**（lib/index.js：只 import node 内建与 dsh-* 兄弟包，
 // 未压缩），我们的 overlay 是那份包的 TS 源码。要既带上 delta、又不把兄弟包内联成重复副本，
@@ -31,7 +31,7 @@ function isBare(spec) {
   return true;
 }
 
-/** 解析 rspack（RSPACK_ENV 或本地 node_modules；与 src-cordis/build.ts 同一口径）。 */
+/** 解析 rspack（RSPACK_ENV 或本地 node_modules；与 packages/app/src/cordis.ts 同一口径）。 */
 async function loadRspack() {
   const envDir = process.env.RSPACK_ENV;
   if (envDir) {

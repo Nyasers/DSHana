@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src-cordis/build/client-config.mts — cordis 子插件 client 半共享 preset（tsdown）
+// packages/app/src/cordis/client-config.mts — cordis 子插件 client 半共享 preset（tsdown）
 // 学官方 dsh（packages/client/tsdown.client.ts clientBundle 预设）：每包自持构建描述
-// （plugins/<pkg>/cordis.config.mjs 的 client 字段），本 preset 生成并执行
+// （packages/<pkg>/cordis.config.mjs 的 client 字段），本 preset 生成并执行
 // tsdown 打包。输出 closure-factory 自注册 client bundle：
 //   format cjs + outputOptions intro/banner/footer →
 //     intro:  var module = { exports: {} }; var exports = module.exports;
@@ -26,7 +26,7 @@
 // NODE_ENV=production（store 引擎 devFreeze 等按 production 走），官方
 // tsdown.client.ts 同款 define 姿势；产物无源码内嵌内容字符串（全部走正常构建）。
 //
-// 消费方：src-cordis/build.ts（package.json build:cordis）编排。
+// 消费方：packages/app/src/cordis.ts（package.json build:cordis）编排。
 // tsdown 为 devDep（构建工具不进运行时依赖）。
 import { build } from "tsdown";
 import { dirname, extname, join, resolve } from "node:path";

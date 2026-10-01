@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src-cordis/build/service-config.mts — cordis 子插件服务端半共享 preset（rspack）
-// 学官方 dsh 组织：每包自持构建描述（plugins/<pkg>/cordis.config.mjs），
+// packages/app/src/cordis/service-config.mts — cordis 子插件服务端半共享 preset（rspack）
+// 学官方 dsh 组织：每包自持构建描述（packages/<pkg>/cordis.config.mjs），
 // 共享 preset 层消费描述生成实际打包配置：单包逻辑的参数化抽取（两源两产物：
-// src → 插件本体；src-cordis → 子插件包）。
+// src → 插件本体；packages/<pkg> → 子插件包）。
 //
 // 服务端半（service 半）：包 index.js 为 entry 打 ESM bundle（cordis loader 按
 // package.json main=index.js 原生 import，具名导出 name/inject/provide/apply 保留
@@ -13,13 +13,13 @@
 // /* webpackIgnore */ 保留原生运行时导入。
 //
 // preset 签名：serviceBundle({ name, pkgDir, outDir, rules?, optimization? })，返回
-// rspack 单包配置对象（纯数据，不含 rspack import；rspack 本体由编排侧 src-cordis/build.ts
+// rspack 单包配置对象（纯数据，不含 rspack import；rspack 本体由编排侧 packages/app/src/cordis.ts
 // 统一解析，RSPACK_ENV / 本地 node_modules 两路）。opts 覆盖口供特殊包逃生。
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const ROOT = path.dirname(path.dirname(path.dirname(fileURLToPath(import.meta.url)))); // src-cordis/build → repo 根
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", ".."); // packages/app/src/cordis → repo 根
 const MINIFY_LOADER = path.join(ROOT, "scripts", "build", "minify-loader.mts");
 
 /** 服务半入口：优先 index.ts（TS 源），否则 index.js。产物名始终是 index.js。 */
