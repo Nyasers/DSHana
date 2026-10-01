@@ -10,8 +10,8 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { createHash } from "node:crypto";
 
-import { startDshBridge } from "../../src/runtime/bridge.ts";
-import { OPCODE, framePayload, readFrameHeader, serializeFrame } from "../../src/lib/ws-frames.ts";
+import { startDshBridge } from "@dshana/host/bridge.ts";
+import { OPCODE, framePayload, readFrameHeader, serializeFrame } from "../../packages/host/src/ws-frames.ts";
 import {
   ChunkAssembler,
   MUX_CHUNK_BYTES,
@@ -22,7 +22,7 @@ import {
   decodeUtf8,
   encodeAck,
   encodeUtf8,
-} from "../../src/lib/mux-chunks.ts";
+} from "@dshana/shared/mux-chunks.ts";
 
 const KEY = "bridge-key-0123456789abcdef";
 const GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";

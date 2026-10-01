@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/mux-chunks.ts — 承载面分片信封（中继 ↔ 页面载体之间的私有约定）
+// packages/shared/src/mux-chunks.ts — 承载面分片信封（中继 ↔ 页面载体之间的私有约定）
 //
 // 为什么需要它：宿主对「App 受管服务」的 WebSocket 中继有一条 1 MiB 的**上游帧**上限
 // （宿主侧实现：上游 ws 客户端 `{ maxPayload: 1024 * 1024 }`，超限即把下游连接

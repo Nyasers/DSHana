@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/runtime/cwd-check.test.mjs — 会话工作目录判定（src/runtime/cwd-check.ts）
+// tests/runtime/cwd-check.test.mjs — 会话工作目录判定（packages/host/src/cwd-check.ts）
 //
 // 钉住三件：存在的目录放行、不存在的路径带 ENOENT、指向文件时 isDirectory=false。
 // 另外两件属于契约而非行为，也一并钉：空值不抛错只回执，回执永远带可读原因。
@@ -11,7 +11,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { checkCwd } from "../../src/runtime/cwd-check.ts";
+import { checkCwd } from "@dshana/host/cwd-check.ts";
 
 test("存在的目录 → ok + isDirectory=true", async () => {
   const dir = mkdtempSync(join(tmpdir(), "dshana-cwd-check-"));

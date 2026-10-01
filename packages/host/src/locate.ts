@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/runtime/locate.ts — DSH 依赖定位（受管 runtime 子进程侧，dsh-host 专用）
+// packages/host/src/locate.ts — DSH 依赖定位（受管 runtime 子进程侧，dsh-host 专用）
 //
 // depsRoot（默认 App dataDir
 // runtime/node_modules）下定位
@@ -14,7 +14,7 @@ import { createRequire } from "node:module";
 import { readdirSync, existsSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { pathToFileURL } from "node:url";
-import { errText } from "#/lib/err-text.ts";
+import { errText } from "@dshana/shared/err-text.ts";
 
 /** 读一个包目录的 package.json version；不存在/解析失败 → null。 */
 export function readPkgVersion(pkgDir) {

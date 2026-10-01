@@ -1,0 +1,15 @@
+{
+  "name": "@dshana/host",
+  "version": "0.0.0",
+  "private": true,
+  "description": "受管 Node runtime 的宿主半：DSH boot/定位、中继与桥、关停；内核声明在这里",
+  "license": "MPL-2.0",
+  "type": "module",
+  "exports": {
+    "./*": "./src/*"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh": "0.2.0-rc.2",
+    "@dshana/shared": "workspace:*"
+  }
+}

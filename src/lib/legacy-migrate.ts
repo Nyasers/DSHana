@@ -7,7 +7,7 @@
 //   <hanakoHome>/plugin-data/dsh-hanako/{dsh-home, logs, config.json, node_modules, pnpm-dist}
 // 迁入 App v2 数据区 ctx.dataDir = <hanakoHome>/app-data/dshana/，使：
 //   · dsh-home/{sessions, storages, settings.yaml, .anonymous-user-id} → <私有源目录>/…
-//     （DSH_HOME 指向当前数据源的 home，见 src/runtime/main.ts env 设置）
+//     （DSH_HOME 指向当前数据源的 home，见 packages/host/src/main.ts env 设置）
 //     ⚠ 源目录名 dsh-home 是 v1 的历史布局（不可改）；目标用 PRIVATE_HOME_NAME（.dsh）
 //   · logs/* **不迁移**：App 侧日志走宿主 ctx.logger，旧日志无落点
 //   · config.json（v1 全局设置）→ 参考拷贝 dataDir/legacy-config.json + 映射建议输出
@@ -36,7 +36,7 @@ import { readFileSync, writeFileSync, renameSync, existsSync, statSync, mkdirSyn
 import path from "node:path";
 // 目标私有源目录名与运行时实际读取处同源（data-source.js）；本模块不再自带一份字面值
 import { PRIVATE_HOME_NAME } from "#/lib/data-source.ts";
-import { errText } from "#/lib/err-text.ts";
+import { errText } from "@dshana/shared/err-text.ts";
 
 export const LEGACY_SUBDIR = "dsh-hanako"; // plugin-data 下的旧插件数据目录名
 export const LEGACY_PLUGIN_DATA_REL = path.join("plugin-data", LEGACY_SUBDIR);

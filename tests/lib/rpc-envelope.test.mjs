@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/lib/rpc-envelope.test.mjs — src/lib/rpc-envelope.js 信封构造/解析单测（node --test）
+// tests/lib/rpc-envelope.test.mjs — packages/shared/src/rpc-envelope.ts 信封构造/解析单测（node --test）
 // 覆盖：client-request 信封（v1 复用格式）、session 方法 gateway 包装（request/_request +
 // requestId 注入）、rpcId 回显校验、result.ok 语义。
 import { test } from "node:test";
@@ -13,7 +13,7 @@ import {
   buildClientRequest,
   parseServerResponse,
   defaultRpcTimeoutMs,
-} from "../../src/lib/rpc-envelope.ts";
+} from "@dshana/shared/rpc-envelope.ts";
 
 test("endpointOf: 点号方法 → 斜杠端点；斜杠方法直通", () => {
   assert.equal(endpointOf("session.create"), "session/create");

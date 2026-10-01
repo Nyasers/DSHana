@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/runtime/options.ts — 受管 runtime 子进程的私有配置读取（dsh-host 专用）
+// packages/host/src/options.ts — 受管 runtime 子进程的私有配置读取（dsh-host 专用）
 //
 // 形态（对齐官方样例 hana-dsh）：**入参只有一份私有配置文件的路径**（argv[1]），命令行不带
 // 明文参数——配置由 App 主进程（lib/managed-runtime.js）以 0600 写入 dataDir/.runtime-tmp/，
@@ -26,7 +26,7 @@
 //
 // 仍接受 --help（无配置文件时打印用法）。
 import { isAbsolute } from "node:path";
-import { errText } from "#/lib/err-text.ts";
+import { errText } from "@dshana/shared/err-text.ts";
 
 export class UsageError extends Error {
   /** 进程退出码（入口据此区分用法错与运行错）。 */

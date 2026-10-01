@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/runtime/approval-bridge.ts — 受管 runtime 内 DSH 审批 → Hana 审批桥
+// packages/host/src/approval-bridge.ts — 受管 runtime 内 DSH 审批 → Hana 审批桥
 //
 // 位置与角色：本模块随 .cache/dist/runtime/dsh-host.mjs 打进受管 runtime（与 DSH 同进程），
 // main.js 在 DSH boot 就绪后挂载（先于 readyMarker）。它把 DSH 的审批等待者接到 Hana：
@@ -38,14 +38,14 @@ import {
   createTaskBindingIndex,
   isValidSessionId,
   type TaskBindingIndex,
-} from "#/lib/task-binding.ts";
-import { approvalOutcomeOf, runWatchReconcile } from "#/lib/watch-sse.ts";
+} from "@dshana/shared/task-binding.ts";
+import { approvalOutcomeOf, runWatchReconcile } from "@dshana/shared/watch-sse.ts";
 // 宿主审批契约类型只进类型层（swc / Node 剥类型后不留运行时 import）
 import type {
   AppTaskApprovalOutcome,
   AppTaskApprovalRecordV2,
   AppTaskApprovalRequestV2,
-} from "#/types/host.ts";
+} from "@dshana/shared/host.ts";
 
 // 审批超时：**30s 是我们自己的策略，不是宿主默认**。APPS.md（0.951.4，后台任务与审批节）明写
 // `requestApproval({…, timeoutMs})` 的 `timeoutMs: 0` 禁用超时，**默认也是 0**；父任务结束会拒绝剩余

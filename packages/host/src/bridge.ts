@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/runtime/bridge.ts — DSH 访问中继（受管 runtime 子进程内）
+// packages/host/src/bridge.ts — DSH 访问中继（受管 runtime 子进程内）
 //
 // 为什么存在：向官方样例 hana-dsh 看齐后，DSH 的鉴权面交回官方 @deepseek-ai/dsh-client-connection
 // （BrowserAuth：进程 token → 303 Set-Cookie → authority 绑定签名 cookie）。宿主 runtime 代理
@@ -26,9 +26,9 @@
 import { createServer, type IncomingHttpHeaders } from "node:http";
 import { connect as netConnect } from "node:net";
 import { timingSafeEqual } from "node:crypto";
-import { errText } from "#/lib/err-text.ts";
-import { MUX_CHUNK_QUERY, MUX_CHUNK_QUERY_VALUE } from "#/lib/mux-chunks.ts";
-import { startFrameRelay } from "#/runtime/mux-relay.ts";
+import { errText } from "@dshana/shared/err-text.ts";
+import { MUX_CHUNK_QUERY, MUX_CHUNK_QUERY_VALUE } from "@dshana/shared/mux-chunks.ts";
+import { startFrameRelay } from "./mux-relay.ts";
 
 const MAX_WS_BUFFER = 1024 * 1024;
 const FREEZE_CLOSE_CODE = 1013; // 数据源切换中：请稍后重连

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/types/host.ts — 宿主契约类型面（App 侧唯一入口）
+// packages/shared/src/host.ts — 宿主契约类型面（App 侧唯一入口）
 //
 // 为什么单独一份：宿主给的形状要收成一处具名类型，供 lib / tools / routes / runtime 引用
 // （src 域有 TS 语法能力，见 src/rspack.config.mts 的 swc 规则）。形状散在各处靠注释与 JSDoc
@@ -9,7 +9,7 @@
 //
 // 只进类型层：本文件被 `import type` 引用，swc 剥掉后 bundle 里不留 @hana/app-sdk 的运行时
 // 依赖（该包是 devDependency，运行时由宿主提供；运行时真需要的那处值导入见
-// src/runtime/main.ts 的 connectAppRuntime）。
+// packages/host/src/main.ts 的 connectAppRuntime）。
 //
 // 我们自己的形状不在这里：归属某个模块的语义形状（如归属校验结论、解析出的目标）由该模块
 // 自己导出，就近可读，避免把这里做成什么都装的桶。

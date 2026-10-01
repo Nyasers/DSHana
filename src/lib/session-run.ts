@@ -12,7 +12,7 @@
 //      一起下传，见集成 api-session-controller）；
 //   ④ 把 DSH 坐标（metadata.dsh：action/cwd/sessionId/rpcId/timeoutSec/approvalTimeoutMs）
 //      回写宿主任务记录（ctx.tasks.update）——绑定事实源就是这份记录，受管 runtime 的
-//      task-bridge / approval-bridge（src/runtime/*）与 provider 身份判定直接读它
+//      task-bridge / approval-bridge（packages/host/src/*）与 provider 身份判定直接读它
 //      （见 lib/task-binding.ts），没有私有映射文件；
 //   ⑤ 同 DSH session 串行化（lib/session-serialize.js）：锁持有到任务终态，不同 session
 //      互不干扰——否则同一 session 的两个任务会互相消费对方的终态事件。
@@ -29,8 +29,8 @@ import { isAbsolute, join } from "node:path";
 import { appCtx, appDataDir } from "#/lib/app-runtime.ts";
 import { currentDshHome } from "#/lib/data-source.ts";
 import { ensureManagedRuntime } from "#/lib/managed-runtime.ts";
-import { nextRpcId } from "#/lib/rpc-envelope.ts";
-import { isValidSessionId, dshMetadataFor } from "#/lib/task-binding.ts";
+import { nextRpcId } from "@dshana/shared/rpc-envelope.ts";
+import { isValidSessionId, dshMetadataFor } from "@dshana/shared/task-binding.ts";
 import { withSessionTurn, enterSessionTurn } from "#/lib/session-serialize.ts";
 import { readDshDefaultModel } from "#/lib/config.ts";
 import { callerPlanDeps, resolveCallerPlan } from "#/lib/caller-model.ts";

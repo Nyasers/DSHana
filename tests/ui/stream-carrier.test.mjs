@@ -21,7 +21,7 @@ import {
   decodeMuxControlFrame,
   encodeUtf8,
   splitTextMessage,
-} from "../../src/lib/mux-chunks.ts";
+} from "@dshana/shared/mux-chunks.ts";
 
 const BASE = new URL("https://hana.local/api/apps/dshana/routes/_runtime/r1/_surface/tok/");
 const MARK = "dshRemoteStreamFailure";
@@ -221,7 +221,7 @@ test("dispose 是页面收尾，不是载体丢失：终态错、无 carrier 标
   assert.equal(ws.readyState, FakeWebSocket.CLOSED);
 });
 
-// ---- 承载面分片（见 src/lib/mux-chunks.ts）：宿主的 1 MiB 上游帧上限使长会话的首帧打不开，
+// ---- 承载面分片（见 packages/shared/src/mux-chunks.ts）：宿主的 1 MiB 上游帧上限使长会话的首帧打不开，
 // 中继把超限帧按尺寸切开、载体在页面侧重组成一条消息再交给 DSH；每片回执驱动中继的窗口。
 test("分片信封：载体逐片重组后交给 DSH，并按片回执", async () => {
   const mux = newMux();

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/rpc-envelope.ts — DSH /api 网关 Unary RPC 信封构造/解析（纯函数）
+// packages/shared/src/rpc-envelope.ts — DSH /api 网关 Unary RPC 信封构造/解析（纯函数）
 //
 // 指令通道：
 // App 主进程 → 受管 runtime 内 DSH web 服务的指令 = loopback HTTP Unary RPC，

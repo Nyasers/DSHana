@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/runtime/cwd-check.ts — 会话工作目录的可用性判定（runtime 半）
+// packages/host/src/cwd-check.ts — 会话工作目录的可用性判定（runtime 半）
 //
 // 为什么这件事归 runtime：App 宿主半的 node:fs 只覆盖应用自己的目录（应用包 + dataDir），用户侧
 // 路径 stat 不到，而且失败原因与「目录不存在」在 errno 上分不开——两者混为一谈会把每一个合法

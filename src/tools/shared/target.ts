@@ -11,11 +11,11 @@
 //   · approvalId ⇒ 句柄路径：宿主审批记录的 parentTaskId 指向父任务，取父任务的
 //     metadata.dsh.sessionId 与 parentSessionPath（审批记录本身就带父任务的归属字段）。
 // 解析不出来一律显式失败：不猜、不降级。
-import { taskBindingOf, isValidSessionId } from "#/lib/task-binding.ts";
+import { taskBindingOf, isValidSessionId } from "@dshana/shared/task-binding.ts";
 import { taskOwnership, ownershipRefusalText } from "#/lib/task-ownership.ts";
-import { errText } from "#/lib/err-text.ts";
+import { errText } from "@dshana/shared/err-text.ts";
 import type { OwnershipReason } from "#/lib/task-ownership.ts";
-import type { ToolCtx } from "#/types/host.ts";
+import type { ToolCtx } from "@dshana/shared/host.ts";
 import type { ToolInputBase } from "#/tools/shared/types.ts";
 
 /** 宿主任务记录（ctx.tasks.get 的返回值；从 ctx 下钻，勿手抄形状）。 */

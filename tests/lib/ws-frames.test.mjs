@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { OPCODE, framePayload, readFrameHeader, serializeFrame } from "../../src/lib/ws-frames.ts";
+import { OPCODE, framePayload, readFrameHeader, serializeFrame } from "../../packages/host/src/ws-frames.ts";
 
 const bytes = (length, fill = 0x61) => new Uint8Array(length).fill(fill);
 

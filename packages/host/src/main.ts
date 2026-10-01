@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/runtime/main.ts — dshana 受管 Node runtime 入口主体
+// packages/host/src/main.ts — dshana 受管 Node runtime 入口主体
 //
 // 打包产物：.cache/dist/runtime/dsh-host.mjs（rspack ESM bundle）。宿主以 ctx.runtime.start({ runtime:
 // "node", entry: "runtime/dsh-host.mjs", ... }) 拉起，本进程自持生命周期，不回宿主进程。
@@ -28,21 +28,21 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import http from "node:http";
-import { parseRuntimeConfig, UsageError, USAGE } from "#/runtime/options.ts";
-import { startDshBridge } from "#/runtime/bridge.ts";
-import { checkCwd } from "#/runtime/cwd-check.ts";
-import { info, warn, err } from "#/runtime/log.ts";
-import { runtimeErrorState } from "#/lib/runtime-error.ts";
+import { parseRuntimeConfig, UsageError, USAGE } from "./options.ts";
+import { startDshBridge } from "./bridge.ts";
+import { checkCwd } from "./cwd-check.ts";
+import { info, warn, err } from "./log.ts";
+import { runtimeErrorState } from "@dshana/shared/runtime-error.ts";
 // @hana/app-sdk 为 devDependencies（file:vendor/hana-app-sdk/hana-app-sdk.tgz，版本随宿主
 // 0.946.2 App 契约）；connectAppRuntime 运行时实现经 rspack 构建时静态内联进本 bundle（只
 // 依赖 node:crypto，无运行时包解析——见 rspack.config.mts 打包纪律注释）。升级 = 换 vendor
 // 里的 sdk tgz + pnpm install + 重建。
 import { connectAppRuntime } from "@hana/app-sdk";
-import { startTaskBridge } from "#/runtime/task-bridge.ts"; // DSH 事件 → Hana task 回投
-import { startApprovalBridge } from "#/runtime/approval-bridge.ts"; // DSH 审批 → Hana requestApproval / watch 对账
-import { createTaskBindingIndex, publishTaskBindingIndex } from "#/lib/task-binding.ts"; // 绑定事实源 = 宿主任务记录
-import { PROVIDER_RELOAD_GLOBAL_KEY } from "#/lib/provider-hooks.ts"; // 目录重载钩子键（provider 插件装）
-import { resolveInstallRoot, locateDsh } from "#/runtime/locate.ts";
+import { startTaskBridge } from "./task-bridge.ts"; // DSH 事件 → Hana task 回投
+import { startApprovalBridge } from "./approval-bridge.ts"; // DSH 审批 → Hana requestApproval / watch 对账
+import { createTaskBindingIndex, publishTaskBindingIndex } from "@dshana/shared/task-binding.ts"; // 绑定事实源 = 宿主任务记录
+import { PROVIDER_RELOAD_GLOBAL_KEY } from "./provider-hooks.ts"; // 目录重载钩子键（provider 插件装）
+import { resolveInstallRoot, locateDsh } from "./locate.ts";
 
 /** 退出码约定（App 主进程 managed-runtime.js classify 读 exitCode 归类；勿随意改）。 */
 export const EXIT = {

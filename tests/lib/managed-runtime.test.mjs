@@ -3,7 +3,7 @@
 //
 // tests/lib/managed-runtime.test.mjs — src/lib/managed-runtime.js 纯函数单测（node --test）
 // 覆盖：端口选取（区间随机 + 两端口不相等）、就绪标记（opaque）、子进程配置构造（与
-// src/runtime/options.js 对偶）、runtime 终态错误归类（退出码契约 → 用户可读分类）。
+// packages/host/src/options.ts 对偶）、runtime 终态错误归类（退出码契约 → 用户可读分类）。
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -115,7 +115,7 @@ test("buildRuntimeConfig: 覆盖项 fatalPath 只在显式传时出现", () => {
   assert.equal(withFatal.fatalPath, "/x/runtime-fatal.json");
 });
 
-test("classifyRuntimeFailure: 退出码契约归类（src/runtime/main.js EXIT 同步）", () => {
+test("classifyRuntimeFailure: 退出码契约归类（packages/host/src/main.ts EXIT 同步）", () => {
   assert.equal(classifyRuntimeFailure({ exitCode: 7 }).kind, "port-busy");
   assert.equal(classifyRuntimeFailure({ exitCode: 4 }).kind, "deps");
   assert.equal(classifyRuntimeFailure({ exitCode: 5 }).kind, "seed");

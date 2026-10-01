@@ -26,7 +26,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { randomBytes, randomInt } from "node:crypto";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildClientRequest, parseServerResponse } from "../../src/lib/rpc-envelope.ts";
+import { buildClientRequest, parseServerResponse } from "@dshana/shared/rpc-envelope.ts";
 import { lastRoundOutput } from "../../src/tools/actions/get.ts";
 import { distDirOf } from "../../scripts/shared/paths.mts";
 
