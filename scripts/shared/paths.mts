@@ -10,7 +10,8 @@
 // manifest.json 并排）；host 是受管 runtime 入口 bundle（自己一个键，由 App 域的构建拷进
 // dist/runtime）；ui 是壳的文档侧（页面脚本 bundle + 静态面，自己一个键，由 App 域的构建
 // 拷进 dist/ui）；cordis 子插件包不是安装态里的东西——pack 按 bundle 认领规则把它们落进
-// 包内 node_modules/@dshana，另成一个键。
+// 包内 node_modules/@dshana，另成一个键；integrations 是集成层编译出的补丁包（每个集成
+// 一个子目录），pack 按 integration.json 的 package 字段覆盖进交付树。
 import path from "node:path";
 
 import { ROOT } from "./root.mts";
@@ -43,3 +44,10 @@ export const UI_DIR = uiDirOf(ROOT);
 
 /** cordis 子插件包（provider / theme / clipboard）：pack 落进包内 node_modules/@dshana。 */
 export const CORDIS_DIR = path.join(ROOT, CACHE, "cordis");
+
+/** 集成层编译出的补丁包目录（每个集成一个子目录，见 src-integrations/README.md）。 */
+export function integrationsDirOf(repoRoot: string): string {
+  return path.join(repoRoot, CACHE, "integrations");
+}
+
+export const INTEGRATIONS_DIR = integrationsDirOf(ROOT);

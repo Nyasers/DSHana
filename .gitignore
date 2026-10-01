@@ -3,10 +3,10 @@
 node_modules/
 releases/
 
-# 可再生中间产物（.cache/dist = App 交付目录；跨次复用，构建不清它）
+# 可再生中间产物（.cache/dist = App 交付目录、.cache/integrations = 集成层补丁包；跨次复用，构建不清它）
 .cache/
 
-# 每次重来的草稿（pack 物化工位 .tmp/pkg-root、组装台 .tmp/pkg、集成摊源树 .tmp/integrations-*）
+# 每次重来的草稿（pack 物化工位 .tmp/pkg-root、组装台 .tmp/pkg、集成摊源树 .tmp/integrations-src）
 .tmp/
 
 # 系统杂项

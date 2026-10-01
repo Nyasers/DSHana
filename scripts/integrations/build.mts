@@ -3,7 +3,7 @@
 //
 // scripts/integrations/build.mts — 编译集成进包（摊源 → 覆盖 overlay → 编译 → 装包 + 版本戳）。
 //
-// 每个集成的产物落在 .tmp/integrations-built/<短名>/：以**原版包为模板**（lib/index.js、
+// 每个集成的产物落在 .cache/integrations/<短名>/：以**原版包为模板**（lib/index.js、
 // lib/types、package.json 原样），只把 lib/client.js 换成我们编译的那份，版本戳为
 // <上游版本>+dshana-<我们的干净版本>。
 //
@@ -14,6 +14,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, write
 import { dirname, join } from "node:path";
 
 import { MIRROR, REPO_ROOT, listMirrorFiles, readUpstreamFromMirror } from "./mirror.mts";
+import { integrationsDirOf } from "../shared/paths.mts";
 
 /**
  * 递归收集目录下源码文件里的**非相对导入 specifier**（含 type-only：列出无害）。
@@ -198,7 +199,7 @@ interface BuildIntegrationsOptions {
 /**
  * 编译一个集成：把上游 src 摊到 .tmp/integrations-src/<短名>/，覆盖 overlay，
  * 用我们的 client preset 编译出 lib/client.js，再以原版包为模板组装成
- * .tmp/integrations-built/<短名>/（版本戳 <上游>+dshana-<干净版本>）。
+ * .cache/integrations/<短名>/（版本戳 <上游>+dshana-<干净版本>）。
  */
 export async function buildIntegrations(integrations, { tag, mirrorDir = MIRROR, repoRoot = REPO_ROOT, log = (_msg) => {} }: BuildIntegrationsOptions) {
   const { buildClientBundle } = await import("../../packages/app/src/cordis/client-config.mts");
@@ -317,7 +318,7 @@ export async function buildIntegrations(integrations, { tag, mirrorDir = MIRROR,
     }
 
     // 5) 以原版包为模板组装（lib/index.js、lib/types、package.json 等原样；被我们重打的那半替换）
-    const out = join(repoRoot, ".tmp", "integrations-built", short);
+    const out = join(integrationsDirOf(repoRoot), short);
     rmSync(out, { recursive: true, force: true });
     mkdirSync(out, { recursive: true });
     cpSync(join(template, "lib"), join(out, "lib"), { recursive: true });
