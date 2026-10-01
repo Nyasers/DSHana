@@ -30,25 +30,24 @@ test("壳页共用台面样式：三个面都引 face-stage.css，且不再各�
   assert.ok(!ui("sidebar.html").includes("face-stage.css"), "sidebar 不引台面样式");
 });
 
-test("只读会话流面：摘的是输入卡，不是整座（座位里挂着统计信息行）", () => {
+test("会话流面：输入卡保留（可直接在该会话里打字），只收 header 角落的右栏展开钮", () => {
   const css = readFileSync(join(here, "..", "..", "src-integrations", "ui-layout", "files", "src", "client", "AppFrame.module.css"), "utf8");
-  assert.match(
-    css,
-    /\[data-dshana-surface="stream"\] \[data-composer-card\] \{\s*\n\s*display: none;/,
-    "stream 面应收起输入卡（[data-composer-card]）",
+  assert.ok(
+    !/\[data-dshana-surface="stream"\][^{]*\[data-composer-card\]/.test(css),
+    "stream 面不该再收输入卡：这一面也能打字",
+  );
+  assert.ok(
+    !/data-dshana-surface="stream"\][^{]*\[data-composer-seat\]/.test(css),
+    "更不该收整个座位：统计信息行（[data-composer-stats]）挂在座位里，一并收掉会把每轮的耗时/吞吐带走",
   );
   assert.match(
     css,
     /\[data-dshana-surface="stream"\] \[data-conversation-header-corner\] \{\s*\n\s*display: none;/,
     "stream 面应收起 header 角落的右栏展开钮（没有可展开的栏）",
   );
-  assert.ok(
-    !/data-dshana-surface="stream"\][^{]*\[data-composer-seat\]/.test(css),
-    "不该收整个座位：统计信息行（[data-composer-stats]）挂在座位里，一并收掉会把每轮的耗时/吞吐带走",
-  );
 });
 
-test("只读会话流面：未钉住时跟随共用选中，不把会话清空", () => {
+test("会话流面：未钉住时跟随共用选中，不把会话清空", () => {
   const src = readFileSync(join(here, "..", "..", "src-integrations", "ui-session", "files", "src", "client", "index.ts"), "utf8");
   // 不带 sid 直接开页 = 跟随跨面共用的当前会话（见 ui/stream.html 的注释）。
   // 若这一支也报 MAX_SAFE_INTEGER，applyRemote 就会把它当成「最新的意思：没有会话」而 clear()。
@@ -76,7 +75,7 @@ test("映射：每个面都有角色词，认不出面时回到上游整幅 UI",
   assert.equal(roleForView("nope"), "standalone");
 });
 
-test("只读会话流面：角色词是 stream，且不与别的面共用", () => {
+test("会话流面：角色词是 stream，且不与别的面共用", () => {
   assert.equal(roleForView("stream"), "stream");
   const others = FACE_VIEWS.filter((v) => v !== "stream").map((v) => FACE_ROLE[v]);
   assert.ok(!others.includes("stream"), "stream 是这一面专属的角色词");

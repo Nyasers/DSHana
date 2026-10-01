@@ -82,19 +82,11 @@
   overflow: hidden;
 }
 
-/* 只读会话流面：中列吃下整幅（单轨道网格里它落到第 1 列），
-   并把输入卡摘掉——这一面只负责看，写入口仍在 dshana 工具链上。 */
+/* 会话流面：中列吃下整幅（单轨道网格里它落到第 1 列）。输入卡保留：这一面也能打字，
+   发出去的是这个 DSH 会话自己的一轮（不是 dshana 工具链的一次任务）。 */
 .frame[data-dshana-surface="stream"] .centerCol {
   grid-column: 1;
   background: var(--dsw-alias-bg-base);
-}
-
-/* 摘的是卡（[data-composer-card]，输入框那圈），不是座位（[data-composer-seat]）：
-   统计信息行（[data-composer-stats]）挂在座位里的输入坞上，摘座位会把每轮的
-   耗时/吞吐一起带走。三个属性都是跨包契约，ui-conversation 生产、其余包只读引用，
-   换 DSH 版本时类名会变、属性不变。 */
-.frame[data-dshana-surface="stream"] [data-composer-card] {
-  display: none;
 }
 
 /* header 角落那一格是右栏的「展开」钮（只在右栏隐藏时渲染，glyph 是左侧栏折叠图标的镜像）。

@@ -139,7 +139,7 @@ export function AppFrame({
     settings: 'settings',
     standalone: 'standalone',
     workspace: 'workspace',
-    // 只读会话流：只有中列（见下方渲染分支与 CSS 里的输入位收起）。
+    // 会话流：只有中列（见下方渲染分支）。输入卡保留，可直接在该 DSH 会话里打字。
     stream: 'stream',
   }
   const surface = ROLE_SURFACES[role ?? ''] ?? 'standalone'
@@ -353,7 +353,7 @@ export function AppFrame({
           </RightbarColumn>
         </>
       )}
-      {/* 只读会话流：中列独占整幅（CSS 再把输入位收起），没有侧栏、没有右列、没有拖拽把手。 */}
+      {/* 会话流：中列独占整幅，没有侧栏、没有右列、没有拖拽把手。 */}
       {surface === 'stream' && <CenterColumn>{main}</CenterColumn>}
       {surface === 'workspace' && (
         <div className={css.settingsShell}>

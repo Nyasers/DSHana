@@ -11,7 +11,7 @@
 //   default  — full（整幅 DSH UI）与 detached（拆窗）共用，upstream 的 standalone
 //   main     — 主卡：中列 + 右列，没有 DSH 侧栏（侧栏归 FP），upstream 的 workspace
 //   sidebar  — FP：只有侧栏，upstream 的 navigation
-//   stream   — 只读会话流：只有中列，侧栏/右列/输入位都收起（upstream 的 stream 面）
+//   stream   — 会话流：只有中列，侧栏与右列收起；输入卡保留（可直接在该 DSH 会话里打字）
 //   settings — App 自己的设置页，不注入 DSH，借 workspace 的角色词（不进 DSH 界面）
 
 /** 全部面（判定用的封闭词表）。 */
