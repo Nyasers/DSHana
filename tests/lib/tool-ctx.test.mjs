@@ -10,7 +10,7 @@
 // 本测试钉住口径：工具 ctx = 宿主 ctx 的浅拷贝 + 换名后的 log。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { toolCtxFrom } from "../../src/lib/app-runtime.ts";
+import { toolCtxFrom } from "@dshana/runtime/app-runtime.ts";
 
 const host = {
   dataDir: "D:/app-data/dshana",

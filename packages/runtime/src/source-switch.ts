@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/source-switch.ts — 数据源切换链（spec D-m）。
+// packages/runtime/src/source-switch.ts — 数据源切换链（spec D-m）。
 //
 // 顺序（每一步都按"能不改动就不改动"排）：
 //   ① 互斥：单飞；进行中再触发给冲突（路由映 409）
@@ -15,10 +15,10 @@
 //
 // 依赖全部注入：编排只讲顺序与回滚，具体怎么起停、怎么读写、怎么冻结由调用方给。
 import { randomBytes } from "node:crypto";
-import { appDataDir, appLogger, getAppRuntime } from "#/lib/app-runtime.ts";
-import { dataSources, sourceOf } from "#/lib/data-source.ts";
-import { ensureManagedRuntime, preflightSource, stopManagedRuntime } from "#/lib/managed-runtime.ts";
-import { invokeControl } from "#/lib/controller.ts";
+import { appDataDir, appLogger, getAppRuntime } from "./app-runtime.ts";
+import { dataSources, sourceOf } from "./data-source.ts";
+import { ensureManagedRuntime, preflightSource, stopManagedRuntime } from "./managed-runtime.ts";
+import { invokeControl } from "./controller.ts";
 import { errText } from "@dshana/shared/err-text.ts";
 
 /** 步骤名（页面可直接显示；rolling-back 只在失败时出现）。 */

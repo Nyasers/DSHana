@@ -8,7 +8,7 @@
 //
 // 职责：
 //   1. 解析 App 自有配置（唯一 argv = 私有运行时配置文件路径，0600，启动即删；schema 见
-//      options.js）——字段与 App 主进程 lib/managed-runtime.js buildRuntimeConfig() 对偶一致
+//      options.js）——字段与 App 主进程 packages/runtime/src/managed-runtime.ts buildRuntimeConfig() 对偶一致
 //      （凭据/端口不经 argv、环境变量、日志）；
 //   2. connectAppRuntime() 连宿主（tasks/models/network.fetch/close）；无父 IPC fd 时给可
 //      操作报错 + 退出码 3，绝不假装能跑；

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/lib/legacy-migrate.test.mjs — src/lib/legacy-migrate.js 计划/验证/标记/建议单测
+// tests/lib/legacy-migrate.test.mjs — packages/runtime/src/legacy-migrate.ts 计划/验证/标记/建议单测
 // （纯逻辑 + repo .tmp 内的真实小样本模拟 apply；不触碰真实旧插件数据）
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -20,7 +20,7 @@ import {
   targetDshHomeOf,
   legacyRootOf,
   markerPathOf,
-} from "../../src/lib/legacy-migrate.ts";
+} from "@dshana/runtime/legacy-migrate.ts";
 
 function makeFixture() {
   // repo .tmp 下建样本（工作区可写；测试自清理）

@@ -32,6 +32,11 @@ const DOMAINS = [
     ours: (file) => file.startsWith("packages/shared/"),
   },
   {
+    name: "runtime",
+    config: "tsconfig.runtime.json",
+    ours: (file) => file.startsWith("packages/runtime/"),
+  },
+  {
     name: "ui",
     config: "tsconfig.ui.json",
     ours: (file) => file.startsWith("packages/ui/"),

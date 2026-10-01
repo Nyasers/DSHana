@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createDataSourceStore, validateSettings } from "../../src/lib/data-source.ts";
+import { createDataSourceStore, validateSettings } from "@dshana/runtime/data-source.ts";
 
 const TIMEOUT_DEFAULTS = { approvalTimeoutSec: 30, defaultTimeoutSec: 1800 };
 

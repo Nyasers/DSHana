@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/lib/managed-runtime.test.mjs — src/lib/managed-runtime.js 纯函数单测（node --test）
+// tests/lib/managed-runtime.test.mjs — packages/runtime/src/managed-runtime.ts 纯函数单测（node --test）
 // 覆盖：端口选取（区间随机 + 两端口不相等）、就绪标记（opaque）、子进程配置构造（与
 // packages/host/src/options.ts 对偶）、runtime 终态错误归类（退出码契约 → 用户可读分类）。
 import { test } from "node:test";
@@ -18,7 +18,7 @@ import {
   PORT_MAX,
   RUNTIME_HANDOFF_DIR,
   writeRuntimeConfigFile,
-} from "../../src/lib/managed-runtime.ts";
+} from "@dshana/runtime/managed-runtime.ts";
 
 import { mkdtempSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

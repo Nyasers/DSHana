@@ -23,8 +23,8 @@
 // 这条路；换来的是格式演进由官方承担。
 //
 // 权限模型：sessionId 即访问凭证——拿得到 id 就能读，拿不到天然无所有权，无需注册表。
-import { ensureManagedRuntime } from "#/lib/managed-runtime.ts";
-import { rpcViaControl } from "#/lib/controller.ts";
+import { ensureManagedRuntime } from "@dshana/runtime/managed-runtime.ts";
+import { rpcViaControl } from "@dshana/runtime/controller.ts";
 import { resolveTarget } from "#/tools/shared/target.ts";
 import type { ToolCtx } from "@dshana/shared/host.ts";
 import type { ToolInputBase } from "#/tools/shared/types.ts";

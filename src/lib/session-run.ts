@@ -26,16 +26,16 @@
 // create/send 描述「新建会话 / 续已有会话」这两个动作，映射在 tools/actions/open.ts 与
 // tools/actions/reply.ts 的 submit 调用处完成。
 import { isAbsolute, join } from "node:path";
-import { appCtx, appDataDir } from "#/lib/app-runtime.ts";
-import { currentDshHome } from "#/lib/data-source.ts";
-import { ensureManagedRuntime } from "#/lib/managed-runtime.ts";
+import { appCtx, appDataDir } from "@dshana/runtime/app-runtime.ts";
+import { currentDshHome } from "@dshana/runtime/data-source.ts";
+import { ensureManagedRuntime } from "@dshana/runtime/managed-runtime.ts";
 import { nextRpcId } from "@dshana/shared/rpc-envelope.ts";
 import { isValidSessionId, dshMetadataFor } from "@dshana/shared/task-binding.ts";
 import { withSessionTurn, enterSessionTurn } from "#/lib/session-serialize.ts";
-import { readDshDefaultModel } from "#/lib/config.ts";
+import { readDshDefaultModel } from "@dshana/runtime/config.ts";
 import { callerPlanDeps, resolveCallerPlan } from "#/lib/caller-model.ts";
-import { serviceBase } from "#/lib/service-base.ts";
-import { rpcViaControl, invokeControl } from "#/lib/controller.ts";
+import { serviceBase } from "@dshana/runtime/service-base.ts";
+import { rpcViaControl, invokeControl } from "@dshana/runtime/controller.ts";
 import { resolveTaskTimeoutSec, resolveApprovalTimeoutMs, cancelSessionWork } from "#/lib/cancel-chain.ts";
 
 /** 取错误的可读文本。catch 到的值类型未知，字段访问一律经这里。 */
@@ -107,7 +107,7 @@ export function resolveModelSelection(parsed, dshHome): ModelSelection | null {
 }
 
 // ---- DSH 一元 RPC（经 runtime 控制面转发；App 侧不直连 DSH HTTP）----
-// 载体 = lib/controller.js rpcViaControl（controller.invoke → /_control → runtime 带 cookie 转发）。
+// 载体 = packages/runtime/src/controller.ts rpcViaControl（controller.invoke → /_control → runtime 带 cookie 转发）。
 // 保留 DSHana 特色编排（ctx.tasks.create / 串行化 / 宿主任务记录回投）不变——只换 DSH 访问通道。
 async function rpcCall(ctx, _base, opts) {
   return rpcViaControl(ctx, opts);

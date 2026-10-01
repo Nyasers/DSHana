@@ -15,7 +15,7 @@
 //   超时/父任务结束/撤销：宿主侧把审批结算成 rejected（timeoutMs 自动拒绝 / 父任务终态
 //   拒绝剩余审批），approval-bridge watch 同样把 rejected 投给 DSH 等待者——DSH 得到
 //   确定终态，绝不隐式放行。本模块不设本地定时器（不重复宿主语义）。
-import { appCtx } from "#/lib/app-runtime.ts";
+import { appCtx } from "@dshana/runtime/app-runtime.ts";
 import { taskBindingOf } from "@dshana/shared/task-binding.ts";
 import { errText } from "@dshana/shared/err-text.ts";
 import type { ToolResult } from "#/types/tool.ts";

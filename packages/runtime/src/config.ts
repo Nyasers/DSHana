@@ -1,15 +1,10 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/config.ts — dshana 配置解析共用模块
-// 从 tools/dsh-run.js 剥离的纯解析/零状态函数：默认模型/预设（settings.yaml 行级）、
-// reasoningEffort、审批超时。全部零宿主状态（不碰 globalThis 单例，只读文件/参数），
-// dsh-run.js 静态 import。cwd 无配置回退：create 必传显式指定。
-//
-// 归类说明：新建独立 config.js 而非并入 lib/state.js——state.js 已承载"单例 + 环境
-// 常量"一条职责，本模块是"运行期配置文件解析"另一条职责（全只读、无状态）；若并进
-// state.js 会让单例状态与只读解析混在一个文件，职责分歧。消费方只有 dsh-run.js
-// （submitTask 提交前补齐 preset/effort/model 与 doExecute 的 cwd/timeout 解析）。
+// packages/runtime/src/config.ts — dshana 配置解析共用模块
+// 零状态的只读解析：DSH 默认模型与预设（settings.yaml 行级）、reasoningEffort、审批与任务超时、
+// App 设置缺省值。不碰运行包单例，只读文件与入参，调用方静态 import。
+// 消费方横跨 App 侧多个模块（数据源设置、调用方模型、会话提交、取消链），所以自成一个无状态模块。
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -89,7 +84,7 @@ export const APP_SETTING_DEFAULTS = {
   defaultTimeoutSec: 1800,
   // 会话模型（工具建的会话用哪个模型）：caller = 复用调用方角色卡配的（缺省），
   // custom = 用下面固定的 provider/model（reasoningEffort 空串 = 不指定，由 DSH 决定）。
-  // 见 lib/caller-model.ts。
+  // 见 src/lib/caller-model.ts。
   sessionModelMode: "caller",
   sessionModelProvider: "",
   sessionModelModel: "",

@@ -25,7 +25,7 @@ import {
   legacySettingsSuggestions,
   DSH_HOME_COPY_ENTRIES,
   targetDshHomeOf,
-} from "../../src/lib/legacy-migrate.js";
+} from "@dshana/runtime/legacy-migrate.ts";
 import fs from "node:fs";
 
 import { errText } from "../shared/err-text.mts";
