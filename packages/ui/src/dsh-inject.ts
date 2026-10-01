@@ -17,13 +17,10 @@
 
 import { installClipboardShadow } from "./clipboard-shadow.ts";
 import {
-  ChunkAssembler,
-  MUX_CHUNK_QUERY,
-  MUX_CHUNK_QUERY_VALUE,
-  decodeMuxControlFrame,
-  decodeUtf8,
-  encodeAck,
-} from "@dshana/shared/mux-chunks.ts";
+  carrierFailure,
+  createStreamCarrier,
+  remoteStreamFailure,
+} from "./stream-carrier.ts";
 
 const DSH_INTERNAL_ORIGIN = "http://dsh.internal";
 
@@ -229,232 +226,12 @@ export function installRequestTakeover(
   };
 }
 
-// ---- 远程流载体（api/remote.mux WS 上的多路复用）----
+// ---- 远程流载体 ----
 //
-// 失败语义（跨 bundle 契约，别改）：本载体的失败经 DSH 的 `normalizeConnectionStream`
-// 归一（packages/api/gateway/src/client/index.ts），那一层**只看结构标记不看 instanceof**——
-// 页半与内核半是两份独立 bundle，`RemoteStreamCarrierError` 的类身份跨不过去。标记挂在
-// 抛出的 Error 上：
-//   · `{ kind: 'carrier' }` = 物理载体丢失（socket 断/开不出/帧不合协议）。DSH 侧据此按
-//     **可重试**处理：连接代次仍在位时立刻重开一次，日志流保留已发布窗口、按游标续上。
-//     丢了它，同一个失败会被 `RemoteStream.read()` 判成终态故障折成 `gateway/internal`，
-//     会话历史流一次性死掉（界面停在「历史加载失败」，重连也救不回来）。
-//   · `{ kind: 'remote', code, details }` = 宿主交付的逻辑失败，带上域码与 details，
-//     让 DSH 侧重建出带码的 RemoteError（否则业务码全被折成 `gateway/internal`）。
-// 载体失败必须按 socket 身份收场：旧 socket 迟到的 close/error 不得误杀新载体上的在途流。
-const MAX_STREAMS = 128;
-/** 标记键名（DSH 侧固定读这个属性名，不是我们的私有约定）。 */
-const STREAM_FAILURE = "dshRemoteStreamFailure";
+// 实现搬到 packages/ui/src/stream-carrier.ts（NDJSON over HTTP，不再走 WS），跨半的路径与帧见
+// packages/shared/src/stream-carrier.ts。本文件只负责把中继前缀解析给它。
+export { carrierFailure, remoteStreamFailure } from "./stream-carrier.ts";
 
-/** 载体失败（物理链接丢失）：kind:'carrier'，DSH 侧按可重试的载体丢失处理。 */
-export function carrierFailure(message, cause?) {
-  const error: any = cause === undefined ? new Error(message) : new Error(message, { cause });
-  error.name = "DSHStreamCarrierError";
-  error[STREAM_FAILURE] = { kind: "carrier" };
-  return error;
-}
-
-/** 宿主交付的逻辑失败：kind:'remote' + 域码 + details，DSH 侧原样重建成带码的 RemoteError。 */
-export function remoteStreamFailure(message, code, details, cause?) {
-  const error: any = cause === undefined ? new Error(message) : new Error(message, { cause });
-  error.name = "DSHStreamRemoteError";
-  error[STREAM_FAILURE] = {
-    kind: "remote",
-    code: typeof code === "string" && code ? code : "gateway/internal",
-    details: details && typeof details === "object" ? details : {},
-  };
-  return error;
-}
-
-/** 一条远端流的收件箱（push/finish/next）。首个失败定音：后到的帧与失败不改写它。 */
-class Inbox {
-  values: any[];
-  done: boolean;
-  failure: any;
-  wake: (() => void) | null;
-  constructor() {
-    this.values = [];
-    this.done = false;
-    this.failure = null;
-    this.wake = null;
-  }
-  push(value) {
-    if (this.done) return;
-    this.values.push(value);
-    if (this.wake) { const w = this.wake; this.wake = null; w(); }
-  }
-  finish(error) {
-    if (this.done) return;
-    this.done = true;
-    this.failure = error || null;
-    // 失败丢弃已缓冲的帧（那些帧属于一条已经不可信的流）；**正常收尾（end 帧）不清缓冲**——
-    // item 先到、end 后到而消费端此刻没挂在 next() 上时，清掉就是真丢数据，
-    // 日志流会看到「干净收尾但少一条 entry」而判协议违规。
-    if (this.failure) this.values.length = 0;
-    if (this.wake) { const w = this.wake; this.wake = null; w(); }
-  }
-  async next() {
-    while (!this.values.length && !this.done) {
-      await new Promise<void>((resolve) => { this.wake = resolve; });
-    }
-    if (this.values.length) return { value: this.values.shift(), done: false };
-    if (this.failure) throw this.failure;
-    return { value: undefined, done: true };
-  }
-}
-
-/** 经 api/remote.mux WS 复用多条远端流的载体（对齐样例的 DshStreamMux）。 */
-export function createStreamMux(
-  privateBase: any,
-  WebSocketCtor: any = window.WebSocket,
-) {
-  const wsUrl = new URL("api/remote.mux", privateBase);
-  wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
-  // 声明本页支持承载面分片：中继据此把超限帧按尺寸切开（宿主的 1 MiB 上游帧上限）。
-  // 不声明就走原样透传（约定见 lib/mux-chunks.ts）。
-  wsUrl.searchParams.set(MUX_CHUNK_QUERY, MUX_CHUNK_QUERY_VALUE);
-  let socket: WebSocket | null = null;
-  const streams = new Map<string, any>();
-  let nextId = 0;
-  /** 分片重组：一条消息的分片在同一载体上连续到达，换载体即作废。 */
-  const assembler = new ChunkAssembler();
-
-  /** 让当前全部在途流以同一失败收场（先摘表再逐个 finish：收场期间到达的帧无处投递）。 */
-  const failAll = (error) => {
-    if (!streams.size) return;
-    const pending = [...streams.values()];
-    streams.clear();
-    for (const inbox of pending) inbox.finish(error);
-  };
-
-  /**
-   * 一条物理载体失联：先摘掉它（后续 open 会另起一条 socket），再让在途流以载体失败收场。
-   * 按身份判定——旧 socket 迟到的 error/close 不能误杀新载体上的流。
-   */
-  const lost = (s, error) => {
-    if (s !== socket) return;
-    socket = null;
-    assembler.reset();
-    failAll(error);
-  };
-
-  const receiveText = (raw, s) => {
-    let frame;
-    try { frame = JSON.parse(String(raw)); } catch {
-      // 帧不合协议：对端状态已不可信，连整条载体一起摘下（重开一条），
-      // 取向同内核客户端的「畸形帧 → 关 4002」。
-      lost(s, carrierFailure("DSH stream carrier sent invalid JSON"));
-      try { s.close(4002, "invalid Remote stream frame"); } catch { /* 忽略 */ }
-      return;
-    }
-    const inbox = frame && typeof frame.streamId === "string" ? streams.get(frame.streamId) : undefined;
-    if (!inbox) return;
-    if (frame.type === "item") inbox.push(frame.value);
-    else if (frame.type === "end") { inbox.finish(); streams.delete(frame.streamId); }
-    else if (frame.type === "error") {
-      const failure = frame.error && typeof frame.error === "object" ? frame.error : {};
-      inbox.finish(remoteStreamFailure(
-        typeof failure.message === "string" && failure.message ? failure.message : "DSH remote stream failed",
-        failure.code,
-        failure.details,
-      ));
-      streams.delete(frame.streamId);
-    }
-  };
-
-  /**
-   * 一帧入站数据：文本是 DSH 的 mux 帧；二进制只可能是分片信封（见 lib/mux-chunks.ts）。
-   * 每收一片回一次执，中继据此放行后续分片——宿主对下游缓冲另有一条 1 MiB 守卫，
-   * 只把帧切小不够，发得快一样会被它掐掉。
-   */
-  const receive = (data, s) => {
-    if (typeof data === "string") { receiveText(data, s); return; }
-    const bytes = data instanceof ArrayBuffer ? new Uint8Array(data)
-      : ArrayBuffer.isView(data) ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
-        : null;
-    if (bytes === null) return;
-    const control = decodeMuxControlFrame(bytes);
-    if (control === null || control.kind !== "chunk") return; // 不是本模块的约定：忽略
-    const done = assembler.push(control.payload, control.last);
-    try { s.send(encodeAck(control.payload.length)); } catch { /* 载体已断：等 onclose 收场 */ }
-    if (done === null) return;
-    receiveText(decodeUtf8(done), s);
-  };
-
-  const connect = () => {
-    if (socket && (socket.readyState === WebSocketCtor.OPEN || socket.readyState === WebSocketCtor.CONNECTING)) return socket;
-    // 换代前先把旧载体收场：CLOSING/CLOSED 的 socket 上还挂着在途流，而它的 close 事件
-    // 已经在路上（因身份判定会被丢弃），不显式收掉那些流就永久悬挂在 streams 里。
-    if (socket) lost(socket, carrierFailure("DSH stream carrier closed"));
-    const s = new WebSocketCtor(wsUrl.toString());
-    s.binaryType = "arraybuffer"; // 分片是二进制帧：按 ArrayBuffer 收（免 Blob 的异步读取）
-    assembler.reset(); // 新载体上不会再有上一条消息的分片
-    socket = s; // 先登记：onerror/onclose 与 onmessage 都按身份判定
-    s.onmessage = (event) => { if (s === socket) receive(event.data, s); };
-    s.onerror = () => lost(s, carrierFailure("DSH stream carrier failed"));
-    s.onclose = () => lost(s, carrierFailure("DSH stream carrier closed"));
-    return s;
-  };
-
-  /** 发一帧。返回 false = 这条载体当场不可用（调用方按载体失败收场，不在死载体上空等）。 */
-  const send = (frame): boolean => {
-    const s = connect();
-    const data = JSON.stringify(frame);
-    if (s.readyState === WebSocketCtor.OPEN) {
-      try { s.send(data); } catch { lost(s, carrierFailure("DSH stream carrier failed")); return false; }
-      return true;
-    }
-    if (s.readyState === WebSocketCtor.CONNECTING) {
-      // 握手完成后补发；期间载体若已换代，这一帧属于旧代次，丢弃（对端进程已随载体消失）。
-      s.addEventListener("open", () => { try { if (s === socket) s.send(data); } catch { /* 忽略 */ } }, { once: true });
-      return true;
-    }
-    // 既非 OPEN 也非 CONNECTING：connect() 不该交出来；真出现就按已关闭收场。
-    lost(s, carrierFailure("DSH stream carrier closed"));
-    return false;
-  };
-
-  return {
-    url: wsUrl.toString(),
-    async *openStream(endpoint, payload, signal) {
-      if (signal && signal.aborted) throw signal.reason || new DOMException("Aborted", "AbortError");
-      if (streams.size >= MAX_STREAMS) throw new Error("Too many DSH remote streams");
-      const streamId = "hana-" + (++nextId);
-      const inbox = new Inbox();
-      // 先发 open 帧再登记：帧只可能在 open 之后到达，而 send 期间可能发生载体换代——
-      // 登记早了会把这条刚发出去的流一并收掉（open 帧已出门，本地却当它死了）。
-      // payload 必须成键出现：宿主按 exactKeys 校验 open 帧，缺键会关掉整条载体（1008），
-      // 不是在途的一条流。undefined 由 JSON 丢弃，这里补成 null（正常路径永远是参数信封对象）。
-      if (!send({ type: "open", streamId, endpoint, payload: payload === undefined ? null : payload })) {
-        throw carrierFailure("DSH stream carrier closed before opening stream");
-      }
-      streams.set(streamId, inbox);
-      const abort = () => {
-        try { send({ type: "cancel", streamId }); } catch { /* 忽略 */ }
-        inbox.finish(signal && signal.reason instanceof Error ? signal.reason : new DOMException("Aborted", "AbortError"));
-        streams.delete(streamId);
-      };
-      if (signal) signal.addEventListener("abort", abort, { once: true });
-      try {
-        for (;;) {
-          const next = await inbox.next();
-          if (next.done) return;
-          yield next.value;
-        }
-      } finally {
-        if (signal) signal.removeEventListener("abort", abort);
-        if (streams.delete(streamId)) { try { send({ type: "cancel", streamId }); } catch { /* 忽略 */ } }
-      }
-    },
-    dispose() {
-      // 页面收尾（pagehide）：不属于载体丢失，按终态处理（与内核客户端 close() 同语义）。
-      const dying = socket as any;
-      socket = null;
-      failAll(new Error("DSH stream carrier disposed"));
-      try { if (dying) dying.close(); } catch { /* 忽略 */ }
-    },
-  };
-}
 
 /** 追加一个 script（module 或 classic），按顺序执行。 */
 function appendScript(source: string, module = false): Promise<void> {
@@ -621,11 +398,11 @@ export function installTransport(
 ): DshTransport {
   // 请求接管先装：它必须早于任何 DSH 侧代码执行（注入 index 前调用本函数）。
   const restoreTakeover = installRequestTakeover(privateBase);
-  const mux = createStreamMux(privateBase, undefined);
+  const carrier = createStreamCarrier({ resolve: (pathname) => mapRuntimeUrl(pathname, privateBase, window.location.origin) });
   const runtimeFetch = createRuntimeFetch(privateBase);
   window.__DSH_TRANSPORT__ = {
     fetch: runtimeFetch,
-    openStream: (endpoint, payload, signal) => mux.openStream(endpoint, payload, signal),
+    openStream: (endpoint, payload, signal, uplink) => carrier.openStream(endpoint, payload, signal, uplink),
     loadBundle: loadRuntimeBundle(privateBase),
   };
   window.__DSH_FILE_UPLOAD__ = { fetch: runtimeFetch };
@@ -658,7 +435,7 @@ export function installTransport(
       try { delete window.__DSH_TRANSPORT__; } catch { /* 忽略 */ }
       try { delete window.__DSH_FILE_UPLOAD__; } catch { /* 忽略 */ }
       try { delete window.__DSHANA__; } catch { /* 忽略 */ }
-      mux.dispose();
+      carrier.dispose();
     },
   };
 }

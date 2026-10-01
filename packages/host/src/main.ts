@@ -32,6 +32,7 @@ import { randomUUID } from "node:crypto";
 import http from "node:http";
 import { parseRuntimeConfig, UsageError, USAGE } from "./options.ts";
 import { startDshBridge } from "./bridge.ts";
+import { createStreamCarrier } from "./stream-carrier.ts";
 import { checkCwd } from "./cwd-check.ts";
 import { info, warn, err } from "./log.ts";
 import { runtimeErrorState } from "@dshana/shared/runtime-error.ts";
@@ -504,6 +505,19 @@ export async function main(argv: string[]): Promise<number> {
   // 缓存，模型请求热路径不至于每请求往返宿主）。读取失败在各自读点显式处理（fail-closed）。
   const bindings = createTaskBindingIndex(hana.tasks);
 
+  // 远端流载体：本进程内直驱内核的 typertGateway（上游注释写明 wireStream 服务「WebSocket mux 与
+  // 本地宿主传输」），页面那条 WS 因此不再需要（见 packages/ui/src/stream-carrier.ts）。
+  const gateway = typeof boot.ctx.get === "function" ? boot.ctx.get("typertGateway") : null;
+  const wireStream = gateway && gateway.wireStream;
+  const streamCarrier = wireStream && typeof wireStream.open === "function" && typeof wireStream.failure === "function"
+    ? createStreamCarrier({
+      open: (endpoint, payload, uplink, peer, signal) => wireStream.open(endpoint, payload, uplink, peer, signal),
+      failure: wireStream.failure,
+      log: (message) => warn("stream-carrier", message),
+    })
+    : undefined;
+  if (!streamCarrier) warn("stream-carrier", "typertGateway.wireStream 不在场，远端流载体未安装（页面侧的流会拿不到承载）");
+
   try {
     state.bridge = await startDshBridge({
       port: opts.bridgePort,
@@ -511,6 +525,7 @@ export async function main(argv: string[]): Promise<number> {
       controlKey: opts.controlKey,
       upstreamOrigin,
       upstreamCookie: dshCookie,
+      streamCarrier,
       // 控制面：App 工具（controller.invoke）经宿主 ctx.runtime.fetch(runtimeId, "/_control") 到达
       // 这里，由本进程带 cookie 转发到 DSH /api（App 侧不直接摸 DSH HTTP，也不需 network 到中继）。
       // 参数 = 客户端信封本身（buildClientRequest 产物，含 rpcId/method/payload）。

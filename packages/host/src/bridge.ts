@@ -29,6 +29,7 @@ import { timingSafeEqual } from "node:crypto";
 import { errText } from "@dshana/shared/err-text.ts";
 import { MUX_CHUNK_QUERY, MUX_CHUNK_QUERY_VALUE } from "@dshana/shared/mux-chunks.ts";
 import { startFrameRelay } from "./mux-relay.ts";
+import type { DshStreamCarrier } from "./stream-carrier.ts";
 
 const MAX_WS_BUFFER = 1024 * 1024;
 const FREEZE_CLOSE_CODE = 1013; // 数据源切换中：请稍后重连
@@ -170,6 +171,8 @@ export interface DshBridgeOptions {
   upstreamOrigin: string;
   upstreamCookie?: string;
   onControl?: (action: string, args: any) => Promise<any>;
+  /** 远端流载体：本进程内直驱内核（见 stream-carrier.ts），不经上游 DSH 端口，也不计在途调用。 */
+  streamCarrier?: DshStreamCarrier;
   log?: (s: string) => void;
 }
 
@@ -182,7 +185,7 @@ export interface DshBridgeHandle {
 /** 起中继（监听 127.0.0.1:port）。 */
 export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeHandle> {
   const {
-    port, bridgeKey, controlKey, upstreamOrigin, upstreamCookie = "", onControl, log = () => {},
+    port, bridgeKey, controlKey, upstreamOrigin, upstreamCookie = "", onControl, streamCarrier, log = () => {},
   } = opts || {};
   const upstream = new URL(upstreamOrigin);
   if (upstream.protocol !== "http:" || upstream.hostname !== "127.0.0.1") {
@@ -209,6 +212,8 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
       try { socket.write(frame); } catch { /* 已断 */ }
       socket.end();
     }
+    // 远端流载体上的在途流同样随切换取消（页面的 carrier 收到流中断后自行重开）。
+    streamCarrier?.close();
   }
 
   const server = createServer(async (req, res) => {
@@ -279,6 +284,17 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
     }
     if (frozen) {
       rejectJson(res, 503, "DSH data source is changing; reconnect after the update");
+      return;
+    }
+    // 远端流载体：与上游 DSH 无关的路（本进程内直驱内核），鉴权同一条中继 key，
+    // 但不进在途调用计数（流是长命的，计数会永久堵住数据源切换的忙判定）。
+    if (streamCarrier && streamCarrier.owns(authorized.path)) {
+      try {
+        // 把剥完前缀的路径交给载体：req.url 上还带着 `/_hana/<key>/`。
+        await streamCarrier.handle(req, res, authorized.path);
+      } catch (error) {
+        rejectJson(res, 502, error instanceof Error ? error.message : "DSH stream carrier failed");
+      }
       return;
     }
     const isCall = req.method !== "GET" && req.method !== "HEAD";
@@ -420,6 +436,7 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
     port: listenedPort(),
     close: () =>
       new Promise((resolve) => {
+        streamCarrier?.close();
         for (const controller of activeRequests) controller.abort();
         for (const socket of upstreamSockets) socket.destroy();
         for (const socket of clientSockets) socket.destroy();
