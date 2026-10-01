@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MPL-2.0
    Copyright (c) 2026 Nyasers
 
-   src/ui/face-stage.css — 壳页共用的自举台面（main / default / stream 三个面同一副）。
+   packages/ui/src/face-stage.css — 壳页共用的自举台面（main / default / stream 三个面同一副）。
 
    只收三个面完全一样的部分：页面底色与字体、#root 容器、自举台（字标 + 细圆环 + 一行状态）、
    日志/报错块（.diag-progress）、台面上的按钮。面的差异留在各自页面里：

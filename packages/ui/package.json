@@ -1,0 +1,14 @@
+{
+  "name": "@dshana/ui",
+  "version": "0.0.0",
+  "private": true,
+  "description": "壳的文档侧：同文档注入、URL 重写、三态壳页、会话卡、设置页、主题桥",
+  "license": "MPL-2.0",
+  "type": "module",
+  "exports": {
+    "./*": "./src/*"
+  },
+  "dependencies": {
+    "@dshana/shared": "workspace:*"
+  }
+}

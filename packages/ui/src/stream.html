@@ -8,7 +8,7 @@
      在这里打的字进的是这个 DSH 会话自己的一轮，不走 dshana 工具链（那条链是模型侧的委派）。 -->
 <meta name="hana-dshana-role" content="stream">
 <title>DSHana 会话</title>
-<!-- src/ui/stream.html — dshana 的会话卡，同一页两个挂载态（由 stream-entry.ts 认）：
+<!-- packages/ui/src/stream.html — dshana 的会话卡，同一页两个挂载态（由 stream-entry.ts 认）：
        · 聊天流里（宿主 mount 的 height 是 flexible）：只画一行入口（会话坐标），不注入 DSH、
          不连中继——所以不叠也不冻结。这是工具出卡（details.card）落进来的形态。
        · 取出到黑板 / 拆窗（height 是 fixed）：宿主把同一 route 装到新挂载上，本页此时才装配
@@ -28,7 +28,7 @@
     
       注入的 DSH UI 就是那段会话本身：这一面不带 App 侧的状态行。
     相对资源纪律：页面里不出现根路径绝对 URL；重型 chunk 也走相对路径（rspack 的
-    output.chunkFilename，见 src/ui/rspack.config.mts），所以宿主以 /api/apps/<id>/ui/stream.html
+    output.chunkFilename，见 packages/ui/src/rspack.config.mts），所以宿主以 /api/apps/<id>/ui/stream.html
       服务本页时它照样取得到。 -->
 <link rel="stylesheet" href="./face-stage.css">
 <style>

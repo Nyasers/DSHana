@@ -1,33 +1,32 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/ui/rspack.config.mts — 页面脚本 bundle 构建配置（ui 域）
-// 产物：.cache/dist/ui/app-shell.js（main / default / sidebar 壳页，ESM，
-// `<script type="module" src="./app-shell.js">`）、.cache/dist/ui/stream.js（会话卡轻半，
-// stream.html 引它）、.cache/dist/ui/settings.js（App 自己的设置页脚本），
-// 以及被 import 的样式 .cache/dist/ui/<name>.css（页面用 <link> 引入）。
+// packages/ui/src/rspack.config.mts — 页面脚本 bundle 构建配置（ui 域）
+// 产物：.cache/ui/app-shell.js（main / default / sidebar 壳页，ESM，
+// `<script type="module" src="./app-shell.js">`）、.cache/ui/stream.js（会话卡轻半，
+// stream.html 引它）、.cache/ui/settings.js（App 自己的设置页脚本），
+// 以及被 import 的样式 .cache/ui/<name>.css（页面用 <link> 引入）。
+// App 域的构建（src/build.ts）把 .cache/ui 整树拷进交付目录的 ui/，缺件即拒。
+//
 // 会话卡的重型半（stream-stage.tsx：React + DSH 注入）是 stream-entry.ts 里**动态 import()** 的
 // 结果，rspack 按需切出独立 chunk（output.chunkFilename）——聊天流态的卡只解析 stream.js，
 // 永远不取这个 chunk。chunk 名走相对路径（页面在 /api/apps/<id>/ui/stream.html，静态树同层），
 // 所以页面内不出现根绝对 URL。
 //
 // 打包纪律：
-//   - 浏览器 SDK @hana/plugin-sdk 与组件库 @hana/plugin-components 从 devDependencies 解析
-//     （file:vendor/hana-app-sdk/*.tgz），由 rspack 静态打进产物。浏览器 ESM 不解析裸包名
-//     （宿主不注入 importmap），故不由页面裸 import、也不在 .cache/dist/ui 另放一份 vendored
+//   - 浏览器 SDK @hana/plugin-sdk 与组件库 @hana/plugin-components 从仓库根 devDependencies
+//     解析（file:vendor/hana-app-sdk/*.tgz），由 rspack 静态打进产物。浏览器 ESM 不解析裸包名
+//     （宿主不注入 importmap），故不由页面裸 import、也不在 .cache/ui 另放一份 vendored
 //     拷贝——依赖来源单一（包管理器），产物自包含。
 //   - target: "web"（无 node 内置、无 node polyfill）；源码是纯浏览器 ESM（无 node 依赖）。
 //   - .ts/.tsx 交给内置 swc 转译，JSX 走 automatic runtime（源码不需要 import React）。
 //   - 样式走 rspack 内置 css 支持，按入口产出同名 .css。
 //   - 入口无导出（自执行脚本）：不设 library，产物只做副作用执行。
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
-import { DIST_DIR } from "../../scripts/shared/paths.mts";
+import { ROOT, UI_DIR } from "../../../scripts/shared/paths.mts";
 
-const root = path.dirname(path.dirname(path.dirname(fileURLToPath(import.meta.url)))); // src/ui/ → 仓库根
-
-const ui = (f) => path.join(root, "src", "ui", f);
+const ui = (f) => path.join(ROOT, "packages", "ui", "src", f);
 
 export default {
   name: "dshana-ui",
@@ -41,14 +40,15 @@ export default {
     settings: ui("settings.tsx"),
   },
   output: {
-    path: path.join(DIST_DIR, "ui"),
+    path: UI_DIR,
     filename: "[name].js",
-    // 动态 import() 的 chunk 与页面同层（.cache/dist/ui/），相对 stream.js 解析；module 产物里
+    // 动态 import() 的 chunk 与页面同层（.cache/ui/），相对 stream.js 解析；module 产物里
     // 由浏览器按相对 URL 取，不经 publicPath。
     chunkFilename: "[name].js",
     cssFilename: "[name].css",
     module: true,
-    clean: false, // 主 bundle 已 clean 整树；这里只写 ui/*（静态页由 build.ts copy）
+    // 本域自持 .cache/ui：先清再写（静态页由 packages/ui/src/build.ts 随后拷进来）。
+    clean: true,
   },
   module: {
     rules: [

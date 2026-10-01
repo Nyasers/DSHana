@@ -32,6 +32,11 @@ const DOMAINS = [
     ours: (file) => file.startsWith("packages/shared/"),
   },
   {
+    name: "ui",
+    config: "tsconfig.ui.json",
+    ours: (file) => file.startsWith("packages/ui/"),
+  },
+  {
     name: "src-cordis",
     config: "tsconfig.cordis.json",
     ours: (file) => file.startsWith("src-cordis/"),

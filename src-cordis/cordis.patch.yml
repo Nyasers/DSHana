@@ -41,7 +41,7 @@
 # 目录选择器不动：官方 web-app 层的 directory-picker-auto 在 win32 + loopback 下挑 native，
 # 而 native 的客户端半优先读页面里的目录桥（官方桌面壳由 preload 注入）——壳页在注入 DSH index
 # 前把 __DSH_DIRECTORY_PICKER__ 装上（照 hana.resources.pick 要目录），所以用户看到的是宿主的
-# 系统弹窗，而不是沙箱里的后台子进程去 spawn worker 开 IFileOpenDialog。见 src/ui/dsh-inject.ts。
+# 系统弹窗，而不是沙箱里的后台子进程去 spawn worker 开 IFileOpenDialog。见 packages/ui/src/dsh-inject.ts。
 
 # 缺省模型不在这里写死：base 层给的是官方路由 deepseek-official/deepseek-flash，上面那行停掉
 # 之后这条路由没人服务。写死一个宿主 provider/model 也不行——宿主配了哪些提供商、它们叫什么

@@ -32,6 +32,6 @@
     "全局名用我们自己的 __DSHANA__（样例叫 __HANA_DSH__）。",
     "productTitle 仍走上游 process.env.DSH_CLIENT_TITLE ?? t('brand.localBuild')（样例硬编码成产品名），属最小 delta。",
     "index.ts / stores.ts / DocumentTitle.tsx 不改；样例对 index 的改动是主题 token 映射与 inject 列表，属后续批次。",
-    "发布侧：壳页 src/ui/app-shell.js 在注入 DSH 前写 window.__DSHANA__（当前只有 role）。"
+    "发布侧：壳页 packages/ui/src/app-shell.ts 在注入 DSH 前写 window.__DSHANA__（当前只有 role）。"
   ]
 }

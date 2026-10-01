@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/ui/settings.tsx — DSHana App 自己的设置页脚本（contributes.settings.ui.route = /settings.html）。
+// packages/ui/src/settings.tsx — DSHana App 自己的设置页脚本（contributes.settings.ui.route = /settings.html）。
 //
 // 为什么是我们自己的页：宿主设置区里那个「DSHana」标签页直接渲染本页，配置经 App 自己的后端
 // 读写（GET/POST /dshana/settings → dataDir/config.json 的 global.*，即运行时优先直读的那份值），
@@ -32,9 +32,9 @@ import {
 } from "@hana/plugin-components/settings";
 import type { SelectOption } from "@hana/plugin-components/settings";
 import "@hana/plugin-components/settings.css";
-import { followHostTheme } from "#/ui/host-theme.ts";
+import { followHostTheme } from "./host-theme.ts";
 
-// ---- 主题跟随（与壳页同一姿势，实现在 src/ui/host-theme.ts）----
+// ---- 主题跟随（与壳页同一姿势，实现在 packages/ui/src/host-theme.ts）----
 // 本页要跟着宿主明暗改 color-scheme（原生控件与滚动条跟宿主，不跟系统），故传 syncColorScheme。
 
 // ---- 小工具 ----

@@ -93,11 +93,11 @@ export function assertCordisArtifacts(cordisDir, patchFile, version) {
 export function assertUiTree(outDir) {
   const uiDir = join(outDir, "ui");
   if (!fs.pathExistsSync(uiDir)) {
-    throw new Error("App ui/ 静态树缺失（.cache/dist/ui 不存在）：src/ui 未随 build 拷贝——先跑 pnpm run build 再打包");
+    throw new Error("App ui/ 静态树缺失（.cache/dist/ui 不存在）：@dshana/ui 的产物未拷进交付目录——先跑 pnpm run build 再打包");
   }
   for (const rel of ["main.html", "sidebar.html", "app-shell.js"]) {
     if (!fs.pathExistsSync(join(uiDir, rel))) {
-      throw new Error("App ui/ 缺 cards route 资源：" + rel + "（src/ui/" + rel + " 缺失或构建未跑）");
+      throw new Error("App ui/ 缺 cards route 资源：" + rel + "（packages/ui/src/" + rel + " 缺失或构建未跑）");
     }
   }
   console.log("[pack] ui/ 静态树完整（main/sidebar 壳页 + app-shell.js bundle）");

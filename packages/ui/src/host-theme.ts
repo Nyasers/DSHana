@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/ui/host-theme.ts — 让 App 页面跟上宿主主题的那一步「贴样式表」。
+// packages/ui/src/host-theme.ts — 让 App 页面跟上宿主主题的那一步「贴样式表」。
 //
 // 为什么必须由页面自己做：宿主只把主题参数附在 App surface iframe 的 URL 上
 // （hana-theme / hana-css / hana-theme-appearance），变化时再推 hana.theme.changed；

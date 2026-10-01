@@ -122,13 +122,13 @@ DSHana 以**单卡 + 自带功能面板**注册（manifest `contributes.cards[0]
 
 DSH 的 workspace 选择对话框来自 `directory-picker` seam（宿主半列目录或开系统弹窗，客户端半渲染）。官方 web-app 层挂的是 `dsh-host-directory-picker-auto`，它按启动时采样的一把宿主事实（bindHost / ssh / platform / DISPLAY）挑后端，win32 + loopback 必落 native。native 的客户端半优先读页面里的 `__DSH_DIRECTORY_PICKER__`（官方桌面壳由 preload 注入、弹 Electron 对话框），没桥才回落到宿主进程的 OS chooser——后者要在宿主进程里 spawn 一个子进程跑 `IFileOpenDialog`（koffi 走 COM，还先合成一次 Alt 把弹窗抢到前台），上游写明它只适合「操作者坐在宿主屏幕前」。本形态的受管 runtime 是沙箱里的后台子进程，那条回落路开不出来，客户端就把异常交给 owner 的 `onError`，表现成每次选目录弹一个错误。
 
-壳页因此自己提供桥：在注入 DSH index 之前装 `__DSH_DIRECTORY_PICKER__`（`src/ui/dsh-inject.ts` 的 `installDirectoryPickerBridge`），`pick()` 调宿主的 `hana.resources.pick({ mode: 'directory' })`。弹窗由宿主出、在用户自己的机器上，既不经沙箱，也不依赖 DSH 自己的桌面壳；roster 层不动，native 那一对照挂，只是其中宿主半永远不会被调到。
+壳页因此自己提供桥：在注入 DSH index 之前装 `__DSH_DIRECTORY_PICKER__`（`packages/ui/src/dsh-inject.ts` 的 `installDirectoryPickerBridge`），`pick()` 调宿主的 `hana.resources.pick({ mode: 'directory' })`。弹窗由宿主出、在用户自己的机器上，既不经沙箱，也不依赖 DSH 自己的桌面壳；roster 层不动，native 那一对照挂，只是其中宿主半永远不会被调到。
 
 ## 主题跟随
 
 `@dshana/theme` 经 `tapIndex` 注入 index 响应：静态 fallback + 动态桥脚本，向壳页索取宿主主题 vars → 写 body 层 `!important` 覆盖 `--dsw-alias-*` / `--dsw-specific-*`。
 
-**App 页面这一侧要自己贴样式表**：宿主把主题参数附在 App surface iframe 的 URL 上（`hana-theme` / `hana-css` / `hana-theme-appearance`），变化时再推 `hana.theme.changed`；但把样式表贴进页面这件事宿主不代劳，而 SDK 只在收到 `hana.theme.changed` 时才应用 `cssUrl`——页面不自己贴首帧，就会一路吃 HTML 里写死的纸张 fallback，直到第一次主题变化才跟上。壳页 / 设置页 / 会话卡共用 `src/ui/host-theme.ts` 做这一步（首屏读快照 + URL 兜底 + 订阅）。
+**App 页面这一侧要自己贴样式表**：宿主把主题参数附在 App surface iframe 的 URL 上（`hana-theme` / `hana-css` / `hana-theme-appearance`），变化时再推 `hana.theme.changed`；但把样式表贴进页面这件事宿主不代劳，而 SDK 只在收到 `hana.theme.changed` 时才应用 `cssUrl`——页面不自己贴首帧，就会一路吃 HTML 里写死的纸张 fallback，直到第一次主题变化才跟上。壳页 / 设置页 / 会话卡共用 `packages/ui/src/host-theme.ts` 做这一步（首屏读快照 + URL 兜底 + 订阅）。
 
 **跟随语义（有意自持）**：仅当 DSH 主题偏好为 `system` 时跟随宿主配色；显式 `light`/`dark` 时完全用 DSH 自己的主题，宿主配色不介入。偏好变更经事件驱动重读（不再周期轮询）。此语义与官方样例的「无条件双 palette 替换」不同，是保留项。
 
@@ -156,14 +156,14 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 - 工具注册：`ctx.tools.register`，工具名 `dshana`（一个插件一个同名工具 + subcommand；v2 不自动加 `pluginId_` 前缀、重名被宿主当场拒）。动作五个：`open`/`reply`/`get`/`close`/`approve`，装配见 `src/tools/index.ts`、手册见 `src/skills/dshana/SKILL.md`。
 - 设置：`contributes.settings` 的 UI 由 App 自绘设置页承担（`ui.route: /settings.html`，宿主设置区渲染）；键与缺省以 `src/lib/config.ts` 为准，读写落 `dataDir/settings.json`（旧 `config.json` 只在两键缺位时作读侧兼容）。
 - 数据读路径迁到 `ctx.dataDir`（宿主 `app-data/<id>/`）：list/get 读当前源的 `<DSH_HOME>/...`（projcache + jsonl zstd）；旧插件数据迁移见 `src/lib/legacy-migrate.ts` 与 `scripts/migrate/legacy.mts`。
-- 构建：`node src/build.ts` 产物 `.cache/dist/` = App 安装目录形态（根 `manifest.json` + `index.js` + `assets/` + `skills/` + `ui/` + `runtime/` + roster patch `cordis.patch.yml`）。cordis 子插件包另出 `.cache/cordis/`（`node src-cordis/build.ts`）：它们不是安装态里的东西，出包时由 pack 落进包内 `node_modules/@dshana`。
+- 构建：`node src/build.ts` 产物 `.cache/dist/` = App 安装目录形态（根 `manifest.json` + `index.js` + `assets/` + `skills/` + `ui/` + `runtime/` + roster patch `cordis.patch.yml`）。壳的文档侧另出 `.cache/ui/`（`node packages/ui/src/build.ts`），App 域构建整树拷进 `ui/`。cordis 子插件包另出 `.cache/cordis/`（`node src-cordis/build.ts`）：它们不是安装态里的东西，出包时由 pack 落进包内 `node_modules/@dshana`。
 
 **受管 Node runtime：local-machine/external + readyMarker 就绪门（迁移步骤 2）：**
 
 - 受管 runtime 入口 `runtime/dsh-host.mjs`（源码 `packages/host/src/`，rspack → `.cache/host/dsh-host.mjs`，App 域构建再拷进交付目录 `runtime/`，见 `packages/host/src/rspack.config.mts`）：App 自有配置解析（唯一 argv = 私有运行时配置文件路径，schema 见 `packages/host/src/options.ts`，与 `src/lib/managed-runtime.ts buildRuntimeConfig()` 对偶）→ `connectAppRuntime()`（无父 IPC fd → 可操作报错 + 退出码 3，不假装能跑）→ 进程级 env（`DSH_HOME=<dataDir>/.dsh`、`DSHANA_HOME=<dataDir>`，不改宿主进程环境）→ 依赖随包就位（安装目录 `node_modules`，无运行时安装）→ profile 种子化（`initProfile` + `node_modules/@dshana` scope 链接 → installDir `cordis/`，junction/拷贝回退）→ 动态定位 DSH（`locate.ts`，profile-boot/app-boot，webpackIgnore 原生 import）→ `runProfile`（profile dshana、配置中的 dshPort、`--no-open`）→ **就绪门**（webServer 服务端口 === 期望端口 且 HTTP 探测成功）→ stdout 打 `readyMarker`（唯一出口；失败路径绝不打印 READY）→ SIGTERM/SIGINT/父断连有序释放（关 DSH fiber → 再 `hana.close()`；拿到流式响应不能立刻 close，本步未接流）。退出码契约：2=usage/3=IPC 不可用/4=deps/5=seed/6=boot/7=port。
 - App 侧封装 `src/lib/managed-runtime.ts`：`ensureManagedRuntime()`（单例 single-flight：**一个 App runtime 服务多个 DSH 会话**，首次 create 触发启动——设计见模块头注释与 tools/actions 的提交链）父进程随机选取中继端口与 DSH 内部端口（区间 38000..52000，见 `choosePort`/`pickPorts`；宿主 service 端口契约只收确定整数，故不能交给宿主分配）→ `ctx.runtime.start({ runtime:"node", entry:"runtime/dsh-host.mjs", profile:"local-machine", network:"external", cwd:dataDir, service:{ port:中继端口, readyMarker:带随机 opaque }, args:[私有配置文件路径] })`（契约禁止 readRoots/writeRoots/callToken/taskId，故一律不带） → `ctx.runtime.get` 轮询到 ready（不能把 runtimeId 当就绪；端口占用 port-busy 自动换随机端口重试，上限 3 次）→ 失败归类（`err.code`：port-busy/deps/seed/boot-failed/not-authorized/timeout/unknown，message 带用户指引）+ runtime watch 日志尽力镜像（src=dsht 进 App 会话日志）；每次命中 ready 缓存先经 runtime.get 探活，子进程崩溃/被宿主回收则清单例并重起；失败路径把端口与两把 key 归零（`bridgeAccess()` 不再放出死端口）；`disposeManagedRuntime()`/`stopManagedRuntime()`（App 卸载/更新前停 runtime，Windows .node 锁纪律）；`choosePort`/`pickPorts`/`makeReadyMarker`/`classifyRuntimeFailure` 纯函数可单测。
 - `src/tools/actions/*.ts` 接 `src/lib/session-run.ts`（open/reply 提交链）、`src/lib/cancel-chain.ts`（close 取消链）与 `src/lib/approve-respond.ts`（approve 应答）；`get`/`list` 离线可读。`src/index.ts` disposer 接 disposeManagedRuntime。
-- `src/build.ts`：主 bundle 先清 `.cache/dist` 再写入；受管 runtime 入口不在本域编译，而是从 `.cache/host/dsh-host.mjs` 拷进交付目录 `runtime/`（缺件即拒），随后统一做 URL 回写 / terser / 断言。
+- `src/build.ts`：主 bundle 先清 `.cache/dist` 再写入；受管 runtime 入口与壳的文档侧都不在本域编译，分别从 `.cache/host/dsh-host.mjs`、`.cache/ui/` 拷进交付目录 `runtime/` 与 `ui/`（缺件即拒），随后统一做 URL 回写 / terser / 断言。
 - 单测 `tests/**/*.test.mjs`（node --test，分组见 tests/README.md）：child options parse、managed-runtime 端口/参数/错误归类、readyMarker 构造。本地验证：`node src/build.ts` 通过；`node .cache/dist/runtime/dsh-host.mjs` 直跑给出清晰报错（无父 IPC / 缺参）。真机 AppHost 验收仍待装包（边界清单见本节末）。
 
 **依赖部署：随包物化（自包含打包）**
@@ -359,7 +359,7 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 
 ### 交付 3：ui/ 静态树归位
 
-- src/ui/{main.html, sidebar.html, app-shell.ts}（build:src 复制到 .cache/dist/ui/）：
+- packages/ui/src/{main.html, sidebar.html, app-shell.ts}（build:ui 出 .cache/ui，build:src 整树拷到 .cache/dist/ui/）：
   页面同层相对引用（`./app-shell.js`），无根路径绝对 URL；appId/路由前缀由页面
   location.pathname 推导（/api/apps/<appId>/... 段），不硬编码整 URL。壳页轮询 boot-state、
   POST start/stop；主题桥（同文档，`dshHanaThemeRequest`）best-effort。剪贴板已改由

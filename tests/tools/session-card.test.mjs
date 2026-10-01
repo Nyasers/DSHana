@@ -46,8 +46,8 @@ function cardQuery(card) {
 test("卡页存在：SESSION_CARD_ROUTE 指向 ui/ 里真实存在的页面", () => {
   assert.equal(SESSION_CARD_ROUTE, "/stream.html");
   assert.ok(
-    existsSync(join(here, "..", "..", "src", "ui", SESSION_CARD_ROUTE.replace(/^\//, ""))),
-    "常量指向的页面必须真的在 src/ui 里（宿主按 ui 静态树取页）",
+    existsSync(join(here, "..", "..", "packages", "ui", "src", SESSION_CARD_ROUTE.replace(/^\//, ""))),
+    "常量指向的页面必须真的在 packages/ui/src 里（宿主按 ui 静态树取页）",
   );
 });
 

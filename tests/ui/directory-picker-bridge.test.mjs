@@ -11,7 +11,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { installDirectoryPickerBridge, pickedPathOf } from "../../src/ui/dsh-inject.ts";
+import { installDirectoryPickerBridge, pickedPathOf } from "@dshana/ui/dsh-inject.ts";
 
 const KEY = "__DSH_DIRECTORY_PICKER__";
 

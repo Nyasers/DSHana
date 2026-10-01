@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/ui/dsh-inject.ts — 把 DSH 前端注入当前文档 + 提供 __DSH_TRANSPORT__（浏览器 ESM）
+// packages/ui/src/dsh-inject.ts — 把 DSH 前端注入当前文档 + 提供 __DSH_TRANSPORT__（浏览器 ESM）
 //
-// 形态对齐官方样例 hana-dsh（runtime/bootstrap.js 的 src/ui/main.ts）：不再用 iframe 内嵌
+// 形态对齐官方样例 hana-dsh（它 runtime/bootstrap.js 的 src/ui/main.ts）：不再用 iframe 内嵌
 // DSH，而是把 DSH 的 index.html 解析后注入本页——<base href> 指向中继前缀，DSH 的所有相对
 // 资源（./assets/*、manifest、favicon）与绝对路径请求都经 __DSH_TRANSPORT__ 重写到该前缀。
 // 这样 DSH 前端的 SPA 基址问题（绝对路径绕开代理前缀）不再存在，也不再需要 iframe 的
@@ -15,7 +15,7 @@
 //
 // 依赖：全部走浏览器原生 API（DOMParser / fetch / WebSocket / <script> 注入），无第三方包。
 
-import { installClipboardShadow } from "#/ui/clipboard-shadow.ts";
+import { installClipboardShadow } from "./clipboard-shadow.ts";
 import {
   ChunkAssembler,
   MUX_CHUNK_QUERY,
@@ -637,7 +637,7 @@ export function installTransport(
   window.__DSHANA__ = {
     role: role || "workspace",
     runtimeUrl: (path) => mapRuntimeUrl(String(path), privateBase, window.location.origin).toString(),
-    // 壳页传入的额外桥面（当前是设置视图读/写/订阅，见 src/ui/app-shell.ts 的 VIEW_STATE_API）：
+    // 壳页传入的额外桥面（当前是设置视图读/写/订阅，见 packages/ui/src/app-shell.ts 的 VIEW_STATE_API）：
     // src-integrations/ui-settings-general 靠它做「FP 点设置、主卡打开」。
     ...(bridge && typeof bridge === "object" ? bridge : {}),
   };

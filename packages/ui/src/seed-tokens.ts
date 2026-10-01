@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/seed-tokens.ts — 注入 DSH 之前先垫上的 DSW 底色 token（token-map 的子集，按面分）
+// packages/ui/src/seed-tokens.ts — 注入 DSH 之前先垫上的 DSW 底色 token（token-map 的子集，按面分）
 //
 // 为什么需要：DSH 自己的 design-platform.css 在 body 上写了整套浅色默认
 // （--dsw-alias-bg-base = bluish-00，近白），而把宿主色写上去的主题桥是**跑在 DSH 客户端里的

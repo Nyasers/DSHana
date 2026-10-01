@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/ui/surface-bridge.ts — App surface 的低层宿主管道（凭据 / 取数 / 跨面共享 / 卡实例态 / 剪贴板）
+// packages/ui/src/surface-bridge.ts — App surface 的低层宿主管道（凭据 / 取数 / 跨面共享 / 卡实例态 / 剪贴板）
 //
 // 这一层是「谁在跑」与「页面长什么样」之间的接口：会话卡（stream 面）与壳页（main / default /
 // sidebar）都要它，但它是**纯宿主 plumbing**——不碰 DOM 渲染、不引 dsh-inject / React，所以
 // 会话卡的聊天流态可以只带这一层（外加 SDK 的 envelope 订阅），把重型那一半留在动态 chunk 里。
 //
-// 相对资源纪律与凭据形态的来龙去脉见 src/ui/app-shell.ts 顶部注释；这里只保留实现。
+// 相对资源纪律与凭据形态的来龙去脉见 packages/ui/src/app-shell.ts 顶部注释；这里只保留实现。
 import { hana } from "@hana/plugin-sdk";
-import { SHARED_KEY_PREFIX, selectionSharedValue } from "#/lib/shared-state.ts";
+import { SHARED_KEY_PREFIX, selectionSharedValue } from "@dshana/shared/shared-state.ts";
 
 // ---- 到 App 后端路由的取数面 ----
 // 本页的凭据是 surface 会话票，只从 location 读——查询串（宿主给 App surface iframe 附
@@ -107,7 +107,7 @@ export function credMissingHtml(): string {
     + "请从 Card Center 重新打开本卡。</pre>";
 }
 
-// ---- 跨面共享状态（通道语义见 src/lib/shared-state.ts）----
+// ---- 跨面共享状态（通道语义见 @dshana/shared/shared-state.ts）----
 // 作用域：本 App 单 DSH 源、单主卡，宿主给主卡与其 FP 同一个 cardInstanceId，按实例分段没有
 // 区分度，键就是 `dshana.<kind>`（前缀与 lib/shared-state.ts 同源）。这批键的寿命是一次 App
 // 生命周期：加载时由 renewSharedState 清空，页面下线时由 dropShared 删。

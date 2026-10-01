@@ -3,7 +3,7 @@
 //
 // src/tools/shared/card.ts — 会话卡字面量（工具返回值 details.card）
 //
-// 一张卡，两个挂载态（页 = ui/stream.html，见 src/ui/stream.html 与 src/ui/app-shell.ts）：
+// 一张卡，两个挂载态（页 = ui/stream.html，见 packages/ui/src/stream.html 与 packages/ui/src/app-shell.ts）：
 //   · 聊天流里：只画一行入口（会话坐标）；不注入 DSH、不带票据，所以不叠也不冻结。
 //   · 取出到黑板 / 拆窗：宿主把同一 route 装到新的挂载上，页面自己认挂载态，注入完整 DSH 现场。
 // 「取出」是宿主手势（聊天卡右上角菜单 / 拖拽），不经过本 App 的代码；所以这里不注册

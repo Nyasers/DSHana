@@ -3,7 +3,7 @@
 //
 // src/types/globals.d.ts — 我们注入到页面上的自定义全局
 //
-// 这些名字由 src/ui/dsh-inject.ts 在注入 DSH index 之前挂到 window 上（DSH 客户端集成
+// 这些名字由 packages/ui/src/dsh-inject.ts 在注入 DSH index 之前挂到 window 上（DSH 客户端集成
 // 与壳页桥都按它们判断环境）。它们不是标准 DOM，类型层要单独承认，否则每个引用处都报
 // "Property does not exist on type 'Window & typeof globalThis'"。
 //

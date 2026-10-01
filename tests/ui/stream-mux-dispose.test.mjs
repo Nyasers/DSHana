@@ -8,7 +8,7 @@
 // 用假 WebSocket 构造器注入（createStreamMux 的第二个参数），不起真连接。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createStreamMux } from "../../src/ui/dsh-inject.ts";
+import { createStreamMux } from "@dshana/ui/dsh-inject.ts";
 
 /** 最小假载体：记录新建/发送/关闭，readyState 停在 CONNECTING（对端不会回执）。 */
 class FakeWebSocket {

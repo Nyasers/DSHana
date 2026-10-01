@@ -1,25 +1,25 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/ui/app-shell.ts — dshana App v2 壳页逻辑（main / default / sidebar 共用；浏览器 ESM）
+// packages/ui/src/app-shell.ts — dshana App v2 壳页逻辑（main / default / sidebar 共用；浏览器 ESM）
 //
 // 相对资源纪律：经 <script type="module" src="./app-shell.js"> 相对引入，
 // 页面内不出现根路径绝对 URL。浏览器 SDK = 官方 @hana/plugin-sdk（devDependencies，
 // file:vendor/hana-app-sdk/hana-plugin-sdk-0.0.0.tgz），构建期由 rspack 静态打进本文件（见
-// src/ui/rspack.config.mts）——浏览器 ESM 不解析裸包名（宿主不注入 importmap），所以依赖
+// packages/ui/src/rspack.config.mts）——浏览器 ESM 不解析裸包名（宿主不注入 importmap），所以依赖
 // 由打包器 resolve、产物自包含，不在 .cache/dist/ui 另放 vendored 拷贝。
 //
 // 本文件只管 main / default / sidebar 三个面。**会话卡（stream 面）不在这里**：
-// src/ui/stream.html 引的是 src/ui/stream-entry.ts（轻半，零 React），它按 hana.envelope 认到
-// 黑板 / 拆窗（fixed）后才动态 import() src/ui/stream-stage.tsx（重型半，带 React 与 DSH 注入）。
+// packages/ui/src/stream.html 引的是 packages/ui/src/stream-entry.ts（轻半，零 React），它按 hana.envelope 认到
+// 黑板 / 拆窗（fixed）后才动态 import() packages/ui/src/stream-stage.tsx（重型半，带 React 与 DSH 注入）。
 // 低层宿主管道（凭据 / 取数 / 跨面共享 / 卡实例态 / 剪贴板）两边共用，住在
-// src/ui/surface-bridge.ts。视觉沿袭 v1 webui-shell 纸张风（CSS 变量 + fallback 纸张色），
+// packages/ui/src/surface-bridge.ts。视觉沿袭 v1 webui-shell 纸张风（CSS 变量 + fallback 纸张色），
 // 数据语义 v2 boot-state（phase idle/starting/ready/error/stopped）。
 import { hana } from "@hana/plugin-sdk";
-import { injectDshIndex, installTransport, type DshTransport } from "#/ui/dsh-inject.ts";
-import { isFaceView, roleForView } from "#/lib/face-role.ts";
-import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPreference } from "#/lib/seed-tokens.ts";
-import { followHostTheme } from "#/ui/host-theme.ts";
+import { injectDshIndex, installTransport, type DshTransport } from "./dsh-inject.ts";
+import { isFaceView, roleForView } from "./face-role.ts";
+import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPreference } from "./seed-tokens.ts";
+import { followHostTheme } from "./host-theme.ts";
 import {
   SURFACE_API,
   SURFACE_MISSING,
@@ -33,7 +33,7 @@ import {
   postAction,
   surfaceSession,
   withSurfaceTicket,
-} from "#/ui/surface-bridge.ts";
+} from "./surface-bridge.ts";
 
 (function () {
   "use strict";
@@ -161,7 +161,7 @@ import {
   }
 
   // 低层宿主管道（到 App 后端路由的取数面、surface 凭据、跨面共享状态、卡实例态、剪贴板）
-  // 已抽到 src/ui/surface-bridge.ts：会话卡的轻半（stream-entry.ts）也要这一层，但不该为此
+  // 已抽到 packages/ui/src/surface-bridge.ts：会话卡的轻半（stream-entry.ts）也要这一层，但不该为此
   // 背上下面的 DSH 注入与 React。本文件从那里 import，别名不变、调用点不动。
   // ---- DSH 注入（对齐官方样例：同文档注入 + __DSH_TRANSPORT__，不再用 iframe）----
   // 一次装配：标记视图参数（DSH 侧 view 插件读 ?dshana-view=）→ 装 transport → 取回 DSH
@@ -463,7 +463,7 @@ import {
     if (!data || typeof data !== "object") return;
     if (data.dshHanaThemeRequest) { try { sendThemeTo(e.source); } catch (err) { /* 忽略 */ } }
   });
-  // 剪贴板实现（writeClipboard）随低层管道移到了 src/ui/surface-bridge.ts 的 clipboardWrite，
+  // 剪贴板实现（writeClipboard）随低层管道移到了 packages/ui/src/surface-bridge.ts 的 clipboardWrite，
   // 契约与现场结论的来龙去脉见那里的注释；本文件只是把它挂进 SURFACE_API（见上方 import）。
   // 主题跟随（**事件驱动，不轮询**）：宿主主题变化由 SDK 通知（事件名 hana.theme.changed，
   // 常量见 @hana/plugin-protocol 的 THEME_CHANGED），SDK 侧即 hana.theme.subscribe；
@@ -475,10 +475,10 @@ import {
   }
   // 宿主主题：宿主经 App surface iframe 的 URL 参数给 hana-theme / hana-css /
   // hana-theme-appearance，变更再经 hana.theme.changed 推同一组值。「贴样式表」那一步的
-  // 契约与实现见 src/ui/host-theme.ts（壳页 / 设置页 / 会话卡共用一份）；壳页只额外做面
+  // 契约与实现见 packages/ui/src/host-theme.ts（壳页 / 设置页 / 会话卡共用一份）；壳页只额外做面
   // 相关的事：应用后垫 DSH 首帧底色 token，样式表落地后把主题推给内层桥。
 
-  // ---- 注入前先垫上 DSW 自己的底色 token（见 src/lib/seed-tokens.ts）----
+  // ---- 注入前先垫上 DSW 自己的底色 token（见 packages/ui/src/seed-tokens.ts）----
   // 写 body 的内联 style、不加 !important：赢过 DSH 的静态样式表，输给主题桥的 !important。
   // 值按面取（侧栏面垫侧栏色），宿主变量取不到就跳过——不发明用户没选过的颜色。
   // 同时在 <html> 上声明这一面的底座 token：桥落地后按它把 base 也压成同色（桥的映射表是
@@ -521,7 +521,7 @@ import {
       if (backdropValue) document.body.style.backgroundColor = backdropValue;
     }
   }
-  // 首屏跟随 + 订阅（共用 src/ui/host-theme.ts）。分面差异只在两个钩子：应用后垫 DSH 首帧
+  // 首屏跟随 + 订阅（共用 packages/ui/src/host-theme.ts）。分面差异只在两个钩子：应用后垫 DSH 首帧
   // 底色 token；样式表落地后推一次主题给内层桥。
   followHostTheme(hana, {
     onApplied: function () { seedDshTokens(); pushThemeNow(); },
@@ -531,7 +531,7 @@ import {
   // ---- 认面：页面自己声明为准，宿主 slot 只作兜底 ----
   // 与样例 hana-dsh 同一姿势："我是哪个面"写在**页面自己身上**（样例用 <meta name="hana-dsh-role">，
   // 我们用 <meta name="hana-dshana-role"> + 壳属性 data-dshana-view）。
-  // 三态模型（词表见 src/lib/face-role.ts）：
+  // 三态模型（词表见 packages/ui/src/face-role.ts）：
   //   default —— full（整幅 DSH UI）与 detached（拆窗）共用一页，内容一样；
   //   main    —— 主卡，无 DSH 侧栏（侧栏归 FP）；
   //   sidebar —— FP，只有侧栏；
@@ -644,8 +644,8 @@ import {
   }
 
   // ---- 会话卡（stream 面）已移出本文件 ----
-  // 那一页的两态（聊天流入口行 / 黑板·拆窗的完整 DSH 现场）见 src/ui/stream-entry.ts 与
-  // src/ui/stream-stage.tsx：判据仍是 hana.envelope 的 height.mode（APPS_EN.md「Mount-mode
+  // 那一页的两态（聊天流入口行 / 黑板·拆窗的完整 DSH 现场）见 packages/ui/src/stream-entry.ts 与
+  // packages/ui/src/stream-stage.tsx：判据仍是 hana.envelope 的 height.mode（APPS_EN.md「Mount-mode
   // table」与「Size envelope」），但重型的注入半只在 fixed 态经动态 import() 装载。
   // ---- 启动 ----
   function boot() {

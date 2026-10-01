@@ -187,6 +187,9 @@ importers:
       '@dshana/shared':
         specifier: workspace:*
         version: link:packages/shared
+      '@dshana/ui':
+        specifier: workspace:*
+        version: link:packages/ui
       '@hana/app-sdk':
         specifier: file:vendor/hana-app-sdk/hana-app-sdk.tgz
         version: file:vendor/hana-app-sdk/hana-app-sdk.tgz(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -276,6 +279,12 @@ importers:
         version: link:../shared
 
   packages/shared: {}
+
+  packages/ui:
+    dependencies:
+      '@dshana/shared':
+        specifier: workspace:*
+        version: link:../shared
 
 packages:
 
