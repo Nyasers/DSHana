@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/runtime/bridge-freeze.test.mjs — packages/host/src/bridge.ts 控制面与冻结契约单测（真起 http 服务）
+// tests/host/bridge-freeze.test.mjs — packages/host/src/bridge.ts 控制面与冻结契约单测（真起 http 服务）
 // 覆盖：controlKey 鉴权、prepare-switch/resume 冻结（503、在途调用拒绝、守门失败不半冻）、
 // WS 升级握手头不被剥离（101）、冻结时给已升级 WS 发 1013 关闭帧。
 import { test } from "node:test";

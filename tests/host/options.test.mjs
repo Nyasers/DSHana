@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/runtime/options.test.mjs — packages/host/src/options.ts 纯函数单测（node --test）
+// tests/host/options.test.mjs — packages/host/src/options.ts 纯函数单测（node --test）
 // 覆盖：私有配置文件形态（argv[1] = config 路径）、配置 schema 校验（dataDir 必填、
 // dshPort/bridgePort 1..65535 且不相同、bridgeKey 长度、readyMarker 换行）、--help 豁免、
 // 非法 JSON / 读取失败。读取经注入的 readFile 打桩，不触盘。
