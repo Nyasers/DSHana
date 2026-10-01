@@ -319,8 +319,8 @@ export async function main(argv: string[]): Promise<number> {
     }
   };
   info(opts.preflight
-    ? `dsh-host 启动（preflight 预检）：dshHome=${opts.dshHome} dataDir=${opts.dataDir}`
-    : `dsh-host 启动（managed node runtime entry）：dshPort=${opts.dshPort} bridgePort=${opts.bridgePort} dataDir=${opts.dataDir}`);
+    ? `dsh 启动（preflight 预检）：dshHome=${opts.dshHome} dataDir=${opts.dataDir}`
+    : `dsh 启动（managed node runtime entry）：dshPort=${opts.dshPort} bridgePort=${opts.bridgePort} dataDir=${opts.dataDir}`);
 
   const entryFile = fileURLToPath(import.meta.url);
   let installRoot;

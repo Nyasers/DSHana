@@ -6,7 +6,7 @@
 // 共享工具（collect/walk/terser/assert + minify/template loader）在 scripts/build/。
 // 产物（.cache/dist = App 安装目录形态；宿主读该根 manifest.json + entry）：
 //   manifest.json       App v2 manifest（entry "index.js" / icon "assets/icon.png"）
-//   index.js            壳：只 import ./bin/main.mjs 并重新导出 apply/default（宿主启 App 时会缓存它）
+//   index.js            壳：静态两行，只 re-export ./bin/main.mjs 的 apply/default（宿主启 App 时会缓存它）
 //   bin/main.mjs        App 主体（含它自己切出的 chunk）
 //   bin/dsh.mjs          受管 Node runtime 入口（宿主以 node 执行；与主体同一次构建、共享 chunk）
 //   assets/icon.png     App 身份图标（manifest.icon 指向的包内真实图片）
@@ -78,11 +78,21 @@ async function compile(cfg, label) {
 // 主 bundle 编译（rspack output.clean 清空 .cache/dist 后写入 index.js）
 await compile(config, "build:app 主 bundle");
 
-// 受管 runtime 入口已随本次 rspack 构建落到交付目录 bin/（三入口一次构建，见 rspack.config.mts）
+// 受管 runtime 入口已随本次 rspack 构建落到交付目录 bin/（两入口一次构建，见 rspack.config.mts）
 const runtimeEntry = join(DIST_DIR, "bin", "dsh.mjs");
 if (!fs.pathExistsSync(runtimeEntry)) {
   throw new Error("受管 runtime 入口缺失（" + runtimeEntry + "）：拒绝出一份没有 runtime 的 App");
 }
+// 产物根 index.js = 静态壳：只 re-export 主体。不由 rspack 产出——字面跨构建不变，
+// 宿主缓存它才稳（rspack 出的入口会带数字 id / chunk 名，每次都变）。
+if (!fs.pathExistsSync(join(DIST_DIR, "bin", "main.mjs"))) {
+  throw new Error("App 主体缺失（bin/main.mjs）：拒绝出交付目录");
+}
+fs.writeFileSync(
+  join(DIST_DIR, "index.js"),
+  'export*from"./bin/main.mjs";\nexport{default}from"./bin/main.mjs";\n',
+  "utf8",
+);
 
 // 1) 静态化路径字面量回写（dist 主区）
 rewriter(DIST_DIR);
