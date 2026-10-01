@@ -6,18 +6,18 @@
 // 共享工具（collect/walk/terser/assert + minify/template loader）在 scripts/build/。
 // 产物（.cache/dist = App 安装目录形态；宿主读该根 manifest.json + entry）：
 //   manifest.json       App v2 manifest（entry "index.js" / icon "assets/icon.png"）
-//   index.js            rspack 单 bundle（入口具名导出 apply + default.apply）
+//   index.js            壳：只 import ./bin/main.mjs 并重新导出 apply/default（宿主启 App 时会缓存它）
+//   bin/main.mjs        App 主体（含它自己切出的 chunk）
+//   bin/dsh-host.mjs    受管 Node runtime 入口（宿主以 node 执行；与主体同一次构建、共享 chunk）
 //   assets/icon.png     App 身份图标（manifest.icon 指向的包内真实图片）
 //   skills/             App skills（dshana，SKILL.md 随包分发）
-//   runtime/dsh-host.mjs  受管 Node runtime 入口（由 @dshana/host 构建产出，本入口把它拷进
-//                         交付目录的 runtime/；cordis/ 产物由 build:cordis 另产出 .cache/cordis）
 //   ui/                   壳的文档侧（cards route 指向壳页，见 packages/ui/src/——相对资源路径，
 //                         宿主以 /api/apps/<id>/ui<route> 服务；由 @dshana/ui 构建产出，本入口只拷贝）
 // 路由：v2 走 ctx.routes.register（单个 route app），不生成 .cache/dist/routes/ 目录——宿主只认注册
 // 的 route app，不扫 dist。
 // 用法：node packages/app/src/build.ts [RSPACK_ENV=<构建环境目录>]
-// 注意：本文件是构建入口，不在 bundle 里（主入口由 rspack.config.mts 指定为 packages/app/src/index.ts）；
-// 但 collectSource 会把本目录下的 .js/.ts 一并收作 URL 回写与静态 URL 断言的扫描面。
+// 注意：本文件是构建入口，不在 bundle 里（入口在 rspack.config.mts 指定）；collectSource 会把
+// app 与 host 两域的 .ts 一并收作 URL 回写与静态 URL 断言的扫描面。
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -29,8 +29,8 @@ import {
   extraMinify,
   assertNoStaticFileUrl,
 } from "../../../scripts/build/common.mts";
-// 交付目录常量（.cache/dist、.cache/host、.cache/ui）与 Node 版本断言（本入口以 TypeScript 直跑，依赖原生类型剥离）
-import { DIST_DIR, HOST_DIR, UI_DIR } from "../../../scripts/shared/paths.mts";
+// 交付目录常量（.cache/dist、.cache/ui）与 Node 版本断言（本入口以 TypeScript 直跑，依赖原生类型剥离）
+import { DIST_DIR, UI_DIR, ROOT } from "../../../scripts/shared/paths.mts";
 
 const SRC_ROOT = dirname(fileURLToPath(import.meta.url)); // packages/app/src/
 
@@ -55,8 +55,11 @@ if (envDir) {
 }
 const rspack = rspackPkg.rspack ?? rspackPkg.default?.rspack;
 
-// app 域源码收集（供 URL 回写）
-const rewriter = makeUrlRewriter(collectSource(SRC_ROOT));
+// 源码收集（供 URL 回写）：app 主体与 host runtime 同一次构建，两域的 .ts 都要收
+// （runtime 入口用 import.meta.url 定位安装根，静态化的 file:// 字面量必须回写）。
+const rewriter = makeUrlRewriter(
+  new Map([...collectSource(SRC_ROOT), ...collectSource(join(ROOT, "packages", "host", "src"))]),
+);
 
 // 单 compiler 编译封装（rspack 一次 run/close；stats 报错即 reject）
 async function compile(cfg, label) {
@@ -75,14 +78,11 @@ async function compile(cfg, label) {
 // 主 bundle 编译（rspack output.clean 清空 .cache/dist 后写入 index.js）
 await compile(config, "build:app 主 bundle");
 
-// 受管 runtime 入口就位（由 @dshana/host 先行构建产出；本入口只负责把它摆进交付目录的 runtime/，
-// 好让下面的静态 URL 回写、二次压缩与断言覆盖到它。缺件即拒，不出一份没有 runtime 的 App）。
-const hostEntry = join(HOST_DIR, "dsh-host.mjs");
-if (!fs.pathExistsSync(hostEntry)) {
-  throw new Error("受管 runtime 入口缺失（" + hostEntry + "）：先跑 pnpm run build:host");
+// 受管 runtime 入口已随本次 rspack 构建落到交付目录 bin/（三入口一次构建，见 rspack.config.mts）
+const runtimeEntry = join(DIST_DIR, "bin", "dsh-host.mjs");
+if (!fs.pathExistsSync(runtimeEntry)) {
+  throw new Error("受管 runtime 入口缺失（" + runtimeEntry + "）：拒绝出一份没有 runtime 的 App");
 }
-fs.copySync(hostEntry, join(DIST_DIR, "runtime", "dsh-host.mjs"));
-console.log("runtime bundle -> .cache/dist/runtime/dsh-host.mjs（受管 runtime 入口，来自 .cache/host）");
 
 // 1) 静态化路径字面量回写（dist 主区）
 rewriter(DIST_DIR);

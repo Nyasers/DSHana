@@ -8,8 +8,7 @@
   },
   "type": "module",
   "scripts": {
-    "build": "pnpm run verify:integrations && pnpm run check:type && pnpm run build:host && pnpm run build:ui && pnpm run build:app && pnpm run build:cordis && pnpm run build:integrations",
-    "build:host": "node packages/host/src/build.ts",
+    "build": "pnpm run verify:integrations && pnpm run check:type && pnpm run build:ui && pnpm run build:app && pnpm run build:cordis && pnpm run build:integrations",
     "build:ui": "node packages/ui/src/build.ts",
     "build:app": "node packages/app/src/build.ts",
     "build:cordis": "node packages/app/src/cordis.ts",

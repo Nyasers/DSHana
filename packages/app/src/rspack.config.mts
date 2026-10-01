@@ -4,8 +4,14 @@
 // packages/app/src/rspack.config.mts — dshana 主 bundle 构建配置（app 域：随源码，见布局原则
 // 「领域专用脚本随各自源码」；.mts 不被 collectSource 收集，不随 bundle 打包）
 // 与 hana-remote-dev 的 rspack.config.mts 对齐，按 dshana 实际适配：
-//   - 单入口 packages/app/src/index.ts → 单产物 .cache/dist/index.js（组装 + 我们那几个包
-//     的接线全部收敛）
+//   - 三入口一次构建：
+//       · 主体 packages/app/src/index.ts → bin/main.mjs
+//       · 受管 runtime 入口 packages/host/src/main.ts → bin/dsh-host.mjs（宿主以 node 执行）
+//       · 壳 packages/app/src/shell.ts → 产物根 index.js（宿主按 manifest.entry=index.js
+//         加载，且启 App 时会缓存它——所以这个文件只做壳、保持稳定；用 entry dependOn 依赖
+//         主体，产物就是一层 import ./bin/main.mjs）
+//     主体与 runtime 有公共代码，同一次构建让 rspack 把它切成共享 chunk（splitChunks），
+//     两边不各打一份；主体自己按需切出的 chunk 也归 bin/。
 //   - 输出 ESM module（纯 ESM 无原生模块，不需要 CJS+loadBundle 沙箱；宿主直接 import）
 //   - library.type=module：入口具名导出（apply）真 emit 成 ESM export，宿主直接 import
 //   - packages/app/src/assets 只有 icon.png（App 图标，由 build.ts 原样 copy，不进 bundle），
@@ -20,10 +26,24 @@ export default {
   name: "dshana",
   mode: "production",
   target: "node",
-  entry: path.join(ROOT, "packages", "app", "src", "index.ts"),
+  entry: {
+    // App 主体（宿主在隔离进程内加载）
+    "bin/main": path.join(ROOT, "packages", "app", "src", "index.ts"),
+    // 受管 runtime 入口（宿主以 node 执行 bin/dsh-host.mjs）
+    "bin/dsh-host": path.join(ROOT, "packages", "host", "src", "main.ts"),
+    // 壳依赖主体：不重复实现，产物就是一层 import ./bin/main.mjs
+    index: { import: path.join(ROOT, "packages", "app", "src", "shell.ts"), dependOn: "bin/main" },
+  },
   output: {
     path: DIST_DIR,
-    filename: "index.js",
+    // 壳落产物根 index.js（manifest.entry，保持稳定）；入口（bin/main、bin/dsh-host）与
+    // 它们共享的 chunk 都归 bin/
+    filename: (pathData) => {
+      const name = String(pathData.chunk?.name ?? "");
+      if (name === "index") return "index.js";
+      return name.startsWith("bin/") ? "[name].mjs" : "bin/[name].mjs";
+    },
+    chunkFilename: "bin/[name].mjs",
     module: true,
     clean: true,
     library: { type: "module" },
@@ -44,8 +64,14 @@ export default {
       },
     ],
   },
-  // 入口导出无外部消费者时会被导出级 tree-shaking 摇成空壳（插件本体要全部保留）
-  optimization: { minimize: true, usedExports: false, sideEffects: false },
+  // 入口导出无外部消费者时会被导出级 tree-shaking 摇成空壳（插件本体要全部保留）。
+  // splitChunks 全量切：主体自己按需分包，chunk 落 bin/（壳侧不重复一份）。
+  optimization: {
+    minimize: true,
+    usedExports: false,
+    sideEffects: false,
+    splitChunks: { chunks: "all" },
+  },
   devtool: false,
   node: false,
   stats: "minimal",

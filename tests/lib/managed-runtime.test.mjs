@@ -132,7 +132,7 @@ test("classifyRuntimeFailure: 退出码契约归类（packages/host/src/main.ts 
 });
 
 test("常量契约：entry 相对安装根 / marker 前缀 / 端口区间", () => {
-  assert.equal(RUNTIME_ENTRY, "runtime/dsh-host.mjs");
+  assert.equal(RUNTIME_ENTRY, "bin/dsh-host.mjs");
   assert.equal(READY_MARKER, "DSH_READY");
   assert.equal(PORT_MIN, 38000);
   assert.equal(PORT_MAX, 52000);
