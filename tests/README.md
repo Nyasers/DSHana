@@ -9,9 +9,9 @@
 | 组 | 覆盖 |
 |---|---|
 | `lib/` | `src/lib/**` 与从它分出去的 App 侧包（`packages/shared/src/**`、`packages/runtime/src/**`、`packages/models/src/**`、`packages/session/src/**`）：纯函数与状态机（模型选择、数据源与迁移、受管 runtime 封装、会话提交与取消、流帧、任务归属…） |
-| `routes/` | `src/routes/**`：App 路由的挂载与响应 |
+| `routes/` | `packages/tools/src/routes/**`：App 路由的挂载与响应 |
 | `host/` | `packages/host/src/**`（`@dshana/host`，受管 runtime 的宿主半）：桥、中继、任务桥、子进程参数（部分真起 http/socket） |
-| `tools/` | `src/tools/**`：dshana 工具的取数与出卡字面量 |
+| `tools/` | `packages/tools/src/{actions,shared}/**`：dshana 工具的取数与出卡字面量 |
 | `ui/` | `packages/ui/src/**`：壳页注入的桥、剪贴板影子、流载体 |
 | `cordis/` | `src-cordis/**`：主题适配层（规则表 + 桥）与 provider 插件 |
 | `build/` | 构建与交付面约束：集成层漂移闸、依赖版本、产物语法、打包清单 |
@@ -28,6 +28,6 @@
 
 - 从 `import.meta.url` 推本仓根时按层数写：`tests/<组>/x.test.mjs` 的仓根是 `"..", ".."`，
   被测源是 `"../../src/…"`。组内**不再往下分层**——层数一变，这些相对路径全要跟着改。
-- 已经成包的那几个源（`@dshana/shared` / `@dshana/host` / `@dshana/runtime` / `@dshana/models` / `@dshana/session` / `@dshana/ui`）在 import 里写包说明符，
+- 已经成包的那几个源（`@dshana/shared` / `@dshana/host` / `@dshana/runtime` / `@dshana/models` / `@dshana/session` / `@dshana/tools` / `@dshana/ui`）在 import 里写包说明符，
   不写 `node_modules` 路径；只有在 `readFileSync` 那种要磁盘路径的地方才用 `"../../packages/<包>/src/…"`。
 - 夹具与 e2e 各自在 `fixtures/`、`e2e/`，别在组目录里另建同级资源目录。

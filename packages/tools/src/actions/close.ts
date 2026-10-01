@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/tools/actions/close.ts — dshana close：取消这个子代理正在跑的任务
+// packages/tools/src/actions/close.ts — dshana close：取消这个子代理正在跑的任务
 //
 // 语义对齐 subagent_close 的「收工」，但只到「取消当前活动工作」为止：DSH 会话是持久的、
 // 随时可 resume，没有实例槽位这回事，所以这里不假装释放实例。只停本工作，不影响共享
@@ -10,9 +10,9 @@
 // **异步语义**：本动作只发请求就返回，不等确认窗口（15s 不进工具回调——占着回调等确认会
 // 堵住宿主通道）；确认或升级的证据随后台任务通知（投递回本会话）与 App 日志落定。
 import { requestCancel } from "@dshana/session/cancel-chain.ts";
-import { resolveTarget } from "#/tools/shared/target.ts";
+import { resolveTarget } from "../shared/target.ts";
 import type { ToolCtx } from "@dshana/shared/host.ts";
-import type { ToolInputBase, ToolResult } from "#/tools/shared/types.ts";
+import type { ToolInputBase, ToolResult } from "../shared/types.ts";
 
 export const command = "close";
 export const summary = "取消这个 DSH 子代理正在跑的任务（只停本工作，不影响共享 runtime 上的其他会话）";

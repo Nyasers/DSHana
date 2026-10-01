@@ -42,6 +42,7 @@
     "packages/models/src/**/*.ts",
     "packages/runtime/src/**/*.ts",
     "packages/session/src/**/*.ts",
+    "packages/tools/src/**/*.ts",
     "packages/ui/src/**/*.ts",
     "packages/ui/src/**/*.tsx",
     "scripts/**/*.mts"

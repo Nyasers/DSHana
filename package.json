@@ -63,6 +63,7 @@
     "@dshana/runtime": "workspace:*",
     "@dshana/session": "workspace:*",
     "@dshana/shared": "workspace:*",
+    "@dshana/tools": "workspace:*",
     "@dshana/ui": "workspace:*",
     "@hana/app-sdk": "file:vendor/hana-app-sdk/hana-app-sdk.tgz",
     "@hana/plugin-components": "file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz",

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/tools/actions/get.ts — dshana get：回看某个子代理最近一轮的最终结论
+// packages/tools/src/actions/get.ts — dshana get：回看某个子代理最近一轮的最终结论
 //
 // 取数：不读 <DSH_HOME>/storages/session_projcache.json，也不解
 // <DSH_HOME>/sessions/**/session.jsonl.zstd（日志已到 V3，projcache 行结构与 zstd 多帧容器
@@ -25,9 +25,9 @@
 // 权限模型：sessionId 即访问凭证——拿得到 id 就能读，拿不到天然无所有权，无需注册表。
 import { ensureManagedRuntime } from "@dshana/runtime/managed-runtime.ts";
 import { rpcViaControl } from "@dshana/runtime/controller.ts";
-import { resolveTarget } from "#/tools/shared/target.ts";
+import { resolveTarget } from "../shared/target.ts";
 import type { ToolCtx } from "@dshana/shared/host.ts";
-import type { ToolInputBase } from "#/tools/shared/types.ts";
+import type { ToolInputBase } from "../shared/types.ts";
 import type { ToolResult } from "@dshana/session/tool-result.ts";
 
 export const command = "get";

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/tools/shared/target.ts — 目标解析（句柄优先、凭证显式）
+// packages/tools/src/shared/target.ts — 目标解析（句柄优先、凭证显式）
 //
 // 与任务归属校验配套的公共入口，reply/close/get/approve 共用：
 //   · 显式 sessionId ⇒ 凭证路径：直接用，跳过归属校验（故意跨对话的能力保留）；
@@ -16,7 +16,7 @@ import { taskOwnership, ownershipRefusalText } from "@dshana/session/task-owners
 import { errText } from "@dshana/shared/err-text.ts";
 import type { OwnershipReason } from "@dshana/session/task-ownership.ts";
 import type { ToolCtx } from "@dshana/shared/host.ts";
-import type { ToolInputBase } from "#/tools/shared/types.ts";
+import type { ToolInputBase } from "./types.ts";
 
 /** 宿主任务记录（ctx.tasks.get 的返回值；从 ctx 下钻，勿手抄形状）。 */
 type HostTaskRecord = Awaited<ReturnType<NonNullable<ToolCtx["tasks"]>["get"]>>;

@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/tools/actions/reply.ts — dshana reply：往同一个 DSH 子代理续发消息
+// packages/tools/src/actions/reply.ts — dshana reply：往同一个 DSH 子代理续发消息
 //
 // 语义对齐 subagent_reply（用句柄续同一个实例）：task 必填；目标二选一——taskId 句柄
 // （open/reply 返回，工具自己解析会话并校验归属）或 sessionId 凭证（显式 = 我要跨对话）。
 // 同会话多次 reply 由 App 侧串行化（packages/session/src/session-serialize.ts），按提交顺序排队。
 import { submitDshTask } from "@dshana/session/session-run.ts";
-import { resolveTarget } from "#/tools/shared/target.ts";
-import { sessionCard } from "#/tools/shared/card.ts";
+import { resolveTarget } from "../shared/target.ts";
+import { sessionCard } from "../shared/card.ts";
 import type { ToolCtx } from "@dshana/shared/host.ts";
-import type { ToolInputBase, ToolResult } from "#/tools/shared/types.ts";
+import type { ToolInputBase, ToolResult } from "../shared/types.ts";
 
 /** reply 入参：task 必填；目标二选一（taskId 句柄 / sessionId 凭证，均在 ToolInputBase）。 */
 export interface ReplyInput extends ToolInputBase {

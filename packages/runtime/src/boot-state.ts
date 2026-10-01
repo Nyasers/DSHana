@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/lib/boot-state.ts — dshana App v2 壳页/诊断面的 boot 状态快照与提示文案（纯函数）
+// packages/runtime/src/boot-state.ts — dshana App v2 壳页/诊断面的 boot 状态快照与提示文案（纯函数）
 //
-// 消费方：ctx.routes.register 的壳页诊断面（src/routes/dshana-routes.ts）与 ui/ 壳页
+// 消费方：ctx.routes.register 的壳页诊断面（packages/tools/src/routes/dshana-routes.ts）与 ui/ 壳页
 // （GET /api/apps/<appId>/routes/dshana/boot-state）。本模块只做「状态归一化 + 文案」，
 // 不直接触达受管 runtime（由调用方注入 managedRuntimeDetails() 快照），便于单测。
 //

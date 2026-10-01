@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/tools/actions/open.ts — dshana open：开一个 DSH 子代理并交首件活
+// packages/tools/src/actions/open.ts — dshana open：开一个 DSH 子代理并交首件活
 //
 // 语义对齐 subagent 的「创建即带任务」：新建 DSH 会话 + 立即提交首条 prompt（task/cwd 必填），
 // 固定异步，结果作为后台结果回投来源会话。提交链见 packages/session/src/session-run.ts
 // （ctx.tasks.create → 受管 runtime 就绪 → session.create（带模型）→ 绑定回写宿主任务记录 → prompt）。
 //
-// 模块契约（六个 action 模块共用，见 tools/index.ts）：导出 command / summary / fields /
+// 模块契约（六个 action 模块共用，见 packages/tools/src/index.ts）：导出 command / summary / fields /
 // required / readOnly / run；run(input, ctx, deps) 中 deps 仅单测注入提交链。
 import { submitDshTask } from "@dshana/session/session-run.ts";
-import { sessionCard } from "#/tools/shared/card.ts";
+import { sessionCard } from "../shared/card.ts";
 import type { ToolCtx } from "@dshana/shared/host.ts";
-import type { ToolInputBase, ToolResult } from "#/tools/shared/types.ts";
+import type { ToolInputBase, ToolResult } from "../shared/types.ts";
 
 /** open 入参：task/cwd 必填（语义对齐 subagent 的“创建即带任务”）。 */
 export interface OpenInput extends ToolInputBase {

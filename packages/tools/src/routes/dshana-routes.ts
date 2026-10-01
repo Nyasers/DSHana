@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/routes/dshana-routes.ts — dshana App v2 ctx.routes.register 单 registrar
+// packages/tools/src/routes/dshana-routes.ts — dshana App v2 ctx.routes.register 单 registrar
 // 
 //
 // 宿主契约（ctx.routes，实证于 server 0.930.1 bundle / @hana/app-sdk）：
@@ -14,7 +14,7 @@
 //     /api/apps/<appId>/routes/_runtime/<runtimeId>/（自动代理 + 重定向重写 +
 //     hana_app_runtime HttpOnly cookie）。本 registrar 只提供壳页/诊断面（boot 状态、
 //     启动/停止触发），壳页把 DSH Web UI 指向正确的前缀即可（实证记录见
-//     src/lib/boot-state.ts 头注释）。
+//     packages/runtime/src/boot-state.ts 头注释）。
 //
 // 端点（本 App 私有，路径段前缀 dshana）：
 //   GET  /dshana/boot-state  归一化 boot 快照（idle/starting/ready/error + 文案）——壳页轮询
@@ -32,7 +32,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { managedRuntimeDetails, ensureManagedRuntime, stopManagedRuntime, bridgeAccess } from "@dshana/runtime/managed-runtime.ts";
-import { buildBootSnapshot, APP_ID } from "#/lib/boot-state.ts";
+import { buildBootSnapshot, APP_ID } from "@dshana/runtime/boot-state.ts";
 import { dataSources, sourceOf } from "@dshana/runtime/data-source.ts";
 // 数据源切换（packages/runtime/src/source-switch.ts）的入口暂时撤下：链未在真机验证过，见 POST /dshana/settings/restart。
 import { groupHostCatalog } from "@dshana/models/model-catalog-view.ts";

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src/tools/shared/types.ts — 工具面共享类型（入参基形与调用上下文）
+// packages/tools/src/shared/types.ts — 工具面共享类型（入参基形与调用上下文）
 //
 // 一个插件一个同名工具：所有 action 共用同一份宿主投递形状（input + context），各自的专属
 // 字段在 actions/<action>.ts 的 fields 里声明。这里只放跨 action 共用的那部分。
