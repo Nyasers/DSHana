@@ -6,8 +6,8 @@
 // 共享工具（collect/walk/terser/assert + minify/template loader）在 scripts/build/。
 // 产物（.cache/dist = App 安装目录形态；宿主读该根 manifest.json + entry）：
 //   manifest.json       App v2 manifest（entry "index.js" / icon "assets/icon.png"）
-//   index.js            壳：由壳源 packages/app/src/index.ts 写出，只 re-export ./bin/main.mjs（宿主启 App 时会缓存它）
-//   bin/main.mjs        App 主体（含它自己切出的 chunk）
+//   index.js            壳：由壳源 packages/app/src/index.ts 写出，只 re-export ./bin/app.mjs（宿主启 App 时会缓存它）
+//   bin/app.mjs         App 主体（含它自己切出的 chunk）
 //   bin/dsh.mjs          受管 Node runtime 入口（宿主以 node 执行；与主体同一次构建、共享 chunk）
 //   assets/icon.png     App 身份图标（manifest.icon 指向的包内真实图片）
 //   skills/             App skills（dshana，SKILL.md 随包分发）
@@ -84,14 +84,14 @@ if (!fs.pathExistsSync(runtimeEntry)) {
   throw new Error("受管 runtime 入口缺失（" + runtimeEntry + "）：拒绝出一份没有 runtime 的 App");
 }
 // 产物根 index.js = 壳：直接由壳源 packages/app/src/index.ts 写出（去行注释 + 把源内的 ./main.ts
-// 换成产物路径 ./bin/main.mjs）。不由 rspack 产出——静态两行、跨构建字面不变，宿主缓存它才稳
+// 换成产物路径 ./bin/app.mjs）。不由 rspack 产出——静态两行、跨构建字面不变，宿主缓存它才稳
 // （rspack 出的入口会带 ESM chunk 运行时与数字 id，每次都变）。
-if (!fs.pathExistsSync(join(DIST_DIR, "bin", "main.mjs"))) {
-  throw new Error("App 主体缺失（bin/main.mjs）：拒绝出交付目录");
+if (!fs.pathExistsSync(join(DIST_DIR, "bin", "app.mjs"))) {
+  throw new Error("App 主体缺失（bin/app.mjs）：拒绝出交付目录");
 }
 const shellJs = fs.readFileSync(join(SRC_ROOT, "index.ts"), "utf8")
   .replace(/^[ \t]*\/\/.*$/gm, "")
-  .replace(/\.\/main\.ts/g, "./bin/main.mjs")
+  .replace(/\.\/app\.ts/g, "./bin/app.mjs")
   .trim() + "\n";
 fs.writeFileSync(join(DIST_DIR, "index.js"), shellJs, "utf8");
 

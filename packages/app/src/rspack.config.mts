@@ -5,7 +5,7 @@
 // 「领域专用脚本随各自源码」；.mts 不被 collectSource 收集，不随 bundle 打包）
 // 与 hana-remote-dev 的 rspack.config.mts 对齐，按 dshana 实际适配：
 //   - 两入口一次构建：
-//       · 主体 packages/app/src/main.ts → bin/main.mjs
+//       · 主体 packages/app/src/app.ts → bin/app.mjs
 //       · 受管 runtime 入口 packages/host/src/main.ts → bin/dsh.mjs（宿主以 node 执行）
 //     主体与 runtime 有公共代码，同一次构建让 rspack 把它切成共享 chunk（splitChunks），
 //     两边不各打一份；切出的 chunk 都归 bin/。
@@ -28,7 +28,7 @@ export default {
   target: "node",
   entry: {
     // App 主体（宿主在隔离进程内加载）
-    "bin/main": path.join(ROOT, "packages", "app", "src", "main.ts"),
+    "bin/app": path.join(ROOT, "packages", "app", "src", "app.ts"),
     // 受管 runtime 入口（宿主以 node 执行 bin/dsh.mjs）
     "bin/dsh": path.join(ROOT, "packages", "host", "src", "main.ts"),
     // 产物根 index.js 不在这里：它是 build.ts 写出的静态壳（两行 re-export），不参与打包
