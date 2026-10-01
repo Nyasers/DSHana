@@ -62,9 +62,9 @@ const DOMAINS = [
     ours: (file) => file.startsWith("packages/app/"),
   },
   {
-    name: "src-cordis",
+    name: "cordis",
     config: "tsconfig.cordis.json",
-    ours: (file) => file.startsWith("src-cordis/"),
+    ours: (file) => file.startsWith("packages/clipboard/") || file.startsWith("packages/provider/") || file.startsWith("packages/theme/"),
   },
   {
     name: "scripts",

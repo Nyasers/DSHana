@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// scripts/build/common.mts — 构建共享工具（src 半与 src-cordis 半构建复用）
-// 布局原则：跨域共享构件放 scripts/<域>/，领域特有随各自源码（src/ 与 src-cordis/）。
+// scripts/build/common.mts — 构建共享工具（App 域与 cordis 子插件构建复用）
+// 布局原则：跨域共享构件放 scripts/<域>/，领域特有随各自源码（packages/ 下各包）。
 // 提供：collectSource（收集会被 rspack 内联的源码 file:// URL）、walk 工厂（静态化
 // import.meta.url 回写）、extraTerser（rspack 产物二次压缩）、assertNoStaticFileUrl
 // （产物不得残留构建机路径字面量）。

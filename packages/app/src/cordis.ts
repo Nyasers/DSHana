@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src-cordis/build.ts — src-cordis 域构建入口（cordis 子插件包）
-// 布局：领域专用随源码——cordis 域脚本/配置全在 src-cordis/（build/ preset + 每包
-// cordis.config.mjs 描述），共享工具（rspack 本体解析/URL 回写/terser/assert + 共享
-// minify-loader）在 scripts/build/。产物分两处：子插件包住 .cache/cordis（进包时落
-// node_modules/@dshana），roster patch 住交付面根 .cache/dist（进包时落包根，与安装态一致）。
+// packages/app/src/cordis.ts — App 域的 cordis 子插件组装入口
+//
+// 子插件本身是 packages/ 下的包（`@dshana/clipboard` / `@dshana/provider` / `@dshana/theme`，判据：
+// 包内有自持构建描述 `cordis.config.mjs`）；本文件是它们的组装器，归 `@dshana/app`。产物分两处：
+// 子插件包住 .cache/cordis（进包时落 node_modules/@dshana），roster patch 住交付面根
+// .cache/dist（进包时落包根，与安装态一致）。
 //   .cache/cordis/**：3 子插件（provider / theme / clipboard）：service 半 rspack（源 index.ts →
 //     产物 index.js bundle），theme 与 clipboard 另出 client 半（client.ts → client.js，tsdown
 //     closure-factory）；
@@ -14,19 +15,20 @@
 //     这份文件由 runtime 经 runProfile 的 patchFiles 作**启动期 overlay** 传进去（排在所有层之上）。
 // node_modules/@dshana/**：把上面那份 scope 照原样再落一份——仓库树扮演「安装树」，
 //   DSH 的 runtime 解析模式从安装树 + bundle 依赖图算解析代、不建链接。出包时 pack 作同样的事。
-// 用法：node src-cordis/build.ts [RSPACK_ENV=<构建环境目录>]
+// 用法：node packages/app/src/cordis.ts [RSPACK_ENV=<构建环境目录>]
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import fs from "fs-extra";
-import { serviceBundle } from "./build/service-config.mts"; // preset 层（src-cordis/build/）
-import { buildClientBundle } from "./build/client-config.mts";
-import { collectSource, makeUrlRewriter, assertNoStaticFileUrl } from "../scripts/build/common.mts"; // scripts/build/ 共享
-// 交付目录常量（.cache/dist、.cache/cordis）与 Node 版本断言（本入口以 TypeScript 直跑，依赖原生类型剥离）
-import { CORDIS_DIR, DIST_DIR } from "../scripts/shared/paths.mts";
+import { serviceBundle } from "./cordis/service-config.mts"; // preset 层（本目录 cordis/）
+import { buildClientBundle } from "./cordis/client-config.mts";
+import { collectSource, makeUrlRewriter, assertNoStaticFileUrl } from "../../../scripts/build/common.mts"; // scripts/build/ 共享
+// 交付目录常量（.cache/dist、.cache/cordis）与 cordis 子插件包清单（本入口以 TypeScript 直跑，依赖原生类型剥离）
+import { CORDIS_DIR, DIST_DIR } from "../../../scripts/shared/paths.mts";
+import { cordisPkgDirs } from "../../../scripts/shared/version.mts";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), ".."); // src-cordis/ → 仓库根
-const SRC_ROOT = join(ROOT, "src-cordis");
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", ".."); // packages/app/src → 仓库根
+const PATCH_SRC = join(ROOT, "packages", "app", "src", "cordis.patch.yml");
 
 // rspack 解析（同 build-src：RSPACK_ENV 或本地 node_modules）
 function resolveRspackEntry(coreDir) {
@@ -48,20 +50,23 @@ if (envDir) {
 }
 const rspack = rspackPkg.rspack ?? rspackPkg.default?.rspack;
 
-// cordis 域源码收集（plugins/**/*.js；cordis.config/build 为 .mjs 不收集）
-const rewriter = makeUrlRewriter(collectSource(join(SRC_ROOT, "plugins")));
+// cordis 子插件源码收集（各包下 *.ts/*.js；cordis.config.mjs 是构建描述，不收集）
+const sourceUrls = new Map();
+for (const rel of cordisPkgDirs()) {
+  for (const [url, file] of collectSource(join(ROOT, rel))) sourceUrls.set(url, file);
+}
+const rewriter = makeUrlRewriter(sourceUrls);
 
 // 静态组装：子插件 package.json/client.js + dshana roster bundle
 function buildCordisStatic(outRoot) {
   fs.removeSync(outRoot);
   fs.ensureDirSync(outRoot);
-  const pluginsRoot = join(SRC_ROOT, "plugins");
-  if (!fs.pathExistsSync(pluginsRoot)) throw new Error("src-cordis/plugins 缺失");
-  const pkgNames: any[] = [];
-  for (const name of fs.readdirSync(pluginsRoot)) {
-    if (name.startsWith(".")) continue;
-    const pkgSrc = join(pluginsRoot, name);
-    if (!fs.statSync(pkgSrc).isDirectory()) continue;
+  const dirs = cordisPkgDirs();
+  if (dirs.length === 0) throw new Error("没找到 cordis 子插件包（判据：packages/*/cordis.config.mjs）");
+  const pkgNames: string[] = [];
+  for (const rel of dirs) {
+    const name = basename(rel);
+    const pkgSrc = join(ROOT, rel);
     const pkgOut = join(outRoot, name);
     fs.ensureDirSync(pkgOut);
     pkgNames.push(name);
@@ -76,23 +81,20 @@ function buildCordisStatic(outRoot) {
   // roster patch：随包一份普通文件（profile 的 dsh.profile.bundles 里没有我们的条目），
   // runtime 经 patchFiles 作启动期 overlay 传进去。落交付面根：受管 runtime 读的是
   // <installRoot>/cordis.patch.yml，交付面根就是安装态的根。
-  const patchSrc = join(SRC_ROOT, "cordis.patch.yml");
-  if (!fs.pathExistsSync(patchSrc)) throw new Error(`roster patch 缺失：${patchSrc}`);
-  fs.copySync(patchSrc, join(DIST_DIR, "cordis.patch.yml"));
+  if (!fs.pathExistsSync(PATCH_SRC)) throw new Error(`roster patch 缺失：${PATCH_SRC}`);
+  fs.copySync(PATCH_SRC, join(DIST_DIR, "cordis.patch.yml"));
   console.log("cordis 静态组装 -> .cache/cordis/（子插件 " + pkgNames.length + " 包）；roster patch -> .cache/dist/cordis.patch.yml");
 }
 
-// 每包构建描述加载
+// 每包构建描述加载（判据同 cordisPkgDirs：包内有 cordis.config.mjs）
 async function loadCordisPackageConfigs() {
-  const pluginsRoot = join(SRC_ROOT, "plugins");
   const list: any[] = [];
-  for (const name of fs.readdirSync(pluginsRoot)) {
-    const pkgDir = join(pluginsRoot, name);
-    if (!fs.statSync(pkgDir).isDirectory()) continue;
+  for (const rel of cordisPkgDirs()) {
+    const pkgDir = join(ROOT, rel);
     const cfgPath = join(pkgDir, "cordis.config.mjs");
     if (!fs.pathExistsSync(cfgPath)) throw new Error(`cordis 包缺构建描述：${cfgPath}`);
     const mod = await import(pathToFileURL(cfgPath).href);
-    list.push({ name, pkgDir, cfg: mod.default ?? {} });
+    list.push({ name: basename(rel), pkgDir, cfg: mod.default ?? {} });
   }
   return list;
 }

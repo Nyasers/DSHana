@@ -13,7 +13,7 @@
 #   2) @dshana/* 定制插件 insert
 #
 # 机制：一切经本 patch 文件声明，runtime 启动时经 runProfile 的 patchFiles 作启动期 overlay 传进去
-# （见 src-cordis/build.ts）。**不用 profile 用户层**（那本保留给用户），也不用命令行 --patch 叠加。
+# （见 packages/app/src/cordis.ts）。**不用 profile 用户层**（那本保留给用户），也不用命令行 --patch 叠加。
 # profile 是自有的 `dshana`（目录 <DSH_HOME>/profiles/dshana，层列由壳钉住 = base → web-app，
 # 见 packages/host/src/main.ts 的 PROFILE_BUNDLES）；本文件不进制 profile 目录，它在安装根，
 # 以 patchFiles 排在所有层之上。

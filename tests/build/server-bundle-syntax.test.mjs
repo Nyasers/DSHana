@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/build/server-bundle-syntax.test.mjs — server 半产物语法闸（src-cordis/build/server-config.mts）单测
+// tests/build/server-bundle-syntax.test.mjs — server 半产物语法闸（packages/app/src/cordis/server-config.mts）单测
 //
 // 重点是「构建成功」与「node 读得进去」之间的那道缝：标准装饰器没被降级时产物照样被写出来，
 // 只有 node parse 才看得见。这里钉住闸的两种反应（放过合法 ESM / 拦住装饰器残留）与现场清理。
@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { assertNoSourcePathLeak, assertParseableModule } from "../../src-cordis/build/server-config.mts";
+import { assertNoSourcePathLeak, assertParseableModule } from "../../packages/app/src/cordis/server-config.mts";
 
 /** 在临时目录里写一份产物跑闸；返回抛出的错误（没抛为 null）与闸留下的临时文件。 */
 function runGate(name, text) {

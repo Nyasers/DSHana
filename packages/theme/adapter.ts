@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src-cordis/plugins/theme/adapter.ts — 适配层的取值规则与编译（零依赖纯函数）。
+// packages/theme/adapter.ts — 适配层的取值规则与编译（零依赖纯函数）。
 //
 // 为什么不再是 1:1 映射表：宿主只给十几个变量（--bg / --bg-card / --text / --overlay-* …），
 // 而 DSH 前端在用的 --dsw-* 有一百七十多个，其中大量是「比底深一档 / 深两档」的层次位。1:1

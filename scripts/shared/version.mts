@@ -2,8 +2,8 @@
 // Copyright (c) 2026 Nyasers
 //
 // scripts/shared/version.mts — 版本域共享模块（release/version、derive、changelog 复用）
-// 布局原则：跨脚本共享/流程性构件放 scripts/shared/，领域特有随各自域或源码（src-cordis/build）。
-// 提供 cordis 包清单（src-cordis 顶层 roster bundle + plugins/*）与派生同步目标
+// 布局原则：跨脚本共享/流程性构件放 scripts/shared/，领域特有随各自域或源码（packages/app/src/cordis）。
+// 提供 cordis 子插件包清单（packages/ 下带自持构建描述的包，见 cordisPkgDirs）与派生同步目标
 // （manifest + cordis 包）——版本号两个写手各管一段：主号归 `pnpm version`（唯一入口），
 // build metadata 段（`+dsh-…`）归 derive 从 host 声明的内核版本派生（见
 // scripts/derive/version-metadata.mts；派生同步见 scripts/derive/index.mts，
@@ -14,18 +14,29 @@ import { ROOT } from "./root.mts";
 
 export { ROOT };
 
-// cordis 子插件 package.json 清单（相对 ROOT；随插件整体发版，不独立发布）。
-// roster patch 是一份 cordis.patch.yml 文件（不是包），不在这里。
-export function cordisPkgPaths() {
-  const out: string[] = [];
-  const plugins = path.join(ROOT, "src-cordis", "plugins");
-  for (const name of fs.readdirSync(plugins)) {
-    const p = path.join(plugins, name);
-    if (!fs.statSync(p).isDirectory()) continue;
-    const pj = path.join(p, "package.json");
-    if (fs.existsSync(pj)) out.push(path.relative(ROOT, pj));
+// cordis 子插件包目录清单（相对 ROOT；随包发布、随主版本同步，不独立发版）。
+// 判据是包内有自持构建描述 cordis.config.mjs，而依赖方向由包图声明：@dshana/app 必须把这几个
+// 包写进自己的 dependencies（spec §2 的 app → clipboard / provider / theme 那条边），漏声明
+// 直接抛——否则它会被静默漏构建。roster patch 是一份 cordis.patch.yml 文件（不是包），不在这里。
+export function cordisPkgDirs() {
+  const declared = new Set(Object.keys(readPkg("packages/app/package.json")?.dependencies ?? {}));
+  const dirs: string[] = [];
+  const packagesDir = path.join(ROOT, "packages");
+  for (const name of fs.readdirSync(packagesDir)) {
+    const dir = `packages/${name}`;
+    if (!fs.existsSync(path.join(ROOT, dir, "cordis.config.mjs"))) continue;
+    if (!declared.has(`@dshana/${name}`)) {
+      throw new Error(`${dir} 是 cordis 子插件，但 packages/app/package.json 未声明 @dshana/${name}`);
+    }
+    dirs.push(dir);
   }
-  return out.sort();
+  if (dirs.length === 0) throw new Error("没找到 cordis 子插件包（判据：packages/*/cordis.config.mjs）");
+  return dirs.sort();
+}
+
+/** 上面那批包各自的 package.json（版本同步的写回目标）。 */
+export function cordisPkgPaths() {
+  return cordisPkgDirs().map((dir) => `${dir}/package.json`);
 }
 
 // 派生同步目标（随主版本同步的文件）：packages/app/src/manifest.json（app 域构件）+ cordis 包

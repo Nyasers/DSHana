@@ -13,7 +13,7 @@
 | `host/` | `packages/host/src/**`（`@dshana/host`，受管 runtime 的宿主半）：桥、中继、任务桥、子进程参数（部分真起 http/socket） |
 | `tools/` | `packages/tools/src/{actions,shared}/**`：dshana 工具的取数与出卡字面量 |
 | `ui/` | `packages/ui/src/**`：壳页注入的桥、剪贴板影子、流载体 |
-| `cordis/` | `src-cordis/**`：主题适配层（规则表 + 桥）与 provider 插件 |
+| `cordis/` | `packages/{clipboard,provider,theme}`：主题适配层（规则表 + 桥）与 provider 插件 |
 | `build/` | 构建与交付面约束：集成层漂移闸、依赖版本、产物语法、打包清单 |
 | `e2e/` | 真机探针与 smoke（`.probe.mjs` / `.smoke.mjs`），**不进** `pnpm test` |
 | `fixtures/` | 测试夹具（`cordis-user-plugin` 是给真机验收用的 dsh 插件，不是自动测试） |

@@ -10,7 +10,7 @@
 //     var m = __DSH_THEME_TOKENS__;
 // 服务端读取本文件后，把占位符 __DSH_THEME_TOKENS__ 替换为 compileRules(TOKEN_MAP) 的
 // 序列化结果——每个条目是 [token, cssValue, hostVars] 三元组（见
-// src-cordis/plugins/theme/adapter.ts）。取值规则在服务端编译成 CSS 值串（var(…) /
+// packages/theme/adapter.ts）。取值规则在服务端编译成 CSS 值串（var(…) /
 // color-mix(…) / 字面量），桥只按 hostVars 判空后原样写进覆盖，不重复一份编译逻辑。
 // 其余正文无插值，保持纯浏览器 JS（var/ES5 风格，无 import）。
 // cordis 子插件散装分发（不经 rspack，文件随包复制进

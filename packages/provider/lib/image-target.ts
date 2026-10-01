@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src-cordis/plugins/provider/lib/image-target.ts — 图片附件的请求目标尺寸（纯函数）
+// packages/provider/lib/image-target.ts — 图片附件的请求目标尺寸（纯函数）
 //
 // 为什么需要：`ctx.attachments.readImageRequest(ref, target)` 的 target 是
 // `{ width, height, maxBytes }` 三个正整数（上游 `@deepseek-ai/dsh-attachment` 的

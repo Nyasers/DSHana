@@ -11,7 +11,7 @@ import {
   listModelsForProvider,
   resolveModelInfo,
   sameCatalog,
-} from "../../src-cordis/plugins/provider/lib/catalog.ts";
+} from "../../packages/provider/lib/catalog.ts";
 
 const catalog = [
   { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", provider: "deepseek", input: ["text"], reasoning: true, contextWindow: 262144, maxTokens: 32768, defaultThinkingLevel: "high", thinkingLevels: ["off", "low", "medium", "high", "max"], xhigh: true },

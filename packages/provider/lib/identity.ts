@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// src-cordis/plugins/provider/lib/identity.ts — 模型请求身份判定
+// packages/provider/lib/identity.ts — 模型请求身份判定
 // （《DSHana 调用 Hana 模型接口指南》§3/§5）
 //
 // 身份参数二选一，且不能同时传；本 adapter 只可能给出两种形态：

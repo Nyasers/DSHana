@@ -12,7 +12,7 @@
 // 依赖方向：本文件 import packages/ui/src/clipboard-shadow.ts（同一份实现的唯一副本，不复制逻辑）。
 // 约束：只在浏览器面加载；无 navigator 的构建/测试环境直接跳过。
 
-import { installClipboardShadow } from "../../../packages/ui/src/clipboard-shadow.js";
+import { installClipboardShadow } from "../ui/src/clipboard-shadow.js";
 
 export function apply(ctx) {
   if (typeof navigator === "undefined" || navigator.clipboard === undefined || navigator.clipboard === null) return;

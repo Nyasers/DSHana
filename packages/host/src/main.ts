@@ -373,7 +373,7 @@ export async function main(argv: string[]): Promise<number> {
   state.hana = hana;
   // 受管子进程内子插件经该句柄调用宿主
   // tasks/models/network（connectAppRuntime 的 client 对象；与插件同进程，globalThis
-  // 共享——provider adapter 重建见 src-cordis/plugins/provider/index.ts v2）。关闭顺序：
+  // 共享——provider adapter 重建见 packages/provider/index.ts v2）。关闭顺序：
   // 先停 task-bridge/流，再 ctx dispose，最后 hana.close()（流纪律）。
   try {
     globalThis.__dshanaHana = hana;

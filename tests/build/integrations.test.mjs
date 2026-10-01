@@ -21,7 +21,7 @@ import {
   stageIntegrations,
 } from "../../scripts/integrations/mirror.mts";
 import { extractRequires, duplicateCssClasses, patchGeneratedRequestModel } from "../../scripts/integrations/build.mts";
-import { cssScopeOf, scopedClassName } from "../../src-cordis/build/client-config.mts";
+import { cssScopeOf, scopedClassName } from "../../packages/app/src/cordis/client-config.mts";
 
 const upstreamFile = "packages/client/ui-layout/src/client/index.ts";
 
@@ -217,14 +217,14 @@ test("scopedClassName：同包内两个模块的同一个 local 名不撞，且�
 
 test("scopedClassName：无 /src/ 时按 pkgDir 取相对路径，不同子树的同名模块不共享身份", () => {
   const id = "@dshana/view";
-  const pkgDir = "E:/repo/src-cordis/packages/view";
-  const a = scopedClassName(id, "E:/repo/src-cordis/packages/view/views/a/shared.module.css", "root", pkgDir);
-  const b = scopedClassName(id, "E:/repo/src-cordis/packages/view/widgets/a/shared.module.css", "root", pkgDir);
+  const pkgDir = "E:/repo/packages/view";
+  const a = scopedClassName(id, "E:/repo/packages/view/views/a/shared.module.css", "root", pkgDir);
+  const b = scopedClassName(id, "E:/repo/packages/view/widgets/a/shared.module.css", "root", pkgDir);
   assert.notEqual(a, b);
   // 同一 pkgDir 相对路径在不同机器上（盘符与 pkgDir 前缀都变）仍是同一个名字
   assert.equal(
     a,
-    scopedClassName(id, "D:/elsewhere/src-cordis/packages/view/views/a/shared.module.css", "root", "D:/elsewhere/src-cordis/packages/view"),
+    scopedClassName(id, "D:/elsewhere/packages/view/views/a/shared.module.css", "root", "D:/elsewhere/packages/view"),
   );
 });
 

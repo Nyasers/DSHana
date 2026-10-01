@@ -201,7 +201,7 @@ interface BuildIntegrationsOptions {
  * .tmp/integrations-built/<短名>/（版本戳 <上游>+dshana-<干净版本>）。
  */
 export async function buildIntegrations(integrations, { tag, mirrorDir = MIRROR, repoRoot = REPO_ROOT, log = (_msg) => {} }: BuildIntegrationsOptions) {
-  const { buildClientBundle } = await import("../../src-cordis/build/client-config.mts");
+  const { buildClientBundle } = await import("../../packages/app/src/cordis/client-config.mts");
   const { patchVersion } = await import("../shared/version.mts");
   const built: any[] = [];
   for (const it of integrations) {
@@ -310,7 +310,7 @@ export async function buildIntegrations(integrations, { tag, mirrorDir = MIRROR,
       const entry = String(serverDecl.entry || "src/index.ts");
       if (!existsSync(join(stage, entry))) throw new Error(`integration ${short}: server 入口不存在（${entry}）`);
       const outFile = String(serverDecl.out || "lib/index.js").replace(/^lib[\\/]/, "");
-      const { buildServerBundle } = await import("../../src-cordis/build/server-config.mts");
+      const { buildServerBundle } = await import("../../packages/app/src/cordis/server-config.mts");
       const res = await buildServerBundle({ id: pkg, pkgDir: stage, outDir: join(stage, "lib"), entry, outFile });
       serverArtifact = { file: outFile, bytes: readFileSync(res.out).length };
       log(`[integrations] ${short}: ${pkg} server 半编译完成（${outFile} ${serverArtifact.bytes}B，非相对导入全部外部）`);

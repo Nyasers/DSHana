@@ -34,8 +34,9 @@
   // scripts/check/overlay.mts 那条专门通道），不在这里，免得编辑期噪声压住真问题。
   "include": [
     "packages/app/src/**/*.ts",
-    "src-cordis/**/*.ts",
-    "src-cordis/**/*.tsx",
+    "packages/clipboard/**/*.ts",
+    "packages/provider/**/*.ts",
+    "packages/theme/**/*.ts",
     "packages/shared/src/**/*.ts",
     "packages/host/src/**/*.ts",
     "packages/models/src/**/*.ts",
