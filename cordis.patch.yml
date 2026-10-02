@@ -1,7 +1,7 @@
 # @dshana/dshana — 定制 bundle patch。
 #
-# 层序（profile manifest 的 dsh.profile.bundles，后写胜出）：
-#   @deepseek-ai/dsh-base → @deepseek-ai/dsh-web-app → @dshana/dshana（本文件）
+# 层序：先 profile manifest 的 dsh.profile.bundles（@deepseek-ai/dsh-base → @deepseek-ai/dsh-web-app），
+# 本文件再由 runtime 以 patchFiles 最后应用（后写胜出）。
 #
 # 官方两层已经提供：surface 值覆盖（system-prompt / session-query-sqlite / tools）、服务层
 # （session / settings / workspace controller、web-startup / webserver / web-runtime、client-hmr）、
@@ -15,8 +15,8 @@
 # 机制：一切经本 patch 文件声明，runtime 启动时经 runProfile 的 patchFiles 作启动期 overlay 传进去
 # （见 packages/app/src/cordis.ts）。**不用 profile 用户层**（那本保留给用户），也不用命令行 --patch 叠加。
 # profile 是自有的 `dshana`（目录 <DSH_HOME>/profiles/dshana，层列由壳钉住 = base → web-app，
-# 见 packages/host/src/main.ts 的 PROFILE_BUNDLES）；本文件不进制 profile 目录，它在安装根，
-# 以 patchFiles 排在所有层之上。
+# 见 packages/host/src/main.ts 的 PROFILE_BUNDLES）；本文件不进制 profile 目录——源码在仓库根，
+# 随包放到 bin/（与 runtime 入口同目录），启动时以 patchFiles 排在所有层之上。
 
 # ── 1) 对官方行的覆盖 / disable ───────────────────────────────────────────────
 

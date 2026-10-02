@@ -13,7 +13,7 @@
 - 指向本地未入库文档（`specs/`、`SPECS.md`）的引用不入注释与公开文档：规划件带隐私信息、不入库，
   引用只会指向克隆者拿不到的路径。
 
-**覆盖层是别人的文件。** `src-integrations/*/files/**` 是官方 DSH 文件的整体覆盖，里面只允许两类
+**覆盖层是别人的文件。** `integrations/*/files/**` 是官方 DSH 文件的整体覆盖，里面只允许两类
 内容：上游原有注释，以及我们**无注释的代码改动**。我们自己的说明（为什么改、改了什么、与样例的
 差异）一律写在同包的 `integration.json` 的 notes 里——那里是我们的文件，且漂移闸也读它。
 
@@ -53,7 +53,7 @@ CI 直接失败的风险。`engines.node` 不参与 lockfile 解析，改这个�
 
 ## App 契约的派生
 
-`packages/app/src/manifest.json` 的两个字段都来自 derive，不手写：`version` 取主 `package.json`，
+`manifest.json`（仓库根）的两个字段都来自 derive，不手写：`version` 取主 `package.json`，
 `minAppVersion` 取 `vendor/hana-app-sdk/source-manifest.json` 的 `packedVersion`（随包 SDK 快照
 打包时的宿主版本，也就是 App 要求的最低宿主版本）。两者由**同一个** manifest 任务产出完整内容
 （同文件两个任务会互相覆盖）。同步随包 SDK 后跑 `pnpm run derive`，`derive --check` 会在漂移时
@@ -62,14 +62,14 @@ CI 直接失败的风险。`engines.node` 不参与 lockfile 解析，改这个�
 ## 架构总览（受管 runtime）
 
 ```text
-Hana 宿主进程（App 隔离进程内加载 .cache/dist/index.js）
+Hana 宿主进程（App 隔离进程内加载 dist/bin/index.mjs）
   ├─ App 侧：apply(ctx)
   │    ├─ ctx.tools.register(dshana)                 工具（单工具 + subcommand，六动作）
   │    ├─ ctx.routes.register(/dshana/*)             壳页/诊断面（boot-state|health|start|stop）
-  │    └─ ctx.runtime.start({ runtime:"node", entry:"runtime/dsh-host.mjs",
+  │    └─ ctx.runtime.start({ runtime:"node", entry:"bin/dsh.mjs",
   │           cwd:ctx.dataDir, service:{ port:<随机>, readyMarker:"..." } })
   │              ↓ 受管 Node 子进程
-  ├─ runtime/dsh-host.mjs（.cache/dist/runtime，rspack 产物）
+  ├─ bin/dsh.mjs（dist/bin，rspack 产物，与 app 主体同一次构建）
   │    └─ 原生 import 安装目录 node_modules/@deepseek-ai/dsh/lib/profile-boot-*.js
   │         → runProfile() → cordis Context
   │              → 加载自有 profile $DSH_HOME/profiles/dshana（壳建并维护：层列钉住 base → web-app，
@@ -87,7 +87,7 @@ Hana 宿主进程（App 隔离进程内加载 .cache/dist/index.js）
 
 ## 工具
 
-宿主 Agent 工具面为**单工具 `dshana`**（一个插件一个同名工具 + CLI subcommand：装配 `packages/tools/src/index.ts`，各动作 `packages/tools/src/actions/<action>.ts`，提交链 `packages/session/src/session-run.ts`，取消/审批编排 `packages/session/src/cancel-chain.ts` / `packages/session/src/approve-respond.ts`）。语义对齐 subagent（open/reply/close），另有 get/approve 两个特色动作。**完整调用手册见 [dshana skill](packages/app/src/skills/dshana/SKILL.md)**：
+宿主 Agent 工具面为**单工具 `dshana`**（一个插件一个同名工具 + CLI subcommand：装配 `packages/tools/src/index.ts`，各动作 `packages/tools/src/actions/<action>.ts`，提交链 `packages/session/src/session-run.ts`，取消/审批编排 `packages/session/src/cancel-chain.ts` / `packages/session/src/approve-respond.ts`）。语义对齐 subagent（open/reply/close），另有 get/approve 两个特色动作。**完整调用手册见 [dshana skill](skills/dshana/SKILL.md)**：
 
 | action | 用途 | 实现 |
 | --- | --- | --- |
@@ -116,7 +116,7 @@ DSHana 以**单卡 + 自带功能面板**注册（manifest `contributes.cards[0]
 
 - **App 设置页**：`contributes.settings.ui.route`，宿主设置区渲染，不依赖 DSH 运行。两项常规（审批超时 / 任务超时，App 自持存储）+ 会话模型模式。模型候选读 `GET /dshana/models`，后端取**宿主模型目录**（`ctx.models.list`，能力面 `app/models.infer`）——宿主目录是「这条路走不走得通」的唯一事实源，页面因此不列 DSH 自己的目录，DSH 在不在跑都一样（`packages/models/src/model-catalog-view.ts` 归一化、按 provider 归组并附推理档）。
 - **取出到黑板**：会话卡在聊天流里点右上角菜单 / 拖拽**取出**（纯宿主手势，不经 App 代码）——宿主把这张聊天卡（连 aspectRatio / cardForm）钉到黑板 / 拆窗上，本页那时才认到 `fixed` 挂载态并注入 DSH 现场。App 不声明卡、不调 `hana.cards.open`，因此卡片中心不占一格；会话历史归 DSH 自己的侧边栏（打开 DSH UI 即可翻看），App 不另存清单。
-- **会话模型从哪来**：App 设置项 `sessionModelMode` 决定——`caller`（缺省，复用调用方那份）或 `custom`（`sessionModelProvider` / `sessionModelModel` / `sessionModelReasoningEffort` 固定一条，推理强度空串 = 不指定、由 DSH 决定）。优先级：工具入参显式 > App 自定义那条 > 用户手设的 DSH 默认（`caller` 模式下 user 层非空就不补） > **调用方那张角色卡**配的 `models.chat`（`agent:list` 的 `isCurrent` 优先，能力面 `app/agents.read`）。选出的那条**随会话请求带上**（集成层给 `session/create` 与 `session/prompt` 加了可选 `model` 字段，见 `src-integrations/api-session-controller`）：只在会话内生效，不写 `settings.yaml` 的全局默认；只在 create 上补，send 沿用会话已有的选择。见 `packages/models/src/caller-model.ts`（决策）、`agent-models.ts`（读角色卡）、`host-models.ts`（宿主目录）。
+- **会话模型从哪来**：App 设置项 `sessionModelMode` 决定——`caller`（缺省，复用调用方那份）或 `custom`（`sessionModelProvider` / `sessionModelModel` / `sessionModelReasoningEffort` 固定一条，推理强度空串 = 不指定、由 DSH 决定）。优先级：工具入参显式 > App 自定义那条 > 用户手设的 DSH 默认（`caller` 模式下 user 层非空就不补） > **调用方那张角色卡**配的 `models.chat`（`agent:list` 的 `isCurrent` 优先，能力面 `app/agents.read`）。选出的那条**随会话请求带上**（集成层给 `session/create` 与 `session/prompt` 加了可选 `model` 字段，见 `integrations/api-session-controller`）：只在会话内生效，不写 `settings.yaml` 的全局默认；只在 create 上补，send 沿用会话已有的选择。见 `packages/models/src/caller-model.ts`（决策）、`agent-models.ts`（读角色卡）、`host-models.ts`（宿主目录）。
 - **DSH 自己的默认模型**（`agent-default-model`）：本页不经手它，也不在 config.json 存副本。它的用户层有值、而已不在宿主目录里时，`packages/models/src/model-default-guard.ts` 在 runtime 就绪与宿主 `models-changed` 之后就地对账换一条可服务的（优先留在原 provider 里换，再退角色卡模型、目录第一条）；用户层为空不动手——本形态里界面直接开的会话在 DSH 自己的模型选择器里选一条。
 
 ### 目录选择器
@@ -152,37 +152,37 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 
 **manifest / apply 入口 / 设置 / 工具注册（迁移步骤 1）：**
 
-- `packages/app/src/manifest.json` 是 App v2 契约：`version` 由 derive 取主 `package.json`，`minAppVersion` 取随包 SDK 快照（现 `0.1023.1`）；capabilities 十一项（tools / tasks / session / models / agents.read / resources / runtime 三项 / ui 两项，清单见文件）。v1 专属字段（`author`、`trust`、`activationEvents`、`ui.hostCapabilities`、`network` 白名单）不在清单里。
-- `packages/app/src/index.ts` 导出 `apply(ctx)`（兼导出 `default { apply }`）；apply 注册完即返回。统一日志只走宿主 `ctx.logger`；globalThis 宿主单例退役 → `packages/runtime/src/app-runtime.ts` module-scope 运行包。
-- 工具注册：`ctx.tools.register`，工具名 `dshana`（一个插件一个同名工具 + subcommand；v2 不自动加 `pluginId_` 前缀、重名被宿主当场拒）。动作五个：`open`/`reply`/`get`/`close`/`approve`，装配见 `packages/tools/src/index.ts`、手册见 `packages/app/src/skills/dshana/SKILL.md`。
+- `manifest.json`（仓库根，源码形态与产物形态对齐）是 App v2 契约：`version` 由 derive 取主 `package.json`，`minAppVersion` 取随包 SDK 快照（现 `0.1023.1`）；capabilities 十一项（tools / tasks / session / models / agents.read / resources / runtime 三项 / ui 两项，清单见文件）。v1 专属字段（`author`、`trust`、`activationEvents`、`ui.hostCapabilities`、`network` 白名单）不在清单里。
+- `packages/app/src/app.ts` 导出 `apply(ctx)`（兼导出 `default { apply }`）；apply 注册完即返回。统一日志只走宿主 `ctx.logger`；globalThis 宿主单例退役 → `packages/runtime/src/app-runtime.ts` module-scope 运行包。
+- 工具注册：`ctx.tools.register`，工具名 `dshana`（一个插件一个同名工具 + subcommand；v2 不自动加 `pluginId_` 前缀、重名被宿主当场拒）。动作五个：`open`/`reply`/`get`/`close`/`approve`，装配见 `packages/tools/src/index.ts`、手册见 `skills/dshana/SKILL.md`。
 - 设置：`contributes.settings` 的 UI 由 App 自绘设置页承担（`ui.route: /settings.html`，宿主设置区渲染）；键与缺省以 `packages/runtime/src/config.ts` 为准，读写落 `dataDir/settings.json`（旧 `config.json` 只在两键缺位时作读侧兼容）。
 - 数据读路径迁到 `ctx.dataDir`（宿主 `app-data/<id>/`）：list/get 读当前源的 `<DSH_HOME>/...`（projcache + jsonl zstd）；旧插件数据迁移见 `packages/runtime/src/legacy-migrate.ts` 与 `scripts/migrate/legacy.mts`。
-- 构建：`node packages/app/src/build.ts` 产物 `.cache/dist/` = App 安装目录形态（根 `manifest.json` + `index.js` + `assets/` + `skills/` + `ui/` + `runtime/` + roster patch `cordis.patch.yml`）。壳的文档侧另出 `.cache/ui/`（`node packages/ui/src/build.ts`），App 域构建整树拷进 `ui/`。cordis 子插件包另出 `.cache/cordis/`（`node packages/app/src/cordis.ts`）：它们不是安装态里的东西，出包时由 pack 落进包内 `node_modules/@dshana`。
+- 构建：`node packages/app/src/build.ts` 产物 `dist/` = App 安装目录形态（根只放宿主读的契约件与目录：`manifest.json` + `icon.png` + `skills/` + `ui/`；代码与 roster patch 全在 `bin/`：入口 `index.mjs` + 主体 `app.mjs` + runtime `dsh.mjs` + `cordis.patch.yml`）。源码形态与交付形态同形：`manifest.json` / `skills/` 与随包静态件都在仓库根（静态件在 `assets/` 下，其相对路径 = 产物里相对包根的路径：`assets/icon.png` → 产物根 `icon.png`，`assets/ui/cover.png` → 产物 `ui/cover.png`）；`packages/app/src/` 放壳源与主体。壳的文档侧另出 `.cache/ui/`（`node packages/ui/src/build.ts`），App 域构建整树拷进 `ui/`。cordis 子插件包另出 `.cache/cordis/`（`node packages/app/src/cordis.ts`）：它们不是安装态里的东西，出包时由 pack 落进包内 `node_modules/@dshana`。
 
 **受管 Node runtime：local-machine/external + readyMarker 就绪门（迁移步骤 2）：**
 
-- 受管 runtime 入口 `runtime/dsh-host.mjs`（源码 `packages/host/src/`，rspack → `.cache/host/dsh-host.mjs`，App 域构建再拷进交付目录 `runtime/`，见 `packages/host/src/rspack.config.mts`）：App 自有配置解析（唯一 argv = 私有运行时配置文件路径，schema 见 `packages/host/src/options.ts`，与 `packages/runtime/src/managed-runtime.ts buildRuntimeConfig()` 对偶）→ `connectAppRuntime()`（无父 IPC fd → 可操作报错 + 退出码 3，不假装能跑）→ 进程级 env（`DSH_HOME=<dataDir>/.dsh`、`DSHANA_HOME=<dataDir>`，不改宿主进程环境）→ 依赖随包就位（安装目录 `node_modules`，无运行时安装）→ profile 种子化（`initProfile` + `node_modules/@dshana` scope 链接 → installDir `cordis/`，junction/拷贝回退）→ 动态定位 DSH（`locate.ts`，profile-boot/app-boot，webpackIgnore 原生 import）→ `runProfile`（profile dshana、配置中的 dshPort、`--no-open`）→ **就绪门**（webServer 服务端口 === 期望端口 且 HTTP 探测成功）→ stdout 打 `readyMarker`（唯一出口；失败路径绝不打印 READY）→ SIGTERM/SIGINT/父断连有序释放（关 DSH fiber → 再 `hana.close()`；拿到流式响应不能立刻 close，本步未接流）。退出码契约：2=usage/3=IPC 不可用/4=deps/5=seed/6=boot/7=port。
-- App 侧封装 `packages/runtime/src/managed-runtime.ts`：`ensureManagedRuntime()`（单例 single-flight：**一个 App runtime 服务多个 DSH 会话**，首次 create 触发启动——设计见模块头注释与 tools/actions 的提交链）父进程随机选取中继端口与 DSH 内部端口（区间 38000..52000，见 `choosePort`/`pickPorts`；宿主 service 端口契约只收确定整数，故不能交给宿主分配）→ `ctx.runtime.start({ runtime:"node", entry:"runtime/dsh-host.mjs", profile:"local-machine", network:"external", cwd:dataDir, service:{ port:中继端口, readyMarker:带随机 opaque }, args:[私有配置文件路径] })`（契约禁止 readRoots/writeRoots/callToken/taskId，故一律不带） → `ctx.runtime.get` 轮询到 ready（不能把 runtimeId 当就绪；端口占用 port-busy 自动换随机端口重试，上限 3 次）→ 失败归类（`err.code`：port-busy/deps/seed/boot-failed/not-authorized/timeout/unknown，message 带用户指引）+ runtime watch 日志尽力镜像（src=dsht 进 App 会话日志）；每次命中 ready 缓存先经 runtime.get 探活，子进程崩溃/被宿主回收则清单例并重起；失败路径把端口与两把 key 归零（`bridgeAccess()` 不再放出死端口）；`disposeManagedRuntime()`/`stopManagedRuntime()`（App 卸载/更新前停 runtime，Windows .node 锁纪律）；`choosePort`/`pickPorts`/`makeReadyMarker`/`classifyRuntimeFailure` 纯函数可单测。
-- `packages/tools/src/actions/*.ts` 接 `packages/session/src/session-run.ts`（open/reply 提交链）、`packages/session/src/cancel-chain.ts`（close 取消链）与 `packages/session/src/approve-respond.ts`（approve 应答）；`get`/`list` 离线可读。`packages/app/src/index.ts` disposer 接 disposeManagedRuntime。
-- `packages/app/src/build.ts`：主 bundle 先清 `.cache/dist` 再写入；受管 runtime 入口与壳的文档侧都不在本域编译，分别从 `.cache/host/dsh-host.mjs`、`.cache/ui/` 拷进交付目录 `runtime/` 与 `ui/`（缺件即拒），随后统一做 URL 回写 / terser / 断言。
-- 单测 `tests/**/*.test.mjs`（node --test，分组见 tests/README.md）：child options parse、managed-runtime 端口/参数/错误归类、readyMarker 构造。本地验证：`node packages/app/src/build.ts` 通过；`node .cache/dist/runtime/dsh-host.mjs` 直跑给出清晰报错（无父 IPC / 缺参）。真机 AppHost 验收仍待装包（边界清单见本节末）。
+- 受管 runtime 入口 `bin/dsh.mjs`（源码 `packages/host/src/main.ts`，与 app 主体同一次 rspack 构建 → `dist/bin/dsh.mjs`，见 `packages/app/src/rspack.config.mts`）：App 自有配置解析（唯一 argv = 私有运行时配置文件路径，schema 见 `packages/host/src/options.ts`，与 `packages/runtime/src/managed-runtime.ts buildRuntimeConfig()` 对偶）→ `connectAppRuntime()`（无父 IPC fd → 可操作报错 + 退出码 3，不假装能跑）→ 进程级 env（`DSH_HOME=<dataDir>/.dsh`、`DSHANA_HOME=<dataDir>`，不改宿主进程环境）→ 依赖随包就位（安装目录 `node_modules`，无运行时安装）→ profile 种子化（`initProfile` + `node_modules/@dshana` scope 链接 → installDir `cordis/`，junction/拷贝回退）→ 动态定位 DSH（`locate.ts`，profile-boot/app-boot，webpackIgnore 原生 import）→ `runProfile`（profile dshana、配置中的 dshPort、`--no-open`）→ **就绪门**（webServer 服务端口 === 期望端口 且 HTTP 探测成功）→ stdout 打 `readyMarker`（唯一出口；失败路径绝不打印 READY）→ SIGTERM/SIGINT/父断连有序释放（关 DSH fiber → 再 `hana.close()`；拿到流式响应不能立刻 close，本步未接流）。退出码契约：2=usage/3=IPC 不可用/4=deps/5=seed/6=boot/7=port。
+- App 侧封装 `packages/runtime/src/managed-runtime.ts`：`ensureManagedRuntime()`（单例 single-flight：**一个 App runtime 服务多个 DSH 会话**，首次 create 触发启动——设计见模块头注释与 tools/actions 的提交链）父进程随机选取中继端口与 DSH 内部端口（区间 38000..52000，见 `choosePort`/`pickPorts`；宿主 service 端口契约只收确定整数，故不能交给宿主分配）→ `ctx.runtime.start({ runtime:"node", entry:"bin/dsh.mjs", profile:"local-machine", network:"external", cwd:dataDir, service:{ port:中继端口, readyMarker:带随机 opaque }, args:[私有配置文件路径] })`（契约禁止 readRoots/writeRoots/callToken/taskId，故一律不带） → `ctx.runtime.get` 轮询到 ready（不能把 runtimeId 当就绪；端口占用 port-busy 自动换随机端口重试，上限 3 次）→ 失败归类（`err.code`：port-busy/deps/seed/boot-failed/not-authorized/timeout/unknown，message 带用户指引）+ runtime watch 日志尽力镜像（src=dsht 进 App 会话日志）；每次命中 ready 缓存先经 runtime.get 探活，子进程崩溃/被宿主回收则清单例并重起；失败路径把端口与两把 key 归零（`bridgeAccess()` 不再放出死端口）；`disposeManagedRuntime()`/`stopManagedRuntime()`（App 卸载/更新前停 runtime，Windows .node 锁纪律）；`choosePort`/`pickPorts`/`makeReadyMarker`/`classifyRuntimeFailure` 纯函数可单测。
+- `packages/tools/src/actions/*.ts` 接 `packages/session/src/session-run.ts`（open/reply 提交链）、`packages/session/src/cancel-chain.ts`（close 取消链）与 `packages/session/src/approve-respond.ts`（approve 应答）；`get`/`list` 离线可读。`packages/app/src/app.ts` disposer 接 disposeManagedRuntime。
+- `packages/app/src/build.ts`:两入口一次 rspack 构建(主体 `bin/app.mjs` / 受管 runtime `bin/dsh.mjs`),产物 `bin/index.mjs` 是它写出的静态两行壳（re-export 主体，与主体同在 `bin/`，跨构建字面不变）,先清 `dist` 再写入;壳的文档侧不在本域编译,从 `.cache/ui/` 拷进交付目录 `ui/`(缺件即拒),随后统一做 URL 回写 / terser / 断言。
+- 单测 `tests/**/*.test.mjs`（node --test，分组见 tests/README.md）：child options parse、managed-runtime 端口/参数/错误归类、readyMarker 构造。本地验证：`node packages/app/src/build.ts` 通过；`node dist/bin/dsh.mjs` 直跑给出清晰报错（无父 IPC / 缺参）。真机 AppHost 验收仍待装包（边界清单见本节末）。
 
 **依赖部署：随包物化（自包含打包）**
 
 - **形态：DSH 依赖树在打包时逐目标物化进 zip 根 `node_modules/`，运行时零安装（不 spawn pnpm）。** 受管 runtime 的 `depsRoot` 默认 = 安装目录 `<installRoot>/node_modules`，`--deps-root` 可覆盖（调试）。
-- 物化方式（`scripts/release/pack/materialize.mts` + `index.mts`）：逐目标（`package.json` 的 `package:<target>` 脚本 → `pack/targets.mts` 目标表）在 `.tmp/pkg-root/<target>/` 隔离工位跑一次干净安装；工位是一个独立项目——三件都现生成（工位清单 + 以仓库锁文件为种子重解析出的锁 + 按目标替换过 supportedArchitectures 的 `pnpm-workspace.yaml`），先 `pnpm install --lockfile-only` 再 `pnpm install --prod --frozen-lockfile`，交付面的生产闭包由此落进工位根 `node_modules`，得只含该平台资产的 hoisted 树（顶层真实目录、无软链接——软链进 zip 跨机解压即断），`node_modules` 下的点号条目（`.bin` / `.pnpm` / `.pnpm-workspace-state-v1.json` 这类 pnpm 账本）排除后拷入包根。
+- 物化方式（`scripts/release/pack/materialize.mts` + `index.mts`）：逐目标（`package.json` 的 `package:<target>` 脚本 → `pack/targets.mts` 目标表）在 `.cache/pkg-root/<target>/` 隔离工位跑一次干净安装；工位是一个独立项目——三件都现生成（工位清单 + 以仓库锁文件为种子重解析出的锁 + 按目标替换过 supportedArchitectures 的 `pnpm-workspace.yaml`），先 `pnpm install --lockfile-only` 再 `pnpm install --prod --frozen-lockfile`，交付面的生产闭包由此落进工位根 `node_modules`，得只含该平台资产的 hoisted 树（顶层真实目录、无软链接——软链进 zip 跨机解压即断），`node_modules` 下的点号条目（`.bin` / `.pnpm` / `.pnpm-workspace-state-v1.json` 这类 pnpm 账本）排除后拷入包根。
 - 为什么随包而不在运行时安装：① App 安装目录在运行时只读（App 进程 fs-write 白名单只有 dataDir），`pnpm install` 无处落盘；② native 产物（node-pty/koffi/sharp 等）按平台/ABI 区分，逐平台出包才能各带各的 addon；③ 只物化生产闭包（不含 devDeps），体量可控。
 - 版本单一事实源 = `packages/host/package.json` 的 `@deepseek-ai/dsh`（交付面的清单与锁由 pack 从它现生成；根 `devDependencies` 里那条同名声明须与它一致，闸守）；无独立 DSH 升级通道，升级 dsh = 装新 App 包 + 重启宿主。
-- 定位：`dsh-host.mjs` 在 depsRoot 下经显式路径解析 DSH（`packages/host/src/locate.ts`，`createRequire` + `.pnpm` 枚举 + `webpackIgnore` 原生 import）；profile boot 的模块回退 farm（dsh-app-boot `healProfilesModuleFallback`，把 dsh 安装闭包镜像成 `$DSH_HOME/profiles/node_modules` 链接）覆盖官方插件树解析。
-- `@dshana/*` 子插件随包落在安装目录 `node_modules/@dshana`（与 `@deepseek-ai/*` 同锚点）——DSH 的 runtime 解析模式从安装树 + bundle 依赖图算解析代、**不建任何链接**；我们的 roster patch 随包一份 `cordis.patch.yml`（装在包根），由 runtime 经 `runProfile` 的 `patchFiles` 作启动期 overlay 传入（层序在所有层之上），我们因此不写 DSH_HOME 里的任何东西。
+- 定位：`bin/dsh.mjs` 在 depsRoot 下经显式路径解析 DSH（`packages/host/src/locate.ts`，`createRequire` + `.pnpm` 枚举 + `webpackIgnore` 原生 import）；profile boot 的模块回退 farm（dsh-app-boot `healProfilesModuleFallback`，把 dsh 安装闭包镜像成 `$DSH_HOME/profiles/node_modules` 链接）覆盖官方插件树解析。
+- `@dshana/*` 子插件随包落在安装目录 `node_modules/@dshana`（与 `@deepseek-ai/*` 同锚点）——DSH 的 runtime 解析模式从安装树 + bundle 依赖图算解析代、**不建任何链接**；我们的 roster patch 随包一份 `cordis.patch.yml`（源码在仓库根，装在与本 runtime 入口同目录的 `bin/`），由 runtime 经 `runProfile` 的 `patchFiles` 作启动期 overlay 传入（层序在所有层之上），我们因此不写 DSH_HOME 里的任何东西。
 - Windows native 文件锁（指南 §4）：依赖变更即整包替换，替换前必须先停占用 `.node` 的 DSH 进程/worker/终端——受管形态下 DSH 只跑在单例 runtime，App 卸载/更新/停止统一先 `ctx.runtime.stop`。
 
 
 **provider adapter（DSH 推理走 hana.models）+ 任务回投与工具循环（迁移步骤 3）：**
 
 - **manifest 增顶层 network 声明**（决策 A）：{ allowedHosts:["127.0.0.1"], methods:["GET","POST"], allowLocalhost:true, defaultTimeoutMs:60000, maxResponseBytes:8388608 }——App 进程（Node Permission Model，无 --allow-net，唯一出网面 = ctx.network.fetch 宿主门）到受管 runtime DSH web 服务的 loopback RPC 通道。v2 manifest 校验只认 allowedHosts/allowLocalhost/methods/defaultTimeoutMs/maxResponseBytes 五键（别名 hosts 会被拒）；127.0.0.1 属私网且 http 非 https，缺 allowLocalhost:true 必被拒（核对记录，见 packages/runtime/src/managed-runtime.ts 头注释与 manifest 注释）。
-- **决策 A（App → 受管 runtime 指令通道）= runtime service loopback HTTP RPC，复用 v1 信封/翻译器协议**（packages/shared/src/rpc-envelope.ts 纯函数：client-request 信封 + session.* 的 request/_request 包装 + requestId 注入；DSH 网关校验 body.method === 端点路径段（斜杠形态，official rpc-host 与 @dshana/bridge 同款）；响应 rpcId 回显 + result.ok）。**不用** 宿主 /api/apps/<appId>/routes/_runtime/<runtimeId>/ 代理：那是浏览器 surface（HttpOnly cookie + surface 授权 + WS upgrade）的 UI 通道（步骤 4/5 用），App 进程无 cookie 会话面且受管 runtime 无 getService 之类 App 门（hostCall 白名单只有 tasks/models/network）。App 侧 fetch 经 ctx.network.fetch（唯一出网面，宿主代执行），服务端 = 子进程 DSH web /api 原生端点（零新增 server 面）。
-- **决策 B（provider adapter 分界）**：模型推理在受管子进程内经 connectAppRuntime().models 发起；requestId 由 adapter 自管（models.cancel(requestId) 定向）；身份二选一（《DSHana 调用 Hana 模型接口指南》§3/§5，packages/provider/lib/identity.ts）：按宿主任务记录的 `metadata.dsh` 判三态（`resolveSessionIdentity` 经 runtime 挂的绑定索引读；索引缺位报 `BINDING_UNAVAILABLE`，见 `packages/shared/src/task-binding.ts`）——无绑定（用户在 DSH Web UI 自建会话）或绑定指向的任务已终结（委派任务收尾后用户接着在 Web UI 跑）⇒ App 身份（callToken/taskId 都不传）；绑定在且任务活动 ⇒ 传 `taskId`（宿主校验属主）；绑定读不出 ⇒ 报错 `TASK_MAP_BROKEN`（不降级成 App 身份，否则活着的任务会静默丢绑定）。stream 不接受 scope（那是 models.utility 的参数）。provider/model 显式选择：目录 = hana.models.list() 投影，provider/model id 原样透传（宿主逐条 n.provider===provider && n.id===model 匹配），不做二次命名。@dshana/provider 插件 v2 重写为自实现 LlmAdapter（dsh-llm 动态 import，同 v1 profiles 基座解析）：listModels/resolveModel 读目录快照；stream() 把 DSH Message 转换（user/assistant/toolResult + 回放签名，lib/messages.ts）→ hana.models.stream({requestId, ...身份, provider, model, messages, systemPrompt, tools, reasoningEffort?, maxTokens?, temperature?}) → NDJSON 逐行解析（跨 chunk 半行余量，lib/ndjson.ts；**HTTP 非 2xx 先报状态+响应体**，不吞成 STREAM_CLOSED）→ 事件处理（start/text-delta/reasoning-delta/tool-call/done/error）；error = 失败不算成功；done.assistant 完整保存回放（textSignature/signature/thoughtSignature 续接签名进 ReplayEnvelope{kind:hana}，DSH assistant source.replayState）并原样产块（block-start/delta/block-end/usage/finish，工具 arguments 为 JSON 字符串）；流未以 done 结束 → STREAM_CLOSED；图片 base64+MIME（attachment store readImageRequest，不传路径/URL；store 缺失报 UNSUPPORTED_CONTENT）。DSH 自己的工具循环不变（Hana 不执行传入 tools schema，仅声明）；工具执行后 role:toolResult + toolCallId/toolName/content/isError 放回 messages（lib/messages.ts 拆分）。hana client 句柄 = globalThis.__dshanaHana（dsh-host.mjs connectAppRuntime 后、runProfile 前设置，与子插件同进程共享；释放顺序：停 task-bridge → ctx dispose → 清句柄 → hana.close，main.ts 实现）。
+- **决策 A（App → 受管 runtime 指令通道）= runtime service loopback HTTP RPC，复用 v1 信封/翻译器协议**（packages/shared/src/rpc-envelope.ts 纯函数：client-request 信封 + session.* 的 request/_request 包装 + requestId 注入；DSH 网关校验 body.method === 端点路径段（斜杠形态，official rpc-host 同款）；响应 rpcId 回显 + result.ok）。**不用** 宿主 /api/apps/<appId>/routes/_runtime/<runtimeId>/ 代理：那是浏览器 surface（HttpOnly cookie + surface 授权 + WS upgrade）的 UI 通道（步骤 4/5 用），App 进程无 cookie 会话面且受管 runtime 无 getService 之类 App 门（hostCall 白名单只有 tasks/models/network）。App 侧 fetch 经 ctx.network.fetch（唯一出网面，宿主代执行），服务端 = 子进程 DSH web /api 原生端点（零新增 server 面）。
+- **决策 B（provider adapter 分界）**：模型推理在受管子进程内经 connectAppRuntime().models 发起；requestId 由 adapter 自管（models.cancel(requestId) 定向）；身份二选一（《DSHana 调用 Hana 模型接口指南》§3/§5，packages/provider/lib/identity.ts）：按宿主任务记录的 `metadata.dsh` 判三态（`resolveSessionIdentity` 经 runtime 挂的绑定索引读；索引缺位报 `BINDING_UNAVAILABLE`，见 `packages/shared/src/task-binding.ts`）——无绑定（用户在 DSH Web UI 自建会话）或绑定指向的任务已终结（委派任务收尾后用户接着在 Web UI 跑）⇒ App 身份（callToken/taskId 都不传）；绑定在且任务活动 ⇒ 传 `taskId`（宿主校验属主）；绑定读不出 ⇒ 报错 `TASK_MAP_BROKEN`（不降级成 App 身份，否则活着的任务会静默丢绑定）。stream 不接受 scope（那是 models.utility 的参数）。provider/model 显式选择：目录 = hana.models.list() 投影，provider/model id 原样透传（宿主逐条 n.provider===provider && n.id===model 匹配），不做二次命名。@dshana/provider 插件 v2 重写为自实现 LlmAdapter（dsh-llm 动态 import，同 v1 profiles 基座解析）：listModels/resolveModel 读目录快照；stream() 把 DSH Message 转换（user/assistant/toolResult + 回放签名，lib/messages.ts）→ hana.models.stream({requestId, ...身份, provider, model, messages, systemPrompt, tools, reasoningEffort?, maxTokens?, temperature?}) → NDJSON 逐行解析（跨 chunk 半行余量，lib/ndjson.ts；**HTTP 非 2xx 先报状态+响应体**，不吞成 STREAM_CLOSED）→ 事件处理（start/text-delta/reasoning-delta/tool-call/done/error）；error = 失败不算成功；done.assistant 完整保存回放（textSignature/signature/thoughtSignature 续接签名进 ReplayEnvelope{kind:hana}，DSH assistant source.replayState）并原样产块（block-start/delta/block-end/usage/finish，工具 arguments 为 JSON 字符串）；流未以 done 结束 → STREAM_CLOSED；图片 base64+MIME（attachment store readImageRequest，不传路径/URL；store 缺失报 UNSUPPORTED_CONTENT）。DSH 自己的工具循环不变（Hana 不执行传入 tools schema，仅声明）；工具执行后 role:toolResult + toolCallId/toolName/content/isError 放回 messages（lib/messages.ts 拆分）。hana client 句柄 = globalThis.__dshanaHana（bin/dsh.mjs connectAppRuntime 后、runProfile 前设置，与子插件同进程共享；释放顺序：停 task-bridge → ctx dispose → 清句柄 → hana.close，main.ts 实现）。
 - **模型请求字段校验与限额（宿主 `app/models.infer` 默认值，可按 App 注入覆盖）**：宿主对 `models.stream` 的请求字段有硬校验（allowed keys 白名单；requestId/provider/model 为 1-128 ASCII id；messages 1..128；tools ≤64；systemPrompt 与文本块 ≤250000 字符；temperature ∈[0,2]；reasoningEffort 必须在模型 thinking levels 内）。限额默认值：`maxConcurrentStreams: 8`、`maxRequestBytes: 32e6`、`maxImageBytes: 1e7`、`maxEventBytes: 4e6`、`maxTokens: 65536`、`timeoutMs: 10 * 6e4`（单请求 10 分钟）——宿主构造 App 模型服务时按 `{...默认, ...limits}` 合并，所以这些是**默认值，不是写死的闸**（宿主可按 App 覆盖）。`maxTokens` 的取法：超过 65536 → **不传该字段**（收敛到 65536 等于把输出悄悄砍到 64k，而不传则把上限交回模型/供应商默认）；未超闸但超该模型 published 上限 → 按模型上限收敛（模型自身硬限）；非正整数 → 不发字段。目录投影 `resolveModel` 声明模型真实 `maxTokens`（不夹宿主闸），DSH 因此看到真实能力。temperature 越界收敛到 [0,2]。收敛提示按 provider/model 去重一次，不逐次刷屏。
 - **open/reply 业务链**（packages/session/src/session-run.ts submitDshTask → packages/tools/src/actions/open.ts / reply.ts）：execute（含宿主 context.callToken）→ ctx.tasks.create({callToken, label, metadata})（callToken 只此一次消费，不落盘不落日志）→ ensureManagedRuntime({taskId})（未起则启动到 ready，失败归类 err.code 并 fail(taskId)）→ 会话建立（create=session.create{cwd, agentPreset?}；send=session.list 查持久会话（带 cwd）则 session.create resume，活跃 Map 会话直接 prompt，list 不含=不存在由 prompt admission 报 session/not-found）→ 显式 provider/model/effort 才 session/selectModel（model-unavailable 降级不带 effort 重试）→ 绑定回写宿主任务记录（先于 prompt）→ session.prompt fire（mode:queue, content:[{type:text}], requestId=rpcId）。返回 { promise, ready }：ready 在 prompt accepted 后 resolve 定位键 {action, sessionId, rpcId, taskId, cwd}（execute 随即返回，v1 语义不变）；promise 后台等 Hana task 终态（child task-bridge complete/fail → 宿主 deferred:resolve/fail 投递来源会话）并释放同会话串行化锁。
 - **task-bridge（受管 runtime 内，packages/host/src/task-bridge.ts）**：DSH boot 就绪后、readyMarker 前挂载，ctx.on 订阅 api-session/status|error|activity + session/event（进程内直订——turn 生命周期不经 $events）；按宿主任务记录的 `metadata.dsh.sessionId`（App 提交前写入；本进程 hana.tasks 直读，见 `packages/shared/src/task-binding.ts`）把事件回投：running 进度 ctx.tasks.update、终态 complete(taskId, minimal 定位结果)/fail(taskId, message)。事件按 sessionId 路由到唯一当前任务，天然隔离多会话（决策 C/D）。终态判定语义与 v1 run.js consume 对齐：api-session/status false / session/event turn/end（reason.kind=error → 失败；completed → 成功，pendingFailure 兜底判失败）；先到先收、幂等；终态后失效绑定索引缓存。
@@ -190,7 +190,7 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 - **决策 D（并发纪律）**：同 DSH session 的 create/send 由 App 进程内串行化（packages/session/src/session-serialize.ts，与 v1 withSessionTurn 同语义；锁持有到任务终态——否则同一 session 两个任务会互吃对方的终态事件/映射）；不同 session 互不共享「当前任务」（绑定按 `metadata.dsh.sessionId` 归属）；一个 runtime 服务多会话时各请求自带 taskId（models.stream.taskId、task 记录 taskId、prompt 信封 rpcId 作 jsonl data.source.rpcId 关联键）。
 - **工具接线**：open/reply → submitDshTask（返回语义与 v1 一致：fire 即回、终态投递来源会话、内容走 `action=get`）；close → `packages/session/src/cancel-chain.ts`；approve → `packages/session/src/approve-respond.ts`；list/get 离线读（projcache + jsonl zstd）。
 - 端口不再有设置项：servicePort/nodejsPath 随 T5 裁撤（父进程区间随机选端口 38000..52000 + 占用换端口重试；用户不再需要配置端口）。
-- 单测新增（node --test 全绿 62 例）：rpc-envelope（信封/网关 method 斜杠/requestId 注入）、task-binding（归一/索引/TTL/绑定读不出时 fail-closed）、session-serialize（同会话串行/跨会话并行/槽位）、provider-ndjson（跨 chunk 半行/flush/坏行）、provider-catalog（routes/efforts/元数据）、provider-messages（assistant 签名/tool-result 拆分/图片/UNSUPPORTED_CONTENT）、provider-stream（done→chunks/回放信封/EMPTY_RESPONSE/max-tokens）、task-bridge（事件归类）。构建：node packages/app/src/build.ts 与 node packages/app/src/cordis.ts 通过（.cache/dist 内含 task-binding/task-bridge/__dshanaHana 标记）。
+- 单测新增（node --test 全绿 62 例）：rpc-envelope（信封/网关 method 斜杠/requestId 注入）、task-binding（归一/索引/TTL/绑定读不出时 fail-closed）、session-serialize（同会话串行/跨会话并行/槽位）、provider-ndjson（跨 chunk 半行/flush/坏行）、provider-catalog（routes/efforts/元数据）、provider-messages（assistant 签名/tool-result 拆分/图片/UNSUPPORTED_CONTENT）、provider-stream（done→chunks/回放信封/EMPTY_RESPONSE/max-tokens）、task-bridge（事件归类）。构建：node packages/app/src/build.ts 与 node packages/app/src/cordis.ts 通过（dist 内含 task-binding/task-bridge/__dshanaHana 标记）。
 - 已测/未测边界（步骤 3）：真机 AppHost 实跑 create/send 模型流未在本刀跑通（无宿主环境/网络），装包后由主上下文验收：① tasks 生命周期与结果投递；② task-bridge 终态对账；③ provider adapter 被 DSH agent 循环调用的消息/块序与跨 turn done.assistant 回放；④ 同会话两次 send 串行；⑤ DSH 图片附件 base64 路径；⑥ 两会话并发（宿主模型流并发上限 2）；⑦ runtime 中途重启后 send 的 resume 路径；⑧ 执行超时/取消（依赖步骤 4 session.cancel）。本步模型流不逐块实时打字（done 时一次性产块，功能等价；DSH Web UI 实时性属步骤 4/5 面）。
 
 **遗留（步骤 4b/5 收口已由本刀合入代码侧——见文末「步骤 4b/5 收口（代码侧）」；此处只剩真机/后续刀项）：**
@@ -279,7 +279,7 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 - packages/tools/src/actions/{close,approve}.ts：取消/应答分支接线（移「未接线」）；manifest description 更新。
 - 单测新增 21 例（watch-sse 9 / task-map-ext 4 / cancel-chain 3 / approval-bridge 5）+
   packages/provider 注册表不新增测试面（纯注册）。既有 104 例 + 新增 21 例 = 125 全绿；
-  node packages/app/src/build.ts 与 node packages/app/src/cordis.ts 通过（.cache/dist 内含 approval-bridge/requestApproval/
+  node packages/app/src/build.ts 与 node packages/app/src/cordis.ts 通过（dist 内含 approval-bridge/requestApproval/
   cancel 链标记）。
 
 **真机/后续验收边界（本刀代码侧未跑通宿主，装包后由主上下文验收）：**
@@ -339,12 +339,12 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 - 新 packages/tools/src/routes/dshana-routes.ts（v1 routes/webui.js + card.js 两工厂合并语义）：端点
   `GET /dshana/boot-state`、`GET /dshana/health`、`POST /dshana/start`（fire-and-forget，
   202 即回，壳页轮询跟进）、`POST /dshana/stop`。依赖注入（getSnapshot/start/stop）可单测；
-  packages/app/src/index.ts apply 用 defaultDshanaRouteDeps(ctx) 接真实实现（读 managedRuntimeDetails）。
+  packages/app/src/app.ts apply 用 defaultDshanaRouteDeps(ctx) 接真实实现（读 managedRuntimeDetails）。
 - packages/runtime/src/boot-state.ts：归一化快照 `{phase,ready,runtimeId,proxyPrefix,service,error,
   note,updatedAt}` 与 runtimeProxyPrefix()（前缀宿主契约单点）。**ready 门**：service.state
   === ready 才给 proxyPrefix（绝不因 runtimeId 存在就展示端点——宿主在 readyMarker 后才发布
   服务）。阶段文案覆盖 idle/starting/ready/error/stopped。
-- packages/app/src/index.ts：ctx.routes.register 缺失（宿主过旧）→ warn 降级（DSH 仅 dshana 可用）；
+- packages/app/src/app.ts：ctx.routes.register 缺失（宿主过旧）→ warn 降级（DSH 仅 dshana 可用）；
   registrar 抛错 → 抬高中止 App 加载（显式失败优于静默残缺）；disposer 注销。
 
 ### 交付 2：contributes.cards 回归（v2 schema）
@@ -360,7 +360,7 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 
 ### 交付 3：ui/ 静态树归位
 
-- packages/ui/src/{main.html, sidebar.html, app-shell.ts}（build:ui 出 .cache/ui，build:app 整树拷到 .cache/dist/ui/）：
+- packages/ui/src/{main.html, sidebar.html, app-shell.ts}（build:ui 出 .cache/ui，build:app 整树拷到 dist/ui/）：
   页面同层相对引用（`./app-shell.js`），无根路径绝对 URL；appId/路由前缀由页面
   location.pathname 推导（/api/apps/<appId>/... 段），不硬编码整 URL。壳页轮询 boot-state、
   POST start/stop；主题桥（同文档，`dshHanaThemeRequest`）best-effort。剪贴板已改由
@@ -390,9 +390,10 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
   主版本（无独立版本线）；
   build metadata（+dsh-<dsh 依赖>）由 version-hook 发版时统一拼回再同步。
   版本线语义见 scripts/shared/version.mts 头注释。
-- pack.mts：静态项补 THIRD_PARTY_NOTICES.md；cordis 产物断言按清单校验（现 3 包）；
-  新增 ui/ 静态树断言（route 资源 fail-closed）；zip 根级 = manifest.json + index.js + package.json +
-  assets/ + skills/ + ui/ + runtime/ + cordis.patch.yml + NOTICE/THIRD_PARTY_NOTICES.md + 物化的 node_modules/。
+- pack（scripts/release/pack/index.mts）：静态项补 THIRD_PARTY_NOTICES.md；cordis 产物断言按清单校验（现 3 包）；
+  新增 ui/ 静态树断言（route 资源 fail-closed）；zip 根级 = manifest.json + bin/（index.mjs / app.mjs /
+  dsh.mjs / cordis.patch.yml）+ icon.png + skills/ + ui/ + NOTICE/THIRD_PARTY_NOTICES.md + 物化的 node_modules/
+  （不带 package.json：入口以 .mjs 定 ESM）。
 
 ### 交付 6：@dshana/* 子插件 v2 收敛判断（落到 DESIGN；代码侧不动 roster，防 boot 破坏）
 
@@ -414,9 +415,9 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 
 ### 已测/未测边界（本刀）
 
-- 已测：node packages/app/src/build.ts 与 node packages/app/src/cordis.ts 通过（.cache/dist 含 ui/ + manifest cards +
+- 已测：node packages/app/src/build.ts 与 node packages/app/src/cordis.ts 通过（dist 含 ui/ + manifest cards +
   dshana-routes 接线）；单测 143 例全绿（新增 boot-state 7 + dshana-routes 6 + legacy-migrate
-  5 = 18 例；既有 125 例保持）。pack.mts 版本断言/静态清单逻辑改动后未实跑（留发版时验证）。
+  5 = 18 例；既有 125 例保持）。pack 的版本断言/静态清单逻辑改动后未实跑（留发版时验证）。
 - 未测（真机 AppHost 装包后由主上下文验收）：① ui/ 壳页 → /routes/dshana/* 的 surface
   授权形态（scoped uiBasePath/iframe ticket → cookie/hana.api，代码按同源相对 fetch 写，
   实证文件见 bundle iFt/eFt/uVe）；② DSH Web UI 在代理前缀下 SPA 资源/API/WS 的 base 适配

@@ -5,7 +5,7 @@
 //
 // 为什么是我们自己的页：宿主设置区里那个「DSHana」标签页直接渲染本页，配置经 App 自己的后端
 // 读写（GET/POST /dshana/settings → dataDir/config.json 的 global.*，即运行时优先直读的那份值），
-// 不再让宿主按 manifest schema 代画表单，"两处表单两份值"的分叉因此不存在。缺省值由
+// 宿主不按 manifest schema 代画表单，"两处表单两份值"的分叉因此不存在。缺省值由
 // packages/runtime/src/config.ts 的 APP_SETTING_DEFAULTS 持有（30 / 1800）。
 //
 // 界面用宿主自己的设置组件（@hana/plugin-components/settings）：形态、间距、字号、保存反馈与

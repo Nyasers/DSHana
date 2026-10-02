@@ -8,7 +8,7 @@
 //   身上；市场元数据是**对已出产物的派生**，放这里可以按需重跑、可以只对某个 target 生成，
 //   也不必让 pack 知道市场的事（单一职责：产物是产物，市场是市场）。
 //
-// 流程：读 packages/app/src/manifest.json + package.json → 收本版本各 zip 的事实（字节数 + sha256）→ 写
+// 流程：读 manifest.json（仓库根）+ package.json → 收本版本各 zip 的事实（字节数 + sha256）→ 写
 //   <zip>.entry.json（索引构建器的输入）→ 用官方 extension-index-build.mjs 拼 index.v2.json。
 //   事实默认从 releases/ 里那份 zip 与它的 .sha256 取；`--facts-dir <目录>` 时改从该目录下所有
 //   `package-facts.json` 合并出的表取（CI 里事实由出包作业记好、当 artifact 带过来）。
@@ -148,7 +148,7 @@ function targetOf(zipName: string, prefix: string): string {
 
 /** 本版本全量 target → archive（绝对地址）映射，写进自留字段。 */
 function buildTargets(zips: string[], version: string, baseUrl: string): Record<string, Archive> {
-  const manifest = fs.readJsonSync(join(ROOT, "packages", "app", "src", "manifest.json"));
+  const manifest = fs.readJsonSync(join(ROOT, "manifest.json"));
   const prefix = `${manifest.id}-v${version}`;
   const out: Record<string, Archive> = {};
   for (const zipName of zips) {
@@ -160,7 +160,7 @@ function buildTargets(zips: string[], version: string, baseUrl: string): Record<
 }
 
 function buildEntry(zipName: string, targets: Record<string, Archive>): Entry {
-  const manifest = fs.readJsonSync(join(ROOT, "packages", "app", "src", "manifest.json"));
+  const manifest = fs.readJsonSync(join(ROOT, "manifest.json"));
   const pkg = fs.readJsonSync(join(ROOT, "package.json"));
   // scripts/release/pack/index.mts 写的 .sha256 是「纯大写哈希」（不带文件名）——取第一个空白段再归一成小写
   const { size, sha256 } = zipFacts(zipName);
@@ -182,7 +182,7 @@ function buildEntry(zipName: string, targets: Record<string, Archive>): Entry {
 }
 
 function main(): void {
-  const manifest = fs.readJsonSync(join(ROOT, "packages", "app", "src", "manifest.json"));
+  const manifest = fs.readJsonSync(join(ROOT, "manifest.json"));
   const version: string = manifest.version;
   const target = arg("--target") || "universal";
   if (target !== "universal") {

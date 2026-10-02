@@ -5,7 +5,7 @@
 //
 // 职责：
 //   managedStart/ensureManagedRuntime：父进程随机选取「中继端口（注册给宿主的 service.port）
-//     + DSH 内部端口」→ ctx.runtime.start({ runtime:"node", entry:"runtime/dsh-host.mjs",
+//     + DSH 内部端口」→ ctx.runtime.start({ runtime:"node", entry:"bin/dsh.mjs",
 //     profile:"local-machine", network:"external", cwd:ctx.dataDir, service:{ port:中继端口,
 //     readyMarker:带随机 opaque }, ... }) → 状态轮询等到 ready / failed / exited。
 //     绝不把 runtimeId 当就绪：starting 只是宿主已拉起进程，DSH 真就绪 = 子
@@ -34,7 +34,7 @@ import type { HanaPluginContextV2 } from "@dshana/shared/host.ts";
 // 无运行时安装与 spawn。
 
 export const READY_MARKER = "DSH_READY"; // 标记前缀；每次启动拼随机 opaque（宿主按整行匹配）
-export const RUNTIME_ENTRY = "runtime/dsh-host.mjs"; // 相对 App 安装目录（宿主校验在安装/数据目录内）
+export const RUNTIME_ENTRY = "bin/dsh.mjs"; // 相对 App 安装目录（宿主校验在安装/数据目录内）
 /** 受管端口选取区间（与官方样例 hana-dsh controller.mjs 同款；宿主 service 端口契约 1024..65535 的确定整数，禁 0/随机哨兵）。 */
 export const PORT_MIN = 38000;
 export const PORT_MAX = 52000;
@@ -139,7 +139,7 @@ function clearRuntimeIdentity() {
 /**
  * 端口选取（纯函数，可注入 rng 便于单测）：[PORT_MIN, PORT_MAX) 内的确定整数。
  * 宿主 runtime service 端口契约要求显式整数（1024..65535，禁 0/随机哨兵），故只能由父进程
- * 自选后传入，不能交给宿主分配；区间随机使端口不再需要用户配置。
+ * 自选后传入，不能交给宿主分配；区间随机使端口无需用户配置。
  */
 export function choosePort(rng = randomInt) {
   return rng(PORT_MIN, PORT_MAX);

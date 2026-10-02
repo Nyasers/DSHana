@@ -14,12 +14,12 @@
 //   require 的调用（loader 模块表注入，不内联不全局化）。
 //
 // 资源/编译面（client 描述可选字段，见各包 cordis.config.mjs）：
-//   externals: loader 模块表 require 解析清单（默认 react 系；@dshana/view 加
+//   externals: loader 模块表 require 解析清单（默认 react 系；集成层编译 ui-layout 时另加
 //     @deepseek-ai/dsh-client-store——平台 seed，与官方 ui-layout bundle 同款外部）
-//   defines:   tsdown define（编译期常量替换；各包自声明，如 view 的 DSH_CLIENT_TITLE）
+//   defines:   tsdown define（编译期常量替换；各包自声明）
 // 资源内联："./x.css?inline" / "./x.svg?inline" 文本内联虚拟模块（通用文本 loader，
 //   规避 tsdown css-guard：虚拟 id 不以 .css 结尾——官方同款加 .mjs 后缀）；
-//   "./x.module.css"（官方 TSX 组件 CSS Modules 语义，@dshana/view vendor 官方
+//   "./x.module.css"（官方 TSX 组件 CSS Modules 语义，集成层编译官方
 //   ui-layout AppFrame 等源码需要）→ css-modules 虚拟模块（默认导出 local→带包命名空间
 //   前缀的 class 映射 + 模块执行时注入 <style data-plugin-css>，纯运行时无 React 路径）。
 // 环境常量：浏览器产物无 process 全局——define 把 process.env 整体替换为空对象、
@@ -32,6 +32,11 @@ import { build } from "tsdown";
 import { dirname, extname, join, resolve } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import postcss from "postcss";
+import selectorParser from "postcss-selector-parser";
+import valueParser from "postcss-value-parser";
+
+import { minifyCss } from "../../../../scripts/build/minify-assets.mts";
 
 /** client 半入口解析：调用方给了具体文件就用它；否则 client.ts 优先，退到 client.js。
  * 产物名始终是 client.js（__ModuleLoader__ 按包名注册的那个文件）。 */
@@ -59,7 +64,10 @@ const textInlinePlugin = {
   load(virtualId) {
     if (!virtualId.startsWith(TEXT_PREFIX)) return null;
     const file = virtualId.slice(TEXT_PREFIX.length, -VIRTUAL_SUFFIX.length);
-    return "export default " + JSON.stringify(readFileSync(file, "utf8")) + ";";
+    const text = readFileSync(file, "utf8");
+    // .css 的内联文本就地压一次：它同样是手写文本，terser 只压 JS、不会碰字符串里的 CSS。
+    const out = file.endsWith(".css") ? minifyCss(text) : text;
+    return "export default " + JSON.stringify(out) + ";";
   },
 };
 
@@ -99,9 +107,6 @@ export function scopedClassName(id, file, local, pkgDir) {
 
 /** 一条 class 名的记账（class 名 → 生成它的源文件）：构建期的类名唯一性闸读它。 */
 type CssClassRecord = { className: string; local: string; scope: string; file: string };
-
-// url(...) 整段（含引号与内层空白）。载荷不是 class 名，扫描/改写前必须整段摘出去。
-const URL_RE = /url\(\s*(['"]?)([^'")]*)\1\s*\)/gi;
 
 // 可内联资产的扩展名 → MIME。只列会出现在样式里的图/字。
 const ASSET_MIME = {
@@ -149,35 +154,62 @@ function inlineAssetUrl(full, quote, raw, cssFile) {
 // 注入点 = 模块 materialization（factory 执行）——官方 css-modules 同款时机
 // （claimStyles 记账 style[data-plugin]）。
 function cssModuleSource(id, fileId, css, emitted: CssClassRecord[] = [], pkgDir) {
-  // url() 载荷不是 class 名：rc.2 的 ChatView 写了 mask: url('./running-whale@2x.png')，
-  // 载荷里的「.png」会被 tokenRe 当成 class 名改写，把贴图名改成不存在的文件（鲸鱼整只消失）。
-  // 所以先整段摘出去，改写完再放回；顺手把本地资产内联成 data URI——注入的是 <style> 文本，
-  // 相对 URL 按**页面**解析，而资源既没随包发也没在页面根上提供，不内联必然取不到。
-  const urls: string[] = [];
-  const cssNoUrls = css.replace(URL_RE, (full, quote, raw) => {
-    urls.push(inlineAssetUrl(full, quote, raw, fileId));
-    return "\u0001" + String(urls.length - 1) + "\u0001";
-  });
-  const locals = new Set<string>();
-  const prefixed: Record<string, string> = {};
-  const tokenRe = /\.([A-Za-z_][A-Za-z0-9_-]*)/g;
-  let m;
-  while ((m = tokenRe.exec(cssNoUrls)) !== null) locals.add(m[1]);
   const classMap: Record<string, string> = {};
-  for (const local of locals) {
-    const pname = scopedClassName(id, fileId, local, pkgDir);
-    classMap[local] = pname;
-    prefixed[local] = pname;
-    // 记账（class 名 → 生成它的源文件）：闸据此判重名，不去扫产物文本，免掉压缩后的假阳性。
-    emitted.push({ className: pname, local, scope: cssScopeOf(id), file: fileId });
-  }
-  // 仅改写已知 local class 选择器（保留 data 属性/伪类等非 class 语法；url() 已摘出，
-  // 余下的「带点字符串」不在本包样式里）
-  const rewritten = cssNoUrls.replace(/\.([A-Za-z_][A-Za-z0-9_-]*)/g, (full, name) =>
-    prefixed[name] ? "." + prefixed[name] : full).replace(/\u0001(\d+)\u0001/g, (_m, i) => urls[Number(i)]);
+  const prefixed: Record<string, string> = {};
+  // 一条 local class 的作用域化（幂等）：首次遇见时算名并记账。
+  const scope = (local: string): string => {
+    if (prefixed[local] === undefined) {
+      const pname = scopedClassName(id, fileId, local, pkgDir);
+      prefixed[local] = pname;
+      classMap[local] = pname;
+      // 记账（class 名 → 生成它的源文件）：闸据此判重名，不去扫产物文本，免掉压缩后的假阳性。
+      emitted.push({ className: pname, local, scope: cssScopeOf(id), file: fileId });
+    }
+    return prefixed[local];
+  };
+
+  // 走 postcss 解析，不再用正则扫文本：正则看不懂 CSS 语义（伪类伪元素、属性选择器、
+  // 字符串/url() 里的「.x」都会被一起改坏——旧实现就吃过 mask: url('./xxx@2x.png')
+  // 把「.png」当类名改写的亏，只能靠先把 url() 整段摘出来绕开）。
+  const root = postcss.parse(css, { from: fileId });
+
+  // 值里的 url(...)：本地资产内联成 data URI。注入的是 <style> 文本，相对 URL 按**页面**解析，
+  // 而资源既没随包发也没在页面根上提供，不内联必然取不到。
+  root.walkDecls((decl) => {
+    if (!decl.value || !decl.value.includes("url(")) return;
+    const parsed = valueParser(decl.value);
+    let touched = false;
+    parsed.walk((node) => {
+      if (node.type !== "function" || node.value.toLowerCase() !== "url") return;
+      const inner = node.nodes && node.nodes[0];
+      const raw = inner ? inner.value : "";
+      const quote = inner && inner.type === "string" ? inner.quote || "" : "";
+      const full = valueParser.stringify(node);
+      const inlined = inlineAssetUrl(full, quote, raw, fileId);
+      if (inlined === full) return;
+      const innerText = /^url\(([\s\S]*)\)$/.exec(inlined);
+      if (innerText) {
+        (node as any).nodes = [{ type: "word", value: innerText[1] }];
+        touched = true;
+      }
+    });
+    if (touched) decl.value = parsed.toString();
+  });
+
+  // 选择器里的 local class → 作用域名。只动真正的 class 节点（postcss-selector-parser），
+  // 属性选择器里的值、字符串、别的选择器功能一概不碰。
+  root.walkRules((rule) => {
+    rule.selector = selectorParser((sels) => {
+      sels.walkClasses((cls) => { cls.value = scope(cls.value); });
+    }).processSync(rule.selector);
+  });
+
+  // 注入的 CSS 是手写文本、不经任何打包器：terser 只压 JS，不会碰字符串里的 CSS，
+  // 所以在这里就地压一次（与 minify-assets 的 minifyCss 同一份参数）。
+  const cssText = minifyCss(root.toString());
   const tagId = styleTagId(id, fileId);
   return [
-    "const css = " + JSON.stringify(rewritten) + ";",
+    "const css = " + JSON.stringify(cssText) + ";",
     "const tagId = " + JSON.stringify(tagId) + ";",
     "if (typeof document !== 'undefined' && document.querySelector('style[data-plugin-css=' + JSON.stringify(tagId) + ']') === null) {",
     "  const tag = document.createElement('style');",

@@ -1,26 +1,15 @@
 # 依赖与构建产物
+.cache/
 .pnpm-store
 node_modules/
 releases/
-
-# 可再生中间产物（.cache/dist = App 交付目录；跨次复用，构建不清它）
-.cache/
-
-# 每次重来的草稿（pack 物化工位 .tmp/pkg-root、组装台 .tmp/pkg、集成摊源树 .tmp/integrations-*）
-.tmp/
+dist/
 
 # 系统杂项
+.tmp/
 *.log
 .DS_Store
 
 # SDD 本地 spec（不进 git，仅本地规划产物）
 SPECS.md
 specs/
-
-data/
-
-# 运行期 node 代理（installDepsFromPlugin 写入插件根，每次安装幂等重建；不进 git）
-# /node 为 Linux/macOS 无扩展名形态；仓库根无同名资产，安全忽略
-/node.cmd
-/node
-

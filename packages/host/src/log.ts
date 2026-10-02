@@ -9,8 +9,8 @@
 //   stderr = 错误/诊断（warn/err）
 // readyMarker 必须独占一行打印且不带任何前缀（宿主按整行精确匹配）——
 // 因此 marker 打印不经过本模块的 info()，由 main.js 直接 process.stdout.write(marker+"\n")，
-// 且日志行统一加 "[dsh-host]" 前缀，杜绝日志内容误触 readyMarker。
-// 本模块零依赖 node 内置（只 process），可安全被 rspack 打进 .cache/dist/runtime/dsh-host.mjs。
+// 且日志行统一加 "[dsh]" 前缀，杜绝日志内容误触 readyMarker。
+// 本模块零依赖 node 内置（只 process），可安全被 rspack 打进 dist/bin/dsh.mjs。
 function ts() {
   const d = new Date();
   const p = (n, w = 2) => String(n).padStart(w, "0");
@@ -24,7 +24,7 @@ function write(stream, tag, ...args) {
     .replace(/\r/g, "\n");
   for (const line of text.split("\n")) {
     if (line.trim().length === 0) continue;
-    stream.write(`[dsh-host] [${ts()}] [${tag}] ${line.trimEnd()}\n`);
+    stream.write(`[dsh] [${ts()}] [${tag}] ${line.trimEnd()}\n`);
   }
 }
 /** 运行里程碑（stdout，进入宿主运行日志 stdout 流）。 */

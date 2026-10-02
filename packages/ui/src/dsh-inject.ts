@@ -3,11 +3,11 @@
 //
 // packages/ui/src/dsh-inject.ts — 把 DSH 前端注入当前文档 + 提供 __DSH_TRANSPORT__（浏览器 ESM）
 //
-// 形态对齐官方样例 hana-dsh（它 runtime/bootstrap.js 的 src/ui/main.ts）：不再用 iframe 内嵌
-// DSH，而是把 DSH 的 index.html 解析后注入本页——<base href> 指向中继前缀，DSH 的所有相对
-// 资源（./assets/*、manifest、favicon）与绝对路径请求都经 __DSH_TRANSPORT__ 重写到该前缀。
-// 这样 DSH 前端的 SPA 基址问题（绝对路径绕开代理前缀）不再存在，也不再需要 iframe 的
-// surface 票据兜底。
+// 形态对齐官方样例 hana-dsh（它 runtime/bootstrap.js 的 src/ui/main.ts）：DSH 的 index.html
+// 解析后注入本页（不用 iframe）——<base href> 指向中继前缀，DSH 的所有相对资源
+// （./assets/*、manifest、favicon）与绝对路径请求都经 __DSH_TRANSPORT__ 重写到该前缀。
+// 这消掉了 iframe 的两处代价：DSH 前端的 SPA 基址问题（绝对路径绕开代理前缀），以及
+// iframe 的 surface 票据兜底。
 //
 // 宿主（DSH 内核）在 packages/client/connection 读 globalThis.__DSH_TRANSPORT__：
 //   { fetch, openStream?, loadBundle?, ownsHost? }
@@ -603,11 +603,11 @@ export function installDirectoryPickerBridge(sdk) {
  *   · dsh-client-hmr 的 /plugins/events（EventSource）与 dsh-client-ui-open-in-app 的
  *     /open-in-app/apps（裸 fetch）没有官方钩子可接，会落到宿主源被 403；这两处**逐个打补丁**
  *     （client-hmr 与 ui-open-in-app）：EventSource 换 URL（桥的 runtimeUrl）、fetch 换
- *     __DSH_TRANSPORT__.fetch。我们同法（src-integrations/client-hmr、src-integrations/ui-open-in-app）。
+ *     __DSH_TRANSPORT__.fetch。我们同法（integrations/client-hmr、integrations/ui-open-in-app）。
  *
  * 一处接管：installRequestTakeover 直接包住本页的 fetch / XMLHttpRequest / EventSource /
  * WebSocket / sendBeacon，凡「发给本页 origin、且不在宿主前缀 /api/apps/ 下」的 URL 一律改指中继前缀。
- * 上面两处逐包补丁保留（同一目标、互为兼容，不再新增第三处）；__DSH_TRANSPORT__ 仍是内核 connection
+ * 上面两处逐包补丁保留（同一目标、互为兼容，不另增第三处）；__DSH_TRANSPORT__ 仍是内核 connection
  * 客户端的 opt-in 通道，语义不变（它对外部 origin 抛错，接管层则原样放行）。
  */
 export interface DshTransport {
@@ -629,7 +629,7 @@ export function installTransport(
     loadBundle: loadRuntimeBundle(privateBase),
   };
   window.__DSH_FILE_UPLOAD__ = { fetch: runtimeFetch };
-  // 宿主桥：DSH 客户端集成（src-integrations/ui-layout 等）读此对象判断「本文件属于哪个面」。
+  // 宿主桥：DSH 客户端集成（integrations/ui-layout 等）读此对象判断「本文件属于哪个面」。
   // 名字是我们的（样例叫 __HANA_DSH__，我们写自己的 overlay，不沿用它的全局名）。
   //   role       main 卡 → workspace（中+右，无 DSH 侧栏）；FP 面板 → navigation（纯侧栏）。
   //   runtimeUrl 把路径映射到私有运行时基址——给**不能被 fetch 型 transport 包装**的载体用：
@@ -638,7 +638,7 @@ export function installTransport(
     role: role || "workspace",
     runtimeUrl: (path) => mapRuntimeUrl(String(path), privateBase, window.location.origin).toString(),
     // 壳页传入的额外桥面（当前是设置视图读/写/订阅，见 packages/ui/src/app-shell.ts 的 VIEW_STATE_API）：
-    // src-integrations/ui-settings-general 靠它做「FP 点设置、主卡打开」。
+    // integrations/ui-settings-general 靠它做「FP 点设置、主卡打开」。
     ...(bridge && typeof bridge === "object" ? bridge : {}),
   };
   // 剪贴板影子：壳级全局安装，也必须在 DSH 注入之前。

@@ -9,7 +9,7 @@
 // 各独立加载单元（index.js / routes / tools bundle）之间跨单元共享的产物。App v2 里
 // apply(ctx) 与工具 execute 同处一个隔离 App 进程、同一个 ESM 模块图（rspack 单 bundle），
 // 没有 globalThis 跨单元通信的必要；ctx 成员（dataDir/config/logger/……）由 apply 捕获进
-// 模块级运行包，工具执行时经本模块读取即可。生命周期纪律见 packages/app/src/index.ts 头注释。
+// 模块级运行包，工具执行时经本模块读取即可。生命周期纪律见 packages/app/src/app.ts 头注释。
 //
 // 本模块是叶子：只做「存/取运行包」+ 少量无状态取值助手，不 import 任何业务模块。
 // 运行包字段（initAppRuntime 由 apply 写入）：
@@ -50,7 +50,7 @@ export function getAppRuntime(): AppRuntime | null {
 /**
  * 当前数据目录解析（工具/业务统一入口）：
  *  ① App v2：ctx.dataDir（权威，宿主 app-data/<id>/）；
- *  ② 兜底（无宿主 apply 的离线/dev 场景，如单测或直接跑 .cache/dist 里的代码）：调用方
+ *  ② 兜底（无宿主 apply 的离线/dev 场景，如单测或直接跑 dist 里的代码）：调用方
  *     再回落 PLUGIN_ROOT/data（v1 布局，与 state.js 语义一致）。
  * 旧插件数据迁移接缝：未来迁移脚本/只读兜底可在 ① 缺失
  * 所需 DSH_HOME 且 legacy 数据存在时，经此处返回 legacy dataDir 或做导入，勿在各

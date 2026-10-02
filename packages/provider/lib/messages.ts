@@ -14,7 +14,7 @@
 //   user/assistant Message.content 是 ContentBlock[]（text/reasoning/image/tool-call）；
 //   tool 结果是一条独立的 role:"tool" 消息，带 toolCallId/content/isError
 //   （createToolResultMessage，source.kind === "tool"）；assistant 消息 source.replayState
-//   是我们存的 'hana' 回放信封（每块一个 metadata，见 lib/replay.js）。
+//   是我们存的 'hana' 回放信封（每块一个 metadata，见 lib/stream.ts）。
 //   历史兼容：user 消息 content 内的 { type:"tool-result", toolCallId, content, isError }
 //   块同样按工具结果处理。
 // 转换纪律：DSH 文本/推理块原样搬进 hana 内容项；tool-call 的 arguments 是 JSON **字符串**，

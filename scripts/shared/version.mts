@@ -39,10 +39,10 @@ export function cordisPkgPaths() {
   return cordisPkgDirs().map((dir) => `${dir}/package.json`);
 }
 
-// 派生同步目标（随主版本同步的文件）：packages/app/src/manifest.json（app 域构件）+ cordis 包
+// 派生同步目标（随主版本同步的文件）：manifest.json（仓库根，App 契约）+ cordis 包
 //（不含主 package.json——主是事实源，由 bump 阶段改；这里指"跟随"它的文件）
 export function derivedVersionTargets() {
-  return ["packages/app/src/manifest.json", ...cordisPkgPaths()];
+  return ["manifest.json", ...cordisPkgPaths()];
 }
 
 // 版本文件全集（含主 package.json——version-hook 提交范围用：pnpm version 已改主待收口）
@@ -96,7 +96,7 @@ export function dshPin() {
 
 // ---- 交付面（构建期生成，不进树）----
 // 交付树包根那份 package.json 与它的锁文件都由 pack 在工位里现生成（对齐上游 desktop 的
-// runtime 树：清单按内核声明写、锁以仓库锁文件为种子重解析），树里不再留手写的交付面清单与锁。
+// runtime 树：清单按内核声明写、锁以仓库锁文件为种子重解析），树里没有手写的交付面清单与锁。
 // 内核声明住 host（见 dshPin），工位清单的运行时依赖从它派生（见 shipDependencies）。
 
 /**

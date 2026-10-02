@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// @dshana/provider — DSH provider adapter（v2 重写：模型推理走受管 runtime 内 hana）
+// @dshana/provider — DSH provider adapter（模型推理走受管 runtime 内 hana）
 //
-// v1（0.1.2）形态：消费宿主 provider 路由（models.json + apiKey）注册官方 PiAiAdapter 直连
-// 各 provider 端点。本 adapter 不再有 apiKey/baseURL/直连：**推理在受管
+// 本 adapter 不持有 apiKey/baseURL/直连：**推理在受管
 // runtime 内经 connectAppRuntime().models 发起**（受管子进程与 DSH 同进程，hana client
-// 由 dsh-host.mjs 挂 globalThis.__dshanaHana，见 packages/host/src/main.ts）：
+// 由 bin/dsh.mjs 挂 globalThis.__dshanaHana，见 packages/host/src/main.ts）：
 //   · 目录：hana.models.list() → 显式 provider/model 选择（id 原样透传，不二次映射）；
 //   · 推理：hana.models.stream({ requestId, provider, model, messages, systemPrompt, tools,
 //     reasoningEffort?, maxTokens?, temperature?, taskId? })——requestId 由本 adapter 自管
@@ -15,15 +14,15 @@
 //     有绑定 + 任务活动 = taskId（保留任务绑定与结果回投）；绑定读不出/索引缺席 = **显式失败**，
 //     不改走 App 身份（《DSHana 调用 Hana 模型接口指南》§3/§5）。不传 scope——那是
 //     models.utility 的参数，stream 不接受；
-//   · NDJSON 逐行解析（lib/ndjson.js），done.assistant 完整保存回放（含 text/reasoning/
-//     toolCall 续接签名，lib/stream.js buildDoneChunks + 回放信封）；error 事件=失败不算成功；
+//   · NDJSON 逐行解析（lib/ndjson.ts），done.assistant 完整保存回放（含 text/reasoning/
+//     toolCall 续接签名，lib/stream.ts buildDoneChunks + 回放信封）；error 事件=失败不算成功；
 //   · 图片：DSH 消息含 ImageBlock 时经 attachment store 读字节 → base64+MIME（不传路径），
 //     目标尺寸由附件原始尺寸按像素预算投影（lib/image-target.ts）；缺 store 时报
 //     UNSUPPORTED_CONTENT（边界见 DESIGN）。
 // DSH 侧工具循环不变：Hana 不替 DSH 执行传入工具 schema（tools 仅声明）；DSH 执行工具后把
-// role:toolResult 消息放回 messages（lib/messages.js 转换）。
+// role:toolResult 消息放回 messages（lib/messages.ts 转换）。
 //
-// 容错纪律（v1 同款）：apply 全程 try/catch 不抛——依赖缺失/目录空/错误只记日志，插件
+// 容错纪律：apply 全程 try/catch 不抛——依赖缺失/目录空/错误只记日志，插件
 // 降级为空操作（DSH 无 provider 可用），不阻断 dsh 启动。
 import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -414,7 +413,7 @@ export function buildHanaAdapter(LlmAdapter, LlmError, deps) {
 
 export async function apply(ctx, config) {
   try {
-    // 1. hana client 句柄（dsh-host.mjs 在 connectAppRuntime 后、runProfile 前设置；
+    // 1. hana client 句柄（bin/dsh.mjs 在 connectAppRuntime 后、runProfile 前设置；
     // 插件加载晚于该点；仍给窗口兜底轮询）
     let hana: any = null;
     try {

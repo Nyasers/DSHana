@@ -42,7 +42,7 @@ interface InlinedComponent {
  * 只列**内联**的组件。判定依据是 src/ 里的实际 import 链：
  *   · plugin-sdk：app-shell.ts / settings.tsx 直接 import，经 rspack 内联进 ui/*
  *   · plugin-components：settings.tsx 直接 import（连 settings.css）
- *   · app-sdk：runtime/main.ts import connectAppRuntime，内联进 runtime/dsh-host.mjs
+ *   · app-sdk：runtime/main.ts import connectAppRuntime，内联进 bin/dsh.mjs
  *   · plugin-protocol：plugin-sdk 的 dependency，随它一起被打进产物
  * 顺序按依赖方向（底 → 上），与产物里的层次一致。
  */
@@ -69,7 +69,7 @@ const COMPONENTS: InlinedComponent[] = [
     name: "@hana/app-sdk",
     purpose:
       "The `connectAppRuntime()` client runtime for the managed runtime's private IPC (tasks / models / network.fetch / close).",
-    form: `devDependency (\`file:${SDK_DIR}/hana-app-sdk.tgz\`), statically inlined by rspack into \`runtime/dsh-host.mjs\`.`,
+    form: `devDependency (\`file:${SDK_DIR}/hana-app-sdk.tgz\`), statically inlined by rspack into \`bin/dsh.mjs\`.`,
     copyright: "Copyright (c) 2026 Hana App SDK authors (SPDX headers in the source files)",
   },
 ];

@@ -9,24 +9,22 @@
 // 过平台块的 workspace yaml、从仓库锁文件长出来的锁——先 `install --lockfile-only` 以仓库锁为种子
 // 重解析出交付面的生产闭包，再 `install --prod --frozen-lockfile` 按它装。仓库根那份清单（构建面，
 // 带 devDependencies）不进工位。
-// 实测（Windows + 热缓存）：单目标安装 8.4s / 210 MB，且不含其他平台的边角；而「通用树裁剪
+// 实测（Windows + 热缓存）：单目标安装 8.4s / 210 MB，且不含其他平台的边角；「通用树裁剪
 // 派生」会留残留且更大。
-// 隔离的理由：不触碰仓库 node_modules（dev+prod 混合树，且动它会触发 pnpm 重建——Windows 上
-// 曾遇清理被拒导致树损坏）。
+// 隔离的理由：不触碰仓库 node_modules（dev+prod 混合树，动它会触发 pnpm 重建；Windows 上
+// 清理被拒会损坏树）。
 import { createRequire } from "node:module";
 import fs from "fs-extra";
 import { join } from "node:path";
 
 import { ROOT } from "../../shared/root.mts";
+import { STAGING_ROOT } from "../../shared/paths.mts";
 import { dshPin } from "../../shared/version.mts";
 import { assertIntegrationTargets } from "./assert.mts";
 import { stagingManifest } from "./ship-manifest.mts";
 import { stagingWorkspaceYaml } from "./targets.mts";
 
 const require = createRequire(import.meta.url);
-
-/** 依赖物化工位根（起手清残留、用完即清）。 */
-export const STAGING_ROOT = join(ROOT, ".tmp", "pkg-root");
 
 /** 逐目标干净安装（各自暂存目录 + 各自 supportedArchitectures）；返回该目标的 node_modules 路径。 */
 export function materializeProdDeps(spec, version: string) {
@@ -38,7 +36,7 @@ export function materializeProdDeps(spec, version: string) {
   fs.writeFileSync(join(dir, "package.json"), JSON.stringify(stagingManifest(version), null, 2) + "\n");
   fs.copySync(join(ROOT, "pnpm-lock.yaml"), join(dir, "pnpm-lock.yaml"));
   fs.writeFileSync(join(dir, "pnpm-workspace.yaml"), stagingWorkspaceYaml(spec), "utf8");
-  console.log(`[pack] 物化 ${spec.name}（干净安装，隔离目录 .tmp/pkg-root/${spec.name}）...`);
+  console.log(`[pack] 物化 ${spec.name}（干净安装，隔离目录 .cache/pkg-root/${spec.name}）...`);
   // 锁以仓库锁文件为种子重解析（工位是独立项目，锁得按工位清单重算），再按它做 frozen 安装。
   runPnpm(dir, ["install", "--lockfile-only"], spec.name);
   runPnpm(dir, ["install", "--prod", "--frozen-lockfile"], spec.name);
@@ -47,7 +45,7 @@ export function materializeProdDeps(spec, version: string) {
   if (missing.length) {
     throw new Error(`${spec.name} 缺少平台资产（该平台的包会跑不起来）：\n  - ${missing.join("\n  - ")}`);
   }
-  console.log(`[pack] ${spec.name} 物化完成（平台资产 ${spec.assets.length} 项齐备，内核 ${assertKernelAtPin(modules)}，集成目标 ${assertIntegrationTargets(modules, join(ROOT, "src-integrations"))} 项）`);
+  console.log(`[pack] ${spec.name} 物化完成（平台资产 ${spec.assets.length} 项齐备，内核 ${assertKernelAtPin(modules)}，集成目标 ${assertIntegrationTargets(modules, join(ROOT, "integrations"))} 项）`);
   const pruned = pruneNodeModules(modules, spec);
   if (pruned.files > 0) {
     console.log(

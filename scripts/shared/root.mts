@@ -3,8 +3,8 @@
 //
 // scripts/shared/root.mts — 仓库根，以及脚本入口的 Node 版本断言（脚本域共用一份）。
 //
-// 为什么不数 ".." 的层数：脚本按域分在 scripts/<域>/ 下，各自到根的深度不再一致，
-// 数层数会随下一次搬家再错一遍。这里向上找最近的 package.json。
+// 为什么不数 ".." 的层数：脚本按域分在 scripts/<域>/ 下，到根的深度不一，数层数会在目录调整时失准。
+// 这里向上找最近的 package.json。
 // 脚本只会待在 scripts/ 下（其子目录不含 package.json），所以第一个命中的就是仓库根。
 import fs from "node:fs";
 import path from "node:path";

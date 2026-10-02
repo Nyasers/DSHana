@@ -48,7 +48,7 @@ export const DASHANA_ROUTE_PREFIX = "/dshana";
 // 两个超时与数据模式同栈：一份设置（dataDir/settings.json）、一个 revision，
 // 缺省值由 packages/runtime/src/config.ts 的 APP_SETTING_DEFAULTS 单点持有（30 / 1800）。
 // 为什么不用 schema 门：设置标签页直接渲染本 App 自己的页
-// （contributes.settings.ui.route），配置经 App 自己的后端读写，宿主不再代画表单。
+// （contributes.settings.ui.route），配置经 App 自己的后端读写，宿主不代画表单。
 // 写带 expectedRevision：不匹配回 409，不静默覆盖。
 const APP_SETTING_BROADCAST_KEY = "dshana:settings";
 
@@ -120,10 +120,10 @@ export function defaultDshanaRouteDeps(ctx) {
     }
   };
   // 设置面用 App 自己的私有数据目录。宿主契约（@hana/app-sdk HanaPluginContextV2）：
-  // dataDir 在 ctx **顶层**（ctx.dataDir，与 apply 期 index.js、lib/data-source 的
+  // dataDir 在 ctx **顶层**（ctx.dataDir，与 apply 期 index.js、packages/runtime/src/data-source.ts 的
   // createDataSourceStore 同一来源）；ctx.config 是设置读写面（get/getAll/set…），其上没有
-  // dataDir。真机曾按 ctx.config.dataDir 取 → 恒为空串 → POST /dshana/settings 必 500
-  // （读路径只静默降级，所以先前没暴露）。
+  // dataDir——从 ctx.config.dataDir 取只会得到空串，POST /dshana/settings 随之 500
+  // （读路径静默降级，不暴露这个错）。
   const dataDir = ctx && typeof ctx.dataDir === "string" ? ctx.dataDir : "";
   return {
     appId: (ctx && ctx.appId) || APP_ID,

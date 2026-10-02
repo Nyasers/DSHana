@@ -33,7 +33,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 | 就绪（ready） | 页面装载 DSH Web UI | 直接用 |
 | 需要处理（error / stopped） | 状态行 + 一块 `<pre>`（code / message / note / runtimeId / port） | 看 `<pre>` 定位；自动链按退避重试，端口占用自动换端口 |
 
-**读状态的出口**：`boot-state`（壳页与 Agent 都用；含 phase/error/userText）。App 侧不再写文件日志——日志一律走宿主 `ctx.logger`，受管子进程输出由宿主运行日志捕获。
+**读状态的出口**：`boot-state`（壳页与 Agent 都用；含 phase/error/userText）。App 侧不写文件日志——日志一律走宿主 `ctx.logger`，受管子进程输出由宿主运行日志捕获。
 
 ## 工具手册：`dshana(action, …)`
 
@@ -93,7 +93,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 
 会显式标注、不静默篡改的情形：本轮尚无输出（退到更早的最近结论）／窗口内无 user 消息／该轮被中断／**该轮以错误结束**（模型或工具报错时 DSH 只写 `attempt` + `turn/end`，这里把错误原因透出来）／还有更早轮次未读。
 
-注：会话日志已是 V3 格式，**不再自读 `session_projcache.json` / `session.jsonl.zstd`**（格式演进交回官方）；DSH 未启动时 list/get 不可用。
+注：会话日志是 V3 格式，**App 不自读 `session_projcache.json` / `session.jsonl.zstd`**（格式演进交回官方）；DSH 未启动时 list/get 不可用。
 
 ### action=approve：应答挂起审批
 
@@ -127,7 +127,7 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 ## 主题
 
 只有 DSH 主题偏好为 **system** 时跟随宿主配色（经 `@dshana/theme` 子插件注入）；在 DSH 内显式选 light/dark 时完全用 DSH 自己的主题，宿主配色不介入。
-外观里这个选项的文案是**「跟随宿主」**（上游原文是「跟随系统」）——偏好值仍是 `system`，只是措辞按我们的形态改了，见 `src-integrations/ui-theme` 的覆盖层。
+外观里这个选项的文案是**「跟随宿主」**（上游原文是「跟随系统」）——偏好值仍是 `system`，只是措辞按我们的形态改了，见 `integrations/ui-theme` 的覆盖层。
 
 ## 排错表
 
@@ -139,9 +139,9 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 | DSH Web UI 打不开但状态就绪 | 注入失败 / surface 票据缺失 | 重开卡；反复出现查中继前缀与 surface 授权 |
 | `dshana` 报 runtime 未就绪 | DSH 还没起来 | 等就绪即可（工具首调会重新拉起）；持续失败看 boot 状态与宿主日志 |
 | 改了宿主提供商/模型，DSH 里的候选没变 | DSH 侧的 provider 路由与模型目录是启动快照 | 正常路径由 `models-changed` 订阅经控制面触发重拉（不重启 runtime）；订阅面不可用时重启 runtime |
-| 模型报 `no API key for provider route "deepseek-official"` | 官方自带的 LLM adapter 还在服务那条路由（本形态里它拿不到 key），说明 roster patch 没随包落地或被人改过 | 确认装好的树 `cordis.patch.yml` 里 `llm-deepseek` / `llm-pi-ai` 是 `disabled: true`，然后重启 DSH |
-| 默认模型指向宿主没配的提供商/模型（你手设过的那个消失了） | 宿主换过提供商或删了凭据 | 不用手改：App 在 runtime 就绪与宿主模型变更后会对账，换成宿主目录里一条可服务的（日志有「默认模型对账」）；这格现在只由 DSH 自己与对账维护，App 设置页不再有它的入口 |
-| 界面里直接开的会话报 `no API key for provider route "deepseek-official"` | `agent-default-model` 的 user 层为空，值落回 base 层那条官方路由（工具建的会话不受影响：它们按调用方角色卡开） | 在 DSH 自己的模型选择器里选一条可服务的（会话级；App 设置页不再有默认模型的入口） |
+| 模型报 `no API key for provider route "deepseek-official"` | 官方自带的 LLM adapter 还在服务那条路由（本形态里它拿不到 key），说明 roster patch 没随包落地或被人改过 | 确认装好的树 `bin/cordis.patch.yml` 里 `llm-deepseek` / `llm-pi-ai` 是 `disabled: true`，然后重启 DSH |
+| 默认模型指向宿主没配的提供商/模型（你手设过的那个消失了） | 宿主换过提供商或删了凭据 | 不用手改：App 在 runtime 就绪与宿主模型变更后会对账，换成宿主目录里一条可服务的（日志有「默认模型对账」）；这格现在只由 DSH 自己与对账维护，App 设置页没有它的入口 |
+| 界面里直接开的会话报 `no API key for provider route "deepseek-official"` | `agent-default-model` 的 user 层为空，值落回 base 层那条官方路由（工具建的会话不受影响：它们按调用方角色卡开） | 在 DSH 自己的模型选择器里选一条可服务的（会话级；App 设置页没有默认模型的入口） |
 | 主题没跟随宿主 | DSH 主题偏好是 light/dark 而非 system | 在 DSH 外观里选「跟随宿主」（偏好值 system） |
 | DSH 设置里找不到「模型」页 | 该页（`ui-settings-models`）随两个官方 LLM adapter 一起停掉——它只编辑那两行的 settings 段 | 不是故障：工具建会话用的模型在 App 设置页的「会话模型」里配，模型候选列的是宿主目录；DSH 侧会话在 DSH 自己的模型选择器里选 |
 | 选工作区目录时弹一个错误 | 目录弹窗落到了 DSH 宿主进程的 OS chooser（要在沙箱里 spawn 子进程开 `IFileOpenDialog`），而本形态的 runtime 是后台子进程 | 正常路径不该走到那里：壳页注入的目录桥让弹窗由宿主出（`hana.resources.pick`）。若仍报错，确认桥装上了（`__DSH_DIRECTORY_PICKER__`）且宿主授予了资源选择 |
@@ -152,11 +152,11 @@ DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Han
 
 ## 已知限制
 
-- **升级 DSH = 装新 App 包 + 重载 App**：DSH 版本由 App 声明的依赖（`@deepseek-ai/dsh`）决定，产物版本段带上它；无独立升级通道。重载会重新 import 服务端入口、重新注册工具与路由，受管 runtime 按自动链重起（不必重启宿主——DSH 跑在受管子进程里，宿主进程内没有它的模块缓存）。遗留一处：**已建立的会话**握着上次重建会话状态时解析的工具对象副本，重载后要在那个会话里继续调工具得**压缩上下文**（或开新会话）——工具面会按宿主当前注册表重新解析。
+- **升级 DSH = 装新 App 包 + 重载 App**：DSH 版本由 App 声明的依赖（`@deepseek-ai/dsh`）决定，产物版本段带上它；无独立升级通道。重载会重新 import 服务端入口、重新注册工具与路由，受管 runtime 按自动链重起（不必重启宿主——DSH 跑在受管子进程里，宿主进程内没有它的模块缓存）。一处注意：**已建立的会话**握着上次重建会话状态时解析的工具对象副本，重载后要在那个会话里继续调工具得**压缩上下文**（或开新会话）——工具面会按宿主当前注册表重新解析。
 - **壳页没有「启动 / 重启 DSH」的入口**：台面只报状态。拉起由 `apply` 后的自动链、工具首调、以及打开卡页时补的那一次请求承担，失败按退避重试（5s 起、封顶 5min）。要真正重启只能卸载重装、重载 App 或重启宿主。
 - **拆窗、钉回、切页面都不停 DSH 后台**：只有卸载/重载 App 或退出 Hana，宿主才回收受管 runtime。
 - **数据源固定为 App 内置独立目录**（`<dataDir>/.dsh`，即本形态的 `DSH_HOME`），不碰用户主目录的 `~/.dsh`；共享已有 DSH 目录 / 切换数据源的链未启用（`POST /dshana/settings/restart` 回 503）。
 - **会话↔任务的绑定不落 App 文件**：事实源是宿主任务记录（`metadata.dsh` 的 sessionId / rpcId / timeoutSec / approvalTimeoutMs / cancel），读取失败一律 fail-closed。DSH 未启动时 `list` / `get` 不可用。
 - **越界权限默认走审批，且只能在新回合被应答**：`open` / `reply` 提交后须结束本回合，审批通知（含 `approvalId`）下一回合才到；同回合内空等会撞上宿主工具回调的 30 秒上限，并可能卡住该会话。`approvalTimeoutSec` 内无人应答自动拒绝（缺省 30 秒；显式设 0 禁用）。DSH Web UI 里直接开的会话没有委派任务，审批请求没有应答者，按 fail-closed 处理。
-- **会话流不再随任务终结而收线**：页面按 `?sid=` 钉住的那段会话，终态之后照旧可读（历史会话正是用户主动打开来翻看的）。按「任务是否活跃」判流的那一套闸门（中继侧）已随流内卡一起删除。
+- **会话流不随任务终结而收线**：页面按 `?sid=` 钉住的那段会话，终态之后照旧可读（历史会话正是用户主动打开来翻看的）。中继侧不设「任务是否活跃」的闸门。
 - **模型分两条路**：工具建的会话按调用方角色卡配的模型开（App 设置可改成固定的自定义那条）；DSH Web UI 里直接开的会话用 DSH 自己的模型选择器选的那条，候选只来自宿主目录、且是启动快照——宿主改提供商后由 `models-changed` 订阅触发重拉，订阅面不可用时才需要重启 runtime。

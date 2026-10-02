@@ -80,7 +80,7 @@
        ① 主题：宿主把主题参数附在卡页 URL（hana-theme / hana-css / hana-theme-appearance）。
           这里同步写好身份属性并贴一张 <link> 样式表——样式表会挡住首次绘制，所以第一帧就是
           宿主配色，而不是 HTML 里那套纸张 fallback（模块那一步要等一次 fetch，太晚）。
-       ② 坐标：?sid= &tid= &cwd=（字段与 src/tools/shared/card.ts 的 route 查询串同源，
+       ② 坐标：?sid= &tid= &cwd=（字段与 packages/tools/src/shared/card.ts 的 route 查询串同源，
           都经 encodeURIComponent）。
        失败（URL 畸形 / 拿不到主题）一律不阻断页面：留着占位文案继续走。 */
     (function () {

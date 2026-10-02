@@ -8,8 +8,7 @@
   },
   "type": "module",
   "scripts": {
-    "build": "pnpm run verify:integrations && pnpm run check:type && pnpm run build:host && pnpm run build:ui && pnpm run build:app && pnpm run build:cordis && pnpm run build:integrations",
-    "build:host": "node packages/host/src/build.ts",
+    "build": "pnpm run verify:integrations && pnpm run check:type && pnpm run build:ui && pnpm run build:app && pnpm run build:cordis && pnpm run build:integrations",
     "build:ui": "node packages/ui/src/build.ts",
     "build:app": "node packages/app/src/build.ts",
     "build:cordis": "node packages/app/src/cordis.ts",
@@ -35,7 +34,7 @@
     "facts:record": "node scripts/release/package-facts.mts",
     "prepackage": "pnpm run derive && pnpm run build",
     "package": "node scripts/release/pack/index.mts",
-    "postpackage": "node scripts/release/clean-tmp.mts",
+    "postpackage": "node scripts/release/clean-cache.mts",
     "install:local": "node scripts/dev/install-local.mts",
     "probe:host": "node scripts/probe/host-surface.mts",
     "smoke:packed": "node tests/e2e/runtime-boot.smoke.mjs --packed",
@@ -83,10 +82,15 @@
     "corepack": "0.36.0",
     "fs-extra": "^11.4.1",
     "html-minifier-terser": "^7.2.0",
+    "parse5": "^8.0.1",
+    "postcss": "^8.5.28",
+    "postcss-selector-parser": "^7.1.6",
+    "postcss-value-parser": "^4.2.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "terser": "^5.51.2",
     "tsdown": "^0.23.0",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "yaml": "^2.9.1"
   }
 }

@@ -7,7 +7,7 @@
 // 页面内不出现根路径绝对 URL。浏览器 SDK = 官方 @hana/plugin-sdk（devDependencies，
 // file:vendor/hana-app-sdk/hana-plugin-sdk-0.0.0.tgz），构建期由 rspack 静态打进本文件（见
 // packages/ui/src/rspack.config.mts）——浏览器 ESM 不解析裸包名（宿主不注入 importmap），所以依赖
-// 由打包器 resolve、产物自包含，不在 .cache/dist/ui 另放 vendored 拷贝。
+// 由打包器 resolve、产物自包含，不在 dist/ui 另放 vendored 拷贝。
 //
 // 本文件只管 main / default / sidebar 三个面。**会话卡（stream 面）不在这里**：
 // packages/ui/src/stream.html 引的是 packages/ui/src/stream-entry.ts（轻半，零 React），它按 hana.envelope 认到
@@ -163,7 +163,7 @@ import {
   // 低层宿主管道（到 App 后端路由的取数面、surface 凭据、跨面共享状态、卡实例态、剪贴板）
   // 已抽到 packages/ui/src/surface-bridge.ts：会话卡的轻半（stream-entry.ts）也要这一层，但不该为此
   // 背上下面的 DSH 注入与 React。本文件从那里 import，别名不变、调用点不动。
-  // ---- DSH 注入（对齐官方样例：同文档注入 + __DSH_TRANSPORT__，不再用 iframe）----
+  // ---- DSH 注入（对齐官方样例：同文档注入 + __DSH_TRANSPORT__，不用 iframe）----
   // 一次装配：标记视图参数（DSH 侧 view 插件读 ?dshana-view=）→ 装 transport → 取回 DSH
   // index 注入本页。私有前缀 = 中继前缀 + surface 路径票据（DSH 前端经原生 fetch 发出的
   // 请求带不了 header，票据必须在路径里）。

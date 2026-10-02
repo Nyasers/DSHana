@@ -4,8 +4,8 @@
 // scripts/vendor/dsh.mts — 让 vendor/deepseek-harness 站在 packages/host/package.json 声明版本对应的 dsh tag 上。
 //
 // 为什么 gitlink 与工作树 HEAD 都要对：build 的上游源走 `git show <tag>`（tag），类型解析
-// （mirrorPathEntries）走**工作树**。只对一条，就会重现「同一份上游被读成两个版本」那类
-// 假阳性（曾报出 usePanelInfo / MainPanelId 一族）。
+// （mirrorPathEntries）走**工作树**。只对其中一条，就会出现「同一份上游被读成两个版本」这类
+// 假阳性（如 usePanelInfo / MainPanelId 一族）。
 //
 // 两个入口共用本实现：derive 的 vendor 任务（derive --check 门禁的一部分）与
 // `pnpm run sync:vendor:dsh`。这里只导出「检查」与「修复」，调度、日志前缀与退出码归各自入口。

@@ -4,8 +4,8 @@
   "name": "DSHana",
   "version": "1.0.0-rc.30+dsh-0.2.0-rc.2",
   "description": "把 DeepSeek Harness 变成 HanaAgent 的子代理",
-  "entry": "index.js",
-  "icon": "assets/icon.png",
+  "entry": "bin/index.mjs",
+  "icon": "icon.png",
   "minAppVersion": "0.1050.9",
   "capabilities": [
     "app/tools.expose-to-model",
@@ -54,7 +54,7 @@
         "cardForm": "flush",
         "titlebar": "solid",
         "face": {
-          "image": "assets/cover.png"
+          "image": "cover.png"
         }
       }
     ],

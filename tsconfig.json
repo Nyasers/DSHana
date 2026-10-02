@@ -30,7 +30,7 @@
     "allowImportingTsExtensions": true,
     "jsx": "react-jsx"
   },
-  // 覆盖我们有源码的各域；src-integrations/ 是覆盖层补丁（引上游包源码，走
+  // 覆盖我们有源码的各域；integrations/ 是覆盖层补丁（引上游包源码，走
   // scripts/check/overlay.mts 那条专门通道），不在这里，免得编辑期噪声压住真问题。
   "include": [
     "packages/app/src/**/*.ts",

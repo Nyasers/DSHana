@@ -7,15 +7,15 @@
 // 的事实都走这里；只有人能定的东西（设计取舍、文案措辞、许可范围）不进本表。
 //
 // 两态：默认写回；`--check` 只校验、漂了就 exit 1（CI 门禁）。每个任务只声明"怎么从源
-// 算出期望内容"，比较 / 写回 / 报告由框架统一做——不再各自发明 CLI 和 check。
+// 算出期望内容"，比较 / 写回 / 报告由框架统一做，各任务不必自带 CLI 与 check。
 //
 // 一个任务 = 一类读者（再细就成"一个文件一个任务"，derive: 后面排长队反而难用）：
 //   version-metadata packages/host 声明的 dsh 依赖 → package.json#version 的 +dsh- 段（状态型；
 //                                             排第一，因为它改的是后面几个任务的源）
-//   manifest     主 package.json#version + SDK 快照 packedVersion → packages/app/src/manifest.json（宿主读的 App 契约）
+//   manifest     主 package.json#version + SDK 快照 packedVersion → manifest.json（仓库根；宿主读的 App 契约）
 //   cordis       主 package.json#version         → packages/{clipboard,provider,theme}/package.json（profile loader 读的包）
 //   thirdparty   vendor/hana-app-sdk 的 manifest → THIRD_PARTY_NOTICES.md（分发合规）
-//   paths        镜像包清单                       → src-integrations/tsconfig.paths.json（编辑器）
+//   paths        镜像包清单                       → integrations/tsconfig.paths.json（编辑器）
 //   vendor       packages/host 声明的 dsh 版本     → vendor/deepseek-harness 的 checkout（状态型）
 //
 // 不进本表：NOTICE（主体是我们自己的许可声明，只有仓库 URL 会漂，而那事几年一遇，手改即可）；
@@ -100,12 +100,12 @@ function versionFiles(rels: string[]): DerivedFile[] {
 const manifestTask: FileTask = {
   kind: "file",
   name: "manifest",
-  about: "package.json#version + vendor SDK 的 packedVersion → packages/app/src/manifest.json",
+  about: "package.json#version + vendor SDK 的 packedVersion → manifest.json（仓库根，App 契约）",
   plan: () => {
-    const j = readPkg("packages/app/src/manifest.json");
+    const j = readPkg("manifest.json");
     j.version = readPkg("package.json").version;
     j.minAppVersion = packedVersion();
-    return [{ rel: "packages/app/src/manifest.json", content: jsonText(j) }];
+    return [{ rel: "manifest.json", content: jsonText(j) }];
   },
 };
 
@@ -121,11 +121,11 @@ const cordisTask: FileTask = {
 const pathsTask: FileTask = {
   kind: "file",
   name: "paths",
-  about: "镜像包清单 → src-integrations/tsconfig.paths.json",
+  about: "镜像包清单 → integrations/tsconfig.paths.json",
   plan: () => {
     const MIRROR = join("vendor", "deepseek-harness");
     const HIDDEN = join("node_modules", ".pnpm", "node_modules");
-    const OUT_DIR = join("src-integrations");
+    const OUT_DIR = join("integrations");
     const toOut = (abs: string) => path.relative(OUT_DIR, abs).replace(/\\/g, "/");
     const paths: Record<string, string[]> = {
       // 本仓装了的包照旧走 pnpm 隐藏目录（与根 tsconfig 同口径）。
@@ -136,9 +136,9 @@ const pathsTask: FileTask = {
     }
     return [
       {
-        rel: "src-integrations/tsconfig.paths.json",
+        rel: "integrations/tsconfig.paths.json",
         content: jsonText({
-          "//": "由 node scripts/derive/index.mts paths 生成，勿手改。供 src-integrations/<集成>/tsconfig.json 继承。",
+          "//": "由 node scripts/derive/index.mts paths 生成，勿手改。供 integrations/<集成>/tsconfig.json 继承。",
           compilerOptions: { paths },
         }),
       },
