@@ -7,7 +7,7 @@
 // 页面内不出现根路径绝对 URL。浏览器 SDK = 官方 @hana/plugin-sdk（devDependencies，
 // file:vendor/hana-app-sdk/hana-plugin-sdk-0.0.0.tgz），构建期由 rspack 静态打进本文件（见
 // packages/ui/src/rspack.config.mts）——浏览器 ESM 不解析裸包名（宿主不注入 importmap），所以依赖
-// 由打包器 resolve、产物自包含，不在 .cache/dist/ui 另放 vendored 拷贝。
+// 由打包器 resolve、产物自包含，不在 dist/ui 另放 vendored 拷贝。
 //
 // 本文件只管 main / default / sidebar 三个面。**会话卡（stream 面）不在这里**：
 // packages/ui/src/stream.html 引的是 packages/ui/src/stream-entry.ts（轻半，零 React），它按 hana.envelope 认到

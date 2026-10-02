@@ -8,7 +8,7 @@
 // 所以这里立门：既查装出来的两份实际版本，也查 manifest 钉的是精确版本
 // （浮动区间会让下一次安装把两者拆开：react 先发新版，react-dom 还没跟上）。
 //
-// 页面侧的证据在 .cache/dist/ui/settings.js（React 与 React DOM 一起打进产物），
+// 页面侧的证据在 dist/ui/settings.js（React 与 React DOM 一起打进产物），
 // 版本一致由本测试在安装层保证。
 import { test } from "node:test";
 import assert from "node:assert/strict";

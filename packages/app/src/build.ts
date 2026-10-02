@@ -4,7 +4,7 @@
 // packages/app/src/build.ts — 主 bundle（app 域）构建入口（App 交付形态）
 // 布局：领域专用脚本随各自源码——rspack.config.mts（本目录，配置源）与本入口放 packages/app/src/，
 // 共享工具（collect/walk/terser/assert + minify/template loader）在 scripts/build/。
-// 产物（.cache/dist = App 安装目录形态；宿主读该根 manifest.json + entry）：根下只放宿主读的契约件与
+// 产物（dist = App 安装目录形态；宿主读该根 manifest.json + entry）：根下只放宿主读的契约件与
 // 目录（manifest.json / icon.png / skills / ui / node_modules / 声明文本），代码全在 bin/。
 // 源码侧同形：App 契约与随包静态件在仓库根（manifest.json / skills）与 assets/，壳源与主体在
 // packages/app/src/；assets/ 下的相对路径就是产物里相对包根的路径（见下面的静态件组装）。
@@ -18,7 +18,7 @@
 //   skills/             App skills（dshana，SKILL.md 随包分发）
 //   ui/                   壳的文档侧（cards route 指向壳页，见 packages/ui/src/——相对资源路径，
 //                         宿主以 /api/apps/<id>/ui<route> 服务；由 @dshana/ui 构建产出，本入口只拷贝）
-// 路由：v2 走 ctx.routes.register（单个 route app），不生成 .cache/dist/routes/ 目录——宿主只认注册
+// 路由：v2 走 ctx.routes.register（单个 route app），不生成 dist/routes/ 目录——宿主只认注册
 // 的 route app，不扫 dist。
 // 用法：node packages/app/src/build.ts [RSPACK_ENV=<构建环境目录>]
 // 注意：本文件是构建入口，不在 bundle 里（入口在 rspack.config.mts 指定）；collectSource 会把
@@ -34,7 +34,7 @@ import {
   extraMinify,
   assertNoStaticFileUrl,
 } from "../../../scripts/build/common.mts";
-// 交付目录常量（.cache/dist、.cache/ui）与 Node 版本断言（本入口以 TypeScript 直跑，依赖原生类型剥离）
+// 交付目录常量（dist、.cache/ui）与 Node 版本断言（本入口以 TypeScript 直跑，依赖原生类型剥离）
 import { DIST_DIR, UI_DIR, ROOT } from "../../../scripts/shared/paths.mts";
 
 const SRC_ROOT = dirname(fileURLToPath(import.meta.url)); // packages/app/src/
@@ -80,7 +80,7 @@ async function compile(cfg, label) {
   });
 }
 
-// 主 bundle 编译（rspack output.clean 清空 .cache/dist 后写入 index.js）
+// 主 bundle 编译（rspack output.clean 清空 dist 后写入 index.js）
 await compile(config, "build:app 主 bundle");
 
 // 受管 runtime 入口已随本次 rspack 构建落到交付目录 bin/（两入口一次构建，见 rspack.config.mts）
@@ -118,7 +118,7 @@ if (!fs.pathExistsSync(uiSrc)) {
   throw new Error("壳的文档侧产物缺失（" + uiSrc + "）：先跑 pnpm run build:ui");
 }
 fs.copySync(uiSrc, join(DIST_DIR, "ui"));
-console.log("ui/ -> .cache/dist/ui（壳的文档侧整树，来自 .cache/ui）");
+console.log("ui/ -> dist/ui（壳的文档侧整树，来自 .cache/ui）");
 
 // 随包静态件：源码 assets/ 下的相对路径 = 产物里相对包根的路径（assets 这一段在产物里不出现）。
 // 两个字段的基址不同（icon 相对包根、face.image 相对 ui/），落位靠这条规则对齐，不靠人肉推导：
@@ -135,7 +135,7 @@ const copyInto = (from, to) => {
   } else fs.copySync(from, to);
 };
 for (const name of fs.readdirSync(assetsSrc)) copyInto(join(assetsSrc, name), join(DIST_DIR, name));
-console.log("manifest.json + skills/ + assets/** -> .cache/dist/（App v2 安装目录形态）");
+console.log("manifest.json + skills/ + assets/** -> dist/（App v2 安装目录形态）");
 
 // 3) 二次压缩（主区：JS + 静态壳页 HTML）+ 静态 URL 断言
 await extraMinify(DIST_DIR);

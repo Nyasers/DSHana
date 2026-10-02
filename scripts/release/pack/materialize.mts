@@ -18,15 +18,13 @@ import fs from "fs-extra";
 import { join } from "node:path";
 
 import { ROOT } from "../../shared/root.mts";
+import { STAGING_ROOT } from "../../shared/paths.mts";
 import { dshPin } from "../../shared/version.mts";
 import { assertIntegrationTargets } from "./assert.mts";
 import { stagingManifest } from "./ship-manifest.mts";
 import { stagingWorkspaceYaml } from "./targets.mts";
 
 const require = createRequire(import.meta.url);
-
-/** 依赖物化工位根（起手清残留、用完即清）。 */
-export const STAGING_ROOT = join(ROOT, ".tmp", "pkg-root");
 
 /** 逐目标干净安装（各自暂存目录 + 各自 supportedArchitectures）；返回该目标的 node_modules 路径。 */
 export function materializeProdDeps(spec, version: string) {
@@ -38,7 +36,7 @@ export function materializeProdDeps(spec, version: string) {
   fs.writeFileSync(join(dir, "package.json"), JSON.stringify(stagingManifest(version), null, 2) + "\n");
   fs.copySync(join(ROOT, "pnpm-lock.yaml"), join(dir, "pnpm-lock.yaml"));
   fs.writeFileSync(join(dir, "pnpm-workspace.yaml"), stagingWorkspaceYaml(spec), "utf8");
-  console.log(`[pack] 物化 ${spec.name}（干净安装，隔离目录 .tmp/pkg-root/${spec.name}）...`);
+  console.log(`[pack] 物化 ${spec.name}（干净安装，隔离目录 .cache/pkg-root/${spec.name}）...`);
   // 锁以仓库锁文件为种子重解析（工位是独立项目，锁得按工位清单重算），再按它做 frozen 安装。
   runPnpm(dir, ["install", "--lockfile-only"], spec.name);
   runPnpm(dir, ["install", "--prod", "--frozen-lockfile"], spec.name);

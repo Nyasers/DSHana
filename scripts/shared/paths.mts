@@ -3,15 +3,20 @@
 //
 // scripts/shared/paths.mts — 仓内构建产物的路径常量（单一事实源）。
 //
-// 两个临时区的分工，按「这份东西是不是每轮重来」划线：
-//   · .cache/：带键的、可再生的中间产物。按产物种类分键，跨次复用，构建不清它。
-//   · .tmp/：每次重来的草稿。依赖物化工位、打包组装台、集成摊源树都属这类，用完即清。
-// .cache 下的键按**产物种类**分：dist 对齐安装态（App 安装目录形态：manifest.json 在根，
-// 受管 runtime 入口与 roster patch 在 bin/）；ui 是壳的文档侧（页面脚本 bundle
-// + 静态面，自己一个键，由 App 域的构建拷进 dist/ui）；cordis 子插件包不是安装态里的东西
-// ——pack 按 bundle 认领规则把它们落进包内 node_modules/@dshana，另成一个键；integrations
-// 是集成层编译出的补丁包（每个集成一个子目录），pack 按 integration.json 的 package 字段
-// 覆盖进交付树。
+// 三个区按「谁写它、谁清它」划线：
+//   · dist/（仓库根）：交付树（App 安装目录形态）。构建每轮先清再写，pack 从它出 zip。
+//   · releases/（仓库根）：出包产物（zip + sha256），只增不改。
+//   · .cache/：构建与打包两条流水线的中间态，一个区收口：
+//       build   → .cache/{ui,cordis,integrations,integrations-src} → dist/
+//       package → .cache/{pkg,pkg-root}                           → releases/
+//     跨次保留的键（ui / cordis / integrations*）由各自的构建重写；一次运行内的台子（pkg / pkg-root）
+//     由 pack 起手清 + postpackage 钩子清。都可再生，整删无副作用。
+//   · .tmp/：其他临时物（不属两条流水线：集成的 stage 落盘、smoke 的数据目录等）。
+// dist 内部：manifest.json 在根（宿主读它 + entry），代码与 roster patch 在 bin/；ui 是壳的文档侧，
+// 由 @dshana/ui 构建产出 .cache/ui，再由 App 域的构建整树拷进 dist/ui。cordis 是子插件包（不进安装态
+// 的安装面，pack 按 bundle 认领规则落进包内 node_modules/@dshana）；integrations 是集成层编译出的
+// 补丁包（每个集成一个子目录，pack 按 integration.json 的 package 字段覆盖进交付树）；
+// integrations-src 是它们编译前的摊源树（上游 src 全量 + 我们的 overlay，每轮重摊）。
 import path from "node:path";
 
 import { ROOT } from "./root.mts";
@@ -22,7 +27,7 @@ const CACHE = ".cache";
 
 /** 某仓库根下的交付目录（脚本与测试按自己的仓库根问这一份，不各自拼字面量）。 */
 export function distDirOf(repoRoot: string): string {
-  return path.join(repoRoot, CACHE, "dist");
+  return path.join(repoRoot, "dist");
 }
 
 /** App 交付目录：dist 根 = App 安装目录形态（契约件在根，代码与 roster patch 在 bin/），pack 逐份拷进包根。 */
@@ -44,3 +49,14 @@ export function integrationsDirOf(repoRoot: string): string {
 }
 
 export const INTEGRATIONS_DIR = integrationsDirOf(ROOT);
+
+/** 集成编译前的摊源树（上游 src 全量 + 我们的 overlay；每轮重摊，见 integrations/build.mts）。 */
+export function integrationsSrcDirOf(repoRoot: string): string {
+  return path.join(repoRoot, CACHE, "integrations-src");
+}
+
+/** 交付组装台（pack：只放要进包的东西，出包即删）。 */
+export const PKG_DIR = path.join(ROOT, CACHE, "pkg");
+
+/** 依赖物化工位（pack：一个像独立项目的目录，在里面跑一次干净 pnpm install；用完即清）。 */
+export const STAGING_ROOT = path.join(ROOT, CACHE, "pkg-root");

@@ -14,7 +14,7 @@ import { errText } from "../shared/err-text.mts";
 
 // 收集目录下全部 .js 的 file:// URL（rspack 会把 import.meta.url 静态化为构建机源码
 // 绝对路径；构建后产物出现这些字面量一律替换回 import.meta.url——分发路径失效根因）。
-// 产物侧（rewriter/terser/assert）同时覆盖 .js 与 .mjs：受管 runtime 入口 .cache/dist/bin/dsh.mjs
+// 产物侧（rewriter/terser/assert）同时覆盖 .js 与 .mjs：受管 runtime 入口 dist/bin/dsh.mjs
 // 也是 rspack ESM 产物，同样存在 import.meta.url 静态化问题。
 export function collectSource(urlRoot) {
   const map = new Map();

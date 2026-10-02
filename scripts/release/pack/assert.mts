@@ -12,7 +12,7 @@ import { join } from "node:path";
  * App 入口是 index.mjs，Node 按扩展名就判 ESM，安装树不需要「最近一份 package.json 的 type」，
  * 也就没有留在包根的理由；出现它只可能是构建面字段（scripts / devDependencies / packageManager /
  * imports / 内核声明）被混进安装包。
- * @param outDir - 交付目录（.cache/dist 或组装树）
+ * @param outDir - 交付目录（dist 或组装树）
  */
 export function assertNoProductPackage(outDir) {
   const p = join(outDir, "package.json");
@@ -27,10 +27,10 @@ export function assertNoProductPackage(outDir) {
  * cordis 子插件与 roster patch 的产物断言（防回归，与 manifest 校验对称）：子插件（provider /
 theme / clipboard）version 与主 package.json 同批由 derive/version（pnpm version 发版流程）
 同步，pack 时读产物校验一致——手改/漏同步即出包版本漂移。
- * roster patch（.cache/dist/bin/cordis.patch.yml）不是包，只校验在位；子插件住 .cache/cordis，
+ * roster patch（dist/bin/cordis.patch.yml）不是包，只校验在位；子插件住 .cache/cordis，
  * 与它不同源，两份在交付布局里各就各位。
  * @param cordisDir 子插件产物目录（.cache/cordis）
- * @param patchFile roster patch 文件（.cache/dist/bin/cordis.patch.yml 或组装树同级）
+ * @param patchFile roster patch 文件（dist/bin/cordis.patch.yml 或组装树同级）
  * @param version 本次出包的版本
  */
 export function assertCordisArtifacts(cordisDir, patchFile, version) {
@@ -69,7 +69,7 @@ export function assertCordisArtifacts(cordisDir, patchFile, version) {
 export function assertUiTree(outDir) {
   const uiDir = join(outDir, "ui");
   if (!fs.pathExistsSync(uiDir)) {
-    throw new Error("App ui/ 静态树缺失（.cache/dist/ui 不存在）：@dshana/ui 的产物未拷进交付目录——先跑 pnpm run build 再打包");
+    throw new Error("App ui/ 静态树缺失（dist/ui 不存在）：@dshana/ui 的产物未拷进交付目录——先跑 pnpm run build 再打包");
   }
   for (const rel of ["main.html", "sidebar.html", "app-shell.js"]) {
     if (!fs.pathExistsSync(join(uiDir, rel))) {

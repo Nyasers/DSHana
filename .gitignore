@@ -3,10 +3,15 @@
 node_modules/
 releases/
 
-# 可再生中间产物（.cache/dist = App 交付目录、.cache/integrations = 集成层补丁包；跨次复用，构建不清它）
+# 交付树（构建每轮先清再写，pack 从它出 zip）
+/dist/
+
+# 两条流水线的中间态：build 的 .cache/{ui,cordis,integrations,integrations-src} → dist/，
+# package 的 .cache/{pkg,pkg-root} → releases/。跨次保留的键由构建重写，台子由 pack 起手清 + postpackage 钩子清；
+# 都可再生，整删无副作用
 .cache/
 
-# 每次重来的草稿（pack 物化工位 .tmp/pkg-root、组装台 .tmp/pkg、集成摊源树 .tmp/integrations-src）
+# 其他临时物（不属两条流水线：集成的 stage 落盘、smoke 的数据目录等）
 .tmp/
 
 # 系统杂项

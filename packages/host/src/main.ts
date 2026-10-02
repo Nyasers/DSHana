@@ -3,7 +3,7 @@
 //
 // packages/host/src/main.ts — dshana 受管 Node runtime 入口主体
 //
-// 打包产物：.cache/dist/bin/dsh.mjs（rspack ESM bundle，与 app 主体同一次构建、共享 chunk）。
+// 打包产物：dist/bin/dsh.mjs（rspack ESM bundle，与 app 主体同一次构建、共享 chunk）。
 // 宿主以 ctx.runtime.start({ runtime: "node", entry: "bin/dsh.mjs", ... }) 拉起，本进程自持生命周期，
 // 不回宿主进程。
 //

@@ -2,20 +2,20 @@
 // Copyright (c) 2026 Nyasers
 //
 // scripts/release/pack/index.mts — dshana 自包含打包（适配单 bundle 收敛架构；构建脚本不随源码编译）
-// 交付物 = 代码 bundle（.cache/dist/）+ cordis 子插件包（.cache/cordis/）+ **物化后的生产依赖树**
+// 交付物 = 代码 bundle（dist/）+ cordis 子插件包（.cache/cordis/）+ **物化后的生产依赖树**
 // （含 win32/darwin/linux × x64/arm64 预编译资产），安装即用、无需 npm install。
 // 依赖物化形态对齐样例 hana-dsh：hoisted 布局（顶层真实目录、无软链接——软链进 zip 跨机
-// 解压即断）。物化在 .tmp/pkg-root/ 隔离进行，不触碰仓库 node_modules。
+// 解压即断）。物化在 .cache/pkg-root/ 隔离进行，不触碰仓库 node_modules。
 // 流程：复制交付清单（prepackage 钩子已先行 build）→ 物化生产依赖 → 断言多平台资产 → zip → SHA256。
-// 用法：pnpm run package --target <名字>（prepackage 自动前置 build；单独 node scripts/release/pack/index.mts 要求 .cache/dist 已构建）
+// 用法：pnpm run package --target <名字>（prepackage 自动前置 build；单独 node scripts/release/pack/index.mts 要求 dist 已构建）
 // 产出：releases/dshana-v<version>[-<target>].zip + .sha256。**zip 根 = 包根**：manifest.json、
 //   bin/、node_modules/、ui/ 等全部在 zip 根级，不得套一层目录（宿主安装时在包根读 manifest.json）。
-// 两个临时目录的分工（都在 .tmp/ 下，起手清残留、用完即清、收尾由 postpackage 钩子清）：
-//   · .tmp/pkg-root/<target>：依赖物化**工位**。要跑一次真 install，就得有个像独立项目的目录——
+// 两个台子的分工（都在 .cache/ 下，起手清残留、用完即清、收尾由 postpackage 钩子清）：
+//   · .cache/pkg-root/<target>：依赖物化**工位**。要跑一次真 install，就得有个像独立项目的目录——
 //     工位三件都现生成（清单 + 按目标替换过 supportedArchitectures 的 pnpm-workspace.yaml +
 //     以仓库锁文件为种子重解析出的锁）落进去跑 `pnpm install --prod --frozen-lockfile`。
-//     隔离在 .tmp 下，仓库自身的 node_modules 与锁文件不被污染。
-//   · .tmp/pkg：交付**组装台**。只放要进包的东西（.cache/dist/ + .cache/cordis/ + 物化依赖树），
+//     隔离在独立目录下，仓库自身的 node_modules 与锁文件不被污染。
+//   · .cache/pkg：交付**组装台**。只放要进包的东西（dist/ + .cache/cordis/ + 物化依赖树），
 //     不带 pnpm 的中间物（lockfile、workspace yaml、.modules.yaml 这些是构建输入，不是交付物）。
 //     把「工位」与「组装台」分开，就是不让构建输入混进安装包；组装出包后立即删。
 //
@@ -29,11 +29,11 @@ import { ZipArchive } from "archiver";
 import fs from "fs-extra";
 
 import { errText } from "../../shared/err-text.mts";
-import { CORDIS_DIR, DIST_DIR } from "../../shared/paths.mts";
+import { CORDIS_DIR, DIST_DIR, PKG_DIR, STAGING_ROOT } from "../../shared/paths.mts";
 import { ROOT } from "../../shared/root.mts";
 import { assertCordisArtifacts, assertNoProductPackage, assertUiTree } from "./assert.mts";
 import { declareInstallationPlugins } from "./bundle-deps.mts";
-import { STAGING_ROOT, materializeProdDeps } from "./materialize.mts";
+import { materializeProdDeps } from "./materialize.mts";
 import { minifyCordisStatics } from "./minify.mts";
 import { applyIntegrations } from "./overlays.mts";
 import { failUsage, targetSpec } from "./targets.mts";
@@ -113,12 +113,12 @@ await minifyCordisStatics(CORDIS_DIR);
 //    GNU tar（Linux）不认 .zip 后缀会静默产出 tar 伪 zip
 const relDir = join(ROOT, "releases");
 fs.ensureDirSync(relDir);
-// 临时目录纪律（多目标连跑会堆积数 GB）：
+// 打包台纪律（多目标连跑会堆积数 GB）：
 //   · 起手清残留（上次运行/中途崩溃留下的）；
-//   · 用完即清（暂存树 + 铺平目录）；
+//   · 用完即清（物化工位 + 组装台）；
 //   · 收尾全清由 package.json 的 postpackage 钩子承担（scripts/release/clean-tmp.mts），CI 里也可单独调。
-// 中间原料与暂存树都可再生，真正的产物只有 releases/ 下的 zip + sha256。
-const pkgRoot = join(ROOT, ".tmp", "pkg");
+// 两处台子都可再生，真正的产物只有 releases/ 下的 zip + sha256。
+const pkgRoot = PKG_DIR;
 for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
 {
   const modules = materializeProdDeps(spec, version);

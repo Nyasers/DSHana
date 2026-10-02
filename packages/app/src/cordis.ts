@@ -6,11 +6,11 @@
 // 子插件本身是 packages/ 下的包（`@dshana/clipboard` / `@dshana/provider` / `@dshana/theme`，判据：
 // 包内有自持构建描述 `cordis.config.mjs`）；本文件是它们的组装器，归 `@dshana/app`。产物分两处：
 // 子插件包住 .cache/cordis（进包时落 node_modules/@dshana），roster patch 住交付面 bin
-// .cache/dist/bin（进包时落包内 bin/，与安装态一致）；patch 源在仓库根 cordis.patch.yml。
+// dist/bin（进包时落包内 bin/，与安装态一致）；patch 源在仓库根 cordis.patch.yml。
 //   .cache/cordis/**：3 子插件（provider / theme / clipboard）：service 半 rspack（源 index.ts →
 //     产物 index.js bundle），theme 与 clipboard 另出 client 半（client.ts → client.js，tsdown
 //     closure-factory）；
-//   .cache/dist/bin/cordis.patch.yml：我们的 roster patch（对官方行的覆盖 + @dshana/* insert）——
+//   dist/bin/cordis.patch.yml：我们的 roster patch（对官方行的覆盖 + @dshana/* insert）——
 //     profile 由壳自己建并维护（<DSH_HOME>/profiles/dshana，层列钉在 packages/host/src/main.ts），
 //     这份文件由 runtime 经 runProfile 的 patchFiles 作**启动期 overlay** 传进去（排在所有层之上）：
 //     runtime 按自己入口所在目录取它（bin/dsh.mjs 旁边），不依赖安装根布局。
@@ -25,7 +25,7 @@ import * as YAML from "yaml";
 import { serviceBundle } from "./cordis/service-config.mts"; // preset 层（本目录 cordis/）
 import { buildClientBundle } from "./cordis/client-config.mts";
 import { collectSource, makeUrlRewriter, assertNoStaticFileUrl } from "../../../scripts/build/common.mts"; // scripts/build/ 共享
-// 交付目录常量（.cache/dist、.cache/cordis）与 cordis 子插件包清单（本入口以 TypeScript 直跑，依赖原生类型剥离）
+// 交付目录常量（dist、.cache/cordis）与 cordis 子插件包清单（本入口以 TypeScript 直跑，依赖原生类型剥离）
 import { CORDIS_DIR, DIST_DIR } from "../../../scripts/shared/paths.mts";
 import { cordisPkgDirs } from "../../../scripts/shared/version.mts";
 
@@ -107,7 +107,7 @@ function buildCordisStatic(outRoot) {
   if (!fs.pathExistsSync(PATCH_SRC)) throw new Error(`roster patch 缺失：${PATCH_SRC}`);
   fs.ensureDirSync(join(DIST_DIR, "bin"));
   fs.writeFileSync(join(DIST_DIR, "bin", "cordis.patch.yml"), stripYamlComments(fs.readFileSync(PATCH_SRC, "utf8")), "utf8");
-  console.log("cordis 静态组装 -> .cache/cordis/（子插件 " + pkgNames.length + " 包）；roster patch -> .cache/dist/bin/cordis.patch.yml");
+  console.log("cordis 静态组装 -> .cache/cordis/（子插件 " + pkgNames.length + " 包）；roster patch -> dist/bin/cordis.patch.yml");
 }
 
 // 每包构建描述加载（判据同 cordisPkgDirs：包内有 cordis.config.mjs）

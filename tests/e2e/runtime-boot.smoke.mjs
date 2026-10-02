@@ -10,8 +10,8 @@
 // 用本仓库 node_modules 作 depsRoot（替代随包物化），dataDir 指向临时目录；@dshana 子插件由
 // build:cordis 落进仓库的 node_modules/@dshana（仓库树扮演安装树，与出包后同形）；profile 用官方
 // 随附的 web（DSH 首次加载时自建），我们的 roster patch 由 runtime 经 patchFiles 传入
-// （仓库形态下 installRoot = <repo>/.cache/dist，roster patch 与 runtime 入口同目录，即
-// .cache/dist/bin/cordis.patch.yml）。
+// （仓库形态下 installRoot = <repo>/dist，roster patch 与 runtime 入口同目录，即
+// dist/bin/cordis.patch.yml）。
 // 经 child_process.fork 建立 IPC 通道（满足 connectAppRuntime 的 process.send 前置）。
 // 就绪判据（boot）= 中继端口对 http://127.0.0.1:<bridgePort>/ 有 HTTP 应答（无 key 得 403 也算
 // 「有服务在听」；中继只在 DSH 就绪后才起，故等价于就绪门）。真机验收仍须装包后由主上下文做。
