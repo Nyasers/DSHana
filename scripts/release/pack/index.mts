@@ -116,7 +116,7 @@ fs.ensureDirSync(relDir);
 // 打包台纪律（多目标连跑会堆积数 GB）：
 //   · 起手清残留（上次运行/中途崩溃留下的）；
 //   · 用完即清（物化工位 + 组装台）；
-//   · 收尾全清由 package.json 的 postpackage 钩子承担（scripts/release/clean-tmp.mts），CI 里也可单独调。
+//   · 收尾全清由 package.json 的 postpackage 钩子承担（scripts/release/clean-cache.mts），CI 里也可单独调。
 // 两处台子都可再生，真正的产物只有 releases/ 下的 zip + sha256。
 const pkgRoot = PKG_DIR;
 for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
@@ -184,4 +184,4 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
   // 铺平目录已入包，即用即清
   fs.removeSync(pkgDir);
 }
-// 收尾全清 → postpackage 钩子（scripts/release/clean-tmp.mts）
+// 收尾全清 → postpackage 钩子（scripts/release/clean-cache.mts）

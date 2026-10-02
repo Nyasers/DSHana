@@ -34,7 +34,7 @@
     "facts:record": "node scripts/release/package-facts.mts",
     "prepackage": "pnpm run derive && pnpm run build",
     "package": "node scripts/release/pack/index.mts",
-    "postpackage": "node scripts/release/clean-tmp.mts",
+    "postpackage": "node scripts/release/clean-cache.mts",
     "install:local": "node scripts/dev/install-local.mts",
     "probe:host": "node scripts/probe/host-surface.mts",
     "smoke:packed": "node tests/e2e/runtime-boot.smoke.mjs --packed",

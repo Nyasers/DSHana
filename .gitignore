@@ -1,31 +1,15 @@
 # 依赖与构建产物
+.cache/
 .pnpm-store
 node_modules/
 releases/
-
-# 交付树（构建每轮先清再写，pack 从它出 zip）
-/dist/
-
-# 两条流水线的中间态：build 的 .cache/{ui,cordis,integrations,integrations-src} → dist/，
-# package 的 .cache/{pkg,pkg-root} → releases/。跨次保留的键由构建重写，台子由 pack 起手清 + postpackage 钩子清；
-# 都可再生，整删无副作用
-.cache/
-
-# 其他临时物（不属两条流水线：集成的 stage 落盘、smoke 的数据目录等）
-.tmp/
+dist/
 
 # 系统杂项
+.tmp/
 *.log
 .DS_Store
 
 # SDD 本地 spec（不进 git，仅本地规划产物）
 SPECS.md
 specs/
-
-data/
-
-# 运行期 node 代理（installDepsFromPlugin 写入插件根，每次安装幂等重建；不进 git）
-# /node 为 Linux/macOS 无扩展名形态；仓库根无同名资产，安全忽略
-/node.cmd
-/node
-

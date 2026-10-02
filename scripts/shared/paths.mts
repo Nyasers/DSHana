@@ -9,8 +9,8 @@
 //   · .cache/：构建与打包两条流水线的中间态，一个区收口：
 //       build   → .cache/{ui,cordis,integrations,integrations-src} → dist/
 //       package → .cache/{pkg,pkg-root}                           → releases/
-//     跨次保留的键（ui / cordis / integrations*）由各自的构建重写；一次运行内的台子（pkg / pkg-root）
-//     由 pack 起手清 + postpackage 钩子清。都可再生，整删无副作用。
+//     里面的东西全部可由下一次构建/打包再生：构建重写自己那几个键，出包后由 postpackage 钩子
+//     （scripts/release/clean-cache.mts）整片清掉——仓库里长期只剩源码、dist/ 与 releases/。
 //   · .tmp/：其他临时物（不属两条流水线：集成的 stage 落盘、smoke 的数据目录等）。
 // dist 内部：manifest.json 在根（宿主读它 + entry），代码与 roster patch 在 bin/；ui 是壳的文档侧，
 // 由 @dshana/ui 构建产出 .cache/ui，再由 App 域的构建整树拷进 dist/ui。cordis 是子插件包（不进安装态
@@ -24,6 +24,9 @@ import { ROOT } from "./root.mts";
 export { ROOT };
 
 const CACHE = ".cache";
+
+/** 构建与打包的中间区（两条流水线的中途站；出包后由 postpackage 钩子整片清掉）。 */
+export const CACHE_DIR = path.join(ROOT, CACHE);
 
 /** 某仓库根下的交付目录（脚本与测试按自己的仓库根问这一份，不各自拼字面量）。 */
 export function distDirOf(repoRoot: string): string {
