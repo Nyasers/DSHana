@@ -13,6 +13,12 @@ import {
   SHARED_KEY_PREFIX, INTENT_KINDS, intentSharedValue, isIntentKind, normalizeIntent,
   type IntentKind, type IntentPayload,
 } from "@dshana/shared/shared-state.ts";
+import {
+  CHANNEL_KINDS, CHANNEL_SCOPE_FALLBACK, normalizeScope,
+  type FaceAddress, type FaceTarget,
+} from "@dshana/shared/faces-channel.ts";
+import { isFaceView, roleForView } from "./face-role.ts";
+import { createFaceChannel, type FaceChannel } from "./face-channel.ts";
 
 // ---- 到 App 后端路由的取数面 ----
 // 本页的凭据是 surface 会话票，只从 location 读——查询串（宿主给 App surface iframe 附
@@ -118,8 +124,13 @@ export function sharedKey(kind: string): string {
   return SHARED_KEY_PREFIX + kind;
 }
 
-// 本页可能写过的共享键：boot 快照 + 全部意图 kind（同名即同一个键）。
-const SHARED_KINDS = ["boot-state", ...INTENT_KINDS];
+// 本页可能写过的共享键：boot 快照 + 意图 kind 里**没搬上直投通道**的那些。
+// 已在通道上的 kind（CHANNEL_KINDS）不在这里：它们的权威记录由通道服务端半写（见下方
+// faceChannel），页面在 pagehide 里删键就等于抢写者，会把晚到面的快照删掉。
+const SHARED_KINDS = [
+  "boot-state",
+  ...INTENT_KINDS.filter((kind) => !(CHANNEL_KINDS as readonly string[]).includes(kind)),
+];
 
 /** 删掉本页写过的共享键（下线时调用；过期留着没有消费方）。 */
 export function dropShared(): Promise<unknown> {
@@ -165,12 +176,15 @@ export function onSharedChanged(kind: string, listener: () => void): () => void 
   return typeof off === "function" ? off : () => { /* 无取消句柄 */ };
 }
 
-// ---- 跨面转发：一台通道 ----
-// 局部面（FP）发射意图，整幅面落地。跨文档能过的只有意图本身——插件实例与注入的 hook 留在发射端，
-// 接收端拿自己的插件实例把那条面重建出来。词表与载荷归一住在 @dshana/shared/shared-state.ts
-// （纯逻辑，单测直接打）；本层只做运输，并把词表外的 kind 挡在门外。
-// 既有三件（设置视图 / 会话选中 / 主面板选中）就是这条通道上的三个 kind，下面保留同名包装，
-// 消费方按原样调用；新增的跨面面走 readIntent / writeIntent / onIntentChanged。
+// ---- 跨面转发：两台通道 ----
+//   ① **共享空间 + 监听**（广播）：一台通道、封闭词表，局部面（FP）发射意图、整幅面落地。
+//      跨文档能过的只有意图本身——插件实例与注入的 hook 留在发射端，接收端拿自己的插件实例把那条面
+//      重建出来。词表与载荷归一住在 @dshana/shared/shared-state.ts（纯逻辑，单测直接打）；
+//      本层只做运输，并把词表外的 kind 挡在门外。
+//   ② **直投通道**（指名，`publish`）：发射面给出收件人，中介在 App 进程，回执带回投到几个面。
+//      已在通道上的 kind 见 CHANNEL_KINDS（目前是会话选中）；其余 kind 仍在 ① 上，逐个迁移。
+//      两台的边界：要在会话选中上工作，读 `readSelection`；写 `writeSelection`（余下同形）。
+//   既有三件（设置视图 / 会话选中 / 主面板选中）原本都走 ①，下面保留同名包装使消费方按原样调用。
 
 /**
  * 一条意图的读结果。
@@ -236,13 +250,111 @@ export function writeSettingsView(next: { open?: boolean; section?: string | nul
   });
 }
 
-// 会话选中：{ sessionId }；at 是通道盖的写入时刻，接收端据此判断这条意见是否比自己的动手新
-// （主卡自己切工作区/新建会话也会改本地选中，旧意见不得把它压回去）。
-export function readSelection(): Promise<{ sessionId: string | null; at: number }> {
-  return readIntent("selection").then((r) => ({ sessionId: r.value.sessionId, at: r.at }));
+// ---- 跨面直投通道（面 → 面，指名投递）----
+// 与上面那台共享空间划清分工：共享空间是**广播**（谁都能读、读侧自己判新旧），直投通道是**指名**
+// ——发射面给出收件人（面地址或扇出），只有命中的面收，回执带回投到了几个面。协议住在
+// @dshana/shared/faces-channel.ts，中介住在 App 进程（packages/tools/src/faces-hub.ts），
+// 本层只是客户端半的接线与懒单例。试点只搬了会话选中：channel kinds 是意图词表的子集，
+// 其余 kind 仍走共享空间，逐个迁移。
+let faceChan: FaceChannel | null = null;
+
+/** 本页的面（静态声明为准：<meta name="hana-dshana-role"> 或 body[data-dshana-view]）。 */
+function declaredRole(): FaceAddress {
+  try {
+    const meta = document.querySelector('meta[name="hana-dshana-role"]');
+    const declared = meta && meta.getAttribute("content");
+    if (isFaceView(declared)) return roleForView(declared) as FaceAddress;
+    const attr = document.body && document.body.getAttribute("data-dshana-view");
+    if (isFaceView(attr)) return roleForView(attr) as FaceAddress;
+  } catch { /* 无 DOM：按整幅面（不擅自少一列） */ }
+  return "standalone";
 }
-export function writeSelection(sessionId: string | null): Promise<unknown> {
-  return writeIntent("selection", { sessionId: sessionId ?? null });
+
+/** 本页所属的卡片实例（宿主盖章；没有就占位，作用域照样隔离）。 */
+function cardScope(): string {
+  try {
+    const sdk = hana as { surface?: { getContext?: () => { cardInstanceId?: unknown } | null } };
+    const ctx = sdk && sdk.surface && typeof sdk.surface.getContext === "function" ? sdk.surface.getContext() : null;
+    return normalizeScope(ctx && ctx.cardInstanceId);
+  } catch {
+    return CHANNEL_SCOPE_FALLBACK;
+  }
+}
+
+/** 走本 App 路由取一份 JSON（非 2xx 当失败抛，不静默降级）。 */
+function jsonOf(path: string, init: RequestInit): Promise<unknown> {
+  return apiFetch(path, init).then((res) => {
+    if (!res.ok) throw new Error(path + " HTTP " + res.status);
+    return res.json() as Promise<unknown>;
+  });
+}
+
+/** 本页有没有 surface 会话凭据。没有就根本走不了 route（一律拒无凭据请求），也就没有通道可言。 */
+function hasSurfaceCredentials(): boolean {
+  try {
+    return surfaceSession() !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** 本页的直投通道（懒建：没用到的面不开循环；没凭据时返回 null，不建一个注定失败的循环）。 */
+function faceChannel(): FaceChannel | null {
+  if (faceChan) return faceChan;
+  if (!hasSurfaceCredentials()) return null;
+  faceChan = createFaceChannel({
+    role: declaredRole(),
+    scope: cardScope(),
+    io: {
+      get: (path, signal) => jsonOf(path, { method: "GET", cache: "no-store", signal }),
+      post: (path, body) => jsonOf(path, {
+        method: "POST", cache: "no-store",
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      }),
+    },
+    // 首读的种子：直接读一次权威记录。ui-session 的启动握手是「读当前值」，通道就绪与否
+    // 不该改变这个语义（也不该让首屏多等一跳）；pending=false 就是「还没有人表过态」。
+    seed: (kind) => readIntent(kind as IntentKind).then((r) => (r.pending ? { value: r.value, at: r.at } : null)),
+    log: (msg) => console.warn("[dshana/faces] " + msg),
+  });
+  return faceChan;
+}
+
+/** 会话选中：{ sessionId }。有凭据时读本地当前值（首读直接读权威记录）、写指名投递给其余面；
+ * at 仍是写入时刻，接收端据此只采纳比自己动手更新的意见（ui-session 的判据不变）。
+ *
+ * 没凭据的页面（本 App 的页面理论上都有，但被别的宿主/裸开时没有）退到广播共享空间那条：
+ * 读侧读的是同一张权威记录（通道服务端半写的镜像），所以两台的读不会各说各话。 */
+export function readSelection(): Promise<{ sessionId: string | null; at: number }> {
+  const chan = faceChannel();
+  if (chan === null) {
+    return readIntent("selection").then((r) => ({
+      sessionId: typeof r.value.sessionId === "string" ? r.value.sessionId : null,
+      at: r.pending ? r.at : 0,
+    }));
+  }
+  chan.start();
+  return chan.read("selection").then((hit) => {
+    const value = hit && hit.value && typeof hit.value === "object" ? (hit.value as { sessionId?: unknown }) : null;
+    const sessionId = value && typeof value.sessionId === "string" ? value.sessionId : null;
+    return { sessionId, at: hit ? hit.at : 0 };
+  });
+}
+export function writeSelection(sessionId: string | null): Promise<{ delivered: number }> {
+  const chan = faceChannel();
+  if (chan === null) {
+    return writeIntent("selection", { sessionId: sessionId ?? null }).then(() => ({ delivered: 0 }));
+  }
+  return chan.publish("selection", { sessionId: sessionId ?? null });
+}
+export function onSelectionChanged(listener: () => void): () => void {
+  const chan = faceChannel();
+  if (chan === null) return onIntentChanged("selection", listener);
+  chan.start();
+  return chan.onFrame((frame) => {
+    if (frame.kind !== "selection") return;
+    try { listener(); } catch { /* 监听者抛错不影响别的 */ }
+  });
 }
 
 // 主面板选中：{ panelId }。DSH 侧栏的面板行在 FP 上没有中列可放，那一页归主卡。
@@ -358,7 +470,7 @@ export const SURFACE_API = {
   onSettingsViewChanged: (listener: () => void) => onIntentChanged("settings-view", listener),
   readSelection,
   writeSelection,
-  onSelectionChanged: (listener: () => void) => onIntentChanged("selection", listener),
+  onSelectionChanged,
   readPanelView,
   writePanelView,
   onPanelViewChanged: (listener: () => void) => onIntentChanged("panel-view", listener),

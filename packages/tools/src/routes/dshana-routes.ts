@@ -26,6 +26,12 @@
 //                            「会话模型」按它列 provider/模型/推理档，不依赖 DSH 运行
 //   GET  /dshana/card-state  会话流卡页的状态面（按需取数：读宿主任务记录的绑定；回卡页
 //                            可直接换进 DOM 的状态行 HTML。卡页在非终态期间慢轮询，终态即停）
+//   GET  /dshana/faces/poll   面间直投通道的收件半（长轮询：挂起到有帧或超时；首挂回 state 快照）
+//   POST /dshana/faces/send   面间直投通道的投递半（指名投递 + 回执 delivered；state 类写权威记录）
+//
+// 面间直投通道（faces/*）的中介逻辑住在 packages/tools/src/faces-hub.ts，协议住在
+// packages/shared/src/faces-channel.ts；这两个端点就是那座 hub 的 HTTP 面（宿主没给面→面原语，
+// 中介者只能是 App 自己）。
 //
 // 依赖注入（可测性）：deps = { appId, version, getSnapshot(), start(), stop(), log() }。
 // 默认实现经 packages/runtime/src/managed-runtime.ts 读取真实单例；测试注入 fake。
@@ -36,6 +42,8 @@ import { buildBootSnapshot, APP_ID } from "@dshana/runtime/boot-state.ts";
 import { dataSources, sourceOf } from "@dshana/runtime/data-source.ts";
 // 数据源切换（packages/runtime/src/source-switch.ts）的入口暂时撤下：链未在真机验证过，见 POST /dshana/settings/restart。
 import { groupHostCatalog } from "@dshana/models/model-catalog-view.ts";
+import { normalizePoll, normalizeSend } from "@dshana/shared/faces-channel.ts";
+import { facesHubFor } from "@dshana/tools/faces-hub.ts";
 import {
   createTaskBindingIndex,
   isValidSessionId,
@@ -202,6 +210,23 @@ export function defaultDshanaRouteDeps(ctx) {
     },
     start: () => ensureManagedRuntime({}),
     stop: () => stopManagedRuntime(),
+    // 面间直投通道：state 类 kind 的权威记录就是共享空间那批键（`dshana.<kind>`），
+    // 但写者只剩这里（页面不再直写）——mediator 写、页面读，一份事实一个写者。
+    facesHub: facesHubFor({
+      readRecord: async (key) => {
+        const store = ctx && ctx.storage ? ctx.storage.global : null;
+        if (!store || typeof store.get !== "function") return null;
+        const got = await store.get(key);
+        const value = got && typeof got === "object" ? (got as { value?: unknown }).value : null;
+        return value && typeof value === "object" ? value : null;
+      },
+      writeRecord: async (key, value) => {
+        const store = ctx && ctx.storage ? ctx.storage.global : null;
+        if (!store || typeof store.set !== "function") throw new Error("ctx.storage.global 不可用");
+        await store.set(key, value);
+      },
+      log: (msg) => log("warn", "[faces] " + msg),
+    }),
   };
 }
 
@@ -224,6 +249,11 @@ export function registerDshanaRoutes(app, deps) {
   const listHostModels = typeof d.listHostModels === "function" ? d.listHostModels : async () => {
     throw new Error("模型候选不可用：deps.listHostModels 未注入");
   };
+  // 面间直投通道的 hub：注入了就用注入的（单测），否则取进程内的那台（无 ctx 时纯内存）。
+  const facesHub =
+    d.facesHub && typeof d.facesHub.send === "function" && typeof d.facesHub.poll === "function"
+      ? d.facesHub
+      : facesHubFor();
 
   const json = (c, status, body) => {
     if (typeof c?.json !== "function") {
@@ -303,6 +333,23 @@ export function registerDshanaRoutes(app, deps) {
         return html(c, 500, cardStateHtml({ state: "unknown", label: "状态读取失败", detail: errText(e) }));
       }
     });
+
+    // ---- GET /dshana/faces/poll：面间直投通道的收件半（长轮询）----
+    // 挂起到有帧或超时才应答；`since` 是客户端已见的最大序号，首挂（since 缺省/0）只带 state
+    // 快照、不带历史帧（重开一面不重放旧命令）。查询串形状错回 400。
+    app.get(DASHANA_ROUTE_PREFIX + "/faces/poll", async (c) => {
+      const query = c && c.req && typeof c.req.query === "function" ? c.req.query.bind(c.req) : () => undefined;
+      const norm = normalizePoll({
+        card: query("card"), sub: query("sub"), as: query("as"), since: query("since"), fresh: query("fresh"),
+      });
+      if (!norm.ok) return json(c, 400, { ok: false, error: norm.error });
+      try {
+        return json(c, 200, await facesHub.poll(norm.value));
+      } catch (e) {
+        log("warn", "/dshana/faces/poll 失败：" + errText(e));
+        return json(c, 500, { ok: false, error: errText(e) });
+      }
+    });
   }
 
   // ---- POST /dshana/start：手动触发（v2 无自动链；幂等、不阻塞请求）----
@@ -333,6 +380,22 @@ export function registerDshanaRoutes(app, deps) {
         return json(c, 200, { ok: true, state: getSnapshot() });
       } catch (e) {
         log("warn", "/dshana/stop 失败：" + errText(e));
+        return json(c, 500, { ok: false, error: errText(e) });
+      }
+    });
+
+    // ---- POST /dshana/faces/send：面间直投通道的投递半 ----
+    // body { card, sub, from, to, kind, payload, at } → { ok, seq, delivered, to }。形状/词表全在
+    // normalizeSend 里把关（from 必须是面地址、to 必须是面地址或扇出、kind 必须在通道词表里），
+    // 一律回 400 而不是静默丢弃；delivered 是真的会被投到的面数（0 = 当前没有匹配的订阅面）。
+    app.post(DASHANA_ROUTE_PREFIX + "/faces/send", async (c) => {
+      try {
+        const body = c && c.req && typeof c.req.json === "function" ? await c.req.json() : null;
+        const norm = normalizeSend(body, () => Date.now());
+        if (!norm.ok) return json(c, 400, { ok: false, error: norm.error });
+        return json(c, 200, await facesHub.send(norm.value));
+      } catch (e) {
+        log("warn", "/dshana/faces/send 失败：" + errText(e));
         return json(c, 500, { ok: false, error: errText(e) });
       }
     });
@@ -391,8 +454,10 @@ export function dshanaRoutesTable() {
     ["GET", DASHANA_ROUTE_PREFIX + "/settings"],
     ["GET", DASHANA_ROUTE_PREFIX + "/models"],
     ["GET", DASHANA_ROUTE_PREFIX + "/card-state"],
+    ["GET", DASHANA_ROUTE_PREFIX + "/faces/poll"],
     ["POST", DASHANA_ROUTE_PREFIX + "/start"],
     ["POST", DASHANA_ROUTE_PREFIX + "/stop"],
+    ["POST", DASHANA_ROUTE_PREFIX + "/faces/send"],
     ["POST", DASHANA_ROUTE_PREFIX + "/settings"],
     ["POST", DASHANA_ROUTE_PREFIX + "/settings/restart"],
   ];

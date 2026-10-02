@@ -36,6 +36,8 @@ import { installHostModelSync } from "@dshana/models/model-sync.ts";
 import { installModelDefaultGuard, runModelDefaultGuard } from "@dshana/models/model-default-guard.ts";
 // 应用态存储收尾：清掉 UI 跨面共享通道在本生命周期之外的键（见 lib/shared-state.ts）
 import { renewSharedState } from "./shared-state.ts";
+// 面间直投通道的进程内单例：apply 时与共享键一起重置（见下方收尾块）
+import { resetFacesHub } from "@dshana/tools/faces-hub.ts";
 
 // ---- 统一日志：只走宿主 ctx.logger ----
 // App 侧不写自己的文件日志；ctx.logger 缺失（旧 host）或宿主抛错时回落 stderr。
@@ -149,8 +151,15 @@ export function apply(ctx) {
 
   // ---- 应用态存储收尾：UI 共享通道的键就是一次 App 生命周期的事（本次加载写的，上次加载留的，
   //      被杀掉的进程删不掉自己那份），加载时清空整个 `dshana.` 前缀。
+  //      面间直投通道的内存态同理：它的快照就是从这批键种出来的，键被清空时它必须一起清，
+  //      否则新生命周期里第一份 poll 会拿到上个生命周期剩下的选中。
   //      维护动作：fire-and-forget，失败不影响 apply（见 lib/shared-state.ts）。
   {
+    try {
+      resetFacesHub();
+    } catch (e) {
+      log("warn", "面间直投通道重置触发异常（忽略）：" + ((e as any)?.message || e));
+    }
     try {
       Promise.resolve()
         .then(() => renewSharedState(ctx && ctx.storage ? ctx.storage.global : null))

@@ -15,6 +15,7 @@ import {
 } from "@dshana/tools/routes/dshana-routes.ts";
 import { initAppRuntime } from "@dshana/runtime/app-runtime.ts";
 import { resetDataSourceStore } from "@dshana/runtime/data-source.ts";
+import { createFacesHub } from "@dshana/tools/faces-hub.ts";
 
 function makeFakeApp() {
   const routes = [];
@@ -63,16 +64,18 @@ function makeFakeDeps(over = {}) {
   };
 }
 
-test("挂载清单：GET boot-state/health/settings/models/card-state + POST start/stop/settings（前缀 dshana）", () => {
+test("挂载清单：GET boot-state/health/settings/models/card-state/faces-poll + POST start/stop/settings/faces-send（前缀 dshana）", () => {
   const { app, routes } = makeFakeApp();
   registerDshanaRoutes(app, makeFakeDeps());
   const paths = routes.map(([m, p]) => m + " " + p).sort();
   assert.deepEqual(paths, [
     "GET /dshana/boot-state",
     "GET /dshana/card-state",
+    "GET /dshana/faces/poll",
     "GET /dshana/health",
     "GET /dshana/models",
     "GET /dshana/settings",
+    "POST /dshana/faces/send",
     "POST /dshana/settings",
     "POST /dshana/settings/restart",
     "POST /dshana/start",
@@ -484,4 +487,56 @@ test("defaultDshanaRouteDeps: 数据目录取宿主顶层 ctx.dataDir（ctx.conf
     resetDataSourceStore();
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
+});
+
+// ---- 面间直投通道的两个端点（hub 自身的用例在 tests/routes/faces-hub.test.mjs）----
+
+test("GET /dshana/faces/poll: as 不在面地址词表 → 400（形状错，不当空应答）", async () => {
+  const { app, routes } = makeFakeApp();
+  registerDshanaRoutes(app, makeFakeDeps());
+  const handler = routes.find(([m, p]) => m === "GET" && p === "/dshana/faces/poll")[2];
+  const res = await handler(queryCtx({ card: "c1", as: "sidebar" }));
+  assert.equal(res.status, 400);
+  assert.match(res.body.error, /as 不是面地址/);
+});
+
+test("POST /dshana/faces/send: 词表外的 kind → 400（不退化成随便塞）", async () => {
+  const { app, routes } = makeFakeApp();
+  registerDshanaRoutes(app, makeFakeDeps());
+  const handler = routes.find(([m, p]) => m === "POST" && p === "/dshana/faces/send")[2];
+  const ctx = makeFakeCtx();
+  ctx.req = { json: async () => ({ sub: "m1", from: "navigation", to: "workspace", kind: "row-toast", payload: {} }) };
+  const res = await handler(ctx);
+  assert.equal(res.status, 400);
+  assert.match(res.body.error, /kind 不在通道词表里/);
+});
+
+test("faces 端点：注入 hub 后 send 回执 delivered + 主卡下一次挂起补上那帧", async () => {
+  const { app, routes } = makeFakeApp();
+  const hub = createFacesHub({ parkMs: 40 });
+  registerDshanaRoutes(app, makeFakeDeps({ facesHub: hub }));
+  const poll = routes.find(([m, p]) => m === "GET" && p === "/dshana/faces/poll")[2];
+  const send = routes.find(([m, p]) => m === "POST" && p === "/dshana/faces/send")[2];
+
+  // 主卡先挂上（首挂当场拿快照），顺带把自己登记成在场订阅面
+  const born = await poll(queryCtx({ card: "c1", sub: "m1", as: "workspace", since: "0", fresh: "1" }));
+  assert.equal(born.status, 200);
+  assert.equal(born.body.ok, true);
+
+  const ctx = makeFakeCtx();
+  ctx.req = {
+    json: async () => ({
+      card: "c1", sub: "f1", from: "navigation", to: "others", kind: "selection", payload: { sessionId: "s1" }, at: 5,
+    }),
+  };
+  const sent = await send(ctx);
+  assert.equal(sent.status, 200);
+  assert.equal(sent.body.delivered, 1, "主卡在场，收得到");
+  assert.equal(sent.body.seq, 1);
+
+  const next = await poll(queryCtx({ card: "c1", sub: "m1", as: "workspace", since: "1", fresh: "0" }));
+  assert.equal(next.status, 200);
+  assert.equal(next.body.seq, 1);
+  assert.equal(next.body.frames.length, 1, "带上 since 就把缺的那帧补回来");
+  assert.deepEqual(next.body.frames[0].payload, { sessionId: "s1" });
 });
