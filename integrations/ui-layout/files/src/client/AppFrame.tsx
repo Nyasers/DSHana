@@ -365,9 +365,17 @@ export function AppFrame({
           {sidebar}
         </div>
       )}
-      <div className={css.overlayLayer} data-shell-overlay>
-        {overlays}
-      </div>
+      {/* 局部面只有 FP（navigation）：它寄居在主卡的窗口里，列与 chrome 都不是自己的，
+          app 级 overlay 不归它挂。其余面（workspace 主卡 / stream 会话卡 / standalone 拆窗）
+          各自就是一幅 app 视图，自己拥有这一层。门必须按“排掉局部面”写而不是枚举整幅面：
+          同一套插件集在每个面上各挂一遍，注册到 `shell.overlay` 的条目否则会在每个文档里
+          各渲染一份（用户插件尤其明显）。FP 里发起的那些面由整幅面经 surface-bridge 的
+          overlay 意图通道（readIntent / writeIntent / onIntentChanged）落地。 */}
+      {surface !== 'navigation' && (
+        <div className={css.overlayLayer} data-shell-overlay>
+          {overlays}
+        </div>
+      )}
       {leadingMounted && (
         <div className={css.leadingSeat} data-shell-leading>
           {leading}
