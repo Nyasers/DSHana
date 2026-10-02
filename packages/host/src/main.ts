@@ -222,14 +222,6 @@ function missingArtifacts(depsRoot: string): string[] {
 /**
  * 自有 profile 的就位（对齐上游 desktop：壳自己建并维护那本目录，再把它交给 runProfile）。
  *
- * 目录落在 <DSH_HOME>/profiles/<名>。`initProfile` 只补缺、不覆盖已存在的文件；层列表则按
- * reconcileBundles 的口径归一——只在「必需的两层不全 / 顺序不对 / 还指着退役层」时写回，
- * 用户与插件管理面加进来的条目一律不动。
- * @returns profile 目录绝对路径
- */
-/**
- * 自有 profile 的就位（对齐上游 desktop：壳自己建并维护那本目录，再把它交给 runProfile）。
- *
  * 目录落在 <DSH_HOME>/profiles/<名>。**init-and-forget**：`initProfile` 只在建目录那一刻写初始
  * 层列（它不覆盖已存在的文件），之后的 `dsh.profile.bundles` 归用户与插件管理面。唯一的例外是
  * 退役元组（早期版本钉过 `[dsh-base, dsh-web-app]`）——清单精确等于它时迁到当前初始层列，
@@ -481,7 +473,7 @@ export async function main(argv: string[]): Promise<number> {
   try {
     const connection = typeof boot.ctx.get === "function" ? boot.ctx.get("connection") : null;
     if (!connection || typeof connection.authenticatedUrl !== "function") {
-      throw new Error("dshana profile 未提供官方 connection（BrowserAuth 凭据面）——检查 bundle 层序：需含 @deepseek-ai/dsh-web-app");
+      throw new Error("dshana profile 未提供官方 connection（BrowserAuth 凭据面）——检查 bundle 层序：需含 @dshana/dsh-app");
     }
     const launch = connection.authenticatedUrl(upstreamOrigin);
     const exchange = await fetch(launch, { redirect: "manual" });

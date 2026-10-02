@@ -13,7 +13,6 @@
 //                       入口用 .mjs：Node 按扩展名就判 ESM，安装树不必再带一份 package.json 定 type
 //   bin/app.mjs         App 主体（含它自己切出的 chunk）
 //   bin/dsh.mjs          受管 Node runtime 入口（宿主以 node 执行；与主体同一次构建、共享 chunk）
-//   bin/cordis.patch.yml 我们的 roster patch（build:cordis 写出；runtime 按入口所在目录取它，不进包根）
 //   assets/icon.png     App 身份图标（manifest.icon 指向的包内真实图片）
 //   skills/             App skills（dshana，SKILL.md 随包分发）
 //   ui/                   壳的文档侧（cards route 指向壳页，见 packages/ui/src/——相对资源路径，

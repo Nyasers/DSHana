@@ -33,7 +33,13 @@ function upstreamOptionalBundles(): string[] {
   if (block === null) {
     throw new Error(`${file} 里找不到 OPTIONAL_BUNDLES 的字面量（上游改了结构？）：保留名单不能拍`);
   }
-  return [...block[1].matchAll(/'([^']+)'/gu)].map((m) => m[1]);
+  const names = [...block[1].matchAll(/'([^']+)'/gu)].map((m) => m[1]);
+  // 解析为空 = 上游把字面量换成了别的写法（双引号、as const、嵌套…）：那时 keptBundles() 只剩
+  // dsh-base，那四个可选 bundle 会被静默排除（本 PR 刚因为砍多了一次）。宁可当场报。
+  if (names.length === 0) {
+    throw new Error(`${file} 里的 OPTIONAL_BUNDLES 解析为空（上游改了写法？）：保留名单不能拍`);
+  }
+  return names;
 }
 
 /** 保留的表层：共享底座 + 上游那份可选名单（它们随安装走、默认关）。 */
