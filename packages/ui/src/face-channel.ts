@@ -106,6 +106,9 @@ export function createFaceChannel(opts: FaceChannelOptions): FaceChannel {
   // 首次挂起：拿快照 + 对齐序号（不重放历史帧）。收到第一次成功应答后就不再叫首挂。
   let fresh = true;
   let since = 0;
+  // 代数：每 start/stop 各进一位。在飞的那一代即使还在跑，也不得落地、不得续跑——
+  // 否则 stop 后立刻 start 会留下两条循环抢同一条通道（一族难查的重复投递）。
+  let generation = 0;
   let inflight: AbortController | null = null;
   // 停表的信号：stop 时中止在飞的请求与退避等待；start 再开时换一枚新的（AbortSignal 不可复用）。
   let halt = new AbortController();
@@ -160,32 +163,40 @@ export function createFaceChannel(opts: FaceChannelOptions): FaceChannel {
     return "dshana/faces/poll?" + q;
   }
 
-  async function pollOnce(): Promise<void> {
+  /** 这一代还活着吗（仍在跑、且没被新一轮 start/stop 顶掉）。 */
+  const current = (gen: number): boolean => running && gen === generation;
+
+  async function pollOnce(gen: number): Promise<void> {
     const ctl = new AbortController();
     inflight = ctl;
     const timer = setTimeout(() => ctl.abort(), requestTimeoutMs);
     try {
-      applyPoll(await io.get(pollPath(), ctl.signal));
+      const res = await io.get(pollPath(), ctl.signal);
+      // 属于上一代循环的应答不落地：它可能带着已经过期的作用域/序号。
+      if (!current(gen)) return;
+      applyPoll(res);
     } finally {
       clearTimeout(timer);
-      inflight = null;
+      if (inflight === ctl) inflight = null;
     }
   }
 
-  async function loop(): Promise<void> {
+  async function loop(gen: number): Promise<void> {
     let backoff = retryBase;
     let failures = 0;
-    while (running) {
+    while (current(gen)) {
       try {
-        await pollOnce();
+        await pollOnce(gen);
+        if (!current(gen)) return;
         // 空应答 = 服务端挂起超时（心跳）：立刻再挂，不算失败、不退避。
         backoff = retryBase;
         failures = 0;
       } catch (e) {
-        if (!running) return;
+        if (!current(gen)) return;
         // 不可恢复（没凭据/被拒）：停表，而不是每 5 秒刷一条日志、把进程拖住。
         if (isFatal(e)) {
           running = false;
+          generation += 1;
           log("面间通道停表（不可恢复的失败，不再重试）：" + errText(e));
           return;
         }
@@ -195,6 +206,7 @@ export function createFaceChannel(opts: FaceChannelOptions): FaceChannel {
           log("面间通道轮询失败（第 " + failures + " 次，" + Math.round(backoff) + "ms 后重试）：" + errText(e));
         }
         await sleep(backoff, halt.signal);
+        if (!current(gen)) return;
         backoff = Math.min(backoff * 2, retryMax);
       }
     }
@@ -205,10 +217,12 @@ export function createFaceChannel(opts: FaceChannelOptions): FaceChannel {
       if (running) return;
       if (halt.signal.aborted) halt = new AbortController();
       running = true;
-      void loop();
+      generation += 1;
+      void loop(generation);
     },
     stop(): void {
       running = false;
+      generation += 1; // 在飞的那一代就此作废（它落地前会再查一次）
       halt.abort();
       if (inflight) { try { inflight.abort(); } catch { /* 已结束 */ } }
     },

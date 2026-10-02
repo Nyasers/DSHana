@@ -6,8 +6,8 @@ import { test, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { createFaceChannel } from "@dshana/ui/face-channel.ts";
 
-/** 假宿主管道：get 挂起等人应答（可应答/可失败），post 记账。 */
-function makeIO() {
+/** 假宿主管道：get 挂起等人应答（可应答/可失败），post 记账。ignoreAbort 用于造“在飞的上一代”。 */
+function makeIO({ ignoreAbort = false } = {}) {
   const state = { pending: [], gets: [], posts: [] };
   return {
     state,
@@ -16,7 +16,7 @@ function makeIO() {
       return new Promise((resolve, reject) => {
         const rec = { path, resolve, reject };
         state.pending.push(rec);
-        if (signal) {
+        if (signal && !ignoreAbort) {
           signal.addEventListener("abort", () => {
             const at = state.pending.indexOf(rec);
             if (at >= 0) state.pending.splice(at, 1);
@@ -158,6 +158,31 @@ test("停止后不再轮询；再 start 仍能工作", async () => {
   chan.start();
   await tick();
   assert.equal(io.state.gets.length, before + 1, "再 start 能重新挂起");
+});
+
+test("停表再开：在飞的那一代的应答不得落地，也不留第二条循环（代数闸）", async () => {
+  const io = makeIO({ ignoreAbort: true });
+  const chan = makeChannel(io);
+  const seen = [];
+  chan.onFrame((f) => seen.push(f));
+  chan.start();
+  await tick();
+  assert.equal(io.state.gets.length, 1);
+  chan.stop();
+  chan.start();
+  await tick();
+  assert.equal(io.state.gets.length, 2, "新的一代只再挂一条");
+
+  // 上一代那份应答现在才回来：它属于已作废的那一代，不许落地。
+  io.reply({
+    ok: true, seq: 1,
+    frames: [{ seq: 1, at: 9, from: "navigation", to: "others", kind: "selection", payload: { sessionId: "s9" } }],
+  }, 0);
+  await tick();
+  assert.equal(seen.length, 0, "上一代的帧不得通知出去");
+  assert.equal(await chan.read("selection"), null, "也不得落进缓存");
+  await tick(20);
+  assert.equal(io.state.gets.length, 2, "死掉的那一代不得续跑");
 });
 
 test("词表外的 kind 当场拒（不退化成随便塞）", async () => {

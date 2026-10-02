@@ -4,6 +4,7 @@
 // tests/routes/faces-hub.test.mjs — 面间直投通道的服务端半（packages/tools/src/faces-hub.ts）
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createFacesHub } from "@dshana/tools/faces-hub.ts";
 
 const CARD = "card-1";
@@ -27,6 +28,15 @@ function watch(promise) {
 }
 
 const tick = (ms = 12) => new Promise((r) => setTimeout(r, ms));
+
+test("apply 里的通道重置排在注册路由之前（否则路由手里会留着上一个生命周期的 hub）", () => {
+  const src = readFileSync(new URL("../../packages/app/src/app.ts", import.meta.url), "utf8");
+  const reset = src.indexOf("resetFacesHub()");
+  const register = src.indexOf("ctx.routes.register((app)");
+  assert.ok(reset > 0, "app.ts 里要重置通道单例");
+  assert.ok(register > 0, "app.ts 里要注册路由");
+  assert.ok(reset < register, "resetFacesHub() 必须在 ctx.routes.register 之前");
+});
 
 test("指名投递：只有命中的面收得到，回执说清投到了几个面", async () => {
   const hub = createFacesHub({ parkMs: 40 });

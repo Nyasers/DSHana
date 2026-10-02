@@ -96,6 +96,34 @@ export function apply(ctx) {
   });
   log("info", `工具注册:${dshanaTool.name}（ctx.tools.register，v2 全局唯一名，无自动前缀）`);
 
+  // ---- 应用态存储收尾与面间直投通道重置：都必须在**注册路由之前**做完 ----
+  //      · 共享键（UI 共享通道的就是一次 App 生命周期的事，被杀掉的进程删不掉自己那份）；
+  //      · 面间直投通道的进程内单例：它的快照就是从这批键种出来的，键被清空时它必须一起清。
+  //      顺序很要紧：registrar 一跑就会拿 deps（里面就取那台 hub），放在后面重置的话，
+  //      路由手里留的是上一个生命周期的实例（带着旧 ctx 与旧选中），重置也换不掉它。
+  //      维护动作：fire-and-forget，失败不影响 apply（见 lib/shared-state.ts）。
+  {
+    try {
+      resetFacesHub();
+    } catch (e) {
+      log("warn", "面间直投通道重置触发异常（忽略）：" + ((e as any)?.message || e));
+    }
+    try {
+      Promise.resolve()
+        .then(() => renewSharedState(ctx && ctx.storage ? ctx.storage.global : null))
+        .then((r) => {
+          if (r.removed > 0 || r.failed > 0) {
+            log("info", `应用态存储收尾：清共享键 ${r.removed} 个（扫描 ${r.scanned} 键，失败 ${r.failed}）`);
+          }
+        })
+        .catch((e) => {
+          log("warn", "应用态存储收尾异常（忽略）：" + ((e as any)?.message || e));
+        });
+    } catch (e) {
+      log("warn", "应用态存储收尾触发异常（忽略）：" + ((e as any)?.message || e));
+    }
+  }
+
   // ---- ctx.routes.register：壳页/诊断面 ----
   // 契约（@hana/app-sdk）：单 bundle App 只能 register 一次，
   // registrar 收到宿主创建的 Hono sub-app（public URL /api/apps/dshana/routes/dshana/*，
@@ -146,33 +174,6 @@ export function apply(ctx) {
       log("info", "apply 自动链：Promise 微任务触发 ensureManagedRuntime（不占 apply 同步栈，single-flight）");
     } catch (e) {
       log("warn", "apply 自动链触发异常（忽略，继续返回 disposer）：" + ((e as any)?.message || e));
-    }
-  }
-
-  // ---- 应用态存储收尾：UI 共享通道的键就是一次 App 生命周期的事（本次加载写的，上次加载留的，
-  //      被杀掉的进程删不掉自己那份），加载时清空整个 `dshana.` 前缀。
-  //      面间直投通道的内存态同理：它的快照就是从这批键种出来的，键被清空时它必须一起清，
-  //      否则新生命周期里第一份 poll 会拿到上个生命周期剩下的选中。
-  //      维护动作：fire-and-forget，失败不影响 apply（见 lib/shared-state.ts）。
-  {
-    try {
-      resetFacesHub();
-    } catch (e) {
-      log("warn", "面间直投通道重置触发异常（忽略）：" + ((e as any)?.message || e));
-    }
-    try {
-      Promise.resolve()
-        .then(() => renewSharedState(ctx && ctx.storage ? ctx.storage.global : null))
-        .then((r) => {
-          if (r.removed > 0 || r.failed > 0) {
-            log("info", `应用态存储收尾：清共享键 ${r.removed} 个（扫描 ${r.scanned} 键，失败 ${r.failed}）`);
-          }
-        })
-        .catch((e) => {
-          log("warn", "应用态存储收尾异常（忽略）：" + ((e as any)?.message || e));
-        });
-    } catch (e) {
-      log("warn", "应用态存储收尾触发异常（忽略）：" + ((e as any)?.message || e));
     }
   }
 
