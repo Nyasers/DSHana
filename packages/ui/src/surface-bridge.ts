@@ -14,11 +14,13 @@ import {
   type IntentKind, type IntentPayload,
 } from "@dshana/shared/shared-state.ts";
 import {
-  CHANNEL_KINDS, CHANNEL_SCOPE_FALLBACK, normalizeScope,
+  CHANNEL_KINDS, CHANNEL_SCOPE_FALLBACK, isChannelKind, normalizeScope,
   type FaceAddress, type FaceTarget,
 } from "@dshana/shared/faces-channel.ts";
+import { faceTakesIntent } from "@dshana/shared/shared-state.ts";
 import { isFaceView, roleForView } from "./face-role.ts";
 import { createFaceChannel, type FaceChannel } from "./face-channel.ts";
+import { createIntentLandings, type IntentLandingMeta } from "./intent-landing.ts";
 
 // ---- 到 App 后端路由的取数面 ----
 // 本页的凭据是 surface 会话票，只从 location 读——查询串（宿主给 App surface iframe 附
@@ -320,41 +322,85 @@ function faceChannel(): FaceChannel | null {
   return faceChan;
 }
 
-/** 会话选中：{ sessionId }。有凭据时读本地当前值（首读直接读权威记录）、写指名投递给其余面；
- * at 仍是写入时刻，接收端据此只采纳比自己动手更新的意见（ui-session 的判据不变）。
- *
- * 没凭据的页面（本 App 的页面理论上都有，但被别的宿主/裸开时没有）退到广播共享空间那条：
- * 读侧读的是同一张权威记录（通道服务端半写的镜像），所以两台的读不会各说各话。 */
-export function readSelection(): Promise<{ sessionId: string | null; at: number }> {
+// ---- 通用落地面（已上通道的 kind 共用一台机器）----
+// 落地端不再自己写 applier 循环（读 → 判 at → 判 pending → 落地 → 清空），只登记一件回调；
+// 帧到了由这里按“本面是否参与这条 kind”派发。参与面来自意图描述符表（INTENT_SPECS.faces）；
+// 未声明的 kind 一律当真。纯逻辑在 intent-landing.ts，本层只接通道与角色。
+let chanWired = false;
+const landings = createIntentLandings({
+  takes: (kind) => faceTakesIntent(kind, declaredRole()),
+  onError: (message, error) => console.warn("[dshana/faces] " + message, error),
+});
+
+/** 拿到通道并把落地面接上它（只接一次）；没凭据返回 null（退到共享空间那条）。 */
+function channelForLandings(): FaceChannel | null {
   const chan = faceChannel();
-  if (chan === null) {
-    return readIntent("selection").then((r) => ({
-      sessionId: typeof r.value.sessionId === "string" ? r.value.sessionId : null,
-      at: r.pending ? r.at : 0,
-    }));
+  if (chan === null) return null;
+  if (!chanWired) {
+    chanWired = true;
+    chan.onFrame((frame) => {
+      landings.dispatch(frame.kind, frame.payload, { kind: frame.kind, at: frame.at, from: frame.from });
+    });
   }
   chan.start();
-  return chan.read("selection").then((hit) => {
-    const value = hit && hit.value && typeof hit.value === "object" ? (hit.value as { sessionId?: unknown }) : null;
-    const sessionId = value && typeof value.sessionId === "string" ? value.sessionId : null;
-    return { sessionId, at: hit ? hit.at : 0 };
+  return chan;
+}
+
+/**
+ * 登记一件跨面意图的落地回调（返回退订）。
+ *
+ * 还没上通道的 kind 返回一个空退订：那些 kind 仍由广播共享空间那条路（readIntent /
+ * onIntentChanged）服务，等它们搬过来时在这里就自动生效了。
+ */
+export function registerIntentLanding<K extends IntentKind>(
+  kind: K,
+  handler: (payload: IntentPayload<K>, meta: IntentLandingMeta) => void,
+): () => void {
+  if (!isChannelKind(kind)) return () => { /* 未上通道：由共享空间那条服务 */ };
+  channelForLandings();
+  return landings.register(kind, handler as (payload: unknown, meta: IntentLandingMeta) => void);
+}
+
+/** 读一条 kind 的当前值（已上通道的读本地缓存/首读懒种子；其余读共享空间记录）。 */
+export function readIntentState<K extends IntentKind>(
+  kind: K,
+): Promise<{ value: IntentPayload<K>; at: number } | null> {
+  const chan = isChannelKind(kind) ? channelForLandings() : null;
+  if (chan === null) {
+    return readIntent(kind).then((r) => (r.pending ? { value: r.value, at: r.at } : null));
+  }
+  return chan.read(kind).then((hit) => (hit ? { value: hit.value as IntentPayload<K>, at: hit.at } : null));
+}
+
+/** 发一条意图（已上通道的指名投递、带回执；其余写共享空间那条）。 */
+export function publishIntent<K extends IntentKind>(
+  kind: K,
+  payload: IntentPayload<K>,
+): Promise<{ delivered: number }> {
+  const chan = isChannelKind(kind) ? faceChannel() : null;
+  if (chan === null) return writeIntent(kind, payload).then(() => ({ delivered: 0 }));
+  return chan.publish(kind, payload);
+}
+
+/** 会话选中：{ sessionId }。读 = 当前值（首读直接读权威记录），写 = 指名投递给其余面；
+ * at 仍是写入时刻，接收端据此只采纳比自己动手更新的意见（ui-session 的判据不变）。
+ *
+ * 没凭据的页面（本 App 的页面理论上都有，被别的宿主/裸开时没有）由上面三件自动退到广播共享
+ * 空间那条：读侧读的是同一张权威记录（通道服务端半写的镜像），所以两台的读不会各说各话。 */
+export function readSelection(): Promise<{ sessionId: string | null; at: number }> {
+  return readIntentState("selection").then((hit) => {
+    const value = hit && hit.value ? (hit.value as { sessionId?: unknown }) : null;
+    return {
+      sessionId: value && typeof value.sessionId === "string" ? value.sessionId : null,
+      at: hit ? hit.at : 0,
+    };
   });
 }
 export function writeSelection(sessionId: string | null): Promise<{ delivered: number }> {
-  const chan = faceChannel();
-  if (chan === null) {
-    return writeIntent("selection", { sessionId: sessionId ?? null }).then(() => ({ delivered: 0 }));
-  }
-  return chan.publish("selection", { sessionId: sessionId ?? null });
+  return publishIntent("selection", { sessionId: sessionId ?? null });
 }
 export function onSelectionChanged(listener: () => void): () => void {
-  const chan = faceChannel();
-  if (chan === null) return onIntentChanged("selection", listener);
-  chan.start();
-  return chan.onFrame((frame) => {
-    if (frame.kind !== "selection") return;
-    try { listener(); } catch { /* 监听者抛错不影响别的 */ }
-  });
+  return registerIntentLanding("selection", () => { listener(); });
 }
 
 // 主面板选中：{ panelId }。DSH 侧栏的面板行在 FP 上没有中列可放，那一页归主卡。
@@ -465,6 +511,10 @@ export const SURFACE_API = {
   writeIntent,
   onIntentChanged,
   clearIntent,
+  // 通用面（已上通道的 kind 走这三件；逐一迁移时消费方只换调用名）
+  publishIntent,
+  readIntentState,
+  registerIntentLanding,
   readSettingsView,
   writeSettingsView,
   onSettingsViewChanged: (listener: () => void) => onIntentChanged("settings-view", listener),
