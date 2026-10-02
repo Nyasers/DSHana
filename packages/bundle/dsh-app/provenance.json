@@ -1,0 +1,37 @@
+{
+  "package": "@deepseek-ai/dsh-web-app",
+  "upstreamVersion": "0.2.0-rc.2",
+  "upstreamDir": "packages/bundle/web-app",
+  "mirror": "vendor/deepseek-harness",
+  "mirrorTag": "dsh-v0.2.0-rc.2",
+  "files": [
+    {
+      "path": "cordis.patch.yml",
+      "upstreamSha256": "df7653ee4c324dca706034631926c86f13a2cf17c280cc018f8c070a0aaad19e"
+    },
+    {
+      "path": "presets/standard.patch.yml",
+      "upstreamSha256": "6cd2f197737fc94a45e487d0bb57869461dd6f392d45f6429b576e75d973eda8"
+    },
+    {
+      "path": "presets/ptc.patch.yml",
+      "upstreamSha256": "8fcf6b04dce7c2c76fab925129f6ac9b05ebb546840508e6cde72aa2da991832"
+    },
+    {
+      "path": "presets/minimal.patch.yml",
+      "upstreamSha256": "71ef887f43d8a37931ba3b014e5b116f79018af873d06625fb22e280a23c1dfc"
+    },
+    {
+      "path": "presets/cordis.patch.yml",
+      "upstreamSha256": "b74d71901b692f11111d02d20072735b2fe94b74744ee7e3bfdc5d972f1a3aa5"
+    },
+    {
+      "path": "src/index.ts",
+      "upstreamSha256": "a8302cd9b13b6cb1be94ebd2a51b0f42920bb09862eaa8ecf824f9a3e1c7525b"
+    },
+    {
+      "path": "src/startup.ts",
+      "upstreamSha256": "796b31607564f7662c6328457f900ba0f3d1b8fb06eb1d99b0a09ebe0e869d69"
+    }
+  ]
+}

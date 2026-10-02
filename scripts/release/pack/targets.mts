@@ -4,7 +4,8 @@
 // scripts/release/pack/targets.mts — 打包目标表，以及按目标改写 pnpm-workspace.yaml。
 //
 // assets 是出包前的 fail-closed 闸：物化完依赖树后逐个断言这些包在树里（缺一个即拒包）。
-// 覆盖三族预编译依赖（koffi / node-addon-require-builtin / sharp）与 LibreOffice 转换栈。
+// 覆盖三族预编译依赖（koffi / node-addon-require-builtin / sharp）。打包目标另外经
+// exclude.mts 的 overrides 把不要的表层 bundle 挡在物化之外（见那个文件的头注释）。
 //
 // 目标集 = 六个 os × cpu 组合：macOS arm64 / macOS x64 / Windows x64 / Windows arm64 /
 // Linux x86_64（glibc）/ Linux arm64（glibc），外加通用兜底包。
@@ -12,6 +13,7 @@ import fs from "fs-extra";
 import { join } from "node:path";
 
 import { ROOT } from "../../shared/root.mts";
+import { prepareStubs } from "./exclude.mts";
 
 /**
  * 打包目标描述。libc 仅 linux 目标声明（用于 supportedArchitectures.libc）；显式给出形状，
@@ -26,27 +28,16 @@ interface TargetSpec {
   assets: string[];
 }
 
-/** LibreOffice 转换栈的包名根：wrapper 以可选依赖带一组按平台切分的 kit，各自带 os/cpu 门。 */
-const LO_KIT = "@deepseek-ai/libreoffice-kit";
-
-/**
- * 一个目标必须随包的 LibreOffice 件：wrapper + 该平台的原生 kit。Linux 没有原生 kit，
- * 那条形态是 `-wasm`（它的 os 门就是 linux），故四个原生形态之外另有一条 wasm 形态。
- */
-function libreOfficeAssets(kit: "wasm" | "darwin-arm64" | "darwin-x64" | "win32-x64" | "win32-arm64"): string[] {
-  return [LO_KIT, `${LO_KIT}-${kit}`];
-}
-
 // 各平台目标：六个 os × cpu 组合都进发布矩阵，CI 按这份表并发出包。
 // 注：darwin / linux 的 libvips 单独分包（@img/sharp-libvips-*），Windows 则内联在
 // @img/sharp-win32-x64 里、无独立 libvips 包——断言清单按平台实际形态写（实测得出）。
 const PLATFORM_TARGETS: TargetSpec[] = [
-  { name: "darwin-arm64", os: ["darwin"], cpu: ["arm64"], assets: ["@koromix/koffi-darwin-arm64", "node-addon-require-builtin-darwin-arm64", "@img/sharp-darwin-arm64", "@img/sharp-libvips-darwin-arm64", ...libreOfficeAssets("darwin-arm64")] },
-  { name: "darwin-x64", os: ["darwin"], cpu: ["x64"], assets: ["@koromix/koffi-darwin-x64", "node-addon-require-builtin-darwin-x64", "@img/sharp-darwin-x64", "@img/sharp-libvips-darwin-x64", ...libreOfficeAssets("darwin-x64")] },
-  { name: "linux-x64", os: ["linux"], cpu: ["x64"], libc: ["glibc"], assets: ["@koromix/koffi-linux-x64", "node-addon-require-builtin-linux-x64-gnu", "@img/sharp-linux-x64", "@img/sharp-libvips-linux-x64", ...libreOfficeAssets("wasm")] },
-  { name: "win32-x64", os: ["win32"], cpu: ["x64"], assets: ["@koromix/koffi-win32-x64", "node-addon-require-builtin-win32-x64-msvc", "@img/sharp-win32-x64", ...libreOfficeAssets("win32-x64")] },
-  { name: "linux-arm64", os: ["linux"], cpu: ["arm64"], libc: ["glibc"], assets: ["@koromix/koffi-linux-arm64", "node-addon-require-builtin-linux-arm64-gnu", "@img/sharp-linux-arm64", "@img/sharp-libvips-linux-arm64", ...libreOfficeAssets("wasm")] },
-  { name: "win32-arm64", os: ["win32"], cpu: ["arm64"], assets: ["@koromix/koffi-win32-arm64", "node-addon-require-builtin-win32-arm64-msvc", "@img/sharp-win32-arm64", ...libreOfficeAssets("win32-arm64")] },
+  { name: "darwin-arm64", os: ["darwin"], cpu: ["arm64"], assets: ["@koromix/koffi-darwin-arm64", "node-addon-require-builtin-darwin-arm64", "@img/sharp-darwin-arm64", "@img/sharp-libvips-darwin-arm64"] },
+  { name: "darwin-x64", os: ["darwin"], cpu: ["x64"], assets: ["@koromix/koffi-darwin-x64", "node-addon-require-builtin-darwin-x64", "@img/sharp-darwin-x64", "@img/sharp-libvips-darwin-x64"] },
+  { name: "linux-x64", os: ["linux"], cpu: ["x64"], libc: ["glibc"], assets: ["@koromix/koffi-linux-x64", "node-addon-require-builtin-linux-x64-gnu", "@img/sharp-linux-x64", "@img/sharp-libvips-linux-x64"] },
+  { name: "win32-x64", os: ["win32"], cpu: ["x64"], assets: ["@koromix/koffi-win32-x64", "node-addon-require-builtin-win32-x64-msvc", "@img/sharp-win32-x64"] },
+  { name: "linux-arm64", os: ["linux"], cpu: ["arm64"], libc: ["glibc"], assets: ["@koromix/koffi-linux-arm64", "node-addon-require-builtin-linux-arm64-gnu", "@img/sharp-linux-arm64", "@img/sharp-libvips-linux-arm64"] },
+  { name: "win32-arm64", os: ["win32"], cpu: ["arm64"], assets: ["@koromix/koffi-win32-arm64", "node-addon-require-builtin-win32-arm64-msvc", "@img/sharp-win32-arm64"] },
 ];
 
 // 通用兜底包：os × cpu 全叉乘。命名与平台包同源（无目标后缀），覆盖面比上面六个更宽，
@@ -95,7 +86,16 @@ export function stagingWorkspaceYaml(spec) {
     ? repoWs.slice(0, i + PT_START.length) + "\n" + block + repoWs.slice(j)
     : repoWs + "\n" + block;
   // nodeLinker 必须在工作区文件里（CLI 传参形式实测不生效）
-  return "# scripts/release/pack/index.mts 生成（每次打包重建，勿手改）\nnodeLinker: hoisted\n\n" + body;
+  const base = "# scripts/release/pack/index.mts 生成（每次打包重建，勿手改）\nnodeLinker: hoisted\n\n" + body;
+  // 不要的表层 bundle：override 成 stub（见 exclude.mts），真件不下载、不进闭包。
+  // 必须**并进已有的 overrides 块**（仓库根那份里有 @hana/* 的本地 tgz 映射，整份被带过来）：
+  // 另起一个 `overrides:` 是重复键，pnpm 直接以 "duplicated mapping key" 拒掉。
+  const { overrides } = prepareStubs();
+  const names = Object.keys(overrides).sort();
+  const lines = names.map((n) => `  "${n}": "${overrides[n]}"`).join("\n");
+  const existing = /^overrides:\s*$/mu;
+  if (existing.test(base)) return base.replace(existing, (key) => `${key}\n${lines}`);
+  return base + `\noverrides:\n${lines}\n`;
 }
 
 /**

@@ -72,8 +72,8 @@ Hana 宿主进程（App 隔离进程内加载 dist/bin/index.mjs）
   ├─ bin/dsh.mjs（dist/bin，rspack 产物，与 app 主体同一次构建）
   │    └─ 原生 import 安装目录 node_modules/@deepseek-ai/dsh/lib/profile-boot-*.js
   │         → runProfile() → cordis Context
-  │              → 加载自有 profile $DSH_HOME/profiles/dshana（壳建并维护：层列钉住 base → web-app，
-  │                 我们的强制配置以 patchFiles 排在所有层之上）
+  │              → 加载自有 profile $DSH_HOME/profiles/dshana（壳只建与初始化：层列初值 base → dsh-app，
+  │                 之后归用户与插件管理面；启动期不另叠 overlay）
   │                   → dsh-* 官方插件 + @dshana/* 子插件（后者在安装目录 node_modules/@dshana）
   │         → HTTP 服务监听本地端口（宿主按 readyMarker 判定就绪）
   └─ 浏览器面：/api/apps/dshana/routes/_runtime/<runtimeId>/ 由宿主自动代理
@@ -82,7 +82,7 @@ Hana 宿主进程（App 隔离进程内加载 dist/bin/index.mjs）
 - **受管 runtime**：DSH 跑在 `ctx.runtime.start` 拉起的独立 Node 子进程中（不再是宿主进程内 boot）。App 侧与子进程分责：App 管启动/停止/状态，子进程管 DSH 的 cordis 生命周期；崩溃可被父侧识别并重起。
 - **依赖形态（自包含打包）**：DSH 及其依赖树由 `scripts/release/pack/index.mts` 在构建时物化进**安装目录** `node_modules`，运行时**不再安装、不再 spawn pnpm**（v1 的 `ensure-deps` / `lib/pnpm.js` / `lib/bootstrap.js` / `lib/errclass.js` 已删除）。运行时依赖的唯一真源是 `packages/host/package.json` 的内核声明（交付面的清单与锁都由 pack 现生成，树里不留第二份；根那份只留构建面，另留一条同名 devDependencies 供开发侧安装，两处版本由 integrations 闸守）。
 - **更新 = 装新 App 包 + 重启宿主**：无独立升级通道；升级后需重启宿主以清掉旧模块缓存。
-- **连接与鉴权交回官方**：`@dshana/bridge` 已退役；`dsh-web-app` 层的官方 connection（BrowserAuth token/cookie）与 frontend-static 各自负责其位，App 侧只经 runtime 中继补 cookie。
+- **连接与鉴权交回官方**：`@dshana/bridge` 已退役；组合层里的官方 connection（BrowserAuth token/cookie）与 frontend-static 各自负责其位，App 侧只经 runtime 中继补 cookie。
 - **DSH Web UI**：DSH 前端以**同文档注入**方式挂进壳页（`dsh-inject.ts`：取 index → 搬 link/script → 装配 `__DSH_TRANSPORT__` + 流 mux），不再用 iframe 内嵌；到 runtime 的请求走宿主代理前缀 + 路径票据。流 mux 的失败按官方**跨 bundle 契约**打结构标记（页半与内核半类身份不通，DSH 只看标记不看 `instanceof`）：载体丢失 `kind:'carrier'`（DSH 侧按可重试的载体丢失处理，自动重连续流），宿主交付的逻辑失败 `kind:'remote'` + 域码（原样重建成带码的 RemoteError）。少了 carrier 标，一次断链会被折成 `gateway/internal` 终态，会话历史流不再自愈。
 
 ## 工具
@@ -121,7 +121,7 @@ DSHana 以**单卡 + 自带功能面板**注册（manifest `contributes.cards[0]
 
 ### 目录选择器
 
-DSH 的 workspace 选择对话框来自 `directory-picker` seam（宿主半列目录或开系统弹窗，客户端半渲染）。官方 web-app 层挂的是 `dsh-host-directory-picker-auto`，它按启动时采样的一把宿主事实（bindHost / ssh / platform / DISPLAY）挑后端，win32 + loopback 必落 native。native 的客户端半优先读页面里的 `__DSH_DIRECTORY_PICKER__`（官方桌面壳由 preload 注入、弹 Electron 对话框），没桥才回落到宿主进程的 OS chooser——后者要在宿主进程里 spawn 一个子进程跑 `IFileOpenDialog`（koffi 走 COM，还先合成一次 Alt 把弹窗抢到前台），上游写明它只适合「操作者坐在宿主屏幕前」。本形态的受管 runtime 是沙箱里的后台子进程，那条回落路开不出来，客户端就把异常交给 owner 的 `onError`，表现成每次选目录弹一个错误。
+DSH 的 workspace 选择对话框来自 `directory-picker` seam（宿主半列目录或开系统弹窗，客户端半渲染）。组合层（派生自官方 web-app）挂的是 `dsh-host-directory-picker-auto`，它按启动时采样的一把宿主事实（bindHost / ssh / platform / DISPLAY）挑后端，win32 + loopback 必落 native。native 的客户端半优先读页面里的 `__DSH_DIRECTORY_PICKER__`（官方桌面壳由 preload 注入、弹 Electron 对话框），没桥才回落到宿主进程的 OS chooser——后者要在宿主进程里 spawn 一个子进程跑 `IFileOpenDialog`（koffi 走 COM，还先合成一次 Alt 把弹窗抢到前台），上游写明它只适合「操作者坐在宿主屏幕前」。本形态的受管 runtime 是沙箱里的后台子进程，那条回落路开不出来，客户端就把异常交给 owner 的 `onError`，表现成每次选目录弹一个错误。
 
 壳页因此自己提供桥：在注入 DSH index 之前装 `__DSH_DIRECTORY_PICKER__`（`packages/ui/src/dsh-inject.ts` 的 `installDirectoryPickerBridge`），`pick()` 调宿主的 `hana.resources.pick({ mode: 'directory' })`。弹窗由宿主出、在用户自己的机器上，既不经沙箱，也不依赖 DSH 自己的桌面壳；roster 层不动，native 那一对照挂，只是其中宿主半永远不会被调到。
 
@@ -157,7 +157,7 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 - 工具注册：`ctx.tools.register`，工具名 `dshana`（一个插件一个同名工具 + subcommand；v2 不自动加 `pluginId_` 前缀、重名被宿主当场拒）。动作五个：`open`/`reply`/`get`/`close`/`approve`，装配见 `packages/tools/src/index.ts`、手册见 `skills/dshana/SKILL.md`。
 - 设置：`contributes.settings` 的 UI 由 App 自绘设置页承担（`ui.route: /settings.html`，宿主设置区渲染）；键与缺省以 `packages/runtime/src/config.ts` 为准，读写落 `dataDir/settings.json`（旧 `config.json` 只在两键缺位时作读侧兼容）。
 - 数据读路径迁到 `ctx.dataDir`（宿主 `app-data/<id>/`）：list/get 读当前源的 `<DSH_HOME>/...`（projcache + jsonl zstd）；旧插件数据迁移见 `packages/runtime/src/legacy-migrate.ts` 与 `scripts/migrate/legacy.mts`。
-- 构建：`node packages/app/src/build.ts` 产物 `dist/` = App 安装目录形态（根只放宿主读的契约件与目录：`manifest.json` + `icon.png` + `skills/` + `ui/`；代码与 roster patch 全在 `bin/`：入口 `index.mjs` + 主体 `app.mjs` + runtime `dsh.mjs` + `cordis.patch.yml`）。源码形态与交付形态同形：`manifest.json` / `skills/` 与随包静态件都在仓库根（静态件在 `assets/` 下，其相对路径 = 产物里相对包根的路径：`assets/icon.png` → 产物根 `icon.png`，`assets/ui/cover.png` → 产物 `ui/cover.png`）；`packages/app/src/` 放壳源与主体。壳的文档侧另出 `.cache/ui/`（`node packages/ui/src/build.ts`），App 域构建整树拷进 `ui/`。cordis 子插件包另出 `.cache/cordis/`（`node packages/app/src/cordis.ts`）：它们不是安装态里的东西，出包时由 pack 落进包内 `node_modules/@dshana`。
+- 构建：`node packages/app/src/build.ts` 产物 `dist/` = App 安装目录形态（根只放宿主读的契约件与目录：`manifest.json` + `icon.png` + `skills/` + `ui/`；代码全在 `bin/`：入口 `index.mjs` + 主体 `app.mjs` + runtime `dsh.mjs`）。源码形态与交付形态同形：`manifest.json` / `skills/` 与随包静态件都在仓库根（静态件在 `assets/` 下，其相对路径 = 产物里相对包根的路径：`assets/icon.png` → 产物根 `icon.png`，`assets/ui/cover.png` → 产物 `ui/cover.png`）；`packages/app/src/` 放壳源与主体。壳的文档侧另出 `.cache/ui/`（`node packages/ui/src/build.ts`），App 域构建整树拷进 `ui/`。cordis 子插件包另出 `.cache/cordis/`（`node packages/app/src/cordis.ts`）：它们不是安装态里的东西，出包时由 pack 落进包内 `node_modules/@dshana`。
 
 **受管 Node runtime：local-machine/external + readyMarker 就绪门（迁移步骤 2）：**
 
@@ -174,7 +174,7 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 - 为什么随包而不在运行时安装：① App 安装目录在运行时只读（App 进程 fs-write 白名单只有 dataDir），`pnpm install` 无处落盘；② native 产物（node-pty/koffi/sharp 等）按平台/ABI 区分，逐平台出包才能各带各的 addon；③ 只物化生产闭包（不含 devDeps），体量可控。
 - 版本单一事实源 = `packages/host/package.json` 的 `@deepseek-ai/dsh`（交付面的清单与锁由 pack 从它现生成；根 `devDependencies` 里那条同名声明须与它一致，闸守）；无独立 DSH 升级通道，升级 dsh = 装新 App 包 + 重启宿主。
 - 定位：`bin/dsh.mjs` 在 depsRoot 下经显式路径解析 DSH（`packages/host/src/locate.ts`，`createRequire` + `.pnpm` 枚举 + `webpackIgnore` 原生 import）；profile boot 的模块回退 farm（dsh-app-boot `healProfilesModuleFallback`，把 dsh 安装闭包镜像成 `$DSH_HOME/profiles/node_modules` 链接）覆盖官方插件树解析。
-- `@dshana/*` 子插件随包落在安装目录 `node_modules/@dshana`（与 `@deepseek-ai/*` 同锚点）——DSH 的 runtime 解析模式从安装树 + bundle 依赖图算解析代、**不建任何链接**；我们的 roster patch 随包一份 `cordis.patch.yml`（源码在仓库根，装在与本 runtime 入口同目录的 `bin/`），由 runtime 经 `runProfile` 的 `patchFiles` 作启动期 overlay 传入（层序在所有层之上），我们因此不写 DSH_HOME 里的任何东西。
+- `@dshana/*` 子插件随包落在安装目录 `node_modules/@dshana`（与 `@deepseek-ai/*` 同锚点）——DSH 的 runtime 解析模式从安装树 + bundle 依赖图算解析代、**不建任何链接**；组合（roster 行、对官方行的取值、`@dshana/*` insert）不住在仓库根，而在组合层包 `packages/bundle/dsh-app`（派生自上游 web-app，逐文件上游 sha256 见 provenance.json）：随包落在安装树 `node_modules/@dshana/dsh-app`，由 profile 的层列选中（`dsh-base → dsh-app`），启动期不再另传 overlay，也不写 DSH_HOME 里的任何东西。
 - Windows native 文件锁（指南 §4）：依赖变更即整包替换，替换前必须先停占用 `.node` 的 DSH 进程/worker/终端——受管形态下 DSH 只跑在单例 runtime，App 卸载/更新/停止统一先 `ctx.runtime.stop`。
 
 
@@ -386,13 +386,13 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 ### 交付 5：pack 与派生同步收口（版本线）
 
 - 版本线为单一 1.x 线（开发期停在最后已发布基线、发版经 `pnpm version` 推进、DSH 跟随策略）；
-  cordis 包（roster 一份 patch + 三个插件包：`@dshana/clipboard` / `provider` / `theme`）**等值跟随**
+  cordis 子插件三个包（`@dshana/clipboard` / `provider` / `theme`）与组合层包 `@dshana/dsh-app`**等值跟随**
   主版本（无独立版本线）；
   build metadata（+dsh-<dsh 依赖>）由 version-hook 发版时统一拼回再同步。
   版本线语义见 scripts/shared/version.mts 头注释。
 - pack（scripts/release/pack/index.mts）：静态项补 THIRD_PARTY_NOTICES.md；cordis 产物断言按清单校验（现 3 包）；
   新增 ui/ 静态树断言（route 资源 fail-closed）；zip 根级 = manifest.json + bin/（index.mjs / app.mjs /
-  dsh.mjs / cordis.patch.yml）+ icon.png + skills/ + ui/ + NOTICE/THIRD_PARTY_NOTICES.md + 物化的 node_modules/
+  dsh.mjs）+ icon.png + skills/ + ui/ + NOTICE/THIRD_PARTY_NOTICES.md + 物化的 node_modules/
   （不带 package.json：入口以 .mjs 定 ESM）。
 
 ### 交付 6：@dshana/* 子插件 v2 收敛判断（落到 DESIGN；代码侧不动 roster，防 boot 破坏）

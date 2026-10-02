@@ -2,6 +2,8 @@
 # workspace 协议。仓库根仍是构建入口所在的项目（scripts/、integrations/）。
 packages:
   - "packages/*"
+  # 组合层住得更深一层（packages/bundle/dsh-app），与上游 packages/bundle/* 的布局对齐。
+  - "packages/*/*"
 
 # pnpm 构建脚本白名单。pnpm 11 起 allowBuilds 取代 pnpm 10 的 onlyBuiltDependencies 一族
 # （onlyBuiltDependencies / neverBuiltDependencies / onlyBuiltDependenciesFile / ignoredBuiltDependencies

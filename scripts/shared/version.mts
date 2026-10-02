@@ -17,7 +17,8 @@ export { ROOT };
 // cordis 子插件包目录清单（相对 ROOT；随包发布、随主版本同步，不独立发版）。
 // 判据是包内有自持构建描述 cordis.config.mjs，而依赖方向由包图声明：@dshana/app 必须把这几个
 // 包写进自己的 dependencies（spec §2 的 app → clipboard / provider / theme 那条边），漏声明
-// 直接抛——否则它会被静默漏构建。roster patch 是一份 cordis.patch.yml 文件（不是包），不在这里。
+// 直接抛——否则它会被静默漏构建。组合层包（packages/bundle/dsh-app）不走这个判据（它的形态是
+// bundle 而不是子插件），版本同步另见 bundlePkgPaths()。
 export function cordisPkgDirs() {
   const declared = new Set(Object.keys(readPkg("packages/app/package.json")?.dependencies ?? {}));
   const dirs: string[] = [];
@@ -39,10 +40,16 @@ export function cordisPkgPaths() {
   return cordisPkgDirs().map((dir) => `${dir}/package.json`);
 }
 
-// 派生同步目标（随主版本同步的文件）：manifest.json（仓库根，App 契约）+ cordis 包
+// 组合层包（packages/bundle/dsh-app）：它不是 cordis 子插件（没有自持构建描述、也不进 .cache/cordis），
+// 但同样是随包发布、随主版本同步的包，所以版本写回单列一条——漏了它不会报错，只会静默落后一版。
+export function bundlePkgPaths() {
+  return ["packages/bundle/dsh-app/package.json"];
+}
+
+// 派生同步目标（随主版本同步的文件）：manifest.json（仓库根，App 契约）+ cordis 包 + 组合层包
 //（不含主 package.json——主是事实源，由 bump 阶段改；这里指"跟随"它的文件）
 export function derivedVersionTargets() {
-  return ["manifest.json", ...cordisPkgPaths()];
+  return ["manifest.json", ...cordisPkgPaths(), ...bundlePkgPaths()];
 }
 
 // 版本文件全集（含主 package.json——version-hook 提交范围用：pnpm version 已改主待收口）
@@ -100,9 +107,15 @@ export function dshPin() {
 // 内核声明住 host（见 dshPin），工位清单的运行时依赖从它派生（见 shipDependencies）。
 
 /**
- * 交付面的运行时依赖：从 host 的 dependencies 派生，剔除 workspace 在仓项。
+ * 交付面的运行时依赖：内核声明（host 的 dependencies） ∪ 组合层包的 dependencies，
+ * 两者都剔除 workspace 在仓项。
+ *
+ * 为什么是并集：树 = **内核闭包 ∪ 组合层闭包**。内核（@deepseek-ai/dsh）的闭包给 boot 机制
+ * 与共享底座；组合层包（packages/bundle/dsh-app）的依赖才是那 121 个表层插件包——它们以前是
+ * 随官方 web-app 自己进来的（官方那份声明了同样一批），现在那一层归我们，就得由这里说。
+ * 同名依赖必须同规格（通常是内核 pin 的版本），不同就当场拒——两个写手写同一个事实是漏的温床。
  * 仓内包（@dshana/*）在构建期被 rspack 内联进各自 bundle，安装树里没有对应物，也解析不了
- * workspace 协议；交付面只列能物化的 registry 依赖。
+ * workspace 协议；交付面只列能物化的 registry 依赖（组合层包的 @dshana/* 由 pack 落位）。
  */
 export function shipDependencies() {
   const deps = readHostPkg()?.dependencies ?? {};
@@ -110,6 +123,17 @@ export function shipDependencies() {
   for (const [name, spec] of Object.entries(deps)) {
     if (typeof spec === "string" && spec.startsWith("workspace:")) continue;
     out[name] = spec as string;
+  }
+  const bundlePkg = readPkg("packages/bundle/dsh-app/package.json");
+  for (const [name, spec] of Object.entries(bundlePkg?.dependencies ?? {})) {
+    if (typeof spec !== "string" || spec.startsWith("workspace:")) continue;
+    const existing = out[name];
+    if (existing !== undefined && existing !== spec) {
+      throw new Error(
+        `交付面依赖规格冲突：${name} 在内核声明里是 ${existing}，在组合层包里是 ${spec}（两处必须同规格）`,
+      );
+    }
+    out[name] = spec;
   }
   return out;
 }
