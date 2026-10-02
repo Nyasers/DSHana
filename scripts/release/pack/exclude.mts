@@ -1,15 +1,19 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// scripts/release/pack/exclude.mts — 交付树里不出现的包（表层 bundle 与它们的私货）。
+// scripts/release/pack/exclude.mts — 交付树里不出现的包（其他表层与它们的私货）。
 //
 // 本 App 的 profile 层列只有两层：`@deepseek-ai/dsh-base` → `@dshana/dsh-app`。但交付树的依赖
-// 真源是 host 声明的内核 `@deepseek-ai/dsh`（CLI），它自己的清单里还挂着 acp / headless / sdk /
-// experimental 那一堆表层 bundle 与 `dsh-skill-office`——照搬就会把用不到的包（含 LibreOffice
-// 那 182MB 平台件）一并装进产物。
+// 真源是 host 声明的内核 `@deepseek-ai/dsh`（CLI），它自己的清单里还挂着 acp / headless / sdk
+// 等表层 bundle 与 `dsh-skill-office`——照搬就会把用不到的包（含 Office 那 182MB 平台件）
+// 一并装进产物。
 //
-// 名单**派生**而不是手写：扫 vendor checkout 里所有声明 `dsh.bundle` 的包（那就是"表层"），
-// 减去我们要留的那一层；再加一份显式的"非 bundle 私货"（它们不是表层，但只被别的表层挂载）。
+// 保留名单**派生**而不是手写：
+//   · `@deepseek-ai/dsh-base`——共享底座；
+//   · 上游 `OPTIONAL_BUNDLES` 那四个——它们按设计就是「随安装走、默认关，由插件管理页打开」
+//     （vendor 的 app-boot 源码里写着这句话），我们有选择地照搬这个语义。
+// 排除名单同样是派生的：vendor checkout 里所有声明 `dsh.bundle` 的包减去上面那份保留名单，
+// 再加一份显式「非 bundle 私货」（它们不声明 dsh.bundle，扫不到，但只被别的表层挂载）。
 // 上游新增表层时我们自动把它挡在门外，而不是等它悄悄进包。
 //
 // 两道用法：
@@ -21,8 +25,21 @@ import { join } from "node:path";
 
 import { CACHE_DIR, ROOT } from "../../shared/paths.mts";
 
-/** 保留的表层：profile 层列里被选中的那一层（另一层是我们自己的组合层包，不在上游名单里）。 */
-const KEPT_BUNDLES = ["@deepseek-ai/dsh-base"];
+/** 上游 app-boot 源码里那份「可选表层」名单（我们直接读它，不另维护一份）。 */
+function upstreamOptionalBundles(): string[] {
+  const file = join(ROOT, "vendor", "deepseek-harness", "packages", "boot", "app-boot", "src", "profile.ts");
+  const text = fs.readFileSync(file, "utf8");
+  const block = /export const OPTIONAL_BUNDLES[^=]*=\s*\[([\s\S]*?)\]/u.exec(text);
+  if (block === null) {
+    throw new Error(`${file} 里找不到 OPTIONAL_BUNDLES 的字面量（上游改了结构？）：保留名单不能拍`);
+  }
+  return [...block[1].matchAll(/'([^']+)'/gu)].map((m) => m[1]);
+}
+
+/** 保留的表层：共享底座 + 上游那份可选名单（它们随安装走、默认关）。 */
+export function keptBundles(): string[] {
+  return ["@deepseek-ai/dsh-base", ...upstreamOptionalBundles()];
+}
 
 /**
  * 非 bundle 的私货：它们不声明 `dsh.bundle`，因此派生扫不到，但只被别的表层挂载。
@@ -65,7 +82,7 @@ function versionOf(name: string): string {
  * @returns 包名数组（已去重排序）。
  */
 export function excludedPackages(): string[] {
-  const keep = new Set(KEPT_BUNDLES);
+  const keep = new Set(keptBundles());
   const names = upstreamBundles()
     .map((b) => b.name)
     .filter((n) => !keep.has(n));
