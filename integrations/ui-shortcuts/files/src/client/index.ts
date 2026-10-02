@@ -92,13 +92,14 @@ export function apply(ctx: Context): void {
     let appliedAt = -1
     const drain = (): void => {
       void readIntent('shortcuts-panel').then((intent) => {
-        if (!intent) return
+        if (!intent || !intent.pending) return
         const at = typeof intent.at === 'number' ? intent.at : 0
         if (at <= appliedAt) return
         appliedAt = at
         instance.actions.open()
+        // 清空必须带回刚消费的 at（见 clearIntent 注释：否则会被自己的清空再唤醒）。
         const clearIntent = bridge?.clearIntent
-        if (clearIntent !== undefined) void clearIntent('shortcuts-panel').catch(() => { /* 清不掉下次读再判一次 at */ })
+        if (clearIntent !== undefined) void clearIntent('shortcuts-panel', at).catch(() => { /* 清不掉下次读再判一次 at */ })
       }, () => { /* 读失败等下一次变化 */ })
     }
     const off = onIntentChanged('shortcuts-panel', drain)
@@ -112,9 +113,9 @@ export function apply(ctx: Context): void {
 interface ForwardBridge {
   readonly role?: string
   writeIntent?(kind: string, value: unknown): Promise<unknown>
-  readIntent?(kind: string): Promise<{ value: unknown; at: number }>
+  readIntent?(kind: string): Promise<{ value: unknown; at: number; pending: boolean }>
   onIntentChanged?(kind: string, listener: () => void): () => void
-  clearIntent?(kind: string): Promise<unknown>
+  clearIntent?(kind: string, at: number): Promise<unknown>
 }
 
 function forwardBridge(): ForwardBridge | undefined {

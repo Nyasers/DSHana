@@ -269,12 +269,13 @@ export function apply(ctx: Context): void {
       let disposed = false
       const drain = (): void => {
         void readIntent(kind).then((intent) => {
-          if (disposed || !intent) return
+          if (disposed || !intent || !intent.pending) return
           const at = typeof intent.at === 'number' ? intent.at : 0
           if (at <= (appliedAt.get(kind) ?? -1)) return
           appliedAt.set(kind, at)
           apply(intent.value)
-          if (clearIntent !== undefined) void clearIntent(kind).catch(() => { /* 清不掉下次读再判一次 at */ })
+          // 清空必须带回刚消费的 at（见 clearIntent 注释：否则会被自己的清空再唤醒）。
+          if (clearIntent !== undefined) void clearIntent(kind, at).catch(() => { /* 清不掉下次读再判一次 at */ })
         }, () => { /* 读失败保持待处理，等下一次变化 */ })
       }
       const off = onIntentChanged(kind, drain)
@@ -409,9 +410,9 @@ function activeSessionRefusal(reason: unknown): readonly SessionActivity[] | und
 interface ForwardBridge {
   readonly role?: string
   writeIntent?(kind: string, value: unknown): Promise<unknown>
-  readIntent?(kind: string): Promise<{ value: unknown; at: number }>
+  readIntent?(kind: string): Promise<{ value: unknown; at: number; pending: boolean }>
   onIntentChanged?(kind: string, listener: () => void): () => void
-  clearIntent?(kind: string): Promise<unknown>
+  clearIntent?(kind: string, at: number): Promise<unknown>
 }
 
 function forwardBridge(): ForwardBridge | undefined {

@@ -172,10 +172,17 @@ export function onSharedChanged(kind: string, listener: () => void): () => void 
 // 既有三件（设置视图 / 会话选中 / 主面板选中）就是这条通道上的三个 kind，下面保留同名包装，
 // 消费方按原样调用；新增的跨面面走 readIntent / writeIntent / onIntentChanged。
 
-/** 一条意图的读结果：归一后的载荷 + 通道盖的写入时刻。 */
+/**
+ * 一条意图的读结果。
+ *
+ * `pending` 是落地端的判据：这一槽里**有没有待落地的意图**。没写过、以及已被消费过（值被写成
+ * null）都是 false——载荷本身为空的 kind（快捷键参考框）光看 value 分不出来，少了这个标志，
+ * 面一挂载就会把「空槽」当成一条要打开的指令。
+ */
 export interface ForwardedIntent<K extends IntentKind> {
   value: IntentPayload<K>;
   at: number;
+  pending: boolean;
 }
 
 /** 读一条意图（词表外当场拒；载荷先归一，读到的永远是干净形状）。 */
@@ -186,6 +193,7 @@ export function readIntent<K extends IntentKind>(kind: K): Promise<ForwardedInte
     return {
       value: normalizeIntent(kind, envelope.value),
       at: typeof envelope.at === "number" ? envelope.at : 0,
+      pending: raw !== null && envelope.value !== null,
     };
   });
 }
@@ -202,10 +210,19 @@ export function onIntentChanged(kind: IntentKind, listener: () => void): () => v
   return onSharedChanged(kind, listener);
 }
 
-/** 清掉一条 command 意图（落地端消费后调；state 类不要用，那会把要镜像的值抹掉）。 */
-export function clearIntent(kind: IntentKind): Promise<unknown> {
+/**
+ * 清掉一条 command 意图（落地端消费后调，必须把刚消费的 at 原样带回）。
+ *
+ * 两个细节都是必需的：
+ *   · **带原 at**：清空也是一次写，会广播一次变更。盖新时间戳的话，落地端会被自己的清空
+ *     再唤醒一次（读到的 at 更新 → 再应用 → 再清空），就是无限循环；带上原 at，回声被
+ *     “at ≤ 已应用” 挡住。
+ *   · **值写成 null**：面重开时读到的是「这条已经落地过了」（`pending` 为 false），而不是一条
+ *     待应用的空指令——载荷本身为空的 kind（快捷键参考框）光看载荷分不出来。
+ */
+export function clearIntent(kind: IntentKind, at: number): Promise<unknown> {
   if (!isIntentKind(kind)) return Promise.reject(new Error("未知跨面意图：" + String(kind)));
-  return writeShared(kind, intentSharedValue(normalizeIntent(kind, null)));
+  return writeShared(kind, { value: null, at: typeof at === "number" && at > 0 ? at : 0 });
 }
 
 // 设置视图：{ open, section }。
