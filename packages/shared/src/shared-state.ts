@@ -4,7 +4,8 @@
 // packages/shared/src/shared-state.ts — UI 跨面共享通道的纯词表（键前缀、值构造、读侧挑选）。
 //
 // 通道：应用态存储（hana.storage.global → <dataDir>/storage/global.json）。主卡与 FP 用它对齐
-// 视图状态：boot 快照、设置视图、会话选中、主面板选中（读写实现见 ui/surface-bridge.ts）。
+// 视图状态，也是跨面转发（FP 发射意图 → 整幅面落地）的载体：boot 快照、设置视图、会话选中、
+// 主面板选中、会话行面（读写实现见 ui/surface-bridge.ts，词表见下方 INTENT_KINDS）。
 //
 // 键形如 `dshana.<kind>`，**不带卡片实例**：本 App 单 DSH 源、单主卡，宿主给主卡与其 FP 同一个
 // cardInstanceId，按实例分段没有区分度。于是这批键的寿命就是一次 App 生命周期——没有哪一个键
@@ -18,13 +19,102 @@
 export const SHARED_KEY_PREFIX = "dshana.";
 
 /** 跨面共用的当前选中会话（写侧：壳页在本地选中变化时写；读侧：FP 与主卡的对齐，
- * 以及 DSH 侧 ui-session 在「本面没钉住 sid」时跟随它）。消费方见 ui/surface-bridge.ts 与
+ * 以及 DSH 侧 ui-session 在「本面没钉住 sid」时跟随它。消费方见 ui/surface-bridge.ts 与
  * integrations/ui-session。会话卡不写也不读它——那张卡钉自己那一段。 */
 export const SELECTION_SHARED_KEY = SHARED_KEY_PREFIX + "selection";
 
-/** 会话选中的写入值：意见带写入时刻 at（消费侧只采纳比自己动手更新的）。 */
-export function selectionSharedValue(sessionId: string | null, at = Date.now()): { sessionId: string | null; at: number } {
-  return { sessionId: typeof sessionId === "string" && sessionId ? sessionId : null, at };
+// ---- 跨面转发：意图词表与封套 ----
+// 方向是单向的：局部面（FP）发射意图，整幅面落地。跨文档能过的只有**意图**——插件实例、注入的
+// hook 与 React 树都留在发射端，接收端拿自己的插件实例把那条面重建出来。同一 kind 在两边各自
+// 注册消费方（见 ui/surface-bridge.ts 与 integrations/*）。
+//
+// 词表是封闭的：未知 kind 在读写两端都被拒，通道不退化成“随便塞”。加一个 kind 要同时在这里
+// 给出它的载荷归一，读侧拿到的永远是干净形状（多余字段丢掉、缺的补空）。
+
+/** 可跨面转发的意图种类。 */
+export const INTENT_KINDS = [
+  "settings-view",   // 设置面板开/关与当前分区
+  "panel-view",      // 主面板选中（FP 点面板行、主卡把那页打开）
+  "selection",       // 当前选中会话（切会话）
+  "session-rename",  // 重命名弹窗
+  "session-archive", // 归档确认
+  "row-toast",      // 会话行提示
+  "shortcuts-panel", // 快捷键参考框
+] as const;
+
+/** 一个意图种类。 */
+export type IntentKind = (typeof INTENT_KINDS)[number];
+
+/** 认意图种类（词表外的值当场拒）。 */
+export function isIntentKind(value: unknown): value is IntentKind {
+  return typeof value === "string" && (INTENT_KINDS as readonly string[]).includes(value);
+}
+
+/** 一条转发值的封套：载荷 + 写入时刻（at 由通道盖章，接收端据此只采纳比自己动手更新的意见）。 */
+export interface IntentEnvelope<T = unknown> {
+  value: T;
+  at: number;
+}
+
+/** 把载荷打成封套（写入端用）。 */
+export function intentSharedValue<T>(value: T, at: number = Date.now()): IntentEnvelope<T> {
+  return { value, at };
+}
+
+/** 各 kind 的载荷形状（读写两端共用一份；写侧归一后再落盘，读侧直接拿到这个形状）。 */
+export interface IntentPayloadMap {
+  "settings-view": { open: boolean; section: string | null };
+  "panel-view": { panelId: string | null };
+  selection: { sessionId: string | null };
+  "session-rename": { sessionId: string | null; title: string };
+  "session-archive": { sessionId: string | null; displayTitle: string; activity: unknown[] };
+  "row-toast": { notice: Record<string, unknown> | null };
+  "shortcuts-panel": Record<string, never>;
+}
+
+/**
+ * 每个 kind 的性质：
+ *   state   —— 镜像状态（落地后留着，重开面要能把当前值恢复出来）；
+ *   command —— 一次性动作（落地后由接收端清掉，重开面不得重放）。
+ * 判错两种都会出乖：把 command 当 state 镜像，重载主卡就会把旧的重命名框重新弹一遍。
+ */
+export const INTENT_NATURE: Record<IntentKind, "state" | "command"> = {
+  "settings-view": "state",
+  "panel-view": "state",
+  selection: "state",
+  "session-rename": "command",
+  "session-archive": "command",
+  "row-toast": "command",
+  "shortcuts-panel": "command",
+};
+
+/** 一个 kind 的载荷类型。 */
+export type IntentPayload<K extends IntentKind> = IntentPayloadMap[K];
+
+/** 非空字符串，其余（含空串）归 null。 */
+function nonEmptyOrNull(value: unknown): string | null {
+  return typeof value === "string" && value ? value : null;
+}
+
+/** 一个 kind 的载荷归一（纯函数）。 */
+export function normalizeIntent<K extends IntentKind>(kind: K, raw: unknown): IntentPayload<K> {
+  const v = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const out = (() => {
+    switch (kind) {
+      case "settings-view": return { open: v.open === true, section: nonEmptyOrNull(v.section) };
+      case "panel-view": return { panelId: nonEmptyOrNull(v.panelId) };
+      case "selection": return { sessionId: nonEmptyOrNull(v.sessionId) };
+      case "session-rename": return { sessionId: nonEmptyOrNull(v.sessionId), title: typeof v.title === "string" ? v.title : "" };
+      case "session-archive": return {
+        sessionId: nonEmptyOrNull(v.sessionId),
+        displayTitle: typeof v.displayTitle === "string" ? v.displayTitle : "",
+        activity: Array.isArray(v.activity) ? v.activity : [],
+      };
+      case "row-toast": return { notice: v.notice && typeof v.notice === "object" ? (v.notice as Record<string, unknown>) : null };
+      case "shortcuts-panel": return {};
+    }
+  })();
+  return out as IntentPayload<K>;
 }
 
 /** 应用态存储的最小面（结构类型：不绑定 SDK 类型，单测可直接传假实现）。

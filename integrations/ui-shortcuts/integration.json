@@ -1,0 +1,22 @@
+{
+  "package": "@deepseek-ai/dsh-client-ui-shortcuts",
+  "upstreamVersion": "0.2.0-rc.2",
+  "upstreamDir": "packages/client/ui-shortcuts",
+  "files": [
+    {
+      "path": "src/client/index.ts",
+      "upstreamSha256": "f53559d93db900fa14a934835dba71482e2d598b6f46e7c3d6edf6f09e159fca"
+    }
+  ],
+  "notes": [
+    "批次④：快捷键参考框的跨面转发。",
+    "为什么在 ui-shortcuts：这个包把参考框注册在 shell.overlay，而打开它的 `shortcuts.open` 命令在任何面都会",
+    "触发（含 FP）。FP 是局部面，app 级 overlay 那一层不归它（ui-layout 的门），于是框在 FP 里没有落点：",
+    "命令把「打开」写成意图，整幅面（workspace / standalone）读进来用自己的 store 开框，落地即 clearIntent。",
+    "设置区那一行的打开路径在主卡，不受影响，但同一处收口（openReference）以免两条路分叉。",
+    "同批核对结论：ui-plugin-manager 的 refresh-toast 与 ui-schedule 的 delete-toast 不需要转发——",
+    "它们的面只在整幅面被发起（插件管理页与任务页都注册在 `main`，FP 只挂面板图标；会话行那两个座位只投影",
+    "目录、不带删除动作），门对它们无影响。",
+    "不做运行时 shim：与「贴上游 + 构建期哈希闸」的路线一致。"
+  ]
+}

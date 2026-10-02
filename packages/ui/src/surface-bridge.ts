@@ -9,7 +9,10 @@
 //
 // 相对资源纪律与凭据形态的来龙去脉见 packages/ui/src/app-shell.ts 顶部注释；这里只保留实现。
 import { hana } from "@hana/plugin-sdk";
-import { SHARED_KEY_PREFIX, selectionSharedValue } from "@dshana/shared/shared-state.ts";
+import {
+  SHARED_KEY_PREFIX, INTENT_KINDS, intentSharedValue, isIntentKind, normalizeIntent,
+  type IntentKind, type IntentPayload,
+} from "@dshana/shared/shared-state.ts";
 
 // ---- 到 App 后端路由的取数面 ----
 // 本页的凭据是 surface 会话票，只从 location 读——查询串（宿主给 App surface iframe 附
@@ -115,8 +118,8 @@ export function sharedKey(kind: string): string {
   return SHARED_KEY_PREFIX + kind;
 }
 
-// 本页可能写过的四种共享键（与下面各 readShared/writeShared 的 kind 同名）。
-const SHARED_KINDS = ["boot-state", "settings-view", "selection", "panel-view"];
+// 本页可能写过的共享键：boot 快照 + 全部意图 kind（同名即同一个键）。
+const SHARED_KINDS = ["boot-state", ...INTENT_KINDS];
 
 /** 删掉本页写过的共享键（下线时调用；过期留着没有消费方）。 */
 export function dropShared(): Promise<unknown> {
@@ -162,41 +165,92 @@ export function onSharedChanged(kind: string, listener: () => void): () => void 
   return typeof off === "function" ? off : () => { /* 无取消句柄 */ };
 }
 
-// 设置视图：{ open, section }。
-export function readSettingsView(): Promise<{ open: boolean; section: string | null }> {
-  return readShared("settings-view").then((v) => ({
-    open: !!(v && v.open === true),
-    section: v && typeof v.section === "string" && v.section ? v.section : null,
-  }));
-}
-export function writeSettingsView(next: { open?: boolean; section?: string | null }): Promise<any> {
-  const open = !!(next && next.open === true);
-  const section = next && typeof next.section === "string" && next.section ? next.section : null;
-  return writeShared("settings-view", { open, section });
+// ---- 跨面转发：一台通道 ----
+// 局部面（FP）发射意图，整幅面落地。跨文档能过的只有意图本身——插件实例与注入的 hook 留在发射端，
+// 接收端拿自己的插件实例把那条面重建出来。词表与载荷归一住在 @dshana/shared/shared-state.ts
+// （纯逻辑，单测直接打）；本层只做运输，并把词表外的 kind 挡在门外。
+// 既有三件（设置视图 / 会话选中 / 主面板选中）就是这条通道上的三个 kind，下面保留同名包装，
+// 消费方按原样调用；新增的跨面面走 readIntent / writeIntent / onIntentChanged。
+
+/**
+ * 一条意图的读结果。
+ *
+ * `pending` 是落地端的判据：这一槽里**有没有待落地的意图**。没写过、以及已被消费过（值被写成
+ * null）都是 false——载荷本身为空的 kind（快捷键参考框）光看 value 分不出来，少了这个标志，
+ * 面一挂载就会把「空槽」当成一条要打开的指令。
+ */
+export interface ForwardedIntent<K extends IntentKind> {
+  value: IntentPayload<K>;
+  at: number;
+  pending: boolean;
 }
 
-// 会话选中：{ sessionId, at }。at 是写入时刻，接收端据此判断这条意见是否比自己的动手新
+/** 读一条意图（词表外当场拒；载荷先归一，读到的永远是干净形状）。 */
+export function readIntent<K extends IntentKind>(kind: K): Promise<ForwardedIntent<K>> {
+  if (!isIntentKind(kind)) return Promise.reject(new Error("未知跨面意图：" + String(kind)));
+  return readShared(kind).then((raw) => {
+    const envelope = raw && typeof raw === "object" ? (raw as { value?: unknown; at?: unknown }) : {};
+    return {
+      value: normalizeIntent(kind, envelope.value),
+      at: typeof envelope.at === "number" ? envelope.at : 0,
+      pending: raw !== null && envelope.value !== null,
+    };
+  });
+}
+
+/** 写一条意图（落盘前先归一，at 由通道盖章）。 */
+export function writeIntent<K extends IntentKind>(kind: K, value: IntentPayload<K>): Promise<unknown> {
+  if (!isIntentKind(kind)) return Promise.reject(new Error("未知跨面意图：" + String(kind)));
+  return writeShared(kind, intentSharedValue(normalizeIntent(kind, value)));
+}
+
+/** 订阅一条意图的变化（词表外不订阅，静默给一个空 disposer）。 */
+export function onIntentChanged(kind: IntentKind, listener: () => void): () => void {
+  if (!isIntentKind(kind)) return () => { /* 词表外不订阅 */ };
+  return onSharedChanged(kind, listener);
+}
+
+/**
+ * 清掉一条 command 意图（落地端消费后调，必须把刚消费的 at 原样带回）。
+ *
+ * 两个细节都是必需的：
+ *   · **带原 at**：清空也是一次写，会广播一次变更。盖新时间戳的话，落地端会被自己的清空
+ *     再唤醒一次（读到的 at 更新 → 再应用 → 再清空），就是无限循环；带上原 at，回声被
+ *     “at ≤ 已应用” 挡住。
+ *   · **值写成 null**：面重开时读到的是「这条已经落地过了」（`pending` 为 false），而不是一条
+ *     待应用的空指令——载荷本身为空的 kind（快捷键参考框）光看载荷分不出来。
+ */
+export function clearIntent(kind: IntentKind, at: number): Promise<unknown> {
+  if (!isIntentKind(kind)) return Promise.reject(new Error("未知跨面意图：" + String(kind)));
+  return writeShared(kind, { value: null, at: typeof at === "number" && at > 0 ? at : 0 });
+}
+
+// 设置视图：{ open, section }。
+export function readSettingsView(): Promise<IntentPayload<"settings-view">> {
+  return readIntent("settings-view").then((r) => r.value);
+}
+export function writeSettingsView(next: { open?: boolean; section?: string | null }): Promise<unknown> {
+  return writeIntent("settings-view", {
+    open: !!(next && next.open === true),
+    section: next && typeof next.section === "string" && next.section ? next.section : null,
+  });
+}
+
+// 会话选中：{ sessionId }；at 是通道盖的写入时刻，接收端据此判断这条意见是否比自己的动手新
 // （主卡自己切工作区/新建会话也会改本地选中，旧意见不得把它压回去）。
 export function readSelection(): Promise<{ sessionId: string | null; at: number }> {
-  return readShared("selection").then((v) => ({
-    sessionId: v && typeof v.sessionId === "string" && v.sessionId ? v.sessionId : null,
-    at: v && typeof v.at === "number" ? v.at : 0,
-  }));
+  return readIntent("selection").then((r) => ({ sessionId: r.value.sessionId, at: r.at }));
 }
-export function writeSelection(sessionId: string | null): Promise<any> {
-  return writeShared("selection", selectionSharedValue(sessionId));
+export function writeSelection(sessionId: string | null): Promise<unknown> {
+  return writeIntent("selection", { sessionId: sessionId ?? null });
 }
 
 // 主面板选中：{ panelId }。DSH 侧栏的面板行在 FP 上没有中列可放，那一页归主卡。
-export function readPanelView(): Promise<{ panelId: string | null }> {
-  return readShared("panel-view").then((v) => ({
-    panelId: v && typeof v.panelId === "string" && v.panelId ? v.panelId : null,
-  }));
+export function readPanelView(): Promise<IntentPayload<"panel-view">> {
+  return readIntent("panel-view").then((r) => r.value);
 }
-export function writePanelView(panelId: string | null): Promise<any> {
-  return writeShared("panel-view", {
-    panelId: typeof panelId === "string" && panelId ? panelId : null,
-  });
+export function writePanelView(panelId: string | null): Promise<unknown> {
+  return writeIntent("panel-view", { panelId: panelId ?? null });
 }
 
 // ---- 会话卡的会话坐标（只认这张卡自己的状态，不读应用态全局）----
@@ -288,20 +342,26 @@ export function clipboardWrite(text: string): Promise<boolean> {
 }
 
 // ---- 挂到宿主桥（__DSHANA__）上的跨面接口 ----
-//   设置视图 → integrations/ui-settings-general；会话选中 → integrations/ui-session；
-//   主面板选中 → ui-sidebar（FP 发射）与 ui-layout（主卡落地）；
+//   通用转发 → 任意词表内 kind（readIntent / writeIntent / onIntentChanged，新增面走这条）；
+//   三个既有消费者保留同名包装，与上一条同一条通道：
+//     设置视图 → integrations/ui-settings-general；会话选中 → integrations/ui-session；
+//     主面板选中 → ui-sidebar（FP 发射）与 ui-layout（主卡落地）；
 //   会话坐标 → ui-session 的只读面（readPinnedSession）；
 //   剪贴板 → @dshana/clipboard 的 client 半（同文档，直接调，无消息协议）。
 export const SURFACE_API = {
+  readIntent,
+  writeIntent,
+  onIntentChanged,
+  clearIntent,
   readSettingsView,
   writeSettingsView,
-  onSettingsViewChanged: (listener: () => void) => onSharedChanged("settings-view", listener),
+  onSettingsViewChanged: (listener: () => void) => onIntentChanged("settings-view", listener),
   readSelection,
   writeSelection,
-  onSelectionChanged: (listener: () => void) => onSharedChanged("selection", listener),
+  onSelectionChanged: (listener: () => void) => onIntentChanged("selection", listener),
   readPanelView,
   writePanelView,
-  onPanelViewChanged: (listener: () => void) => onSharedChanged("panel-view", listener),
+  onPanelViewChanged: (listener: () => void) => onIntentChanged("panel-view", listener),
   readPinnedSession,
   clipboardWrite,
 };
