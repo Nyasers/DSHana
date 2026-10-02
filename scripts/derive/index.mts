@@ -14,6 +14,7 @@
 //                                             排第一，因为它改的是后面几个任务的源）
 //   manifest     主 package.json#version + SDK 快照 packedVersion → manifest.json（仓库根；宿主读的 App 契约）
 //   cordis       主 package.json#version         → packages/{clipboard,provider,theme}/package.json（profile loader 读的包）
+//   bundle       主 package.json#version         → packages/bundle/dsh-app/package.json（组合层包）
 //   thirdparty   vendor/hana-app-sdk 的 manifest → THIRD_PARTY_NOTICES.md（分发合规）
 //   paths        镜像包清单                       → integrations/tsconfig.paths.json（编辑器）
 //   vendor       packages/host 声明的 dsh 版本     → vendor/deepseek-harness 的 checkout（状态型）
@@ -34,7 +35,7 @@ import path from "node:path";
 import { mirrorPathEntries } from "../shared/mirror-paths.mts";
 import { ROOT } from "../shared/root.mts";
 import { isDirectRun } from "../shared/run.mts";
-import { cordisPkgPaths, readPkg } from "../shared/version.mts";
+import { bundlePkgPaths, cordisPkgPaths, readPkg } from "../shared/version.mts";
 import { dshTask } from "../vendor/dsh.mts";
 import { packedVersion, thirdpartyTask } from "./thirdparty.mts";
 import { versionMetadataTask } from "./version-metadata.mts";
@@ -117,6 +118,15 @@ const cordisTask: FileTask = {
   plan: () => versionFiles(cordisPkgPaths()),
 };
 
+/** 任务：bundle —— 主版本 → 组合层包（packages/bundle/dsh-app，随包发布、无独立版本线）。
+ * 它的版本会被 pack 的 assertBundleArtifacts 拿主版本对拍：漏同步这里，出包当场拒。 */
+const bundleTask: FileTask = {
+  kind: "file",
+  name: "bundle",
+  about: "package.json#version → packages/bundle/dsh-app/package.json",
+  plan: () => versionFiles(bundlePkgPaths()),
+};
+
 /** 任务：paths —— 镜像包清单 → 编辑器用的 tsconfig.paths.json。 */
 const pathsTask: FileTask = {
   kind: "file",
@@ -157,7 +167,7 @@ const vendorTask: StateTask = dshTask;
 
 /** 全部任务（main 按名筛选用；执行顺序即数组顺序——version-metadata 必须在所有读主版本的
  * 任务之前）。 */
-export const TASKS: DeriveTask[] = [versionMetadataTask, manifestTask, cordisTask, pathsTask, vendorTask, thirdpartyTask];
+export const TASKS: DeriveTask[] = [versionMetadataTask, manifestTask, cordisTask, bundleTask, pathsTask, vendorTask, thirdpartyTask];
 
 /** 跑一个任务：比较期望内容与磁盘，写回或报漂。返回漂移文件数。 */
 export function runTask(task: DeriveTask, { checkOnly, log = console.log } = { checkOnly: false, log: console.log as (m: string) => void }): number {

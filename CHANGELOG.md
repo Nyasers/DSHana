@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.0-rc.32+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.31%2Bdsh-0.2.0-rc.2...v1.0.0-rc.32%2Bdsh-0.2.0-rc.2) (2026-10-02)
+
+### Features
+
+* **release:** 组合层换成我们自己的 bundle @dshana/dsh-app，产物只留 web 表层 ([6fc0013](https://github.com/Nyasers/DSHana/commit/6fc00134f4441509cf1dcdca20c68b6193f77dfe))
+
+### Bug Fixes
+
+* **host:** profile 层列表改成 init-and-forget（不再每次 boot 归一） ([3fea7f6](https://github.com/Nyasers/DSHana/commit/3fea7f61c4dd026434aaa8a693166edce6d5c5d9))
+* **release:** 保留上游那四个可选实验 bundle（先前砍过了界） ([46c66fb](https://github.com/Nyasers/DSHana/commit/46c66fb365cbabee9cf68f65e05c955cab7b339e))
+
 ## [1.0.0-rc.31+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.30%2Bdsh-0.2.0-rc.2...v1.0.0-rc.31%2Bdsh-0.2.0-rc.2) (2026-10-02)
 
 ### Performance Improvements
@@ -646,6 +657,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
