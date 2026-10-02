@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.0-rc.31+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.30%2Bdsh-0.2.0-rc.2...v1.0.0-rc.31%2Bdsh-0.2.0-rc.2) (2026-10-02)
+
+### Performance Improvements
+
+* **build:** 补齐压缩面、调压缩参数，手搓解析改成熟库 ([c99b123](https://github.com/Nyasers/DSHana/commit/c99b12304a69521465ee551a9f0b7ad5c0b8d08a))
+
 ## [1.0.0-rc.30+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.29%2Bdsh-0.2.0-rc.2...v1.0.0-rc.30%2Bdsh-0.2.0-rc.2) (2026-10-01)
 
 ### Features
@@ -640,6 +646,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
