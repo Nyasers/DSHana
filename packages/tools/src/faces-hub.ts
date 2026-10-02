@@ -20,6 +20,7 @@
 import {
   CHANNEL_KINDS,
   CHANNEL_NATURE,
+  channelFaces,
   channelRecordKey,
   frameMatches,
   type ChannelFrame,
@@ -158,6 +159,16 @@ export function createFacesHub(opts: FacesHubOptions = {}): FacesHub {
     return out;
   }
 
+  /**
+   * 一条帧该不该投给这个面：寻址命中 **且** 该面参与这条 kind。
+   * 第二条从意图描述符表来（`faces`）——发送端不必知道拓扑，接收端不认识就丢。
+   */
+  function frameLandsHere(f: StoredFrame, sub: { sub: string; as: FaceAddress }): boolean {
+    if (!frameMatches(f.to, f.fromSub, sub)) return false;
+    const faces = channelFaces(f.kind);
+    return faces === null || faces.includes(sub.as);
+  }
+
   function frameFor(f: StoredFrame): ChannelFrame {
     return { seq: f.seq, at: f.at, from: f.from, to: f.to, kind: f.kind, payload: f.payload };
   }
@@ -178,7 +189,7 @@ export function createFacesHub(opts: FacesHubOptions = {}): FacesHub {
     const frames = fresh || ahead
       ? []
       : scope.frames
-        .filter((f) => f.seq > req.since && frameMatches(f.to, f.fromSub, { sub: req.sub, as: req.as }))
+        .filter((f) => f.seq > req.since && frameLandsHere(f, { sub: req.sub, as: req.as }))
         .map(frameFor);
     const state: Record<string, StateEntry> = {};
     if (fresh || reset) for (const [kind, entry] of scope.state) state[kind] = entry;
@@ -216,7 +227,7 @@ export function createFacesHub(opts: FacesHubOptions = {}): FacesHub {
         }
       }
     }
-    const delivered = live(scope).filter((s) => frameMatches(req.to, req.sub, { sub: s.sub, as: s.as })).length;
+    const delivered = live(scope).filter((s) => frameLandsHere(frame, { sub: s.sub, as: s.as })).length;
     wake(scope);
     return { ok: true, seq: scope.seq, delivered, to: req.to };
   }

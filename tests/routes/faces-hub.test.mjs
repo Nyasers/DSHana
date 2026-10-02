@@ -39,7 +39,8 @@ test("apply 里的通道重置排在注册路由之前（否则路由手里会�
 });
 
 test("指名投递：只有命中的面收得到，回执说清投到了几个面", async () => {
-  const hub = createFacesHub({ parkMs: 40 });
+  // parkMs 给得比用例的 tick 预算宽很多：否则“某人仍挂着”可能只是它自己超时了（假绿/假红都见过）。
+  const hub = createFacesHub({ parkMs: 300 });
   const main = watch(hub.poll(poll({ fresh: false })));
   const fp = watch(hub.poll(poll({ sub: "f1", as: "navigation", fresh: false })));
   await tick();
@@ -56,12 +57,12 @@ test("指名投递：只有命中的面收得到，回执说清投到了几个�
   assert.equal(main.value.frames.length, 1);
   assert.deepEqual(main.value.frames[0].payload, { sessionId: "s1" });
   assert.equal(fp.settled, false, "FP 不在收件人里，继续挂着");
-  await tick(60);
+  await tick(340);
   assert.equal(fp.value.frames.length, 0, "挂起到超时只回心跳");
 });
 
 test("others 排除的是发射的那份文档：同角色的另一份文档照样收", async () => {
-  const hub = createFacesHub({ parkMs: 40 });
+  const hub = createFacesHub({ parkMs: 300 });
   const self = watch(hub.poll(poll({ sub: "f1", as: "navigation", fresh: false })));
   const peer = watch(hub.poll(poll({ sub: "f2", as: "navigation", fresh: false })));
   const main = watch(hub.poll(poll({ fresh: false })));
@@ -76,7 +77,7 @@ test("others 排除的是发射的那份文档：同角色的另一份文档照�
 });
 
 test("首挂（fresh）当场给快照，不回放历史帧；之后的挂起才算跟随", async () => {
-  const hub = createFacesHub({ parkMs: 30 });
+  const hub = createFacesHub({ parkMs: 300 });
   await hub.send(send({ to: "workspace" }));            // 地上已经有一帧
   const born = await hub.poll(poll({ sub: "m9", as: "workspace" }));
   assert.equal(born.seq, 1);
@@ -178,4 +179,17 @@ test("作用域隔离：不同卡片实例的帧互不可见", async () => {
   await tick();
   assert.equal(a.value.frames.length, 1);
   assert.equal(b.settled, false, "另一张卡的订阅面不受影响");
+});
+
+test("参与面（描述符表）之外的订阅面不算投递对象，也收不到帧", async () => {
+  const hub = createFacesHub({ parkMs: 300 });
+  const main = watch(hub.poll(poll({ sub: "m1", as: "workspace", fresh: false })));
+  const whole = watch(hub.poll(poll({ sub: "s1", as: "standalone", fresh: false })));
+  await tick();
+  const sent = await hub.send(send({ sub: "f1", from: "navigation", to: "others" }));
+  assert.equal(sent.delivered, 1, "整幅面不参与会话选中，不算投递对象");
+  await tick();
+  assert.equal(main.settled, true);
+  assert.equal(main.value.frames.length, 1);
+  assert.equal(whole.settled, false, "不参与的面收不到");
 });

@@ -97,3 +97,24 @@ test("normalizeScope / normalizeChannelPayload：占位兜底与词表外拒（�
   assert.deepEqual(normalizeChannelPayload("selection", { sessionId: "s2" }), { sessionId: "s2" });
   assert.throws(() => normalizeChannelPayload("settings-view", {}), /未知通道 kind/);
 });
+
+test("描述符表是单一事实源：每个 kind 一条，性质与 INTENT_NATURE 一致", async () => {
+  const { INTENT_KINDS, INTENT_NATURE, INTENT_SPECS, intentFaces, faceTakesIntent } = await import("@dshana/shared/shared-state.ts");
+  assert.deepEqual(Object.keys(INTENT_SPECS).sort(), [...INTENT_KINDS].sort());
+  for (const kind of INTENT_KINDS) {
+    assert.equal(INTENT_SPECS[kind].nature, INTENT_NATURE[kind], kind + " 的性质要与描述符一致");
+    assert.equal(typeof INTENT_SPECS[kind].normalize, "function");
+  }
+  assert.deepEqual([...intentFaces("selection")], ["navigation", "workspace", "stream"]);
+  assert.equal(faceTakesIntent("selection", "workspace"), true);
+  assert.equal(faceTakesIntent("selection", "standalone"), false, "整幅面不参与会话选中");
+  assert.equal(intentFaces("session-rename"), null, "还没迁移的 kind 不声明参与面");
+  assert.equal(faceTakesIntent("session-rename", "standalone"), true, "未声明就一律当真");
+});
+
+test("描述符的归一被通道复用（同一份载荷形状）", async () => {
+  const { intentSpec } = await import("@dshana/shared/shared-state.ts");
+  assert.deepEqual(intentSpec("selection").normalize({ sessionId: "s1", extra: 1 }), { sessionId: "s1" });
+  assert.equal(intentSpec("selection").nature, "state");
+  assert.throws(() => intentSpec("nope"), /未知跨面意图/);
+});

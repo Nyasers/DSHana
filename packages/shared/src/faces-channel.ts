@@ -16,31 +16,30 @@
 // 词表是封闭的，且是 shared-state.ts 的 INTENT_KINDS 的**子集**：迁移一个面就从这里加一个 kind，
 // 载荷归一沿用 normalizeIntent，两套词表不各说各话。
 
-import { INTENT_NATURE, isIntentKind, normalizeIntent, type IntentKind } from "./shared-state.ts";
+import { INTENT_NATURE, intentFaces, isIntentKind, normalizeIntent, type IntentKind } from "./shared-state.ts";
+import {
+  CHANNEL_SCOPE_FALLBACK,
+  FACE_ADDRESSES,
+  FACE_FANOUT,
+  isFaceAddress,
+  isFaceTarget,
+  normalizeScope,
+  type FaceAddress,
+  type FaceTarget,
+} from "./face-addresses.ts";
 
 // ---- 地址 ----
-
-/** 面地址（= face-role.ts 发布的角色词）：投递的收件人。 */
-export const FACE_ADDRESSES = ["workspace", "navigation", "stream", "standalone"] as const;
-
-/** 一个面地址。 */
-export type FaceAddress = (typeof FACE_ADDRESSES)[number];
-
-/** 扇出地址：others = 除发射面以外的同作用域诸面；* = 含发射面。 */
-export const FACE_FANOUT = ["others", "*"] as const;
-
-/** 一条帧的收件人：面地址或扇出地址。 */
-export type FaceTarget = FaceAddress | (typeof FACE_FANOUT)[number];
-
-/** 认面地址（词表外的值当场拒）。 */
-export function isFaceAddress(value: unknown): value is FaceAddress {
-  return typeof value === "string" && (FACE_ADDRESSES as readonly string[]).includes(value);
-}
-
-/** 认收件人（面地址或扇出）。 */
-export function isFaceTarget(value: unknown): value is FaceTarget {
-  return isFaceAddress(value) || (typeof value === "string" && (FACE_FANOUT as readonly string[]).includes(value));
-}
+// 词表住在 face-addresses.ts（意图描述符表也要用它，分开放才不成环）；这里重导出，
+// 让通道的使用方从一处拿齐地址与帧。
+export {
+  CHANNEL_SCOPE_FALLBACK,
+  FACE_ADDRESSES,
+  FACE_FANOUT,
+  isFaceAddress,
+  isFaceTarget,
+  normalizeScope,
+};
+export type { FaceAddress, FaceTarget };
 
 // ---- 词表（试点：只搬会话选中）----
 
@@ -55,10 +54,15 @@ export function isChannelKind(value: unknown): value is ChannelKind {
   return typeof value === "string" && (CHANNEL_KINDS as readonly string[]).includes(value) && isIntentKind(value);
 }
 
-/** 通道 kind 的性质：state 留最新值并可快照，command 只投一次、不落记录。 */
-export const CHANNEL_NATURE: Record<ChannelKind, "state" | "command"> = {
-  selection: INTENT_NATURE.selection,
-};
+/** 通道 kind 的性质（从意图描述符表推出来，不再自带一份副本）。 */
+export const CHANNEL_NATURE: Record<ChannelKind, "state" | "command"> = Object.fromEntries(
+  CHANNEL_KINDS.map((kind) => [kind, INTENT_NATURE[kind]]),
+) as Record<ChannelKind, "state" | "command">;
+
+/** 这条 kind 参与哪些面（与描述符表同源；未声明为 null）。 */
+export function channelFaces(kind: ChannelKind): readonly FaceAddress[] | null {
+  return intentFaces(kind);
+}
 
 /** 一个 kind 在通道上的载荷（沿用意图词表的归一，形状只有一份）。 */
 export type ChannelPayload<K extends ChannelKind = ChannelKind> = ReturnType<typeof normalizeIntent<K>>;
@@ -86,13 +90,7 @@ export interface ChannelFrame {
   payload: unknown;
 }
 
-/** 认作用域（卡片实例戳；缺戳时用占位，作用域照样隔离）。 */
-export const CHANNEL_SCOPE_FALLBACK = "-";
-
-/** 归一作用域戳。 */
-export function normalizeScope(card: unknown): string {
-  return typeof card === "string" && card.trim() ? card.trim() : CHANNEL_SCOPE_FALLBACK;
-}
+/** 认作用域（卡片实例戳；缺戳时用占位，作用域照样隔离）——实现在 face-addresses.ts（上方重导出）。 */
 
 /** 一个订阅面（一份文档）：sub 是文档自己的随机 id（区分同角色的多份文档），as 是它的角色地址。 */
 export interface ChannelSubscriber {
