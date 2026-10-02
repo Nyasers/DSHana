@@ -6,7 +6,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync } from "node:fs";
+import postcss from "postcss";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -21,7 +22,7 @@ import {
   stageIntegrations,
 } from "../../scripts/integrations/mirror.mts";
 import { extractRequires, duplicateCssClasses, patchGeneratedRequestModel } from "../../scripts/integrations/build.mts";
-import { cssScopeOf, scopedClassName } from "../../packages/app/src/cordis/client-config.mts";
+import { cssScopeOf, scopedClassName, scopeSelector } from "../../packages/app/src/cordis/client-config.mts";
 
 const upstreamFile = "packages/client/ui-layout/src/client/index.ts";
 
@@ -226,6 +227,68 @@ test("scopedClassName：无 /src/ 时按 pkgDir 取相对路径，不同子树�
     a,
     scopedClassName(id, "D:/elsewhere/packages/view/views/a/shared.module.css", "root", "D:/elsewhere/packages/view"),
   );
+});
+
+// ---- CSS Modules 穿透语法：:global(...) / :local(...) ----
+
+const scopeAs = (local) => `dv_x_${local}`;
+
+test("scopeSelector：:global(...) 剥掉括号，括号外的 local 照常作用域化", () => {
+  // 真实选择器形状取自被重建的 ui-chat（宿主滚动容器的滚动归属就写在这里）
+  assert.equal(
+    scopeSelector(":global([data-conversation-scroll]) .toBottomSlot", scopeAs),
+    "[data-conversation-scroll] .dv_x_toBottomSlot",
+  );
+  assert.equal(
+    scopeSelector(":global([data-conversation-scroll]):has(.root[data-chat-following-tail])", scopeAs),
+    "[data-conversation-scroll]:has(.dv_x_root[data-chat-following-tail])",
+  );
+  assert.equal(
+    scopeSelector(":global(html[data-platform='darwin'][data-fullscreen]) .frame[data-sidebar-collapsed]", scopeAs),
+    "html[data-platform='darwin'][data-fullscreen] .dv_x_frame[data-sidebar-collapsed]",
+  );
+  assert.equal(
+    scopeSelector(":global([data-windows-titlebar]) .frame::before", scopeAs),
+    "[data-windows-titlebar] .dv_x_frame::before",
+  );
+});
+
+test("scopeSelector：:global(...) 里的类名是宿主的，不换名", () => {
+  assert.equal(
+    scopeSelector(".body :global(.md-table-wide) > table", scopeAs),
+    ".dv_x_body .md-table-wide > table",
+  );
+  assert.equal(
+    scopeSelector(":global([data-platform='darwin']) :global([data-ds-dark-theme]) .sidebarCol", scopeAs),
+    "[data-platform='darwin'] [data-ds-dark-theme] .dv_x_sidebarCol",
+  );
+});
+
+test("scopeSelector：:local(...) 剥括号且内容照常作用域化，裸伪类当场抛", () => {
+  assert.equal(scopeSelector(":local(.root)", scopeAs), ".dv_x_root");
+  // 裸伪类（无括号）的作用范围要按 CSS Modules 语义单独对账：不静默当成没看见
+  assert.throws(() => scopeSelector(":global .root", scopeAs), /没有括号/);
+  assert.throws(() => scopeSelector(":local .root", scopeAs), /没有括号/);
+});
+
+test("仓库自有 overlay 样式：全部只走括号形态，转换后不留 :global/:local", () => {
+  const files = [];
+  const walk = (dir) => {
+    for (const ent of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, ent.name);
+      if (ent.isDirectory()) walk(p);
+      else if (p.endsWith(".module.css")) files.push(p);
+    }
+  };
+  walk(join(REPO_ROOT, "integrations"));
+  assert.ok(files.length >= 2, "至少 ui-layout 与 ui-sidebar 各一份样式");
+  for (const file of files) {
+    const root = postcss.parse(readFileSync(file, "utf8"), { from: file });
+    root.walkRules((rule) => {
+      const next = scopeSelector(rule.selector, scopeAs);
+      assert.ok(!/:(?:global|local)\b/.test(next), `${file}: ${rule.selector} → ${next}`);
+    });
+  }
 });
 
 test("duplicateCssClasses：跨包重名报错、唯一时静默", () => {
