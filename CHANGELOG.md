@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.0-rc.33+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.32%2Bdsh-0.2.0-rc.2...v1.0.0-rc.33%2Bdsh-0.2.0-rc.2) (2026-10-02)
+
+### Bug Fixes
+
+* **app:** 编译链补上 CSS Modules 的 :global() 语义（轮次导航与回到底部按钮贴不住滚动容器） ([39b4424](https://github.com/Nyasers/DSHana/commit/39b442490b0df947efaa4ca826da230ac7a2e548))
+
 ## [1.0.0-rc.32+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.31%2Bdsh-0.2.0-rc.2...v1.0.0-rc.32%2Bdsh-0.2.0-rc.2) (2026-10-02)
 
 ### Features
@@ -657,6 +663,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
