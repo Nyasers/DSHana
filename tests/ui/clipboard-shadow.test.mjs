@@ -188,3 +188,56 @@ test("createClipboardShadow：桥存在时原生的同步抛错不会被碰到",
   const { shadow } = createClipboardShadow({ clipboard, bridge });
   await shadow("x");
 });
+
+// ---- 第三跳（遗留路线）与 tier 留痕：真机探针就靠这两条读数 ----
+
+test("原生被策略关死：跳过原生直接落遗留路线，并留下 tier 痕", async () => {
+  const { target, clipboard, calls } = fakeWindow();
+  const tiers = [];
+  const legacyTexts = [];
+  target.__DSHANA__ = { clipboardWrite: () => Promise.reject(new Error("not allowed in card slots")) };
+  installClipboardShadow({
+    target,
+    report: () => {},
+    nativeBlocked: async () => true,
+    legacyCopy: (text) => { legacyTexts.push(text); return true; },
+    onTier: (tier) => tiers.push(tier),
+  });
+  await clipboard.writeText("copy me");
+  assert.deepEqual(legacyTexts, ["copy me"], "遗留路线要接到那段文本");
+  assert.equal(calls.length, 0, "已关死的门不再撞（不刷 violation）");
+  assert.deepEqual(tiers, ["legacy"]);
+});
+
+test("三跳都失败：每一跳都留痕，抛的是桥那条（根因，不是最后一跳的余波）", async () => {
+  const { target, clipboard } = fakeWindow();
+  const stages = [];
+  target.__DSHANA__ = { clipboardWrite: () => Promise.reject(new Error("not allowed in card slots")) };
+  clipboard.writeText = () => Promise.reject(new Error("policy blocked"));
+  Object.defineProperty(target, "Clipboard", { value: undefined });
+  installClipboardShadow({
+    target,
+    report: (stage, err) => stages.push(String(stage) + ":" + String(err && err.message)),
+    legacyCopy: () => false,
+  });
+  await assert.rejects(() => clipboard.writeText("x"), /not allowed in card slots/);
+  assert.ok(stages.some((s) => s.startsWith("bridge:")), "桥那条要留痕");
+  assert.ok(stages.some((s) => s.startsWith("native:")), "原生那条要留痕");
+  assert.ok(stages.some((s) => s.startsWith("legacy:")), "遗留路线要留痕");
+});
+
+test("桥就通时：原生与遗留路线一次都不碰", async () => {
+  const { target, clipboard, calls } = fakeWindow();
+  const tiers = [];
+  let legacyCalls = 0;
+  target.__DSHANA__ = { clipboardWrite: () => Promise.resolve(true) };
+  installClipboardShadow({
+    target, report: () => {},
+    legacyCopy: () => { legacyCalls += 1; return true; },
+    onTier: (tier) => tiers.push(tier),
+  });
+  await clipboard.writeText("hi");
+  assert.equal(legacyCalls, 0);
+  assert.equal(calls.length, 0);
+  assert.deepEqual(tiers, ["bridge"]);
+});
