@@ -72,11 +72,12 @@ const DISPOSE_TIMEOUT_MS = 4000;
 const PROFILE_NAME = "dshana";
 /**
  * 自有 profile 的 bundle 层列——**钉住的值，不跟上游模板漂**：
- *   `@deepseek-ai/dsh-base`（共享底座）→ `@deepseek-ai/dsh-web-app`（浏览器面：roster / 传输层 /
- *   前端服务）。上游把 `PROFILE_TEMPLATES.web` 改成什么，都不会静默改变这里：层列表是部署决定。
- * 我们的强制配置不在这张表里，走启动期 `patchFiles`（排在所有层之上，不会被用户层翻回去）。
+ *   `@deepseek-ai/dsh-base`（共享底座）→ `@dshana/dsh-app`（本 App 的组合层：浏览器面 roster /
+ *   传输层 / 前端服务，派生自上游 web-app）。
+ * 上游把 `PROFILE_TEMPLATES.web` 改成什么，都不会静默改变这里：层列表是部署决定。
+ * 我们的强制配置与组合在同一份文档里（组合层包的 cordis.patch.yml），启动期不再另传 overlay。
  */
-const PROFILE_BUNDLES = ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"];
+const PROFILE_BUNDLES = ["@deepseek-ai/dsh-base", "@dshana/dsh-app"];
 
 /** 取错误的可读文本。catch 到的值类型未知，字段访问一律经这里。 */
 const errText = (e: unknown): string => ((e as any)?.message as string) || String(e);
@@ -211,17 +212,18 @@ function makeShutdown(state, exitCodeLog) {
 }
 
 /**
- * 产物在位检查（fail-closed）：@dshana 子插件与我们的 roster patch 都得在。
+ * 产物在位检查（fail-closed）：三个 @dshana 子插件与组合层包（@dshana/dsh-app）都得在。
  * 缺了就在这里报清楚，而不是等 DSH 自己把「bundle/插件找不到」抛上来。
  * @returns 缺失项（空数组 = 齐备）。
  */
-function missingArtifacts(depsRoot: string, rosterPatch: string): string[] {
+function missingArtifacts(depsRoot: string): string[] {
   const missing: string[] = [];
   for (const name of ["provider", "theme", "clipboard"]) {
     const dir = join(depsRoot, "@dshana", name);
     if (!existsSync(join(dir, "index.js"))) missing.push(dir);
   }
-  if (!existsSync(rosterPatch)) missing.push(rosterPatch);
+  const bundle = join(depsRoot, "@dshana", "dsh-app");
+  if (!existsSync(join(bundle, "lib", "index.js"))) missing.push(bundle);
   return missing;
 }
 
@@ -260,14 +262,14 @@ function ensureOwnProfile(appBoot, dshHome: string): string {
  * 的 ensureOwnProfile 建，预检不碰）。结果写 resultPath（{ok:true} 或 {ok:false,error}，0600）后立即退出。
  * 退出码对齐 classify：0 = 预检通过；4 = deps/locate；5 = 产物缺失。
  */
-async function runPreflight({ opts, dataDir, dshHome, depsRoot, rosterPatch }): Promise<never> {
+async function runPreflight({ opts, dataDir, dshHome, depsRoot }): Promise<never> {
   const write = (payload) => writeFileSync(opts.resultPath, JSON.stringify(payload), { mode: 0o600 });
   try {
     process.env.DSH_HOME = dshHome;
     process.env.DSHANA_HOME = dataDir;
     info(`预检开始：dshHome=${dshHome} depsRoot=${depsRoot}`);
     await locateDsh({ depsRoot, log: (s) => info("locate", s) });
-    const missing = missingArtifacts(depsRoot, rosterPatch);
+    const missing = missingArtifacts(depsRoot);
     if (missing.length > 0) {
       err("preflight", "产物不在位：" + missing.join("、"));
       write({ ok: false, error: `目标环境缺产物（先跑 pnpm run build 再打包）：${missing.join("、")}` });
@@ -333,15 +335,13 @@ export async function main(argv: string[]): Promise<number> {
   }
   const dataDir = resolve(opts.dataDir);
   // 依赖根默认指向 App 安装目录（随包物化的 node_modules）；--deps-root 可覆盖（调试）。
-  // @dshana 插件与 @deepseek-ai/* 同锚点住在这里（运行时解析模式从安装树算解析代，不建链接），
-  // 我们的 roster patch 随包放在本入口旁边（bin/ 下），经 patchFiles 作启动期 overlay——
-  // 按入口自己所在目录取，与安装根布局解耦。
+  // @dshana 插件、组合层包与 @deepseek-ai/* 同锚点住在这里（运行时解析模式从安装树算解析代，
+  // 不建链接）。
   const depsRoot = resolve(opts.depsRoot || join(installRoot, "node_modules"));
-  const rosterPatch = join(dirname(entryFile), "cordis.patch.yml");
   const dshHome = opts.dshHome ? resolve(opts.dshHome) : join(dataDir, ".dsh");
   // ---- 0) 预检模式（数据源切换探针）：不连宿主 IPC、不起服务，只验证目标环境可用性 ----
   if (opts.preflight) {
-    return await runPreflight({ opts, dataDir, dshHome, depsRoot, rosterPatch });
+    return await runPreflight({ opts, dataDir, dshHome, depsRoot });
   }
   const state: {
     hana: any;
@@ -407,7 +407,7 @@ export async function main(argv: string[]): Promise<number> {
     reportFatal("deps", e);
     return EXIT.DEPS;
   }
-  const missing = missingArtifacts(depsRoot, rosterPatch);
+  const missing = missingArtifacts(depsRoot);
   if (missing.length > 0) {
     err("artifacts", "产物不在位（先跑 pnpm run build 再打包/运行）：" + missing.join("、"));
     err("exit", "exit=" + EXIT.SEED + " kind=artifacts-missing");
@@ -415,7 +415,7 @@ export async function main(argv: string[]): Promise<number> {
     return EXIT.SEED;
   }
 
-  // ---- 5) 子进程内 boot DSH（自有 profile + 我们的 roster 作启动期 overlay；显式端口）----
+  // ---- 5) 子进程内 boot DSH（自有 profile：层列钉住 = base → 我们的组合层；显式端口）----
   const environment = located.appBoot.loadLayeredEnv("dsh");
   const installAnchor = join(depsRoot, "@deepseek-ai", "dsh", "package.json");
   let profile;
@@ -433,14 +433,16 @@ export async function main(argv: string[]): Promise<number> {
   for (const skipped of profile.skippedBundles ?? []) {
     warn("profile", `bundle 被跳过：${skipped.packageName}（${skipped.reason}）`);
   }
-  info(`runProfile({ profile: ${PROFILE_NAME}, bundles: [${PROFILE_BUNDLES.join(", ")}], patchFiles: [${rosterPatch}], port: ${opts.dshPort} }) …`);
+  info(`runProfile({ profile: ${PROFILE_NAME}, bundles: [${PROFILE_BUNDLES.join(", ")}], port: ${opts.dshPort} }) …`);
   let boot;
   try {
     boot = await located.profileBoot.runProfile({
       environment,
       profile: PROFILE_NAME,
       resolvedProfile: { profile, installAnchor },
-      patchFiles: [rosterPatch],
+      // 空数组而不是缺字段：上游 composeProfile 对 patchFiles 无默认值（直接 flatMap），
+      // 本形态的组合全在层里，启动期不叠 overlay。
+      patchFiles: [],
       args: ["--port", String(opts.dshPort), "--no-open"],
     });
   } catch (e) {

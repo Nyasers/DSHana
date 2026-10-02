@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Nyasers
 //
 // scripts/release/pack/index.mts — dshana 自包含打包（适配单 bundle 收敛架构；构建脚本不随源码编译）
-// 交付物 = 代码 bundle（dist/）+ cordis 子插件包（.cache/cordis/）+ **物化后的生产依赖树**
+// 交付物 = 代码 bundle（dist/）+ cordis 子插件包与组合层包（.cache/cordis/、.cache/bundle/）+ **物化后的生产依赖树**
 // （含 win32/darwin/linux × x64/arm64 预编译资产），安装即用、无需 npm install。
 // 依赖物化形态对齐样例 hana-dsh：hoisted 布局（顶层真实目录、无软链接——软链进 zip 跨机
 // 解压即断）。物化在 .cache/pkg-root/ 隔离进行，不触碰仓库 node_modules。
@@ -15,7 +15,7 @@
 //     工位三件都现生成（清单 + 按目标替换过 supportedArchitectures 的 pnpm-workspace.yaml +
 //     以仓库锁文件为种子重解析出的锁）落进去跑 `pnpm install --prod --frozen-lockfile`。
 //     隔离在独立目录下，仓库自身的 node_modules 与锁文件不被污染。
-//   · .cache/pkg：交付**组装台**。只放要进包的东西（dist/ + .cache/cordis/ + 物化依赖树），
+//   · .cache/pkg：交付**组装台**。只放要进包的东西（dist/ + .cache/cordis/ + .cache/bundle/ + 物化依赖树），
 //     不带 pnpm 的中间物（lockfile、workspace yaml、.modules.yaml 这些是构建输入，不是交付物）。
 //     把「工位」与「组装台」分开，就是不让构建输入混进安装包；组装出包后立即删。
 //
@@ -29,10 +29,11 @@ import { ZipArchive } from "archiver";
 import fs from "fs-extra";
 
 import { errText } from "../../shared/err-text.mts";
-import { CORDIS_DIR, DIST_DIR, PKG_DIR, STAGING_ROOT } from "../../shared/paths.mts";
+import { BUNDLE_DIR, CORDIS_DIR, DIST_DIR, PKG_DIR, STAGING_ROOT } from "../../shared/paths.mts";
 import { ROOT } from "../../shared/root.mts";
-import { assertCordisArtifacts, assertNoProductPackage, assertUiTree } from "./assert.mts";
-import { declareInstallationPlugins } from "./bundle-deps.mts";
+import { assertBundleArtifacts, assertCordisArtifacts, assertNoProductPackage, assertUiTree } from "./assert.mts";
+import { declareInstallationBundle, declareInstallationPlugins } from "./bundle-deps.mts";
+import { excludedPackages, pruneExcluded, requiredPackages } from "./exclude.mts";
 import { materializeProdDeps } from "./materialize.mts";
 import { minifyCordisStatics } from "./minify.mts";
 import { applyIntegrations } from "./overlays.mts";
@@ -51,7 +52,7 @@ if (version !== manifestVersion)
   );
 
 // 1. 静态项补齐交付目录。构建阶段（build:app / build:cordis）已写出安装态骨架
-//    （bin/（入口 + app 主体 + runtime + roster patch）+ manifest.json / icon.png / skills/ / ui/），
+//    （bin/（入口 + app 主体 + runtime）+ manifest.json / icon.png / skills/ / ui/），
 //    这里只补清单外的文本件；包根即 App 安装目录，不套 dist 这层目录。不在清单里的东西各有其宿主：
 //    · routes/ —— v2 走 ctx.routes.register，route 在 index.mjs 里注册，无目录产物；
 //    · app/（卡片脚本与样式）—— 构建时内联进 index.mjs bundle；
@@ -77,8 +78,9 @@ for (const item of staticItems) {
   });
 }
 
-// 1.5 / 1.6) 产物断言：cordis 包版本与完整性、交付树无包清单、App ui/ 静态树（缺失即拒包）
-assertCordisArtifacts(CORDIS_DIR, join(distDir, "bin", "cordis.patch.yml"), version);
+// 1.5 / 1.6) 产物断言：cordis 包与组合层包的版本/完整性、交付树无包清单、App ui/ 静态树（缺失即拒包）
+assertCordisArtifacts(CORDIS_DIR, version);
+assertBundleArtifacts(BUNDLE_DIR, version);
 assertNoProductPackage(distDir);
 assertUiTree(distDir);
 
@@ -139,19 +141,40 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
     filter: (srcPath) => !/[\/\\]node_modules[\/\\]\./.test(srcPath),
   });
   applyIntegrations(join(pkgDir, "node_modules"));
-  // @dshana 子插件落进安装树的 node_modules（与 @deepseek-ai/* 同锚点）：DSH 的 runtime 解析模式
-  // 从安装树 + bundle 依赖图算解析代、不建链接，插件因此不能住在安装树外的位置。它们本来就不在
-  // 交付面里（产物在 .cache/cordis），到这一步才按交付布局落进 node_modules/@dshana。
-  // roster patch 则随交付面原样到 bin/（受管 runtime 按自身入口所在目录取它）。
+  // 被排除的表层 bundle 与它们的私货：物化时已 override 成 stub（不下载真件），这里把占位也从
+  // 产物里删掉——交付树里既没有真件也没有槽位。断言两端：名单必须命中，且删干净。
+  const pruned = pruneExcluded(join(pkgDir, "node_modules"));
+  if (pruned.length === 0) {
+    throw new Error("排除名单一个都没命中（工位 overrides 没生效？）：拒绝产出带全量表层的包");
+  }
+  const leftover = excludedPackages().filter((n) => fs.pathExistsSync(join(pkgDir, "node_modules", n)));
+  if (leftover.length > 0) throw new Error(`被排除的包仍在产物里：${leftover.join("、")}`);
+  console.log(`[pack] 排除表层/私货包 ${pruned.length} 个（产物里不留槽位）：${pruned.join(", ")}`);
+  // @dshana 的两个 scope 内容落进安装树的 node_modules（与 @deepseek-ai/* 同锚点）：DSH 的 runtime
+  // 解析模式从安装树 + bundle 依赖图算解析代、不建链接，它们因此不能住在安装树外的位置。两者本来
+  // 都不在交付面里（产物在 .cache/cordis 与 .cache/bundle），到这一步才按交付布局落进
+  // node_modules/@dshana：三个子插件 + 组合层包（dsh-app，profile 层列里被选中的那一层）。
   if (!fs.pathExistsSync(CORDIS_DIR)) throw new Error(".cache/cordis 缺失：先跑 pnpm run build 再打包");
-  fs.copySync(CORDIS_DIR, join(pkgDir, "node_modules", "@dshana"));
-  for (const rel of [join("bin", "cordis.patch.yml"), join("node_modules", "@dshana", "provider", "index.js")]) {
+  if (!fs.pathExistsSync(BUNDLE_DIR)) throw new Error(".cache/bundle/dsh-app 缺失：先跑 pnpm run build 再打包");
+  fs.copySync(CORDIS_DIR, join(pkgDir, "node_modules", "@dshana"), { overwrite: true });
+  fs.copySync(BUNDLE_DIR, join(pkgDir, "node_modules", "@dshana", "dsh-app"));
+  for (const rel of [
+    join("node_modules", "@dshana", "provider", "index.js"),
+    join("node_modules", "@dshana", "dsh-app", "lib", "index.js"),
+  ]) {
     if (!fs.pathExistsSync(join(pkgDir, rel))) throw new Error(`包内产物缺失：${rel}（拒绝出包）`);
   }
-  console.log("[pack] cordis 产物就位（子插件 -> node_modules/@dshana，roster patch 随交付面到 bin/）")
+  // 层列要的那两层必须在：缺 base 或少我们的组合层包，boot 都起不来，宁可不打包。
+  const absent = requiredPackages().filter((n) => !fs.pathExistsSync(join(pkgDir, "node_modules", n, "package.json")));
+  if (absent.length > 0) throw new Error(`产物缺必需的包：${absent.join("、")}（拒绝出包）`);
+  console.log("[pack] @dshana 产物就位（3 子插件 + 组合层包 dsh-app -> node_modules/@dshana），必需包齐备")
   // 只躺在 node_modules 里不够：DSH 按「安装树 + 被选中 bundle 的依赖图」算解析代，真机上
   // profile 在数据目录里向上解析走不到安装树，得由被选中 bundle 认领才进解析代（见 bundle-deps.mts）。
   declareInstallationPlugins(join(pkgDir, "node_modules"));
+  // 只躺在 node_modules 里不够：DSH 按「安装树 + 被选中 bundle 的依赖图」算解析代，而**被选中
+  // bundle 自己的名字会被从 profile 作用域里删掉**（按设计从安装图解析）。所以组合层包必须进安装图
+  // ——声明进安装锚点（内核包）的依赖（见 bundle-deps.mts 的说明）。
+  declareInstallationBundle(join(pkgDir, "node_modules"));
   // 暂存树用完即删
   fs.removeSync(join(STAGING_ROOT, spec.name));
   console.log(`[pack] ${spec.name}：代码 + 依赖树已就位（${base}），暂存树已清理`);

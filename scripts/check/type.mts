@@ -67,6 +67,11 @@ const DOMAINS = [
     ours: (file) => file.startsWith("packages/clipboard/") || file.startsWith("packages/provider/") || file.startsWith("packages/theme/"),
   },
   {
+    name: "bundle",
+    config: "tsconfig.bundle.json",
+    ours: (file) => file.startsWith("packages/bundle/"),
+  },
+  {
     name: "scripts",
     config: "tsconfig.scripts.json",
     ours: (file) => file.startsWith("scripts/"),

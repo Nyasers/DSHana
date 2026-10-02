@@ -37,6 +37,8 @@
     "packages/clipboard/**/*.ts",
     "packages/provider/**/*.ts",
     "packages/theme/**/*.ts",
+    // 组合层（packages/bundle/dsh-app）：派生自上游 web-app 的组合补丁与粘合插件。
+    "packages/bundle/dsh-app/**/*.ts",
     "packages/shared/src/**/*.ts",
     "packages/host/src/**/*.ts",
     "packages/models/src/**/*.ts",

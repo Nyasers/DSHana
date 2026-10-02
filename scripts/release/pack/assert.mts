@@ -24,22 +24,16 @@ export function assertNoProductPackage(outDir) {
 }
 
 /**
- * cordis 子插件与 roster patch 的产物断言（防回归，与 manifest 校验对称）：子插件（provider /
-theme / clipboard）version 与主 package.json 同批由 derive/version（pnpm version 发版流程）
-同步，pack 时读产物校验一致——手改/漏同步即出包版本漂移。
- * roster patch（dist/bin/cordis.patch.yml）不是包，只校验在位；子插件住 .cache/cordis，
- * 与它不同源，两份在交付布局里各就各位。
+ * cordis 子插件的产物断言（防回归，与 manifest 校验对称）：子插件（provider / theme / clipboard）
+ * version 与主 package.json 同批由 derive/version（pnpm version 发版流程）同步，pack 时读产物校验
+ * 一致——手改/漏同步即出包版本漂移。
  * @param cordisDir 子插件产物目录（.cache/cordis）
- * @param patchFile roster patch 文件（dist/bin/cordis.patch.yml 或组装树同级）
  * @param version 本次出包的版本
  */
-export function assertCordisArtifacts(cordisDir, patchFile, version) {
+export function assertCordisArtifacts(cordisDir, version) {
   // cordis 未组装 = 构建未跑/被清：fail-closed（校验放行空产物会让缺插件的包过包）
   if (!fs.pathExistsSync(cordisDir)) {
     throw new Error(`cordis 产物缺失（${cordisDir} 不存在）：先跑 pnpm run build 再打包`);
-  }
-  if (!fs.pathExistsSync(patchFile)) {
-    throw new Error(`roster patch 缺失（${patchFile} 不存在）：先跑 pnpm run build 再打包`);
   }
   // 完整性：子插件全部存在且 package.json 版本一致——缺失/部分产物（含 count=0）
   // 一律拒包，防 build 失败后残留部分产物被误打包。
@@ -62,7 +56,45 @@ export function assertCordisArtifacts(cordisDir, patchFile, version) {
     }
     count += 1;
   }
-  console.log(`[pack] cordis 子插件版本一致（${count} 个 = ${version}）+ roster patch 在位`);
+  console.log(`[pack] cordis 子插件版本一致（${count} 个 = ${version}）`);
+}
+
+/**
+ * 组合层包（@dshana/dsh-app）的产物断言：两个入口与四份组合文档都得在，版本与主 package.json 同批
+ * 由 derive/version 同步（pnpm version 发版流程）。它是 profile 层列里被选中的那一层——缺一件
+ * 就 boot 不起来或少一半行，所以 fail-closed。
+ * @param bundleDir 组合层包产物目录（.cache/bundle/dsh-app）
+ * @param version 本次出包的版本
+ */
+export function assertBundleArtifacts(bundleDir, version) {
+  const required = [
+    "package.json",
+    "cordis.patch.yml",
+    "presets/standard.patch.yml",
+    "presets/ptc.patch.yml",
+    "presets/minimal.patch.yml",
+    "presets/cordis.patch.yml",
+    "lib/index.js",
+    "lib/startup.js",
+  ];
+  if (!fs.pathExistsSync(bundleDir)) {
+    throw new Error(`组合层包产物缺失（${bundleDir} 不存在）：先跑 pnpm run build 再打包`);
+  }
+  for (const rel of required) {
+    if (!fs.pathExistsSync(join(bundleDir, rel))) {
+      throw new Error(`组合层包产物不完整：缺少 ${rel}（${bundleDir} 下）——先跑 pnpm run build 再打包`);
+    }
+  }
+  const j = fs.readJsonSync(join(bundleDir, "package.json"));
+  if (j.version !== version) {
+    throw new Error(
+      `版本不一致：组合层包 package.json version ${j.version} ≠ package.json ${version}（跑 node scripts/derive/index.mts 同步后再打包）`,
+    );
+  }
+  if (j.name !== "@dshana/dsh-app") {
+    throw new Error(`组合层包名字不对：${j.name}（层列钉住的是 @dshana/dsh-app）`);
+  }
+  console.log(`[pack] 组合层包在位（@dshana/dsh-app = ${version}，2 入口 + 5 份组合文档）`);
 }
 
 /** App ui/ 静态树断言（cards route 资源面；相对资源契约）：缺失 = 卡片 404，拒包。 */

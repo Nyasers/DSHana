@@ -18,9 +18,8 @@ import { supportedTargetNames, targetSpec } from "../../scripts/release/pack/tar
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const LOCK_LINES = readFileSync(join(ROOT, "pnpm-lock.yaml"), "utf8").split(/\r?\n/);
 
-/** LibreOffice 转换栈的名字根与四个原生 kit；Linux 没有原生形态，那条是 wasm。 */
+/** Office 转换栈的名字根：那一条链（kit + 按平台切分的原生件）不进产物。 */
 const LO_KIT = "@deepseek-ai/libreoffice-kit";
-const LO_NATIVE = ["darwin-arm64", "darwin-x64", "win32-x64", "win32-arm64"];
 
 const targets = supportedTargetNames().map((name) => {
   const spec = targetSpec(name);
@@ -91,22 +90,10 @@ test("universal 的清单盖住每个平台目标声明的全部资产", () => {
   }
 });
 
-test("LibreOffice 转换栈按平台声明：linux 走 wasm，其余各带本平台原生 kit", () => {
+test("资产清单不声明 Office 转换栈：那一条链不进产物（转换交给宿主侧）", () => {
   for (const { name, spec } of targets) {
     const lo = spec.assets.filter((asset) => asset.startsWith(LO_KIT));
-    assert.ok(lo.includes(LO_KIT), `${name} 缺 LibreOffice wrapper`);
-    if (name === "universal") {
-      for (const kit of LO_NATIVE) assert.ok(lo.includes(`${LO_KIT}-${kit}`), `universal 缺原生 kit ${kit}`);
-      assert.ok(lo.includes(`${LO_KIT}-wasm`), "universal 缺 wasm kit");
-      continue;
-    }
-    if (spec.os.includes("linux")) {
-      assert.deepEqual(lo, [LO_KIT, `${LO_KIT}-wasm`], `${name} 的转换栈应只有 wasm 形态`);
-      continue;
-    }
-    const platform = `${spec.os[0]}-${spec.cpu[0]}`;
-    assert.ok(LO_NATIVE.includes(platform), `${name} 的平台不在原生 kit 清单里`);
-    assert.deepEqual(lo, [LO_KIT, `${LO_KIT}-${platform}`], `${name} 的转换栈应是原生 ${platform}`);
+    assert.deepEqual(lo, [], `${name} 的资产清单还在声明 Office 转换栈：${lo.join(", ")}`);
   }
 });
 

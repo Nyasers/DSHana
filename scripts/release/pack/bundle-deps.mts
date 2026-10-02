@@ -12,10 +12,10 @@
 // bundle 携带**的包按 profile 作用域补进解析代（并按需在 profile 下 reconcile 一条自有链接），
 // 官方 bundle 声明的那些包走的就是这条路。于是子插件必须由某个**被选中**的 bundle 认领。
 //
-// 认领者选 @deepseek-ai/dsh-web-app：web profile 随附两层 bundle（dsh-base + dsh-web-app）里的
-// 上层，已经被 profile 选中，声明在这里即随它进解析代。声明值用 file:../../@dshana/<名>（与它
-// 同锚点的真实目录）：解析代只取依赖**名**做闭包遍历（packageDirFromAnchor 走 node 解析），
-// 任何真去解析它的人（pnpm、DSH 的链接模式）也会命中包内那份真实目录。
+// 认领者就是我们的组合层包 @dshana/dsh-app：profile 层列（dsh-base → dsh-app）里被选中的那一层，
+// 声明在这里即随它进解析代。声明值用 file:../../@dshana/<名>（与它同锚点的真实目录）：解析代只取
+// 依赖**名**做闭包遍历（packageDirFromAnchor 走 node 解析），任何真去解析它的人（pnpm、DSH 的
+// 链接模式）也会命中包内那份真实目录。
 //
 // 因此不改 profile manifest、不建我们自己维护的链接、不碰数据目录：profile 侧的链接由 DSH 每轮
 // boot 自己 reconcile，对任何安装一视同仁。
@@ -23,7 +23,39 @@ import fs from "fs-extra";
 import { join } from "node:path";
 
 /** 认领随包插件的被选中 bundle。 */
-export const BUNDLE_PACKAGE = "@deepseek-ai/dsh-web-app";
+export const BUNDLE_PACKAGE = "@dshana/dsh-app";
+
+/** 安装锚点：内核包（与 packages/host/src/main.ts 的 installAnchor 同一处）。 */
+const ANCHOR_PACKAGE = "@deepseek-ai/dsh";
+
+/**
+ * 把组合层包声明进**安装锚点**（内核包）的依赖，使它成为「安装提供」的包。
+ *
+ * 为什么非得这样：DSH 算 profile 解析代时，会把「被选中 bundle 自己的名字」从 profile 作用域里
+ * **显式删掉**（app-boot 的 collectProfileScopePackages 末尾 `bundleLinks.delete(layer.packageName)`）
+ * ——bundle 里那些 `name: <bundle 自己>` 的行（我们的 web-runtime / web-startup）按设计从**安装图**
+ * 解析，官方的 web-app 正是如此（它是内核包的依赖）。我们的组合层包不在上游安装图里，于是那两行
+ * 谁都解析不到，boot 期表现为 “failed to import”。声明进锚点即把这一步补上。
+ *
+ * fail-closed：锚点不在或它不声明 dsh.bundle 那套结构就对不上，宁可不打包。
+ * @param {string} nodeModulesDir 组装台里的 node_modules（交付树）
+ */
+export function declareInstallationBundle(nodeModulesDir) {
+  const manifestPath = join(nodeModulesDir, ANCHOR_PACKAGE, "package.json");
+  if (!fs.pathExistsSync(manifestPath)) {
+    throw new Error(`安装锚点不在交付树里：${manifestPath}（物化树与该 DSH 版本不匹配？）`);
+  }
+  const manifest = fs.readJsonSync(manifestPath);
+  const declared = `file:../../${BUNDLE_PACKAGE.replace("@", "@")}`;
+  const dependencies = { ...(manifest.dependencies ?? {}) };
+  const existing = dependencies[BUNDLE_PACKAGE];
+  if (existing !== undefined && existing !== declared) {
+    throw new Error(`${ANCHOR_PACKAGE} 已声明的 ${BUNDLE_PACKAGE} 是 ${existing}，与预期 ${declared} 不符`);
+  }
+  dependencies[BUNDLE_PACKAGE] = declared;
+  fs.writeFileSync(manifestPath, JSON.stringify({ ...manifest, dependencies }, null, 2) + "\n");
+  console.log(`[pack] 组合层包已声明进 ${ANCHOR_PACKAGE} 依赖（${declared}）——它由此进安装图（解析代里才算「安装提供」）`);
+}
 
 /** 随包发布子插件的 scope 目录名。 */
 const PLUGINS_SCOPE = "@dshana";
@@ -44,6 +76,8 @@ export function declareInstallationPlugins(nodeModulesDir) {
   const plugins = fs
     .readdirSync(scopeDir, { withFileTypes: true })
     .filter((e) => e.isDirectory() && !e.name.startsWith("."))
+    // 认领者自己不算随包插件（它住在同一个 scope 下，扫到会把自己声明成自己的依赖）。
+    .filter((e) => `${PLUGINS_SCOPE}/${e.name}` !== BUNDLE_PACKAGE)
     .map((e) => e.name)
     .sort();
   if (plugins.length === 0) throw new Error(`随包子插件目录为空：${scopeDir}（拒绝出包）`);
