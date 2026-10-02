@@ -22,6 +22,9 @@
 //   "./x.module.css"（官方 TSX 组件 CSS Modules 语义，集成层编译官方
 //   ui-layout AppFrame 等源码需要）→ css-modules 虚拟模块（默认导出 local→带包命名空间
 //   前缀的 class 映射 + 模块执行时注入 <style data-plugin-css>，纯运行时无 React 路径）。
+//   :global(...)/:local(...)（官方 CSS Modules 的穿透语法，官方链由 lightningcss 剥掉）在
+//   虚拟模块里同样剥掉包装后落进产物：浏览器不认识这两个伪类，留着会让整条规则被丢弃
+//   （宿主条件样式静默失效，见 scopeSelector 与 MODULE_PSEUDO_NAMES）。
 // 环境常量：浏览器产物无 process 全局——define 把 process.env 整体替换为空对象、
 // NODE_ENV=production（store 引擎 devFreeze 等按 production 走），官方
 // tsdown.client.ts 同款 define 姿势；产物无源码内嵌内容字符串（全部走正常构建）。
@@ -103,6 +106,56 @@ function moduleHash(id, file, pkgDir) {
  * pkgDir 供 moduleHash 取包内相对路径（可省略，省略时退到 /src/ 或完整路径）。 */
 export function scopedClassName(id, file, local, pkgDir) {
   return "dv_" + cssScopeOf(id) + "_" + moduleHash(id, file, pkgDir) + "_" + local;
+}
+
+/** CSS Modules 的转义伪类名单。`:global(...)` 里的选择器穿透到宿主（不作用域化），
+ * `:local(...)` 只是把默认语义写明（内容照常作用域化）；两者的括号包装都不属于 CSS，
+ * 必须在产物里剥掉。 */
+const MODULE_PSEUDO_NAMES = ["global", "local"] as const;
+/** 名单里透传（不作用域化）的那一个。 */
+const PIERCING_PSEUDO = "global";
+
+/**
+ * 一条选择器的作用域化：剥掉 `:global(...)`/`:local(...)` 的括号包装，`:global(...)` 里的
+ * 类名保持原样，其余 local 类名交给 scope。
+ *
+ * 为何必须剥：`:global(...)` 是 CSS Modules 的语法，浏览器把它当未知伪类，整条选择器因此无效、
+ * 整条规则被丢弃（不是只失效那一段）。上游的宿主条件样式全靠它表达（[data-conversation-scroll]
+ * 下的滚动归属、[data-windows-titlebar] 下的标题栏几何），官方链由 lightningcss 剥掉——
+ * 本链不剥，这些规则在产物里就是死的。
+ * @param selector - 源选择器
+ * @param scope - local 类名 → 最终类名
+ * @returns 剥掉包装并换名后的选择器
+ */
+export function scopeSelector(selector: string, scope: (local: string) => string): string {
+  return selectorParser((selectors) => {
+    // 穿透区内的 class 节点（含 :has()/is() 等伪类参数里的）：换名时跳过。
+    const pierced = new Set<unknown>();
+    // 先收集再替换：边遍历边改结构会让 walkPseudos 的游标错位。
+    const wrappers: Array<{ nodes: unknown[]; replaceWith: (...nodes: any[]) => unknown }> = [];
+    selectors.walkPseudos((pseudo) => {
+      const name = String(pseudo.value || "").replace(/^::?/, "");
+      if (!(MODULE_PSEUDO_NAMES as readonly string[]).includes(name)) return;
+      const inner = (pseudo as any).nodes as unknown[] | undefined;
+      if (!inner || inner.length === 0) {
+        throw new Error(
+          `选择器里的 :${name} 没有括号（${selector}）——本链只实现 :${name}(...) 形态；` +
+            "裸伪类的作用范围要按 CSS Modules 语义重新对账后再支持",
+        );
+      }
+      wrappers.push(pseudo as any);
+      if (name !== PIERCING_PSEUDO) return;
+      for (const part of inner) {
+        if ((part as any).type === "class") pierced.add(part);
+        (part as any).walkClasses?.((cls: unknown) => pierced.add(cls));
+      }
+    });
+    for (const wrapper of wrappers) wrapper.replaceWith(...(wrapper.nodes as any[]));
+    selectors.walkClasses((cls) => {
+      if (pierced.has(cls)) return;
+      cls.value = scope(cls.value);
+    });
+  }).processSync(selector);
 }
 
 /** 一条 class 名的记账（class 名 → 生成它的源文件）：构建期的类名唯一性闸读它。 */
@@ -196,12 +249,19 @@ function cssModuleSource(id, fileId, css, emitted: CssClassRecord[] = [], pkgDir
     if (touched) decl.value = parsed.toString();
   });
 
-  // 选择器里的 local class → 作用域名。只动真正的 class 节点（postcss-selector-parser），
-  // 属性选择器里的值、字符串、别的选择器功能一概不碰。
+  // 选择器：先剥掉 :global(...)/:local(...) 包装，再给 local class 换名。只动真正的
+  // class 节点（postcss-selector-parser），属性选择器里的值、字符串、别的选择器功能一概不碰。
   root.walkRules((rule) => {
-    rule.selector = selectorParser((sels) => {
-      sels.walkClasses((cls) => { cls.value = scope(cls.value); });
-    }).processSync(rule.selector);
+    rule.selector = scopeSelector(rule.selector, scope);
+    // 闸：这两个伪类留在选择器里就是死规则（浏览器按无效选择器整条丢弃），表现只有
+    // 「某条条件样式莫名没生效」。scopeSelector 已覆盖括号形态，还有残留就是它漏了写法。
+    // 检在选择器上而不是整份产物文本上：声明值里的 local(...)（@font-face 的 src）会误伤。
+    const leftover = MODULE_PSEUDO_NAMES.find((name) => rule.selector.includes(":" + name));
+    if (leftover !== undefined) {
+      throw new Error(
+        `${fileId}: 选择器里仍有 :${leftover}（${rule.selector}）——浏览器不认这个伪类，整条规则会被丢弃`,
+      );
+    }
   });
 
   // 注入的 CSS 是手写文本、不经任何打包器：terser 只压 JS，不会碰字符串里的 CSS，
