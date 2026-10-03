@@ -34,7 +34,6 @@ import { registerDshanaRoutes, defaultDshanaRouteDeps } from "@dshana/tools/rout
 import { installHostModelSync } from "@dshana/models/model-sync.ts";
 // 默认模型对账：DSH 缺省模型必须落在宿主目录里（见 packages/models/src/model-default-guard.ts 的动因）
 import { installModelDefaultGuard, runModelDefaultGuard } from "@dshana/models/model-default-guard.ts";
-// 应用态存储收尾：清掉 UI 跨面共享通道在本生命周期之外的键（见 lib/shared-state.ts）
 
 // ---- 统一日志：只走宿主 ctx.logger ----
 // App 侧不写自己的文件日志；ctx.logger 缺失（旧 host）或宿主抛错时回落 stderr。
@@ -92,34 +91,6 @@ export function apply(ctx) {
     execute: (input, callCtx) => dshanaTool.execute(input, toolCtxFrom(ctx, toolLog)),
   });
   log("info", `工具注册:${dshanaTool.name}（ctx.tools.register，v2 全局唯一名，无自动前缀）`);
-
-  // ---- 应用态存储收尾与面间直投通道重置：都必须在**注册路由之前**做完 ----
-  //      · 共享键（UI 共享通道的就是一次 App 生命周期的事，被杀掉的进程删不掉自己那份）；
-  //      · 面间直投通道的进程内单例：它的快照就是从这批键种出来的，键被清空时它必须一起清。
-  //      顺序很要紧：registrar 一跑就会拿 deps（里面就取那台 hub），放在后面重置的话，
-  //      路由手里留的是上一个生命周期的实例（带着旧 ctx 与旧选中），重置也换不掉它。
-  //      维护动作：fire-and-forget，失败不影响 apply（见 lib/shared-state.ts）。
-  {
-    try {
-      // 面间通道不存在了：不再有 hub 单例要重置。
-    } catch (e) {
-      log("warn", "面间直投通道重置触发异常（忽略）：" + ((e as any)?.message || e));
-    }
-    try {
-      Promise.resolve()
-        // 共享键已不存在：不再需要启动时清键。
-        .then((r) => {
-          if (r.removed > 0 || r.failed > 0) {
-            log("info", `应用态存储收尾：清共享键 ${r.removed} 个（扫描 ${r.scanned} 键，失败 ${r.failed}）`);
-          }
-        })
-        .catch((e) => {
-          log("warn", "应用态存储收尾异常（忽略）：" + ((e as any)?.message || e));
-        });
-    } catch (e) {
-      log("warn", "应用态存储收尾触发异常（忽略）：" + ((e as any)?.message || e));
-    }
-  }
 
   // ---- ctx.routes.register：壳页/诊断面 ----
   // 契约（@hana/app-sdk）：单 bundle App 只能 register 一次，

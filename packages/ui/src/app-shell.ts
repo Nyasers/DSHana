@@ -400,9 +400,10 @@ import {
       lastOwnFetchAt = Date.now();
       if (!isSidebar) publishBootState(s);
       applySnapshot(s);
-      // 终态即停：ready / error / stopped 之后再问没有信息增量，steady state 不该有条取数。
+      // 只有 stopped 停表：ready 的慢轮询是发现运行态漂移（ensureInjection 靠它追上运行时代换后的
+      // 新前缀），error 也还在后台自动重试，停这两态就再也等不到新快照。
       var phase = s && s.phase;
-      if (phase === "ready" || phase === "error" || phase === "stopped") {
+      if (phase === "stopped") {
         if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
       }
     }).catch(function (err) {

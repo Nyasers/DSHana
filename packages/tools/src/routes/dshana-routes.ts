@@ -54,7 +54,6 @@ export const DASHANA_ROUTE_PREFIX = "/dshana";
 // 为什么不用 schema 门：设置标签页直接渲染本 App 自己的页
 // （contributes.settings.ui.route），配置经 App 自己的后端读写，宿主不代画表单。
 // 写带 expectedRevision：不匹配回 409，不静默覆盖。
-  // 设置广播键已退场：没有消费方，设置变更由发起的那个面自己处理。
 
 /** 取错误的可读文本。catch 到的值类型未知（unknown / {}），字段访问一律经这里。 */
 const errText = (e: unknown): string => ((e as any)?.message as string) || String(e);
@@ -390,10 +389,8 @@ export function dshanaRoutesTable() {
     ["GET", DASHANA_ROUTE_PREFIX + "/settings"],
     ["GET", DASHANA_ROUTE_PREFIX + "/models"],
     ["GET", DASHANA_ROUTE_PREFIX + "/card-state"],
-      // faces 端点已拆（面间不再有 HTTP 面）
     ["POST", DASHANA_ROUTE_PREFIX + "/start"],
     ["POST", DASHANA_ROUTE_PREFIX + "/stop"],
-      // faces 端点已拆（面间不再有 HTTP 面）
     ["POST", DASHANA_ROUTE_PREFIX + "/settings"],
     ["POST", DASHANA_ROUTE_PREFIX + "/settings/restart"],
   ];

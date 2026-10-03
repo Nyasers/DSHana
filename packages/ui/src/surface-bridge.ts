@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// packages/ui/src/surface-bridge.ts — App surface 的低层宿主管道（凭据 / 取数 / 跨面共享 / 卡实例态 / 剪贴板）
+// packages/ui/src/surface-bridge.ts — App surface 的低层宿主管道（凭据 / 取数 / 跨面广播 / 卡实例态 / 剪贴板）
 //
 // 这一层是「谁在跑」与「页面长什么样」之间的接口：会话卡（stream 面）与壳页（main / default /
 // sidebar）都要它，但它是**纯宿主 plumbing**——不碰 DOM 渲染、不引 dsh-inject / React，所以
@@ -9,12 +9,8 @@
 //
 // 相对资源纪律与凭据形态的来龙去脉见 packages/ui/src/app-shell.ts 顶部注释；这里只保留实现。
 import { hana } from "@hana/plugin-sdk";
-import {
-  SHARED_KEY_PREFIX, INTENT_KINDS, intentSharedValue, isIntentKind, normalizeIntent,
-  type IntentKind, type IntentPayload,
-} from "@dshana/shared/shared-state.ts";
+import { type IntentKind, type IntentPayload, faceTakesIntent } from "@dshana/shared/shared-state.ts";
 import { CHANNEL_SCOPE_FALLBACK, normalizeScope, type FaceAddress } from "@dshana/shared/face-addresses.ts";
-import { faceTakesIntent } from "@dshana/shared/shared-state.ts";
 import { isFaceView, roleForView } from "./face-role.ts";
 import { createIntentLandings, type IntentLandingMeta } from "./intent-landing.ts";
 
@@ -122,34 +118,11 @@ export function dropShared(): Promise<unknown> {
   return Promise.resolve();
 }
 
-// ---- 跨面转发：两台通道 ----
-//   ① **共享空间 + 监听**（广播）：一台通道、封闭词表，局部面（FP）发射意图、整幅面落地。
-//      跨文档能过的只有意图本身——插件实例与注入的 hook 留在发射端，接收端拿自己的插件实例把那条面
-//      重建出来。词表与载荷归一住在 @dshana/shared/shared-state.ts（纯逻辑，单测直接打）；
-//      本层只做运输，并把词表外的 kind 挡在门外。
-//   ② **直投通道**（指名，`publish`）：发射面给出收件人，中介在 App 进程，回执带回投到几个面。
-//      已在通道上的 kind 见 CHANNEL_KINDS（目前是会话选中）；其余 kind 仍在 ① 上，逐个迁移。
-//      两台的边界：要在会话选中上工作，读 `readSelection`；写 `writeSelection`（余下同形）。
-//   既有三件（设置视图 / 会话选中 / 主面板选中）原本都走 ①，下面保留同名包装使消费方按原样调用。
-
-/** 一条意图的读结果（读侧形状；值不落盘，当前无人产出）。 */
-export interface ForwardedIntent<K extends IntentKind> {
-  value: IntentPayload<K>;
-  at: number;
-  pending: boolean;
-}
-
-// 读/写意图的两件旧工具（readIntent / writeIntent）已随共享存储一起退场：
-// 值随同页广播走，没有槽可读也没有槽可写。
-
-// 旧的四件（readIntent / writeIntent / onIntentChanged / clearIntent）已从公开面撤下：
-//   · readIntent / writeIntent 降为内部工具（通道首读的种子、无凭据页面的退化读写）；
-//   · onIntentChanged / clearIntent 连同那套“待落地 + 消费即清”的协议一起删除——那是广播共享空间的
-//     债（回声、空槽、清空盖新时间戳），而通道的“指名 + 不回放”从根上不需要它。
-
-// ---- 跨面直投通道：已拆 ----
-// 指名投递、hub 与通道协议连同它们的服务端一起退场：同页的两方（FP ↔ main）走
-// BroadcastChannel（频道按卡片实例分），其余面各自独立，不经 HTTP。
+// ---- 跨面转发：同源广播一条通道 ----
+// 局部面（FP）发射意图、整幅面落地。跨文档能过的只有意图本身——插件实例与注入的 hook 留在发射端，
+// 接收端拿自己的插件实例把那条面重建出来。词表与载荷归一住在 @dshana/shared/shared-state.ts
+// （纯逻辑，单测直接打）。本层只做运输：同卡的面 join 同一个 BroadcastChannel（频道名按卡片实例
+// 分），谁发谁收都到。指名的直投通道与共享存储都已退场，这里不再有第二台通道。
 
 /** 本页的面（静态声明为准：<meta name="hana-dshana-role"> 或 body[data-dshana-view]）。 */
 function declaredRole(): FaceAddress {
@@ -216,19 +189,20 @@ function refreshScopeLater(): void {
       refreshScopeLater();
       return;
     }
-    if (host === cardScope()) return;
+    const previous = scopeCache;
     scopeTries = 0;
     scopeCache = host;
-    // 作用域换了，频道名跟着换：丢掉旧总线，下次取时按新的卡片名重建。
+    // 作用域没变且总线已在：什么都不动，别把已有的监听器拆了。
+    if (previous === host && linkBus !== null) return;
+    // 作用域换了（或还停在占位段上）：频道名跟着换，丢掉旧总线，按新卡片名重建。
+    try { linkBus?.close(); } catch { /* 忽略 */ }
     linkBus = null;
     linkWired = false;
+    // 只收不发的面没有发布路径来重建总线，这里替它接上。
+    if (landings.kinds().length > 0) wireLink();
   }, SCOPE_RETRY_MS);
 }
 
-// ---- 同页直连探针（只探不切）----
-// FP 寄居在主卡那页里，两者同源：子页可以把身份当面报给父页，由父页用 cardInstanceId 比对。
-// 比对一致就说明“这份 FP 属于这张卡的 main”，将来帧转发就走这条直连（不经中继）。
-// 这一版不改传输：子页报、父页比、父页打一条控制台。悬停 FP 的控制台够不着，父页的够得着。
 // ---- 同页直连（同源广播，按卡片分频道）----
 // FP 与 main 不一定互为父子（真机上 FP 的父文档不是 main 那一份，“父页可直达”只说明不是顶层），
 // 所以不走 parent/child：同卡的面 join 同一个广播频道，谁发谁收都到，不用先认出对端。
@@ -255,29 +229,12 @@ function linkBusFor(): BroadcastChannel | null {
   return linkBus;
 }
 
-function wireLinkProbe(): void {
+function wireLink(): void {
   if (linkWired) return;
   linkWired = true;
   const bus = linkBusFor();
   console.info("[dshana/faces] [BroadcastChannel]", { as: declaredRole(), card: cardScope() });
   if (bus === null) console.warn("[dshana/faces] [BroadcastChannel] 不可用：本页不发也不收跨面帧。");
-}
-
-/** 走本 App 路由取一份 JSON（非 2xx 当失败抛，不静默降级）。 */
-function jsonOf(path: string, init: RequestInit): Promise<unknown> {
-  return apiFetch(path, init).then((res) => {
-    if (!res.ok) throw new Error(path + " HTTP " + res.status);
-    return res.json() as Promise<unknown>;
-  });
-}
-
-/** 本页有没有 surface 会话凭据。没有就根本走不了 route（一律拒无凭据请求），也就没有通道可言。 */
-function hasSurfaceCredentials(): boolean {
-  try {
-    return surfaceSession() !== null;
-  } catch {
-    return false;
-  }
 }
 
 // ---- 通用落地面 ----
@@ -299,11 +256,10 @@ export function registerIntentLanding<K extends IntentKind>(
   handler: (payload: IntentPayload<K>, meta: IntentLandingMeta) => void,
 ): () => void {
   // 登记时就把广播总线建起来（收方不一定会发，不建就等于没在听）。
-  wireLinkProbe();
+  wireLink();
   return landings.register(kind, handler as (payload: unknown, meta: IntentLandingMeta) => void);
 }
 
-/** 读一条 kind 的当前值（值不存档：同页由广播送，跨页各管各的）。 */
 /** 把一条意图发给同卡的其他面（同源广播）；返回 1 表示已投出。 */
 function linkBroadcast(kind: string, payload: unknown): number {
   const bus = linkBusFor();
@@ -448,10 +404,9 @@ export function clipboardWrite(text: string): Promise<boolean> {
 }
 
 // ---- 挂到宿主桥（__DSHANA__）上的跨面接口 ----
-//   通用转发 → 任意词表内 kind（readIntent / writeIntent / onIntentChanged，新增面走这条）；
-//   三个既有消费者保留同名包装，与上一条同一条通道：
-//     设置视图 → integrations/ui-settings-general；会话选中 → integrations/ui-session；
-//     主面板选中 → ui-sidebar（FP 发射）与 ui-layout（主卡落地）；
+//   通用面 → 任意词表内 kind（publishIntent / readIntentState / registerIntentLanding）；
+//   具名面保留按名的包装，内部坐上面三件：
+//     会话选中 → integrations/ui-session；主面板选中 → ui-sidebar（FP 发射）与 ui-layout（主卡落地）；
 //   会话坐标 → ui-session 的只读面（readPinnedSession）；
 //   剪贴板 → @dshana/clipboard 的 client 半（同文档，直接调，无消息协议）。
 export const SURFACE_API = {
