@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.0.0-rc.34+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.33%2Bdsh-0.2.0-rc.2...v1.0.0-rc.34%2Bdsh-0.2.0-rc.2) (2026-10-03)
+
+### Features
+
+* **app:** 跨面转发统一为一台意图通道，app 级 overlay 只归整幅面 ([44ac7ef](https://github.com/Nyasers/DSHana/commit/44ac7ef660ef4f6d7ecd50cad35e2bd37aef5c99))
+* **app:** 面间直投通道——会话选中改走指名投递 ([e897968](https://github.com/Nyasers/DSHana/commit/e897968273defc6e0e87b63cbed86a8681a95120))
+* **app:** 四个 command 搬到直投通道，删掉各 integration 的 drain 机器 ([12cd0c9](https://github.com/Nyasers/DSHana/commit/12cd0c9c4049d8559c9460cbbed160ec83edb0ea))
+* **app:** panel-view 搬到直投通道，删掉旧三件名 ([29eebaf](https://github.com/Nyasers/DSHana/commit/29eebaf3e7b3740ae2e58a10dd63b3a98b58eef3))
+* **app:** settings-view 搬到直投通道，删掉旧三件名 ([ec0f07a](https://github.com/Nyasers/DSHana/commit/ec0f07a11948829ce8778c1791b214a8a31953b3))
+
+### Bug Fixes
+
+* **app:** 接住 CodeRabbit 三条，扫掉拆通道留下的死代码 ([7bd1ca5](https://github.com/Nyasers/DSHana/commit/7bd1ca5cb9b05f53d43c7cdab2d37cdd1930c8ab))
+* **app:** 跨面意图的消费回声与空槽——修转发把主卡弹爆 ([05e9fb7](https://github.com/Nyasers/DSHana/commit/05e9fb7fae4efc221b4d21160390f345f7364db3))
+* **app:** review 处置——收尾重置排在注册路由之前，通道循环分代 ([dd9d0cd](https://github.com/Nyasers/DSHana/commit/dd9d0cd1e150f2118019cd49cae8ab8504d626b7)), references [#232](https://github.com/Nyasers/DSHana/issues/232)
+* **ci:** audit 放宽无补丁可钉的那条上游告警（http-cache-semantics） ([af1e23d](https://github.com/Nyasers/DSHana/commit/af1e23d5da4f95f7976ae062887ab7fa0e096d81))
+* **pack:** 本地替身包随工位物化（否则 file: overrides 在工位里 ENOENT） ([02c1cfe](https://github.com/Nyasers/DSHana/commit/02c1cfeccba331f821bf548beeca6c3b1ae01827))
+* **shared:** since 不认数字字符串——poll 每次全量回放、永不挂起 ([d03de89](https://github.com/Nyasers/DSHana/commit/d03de89cc8f7c80b7922be9b25365028303a0004))
+* **ui:** 通道加两道闸，掉掉“一秒上百次 poll”那一类循环 ([ed80866](https://github.com/Nyasers/DSHana/commit/ed80866f93f66979904888e38fbb52a5fabf71b2))
+
 ## [1.0.0-rc.33+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.32%2Bdsh-0.2.0-rc.2...v1.0.0-rc.33%2Bdsh-0.2.0-rc.2) (2026-10-02)
 
 ### Bug Fixes
@@ -663,6 +683,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
