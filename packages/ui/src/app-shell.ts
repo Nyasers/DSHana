@@ -25,11 +25,7 @@ import {
   SURFACE_MISSING,
   clipboardWrite,
   credMissingHtml,
-  dropShared,
   fetchBootState,
-  onSharedChanged,
-  readShared,
-  writeShared,
   postAction,
   surfaceSession,
   withSurfaceTicket,
@@ -395,32 +391,29 @@ import {
       Array.isArray(s.logTail) ? s.logTail.join("\n") : "",
     ].join("|");
   }
+  // boot-state 不再进全局存储：每个面自己在非终态期间取、到终态即停。
   function publishBootState(s) {
-    var sig = bootSig(s);
-    if (sig === lastPublishedSig) return; // 状态没变就不写，免存储抖动
-    lastPublishedSig = sig;
-    writeShared("boot-state", { state: s })
-      .catch(function () { /* 拿不到共享面就当没有，本面照常自取 */ });
+    lastPublishedSig = bootSig(s);
   }
   function fetchOwnState() {
     fetchBootState().then(function (s) {
       lastOwnFetchAt = Date.now();
       if (!isSidebar) publishBootState(s);
       applySnapshot(s);
+      // 只有 stopped 停表：ready 的慢轮询是发现运行态漂移（ensureInjection 靠它追上运行时代换后的
+      // 新前缀），error 也还在后台自动重试，停这两态就再也等不到新快照。
+      var phase = s && s.phase;
+      if (phase === "stopped") {
+        if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+      }
     }).catch(function (err) {
       setStateView("error", (err && err.message) || String(err));
     });
   }
-  /** force=true 忽略共享快照直接自取（本面刚发过动作，必须立刻看到结果）。 */
-  function poll(force = false) {
-    if (!isSidebar) { fetchOwnState(); return; }
-    readShared("boot-state").then(function (v) {
-      if (!force && v && v.state && Date.now() - lastOwnFetchAt < POLL_REVERIFY_MS) {
-        applySnapshot(v.state);
-        return;
-      }
-      fetchOwnState();
-    }, function () { fetchOwnState(); });
+  /** 非终态期间每个面自己取；终态由 fetchOwnState 停表（不再问）。force 参数保留形参，语义已无用。 */
+  function poll(_force = false) {
+    void _force;
+    fetchOwnState();
   }
 
   // ---- 壳桥：主题 + 剪贴板（内层 DSH Web UI 的 v1 契约应答）----
@@ -512,7 +505,7 @@ import {
     // —— 直接写 body 背景，跟的是**浏览器系统**偏好；上面那圈自定义属性只管
     // var(--dsw-alias-bg-base) 那一层（.frame 与启动屏），盖不住它。系统暗色时就会先黑一帧。
     // 内联 background-color 优先于样式表，拿这一面“可见底”那格的界面值垫上即可。
-    var backdropVar = null;
+    var backdropVar: string | undefined;
     for (var k = 0; k < spec.length; k++) {
       if (spec[k][0] === "--dsw-alias-bg-base") { backdropVar = spec[k][1]; break; }
     }
@@ -661,24 +654,10 @@ import {
       began = true;
       var view = resolveView(root);
       isSidebar = view === "sidebar";
-      // FP 是投影面：owner（主卡）一写快照就立刻跟随（事件驱动，不等自己的定时器），
-      // 并先用快照渲染首屏（免得空等到第一次定时器）。owner 不在场时下面的 poll 会自己取。
-      if (isSidebar) {
-        onSharedChanged("boot-state", function () {
-          readShared("boot-state").then(function (v) {
-            if (v && v.state) applySnapshot(v.state);
-          }, function () { /* 忽略 */ });
-        });
-        readShared("boot-state").then(function (v) {
-          if (v && v.state) applySnapshot(v.state);
-        }, function () { /* 忽略 */ });
-      }
+      // FP 也是自己取：boot-state 不进全局存储了，下面这句 poll() 就是它的首屏与后续。
       // 卸载释放注入的 transport（WS 载体等）
       window.addEventListener("pagehide", function () {
         if (injected.transport) { try { injected.transport.dispose(); } catch (e) { /* 忽略 */ } }
-        // owner 下线：删掉本页的共享键。键的消费方是「此刻挂着的面」，页面一走就没人读；
-        // 下一个实例自己取一次快照（poll 的过期兜底）。FP 不写键，不必删。
-        if (!isSidebar) { try { dropShared(); } catch (e) { /* 忽略 */ } }
       }, { once: true });
       // 主题按事件推送，没有定时轮询：首屏由
       // getSnapshot()+URL 参数落地，注入完成后在 startInjection 的完成回调里推一次，

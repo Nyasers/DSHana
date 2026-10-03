@@ -1,0 +1,12 @@
+{
+  "name": "@deepseek-ai/dsh-host-product-telemetry-otel",
+  "version": "0.2.0-rc.2",
+  "private": true,
+  "description": "本仓的空实现替身（见 index.js 头注释；不发布）",
+  "type": "module",
+  "license": "MPL-2.0",
+  "exports": {
+    ".": "./index.js"
+  },
+  "main": "index.js"
+}

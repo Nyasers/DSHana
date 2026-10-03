@@ -36,6 +36,11 @@ export function materializeProdDeps(spec, version: string) {
   fs.writeFileSync(join(dir, "package.json"), JSON.stringify(stagingManifest(version), null, 2) + "\n");
   fs.copySync(join(ROOT, "pnpm-lock.yaml"), join(dir, "pnpm-lock.yaml"));
   fs.writeFileSync(join(dir, "pnpm-workspace.yaml"), stagingWorkspaceYaml(spec), "utf8");
+  // 本地替身包（vendor/stubs/*，由 pnpm-workspace.yaml 的 file: overrides 指过来）必须跟着进工位：
+  // 工位是一次**干净安装**，`file:` 路径按工位目录解析，不带过去就是 ENOENT。
+  // 只有运行时闭包里的替身会在这里被解析（@hana/* 那几条是开发面依赖，工位里用不到）。
+  const stubs = join(ROOT, "vendor", "stubs");
+  if (fs.pathExistsSync(stubs)) fs.copySync(stubs, join(dir, "vendor", "stubs"));
   console.log(`[pack] 物化 ${spec.name}（干净安装，隔离目录 .cache/pkg-root/${spec.name}）...`);
   // 锁以仓库锁文件为种子重解析（工位是独立项目，锁得按工位清单重算），再按它做 frozen 安装。
   runPnpm(dir, ["install", "--lockfile-only"], spec.name);

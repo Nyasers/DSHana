@@ -15,6 +15,8 @@
 // 只做一次 getAll + 逐个 delete。广播键 `dshana:settings` 不在此列（冒号而非点号，且它是设置
 // revision 的广播面，不是视图状态）。
 
+import type { FaceAddress } from "./face-addresses.ts";
+
 /** UI 共享通道的键前缀（页面侧拼键与应用侧收尾共用；改一处必须改两处）。 */
 export const SHARED_KEY_PREFIX = "dshana.";
 
@@ -44,6 +46,9 @@ export const INTENT_KINDS = [
 
 /** 一个意图种类。 */
 export type IntentKind = (typeof INTENT_KINDS)[number];
+
+/** 一条跳面 kind。同页广播已承载全部意图，这个别名与 IntentKind 同义。 */
+export type ChannelKind = IntentKind;
 
 /** 认意图种类（词表外的值当场拒）。 */
 export function isIntentKind(value: unknown): value is IntentKind {
@@ -78,15 +83,94 @@ export interface IntentPayloadMap {
  *   command —— 一次性动作（落地后由接收端清掉，重开面不得重放）。
  * 判错两种都会出乖：把 command 当 state 镜像，重载主卡就会把旧的重命名框重新弹一遍。
  */
-export const INTENT_NATURE: Record<IntentKind, "state" | "command"> = {
-  "settings-view": "state",
-  "panel-view": "state",
-  selection: "state",
-  "session-rename": "command",
-  "session-archive": "command",
-  "row-toast": "command",
-  "shortcuts-panel": "command",
-};
+export type IntentNature = "state" | "command";
+
+/**
+ * 一条跨面意图的**完整描述**（单一事实源）。
+ *
+ * 加一条跨面意图 = 这里加一条 + 在落地端登记一个回调；运输（共享空间 / 直投通道）、
+ * 投递面筛选、命令类的“不回放”全由这套描述推出来，不再各处再写一份。
+ */
+export interface IntentSpec<K extends IntentKind = IntentKind> {
+  nature: IntentNature;
+  /** 载荷归一（读侧拿到的永远是干净形状）。 */
+  normalize(raw: unknown): IntentPayload<K>;
+  /**
+   * 参与这条意图的面（发射端与落地端都在内）。不在其中的面收到的帧一律丢。
+   * 不声明 = 未迁移（还只走广播共享空间，投递面由各集成自己的角色闸把关）。
+   */
+  faces?: readonly FaceAddress[];
+}
+
+/** 意图描述符表：词表、性质、载荷归一、参与面的**唯一**来源。 */
+export const INTENT_SPECS = {
+  "settings-view": {
+    nature: "state",
+    normalize: (raw) => normalizeIntent("settings-view", raw),
+    // FP（点设置）与主卡都发射？不——发射端是 FP 与主卡两边的设置入口；落地端是主卡与整幅面
+    // （设置页自身不注入 DSH，不参与）。
+    faces: ["navigation", "workspace", "standalone"],
+  },
+  "panel-view": {
+    nature: "state",
+    normalize: (raw) => normalizeIntent("panel-view", raw),
+    // FP 侧栏选中面板行（发射）、主卡把那一页开出来（落地）：两面参与；整幅面与设置页不参与。
+    faces: ["navigation", "workspace"],
+  },
+  selection: {
+    nature: "state",
+    normalize: (raw) => normalizeIntent("selection", raw),
+    // FP 与主卡发射、（未钉住的）会话流卡只读跟随：三面参与，整幅面与设置页不参与。
+    faces: ["navigation", "workspace", "stream"],
+  },
+  "session-rename": {
+    nature: "command",
+    normalize: (raw) => normalizeIntent("session-rename", raw),
+    // 四个 command 的形状一样：FP 发射（行菜单 / 快捷键），主卡与整幅面落地。
+    faces: ["navigation", "workspace", "standalone"],
+  },
+  "session-archive": {
+    nature: "command",
+    normalize: (raw) => normalizeIntent("session-archive", raw),
+    faces: ["navigation", "workspace", "standalone"],
+  },
+  "row-toast": {
+    nature: "command",
+    normalize: (raw) => normalizeIntent("row-toast", raw),
+    faces: ["navigation", "workspace", "standalone"],
+  },
+  "shortcuts-panel": {
+    nature: "command",
+    normalize: (raw) => normalizeIntent("shortcuts-panel", raw),
+    faces: ["navigation", "workspace", "standalone"],
+  },
+} as const satisfies Record<IntentKind, IntentSpec<IntentKind>>;
+
+/** 取一条描述符（词表外的值当场拒）。 */
+export function intentSpec<K extends IntentKind>(kind: K): IntentSpec<K> {
+  if (!isIntentKind(kind)) throw new Error("未知跨面意图：" + String(kind));
+  return INTENT_SPECS[kind] as IntentSpec<K>;
+}
+
+/** 这条意图参与哪些面（没声明就是 null，表示“由消费方自己的角色闸把关”）。 */
+export function intentFaces(kind: IntentKind): readonly FaceAddress[] | null {
+  if (!isIntentKind(kind)) return null;
+  const faces = INTENT_SPECS[kind].faces;
+  return faces && faces.length ? faces : null;
+}
+
+/** 面是否参与这条意图（未声明参与面时一律当真）。 */
+export function faceTakesIntent(kind: IntentKind, face: string): boolean {
+  const faces = intentFaces(kind);
+  return faces === null || (faces as readonly string[]).includes(face);
+}
+
+/**
+ * 每个 kind 的性质（从描述符表推出来，不再自带一份副本）。
+ */
+export const INTENT_NATURE: Record<IntentKind, IntentNature> = Object.fromEntries(
+  INTENT_KINDS.map((kind) => [kind, INTENT_SPECS[kind].nature]),
+) as Record<IntentKind, IntentNature>;
 
 /** 一个 kind 的载荷类型。 */
 export type IntentPayload<K extends IntentKind> = IntentPayloadMap[K];

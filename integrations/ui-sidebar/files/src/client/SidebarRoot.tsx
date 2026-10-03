@@ -82,7 +82,7 @@ function PanelRow({ id, label, wide, usePanelInfo, selectPanel, renderSlot }: Pa
 
 /** 跨面桥面里本插件用到的那一格（只有面板选中；缺失即不参与）。 */
 type PanelSelectionBridge = {
-  writePanelView?: (panelId: string | null) => Promise<void>
+  publishIntent?: (kind: string, payload: unknown) => Promise<unknown>
 }
 
 /**
@@ -102,7 +102,8 @@ function usePanelPublisher(usePanelInfo: PropsRuntime<'sidebar'>['usePanelInfo']
     if (last.current === activePanelId) return
     last.current = activePanelId
     const bridge = (window as { __DSHANA__?: PanelSelectionBridge }).__DSHANA__
-    void bridge?.writePanelView?.(activePanelId ?? null)
+    // 已上直投通道：通用面指名投递给主卡（“其余面”），回执不用。
+    void bridge?.publishIntent?.('panel-view', { panelId: activePanelId ?? null })
   }, [activePanelId, enabled])
 }
 

@@ -1634,8 +1634,7 @@
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-session-stats"
       ],
       "@deepseek-ai/dsh-session-telemetry": [
-        "../vendor/deepseek-harness/packages/session/session-telemetry/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-session-telemetry"
+        "../vendor/deepseek-harness/packages/session/session-telemetry/src/index.ts"
       ],
       "@deepseek-ai/dsh-session-telemetry-otel": [
         "../vendor/deepseek-harness/packages/session/session-telemetry-otel/src/index.ts",

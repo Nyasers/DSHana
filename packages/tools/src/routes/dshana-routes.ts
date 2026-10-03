@@ -27,6 +27,9 @@
 //   GET  /dshana/card-state  会话流卡页的状态面（按需取数：读宿主任务记录的绑定；回卡页
 //                            可直接换进 DOM 的状态行 HTML。卡页在非终态期间慢轮询，终态即停）
 //
+// 面间的直投通道（faces/*）已拆：同页的两方（FP ↔ main）走 BroadcastChannel，
+// 面间不再有 HTTP 面。
+//
 // 依赖注入（可测性）：deps = { appId, version, getSnapshot(), start(), stop(), log() }。
 // 默认实现经 packages/runtime/src/managed-runtime.ts 读取真实单例；测试注入 fake。
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -36,6 +39,7 @@ import { buildBootSnapshot, APP_ID } from "@dshana/runtime/boot-state.ts";
 import { dataSources, sourceOf } from "@dshana/runtime/data-source.ts";
 // 数据源切换（packages/runtime/src/source-switch.ts）的入口暂时撤下：链未在真机验证过，见 POST /dshana/settings/restart。
 import { groupHostCatalog } from "@dshana/models/model-catalog-view.ts";
+// 面间通道不存在了：跨面只走同页广播（BroadcastChannel），没有 hub、也没有通道协议要引入。
 import {
   createTaskBindingIndex,
   isValidSessionId,
@@ -50,7 +54,6 @@ export const DASHANA_ROUTE_PREFIX = "/dshana";
 // 为什么不用 schema 门：设置标签页直接渲染本 App 自己的页
 // （contributes.settings.ui.route），配置经 App 自己的后端读写，宿主不代画表单。
 // 写带 expectedRevision：不匹配回 409，不静默覆盖。
-const APP_SETTING_BROADCAST_KEY = "dshana:settings";
 
 /** 取错误的可读文本。catch 到的值类型未知（unknown / {}），字段访问一律经这里。 */
 const errText = (e: unknown): string => ((e as any)?.message as string) || String(e);
@@ -179,15 +182,8 @@ export function defaultDshanaRouteDeps(ctx) {
         throw Object.assign(err, { code: "SETTINGS_CONFLICT", revision: cur.revision });
       }
       const next = await store.write({ ...cur.settings, ...patch });
-      // 变更广播：已开页面据此刷新。宿主 App 存储只有 get/set（没有订阅口），
-      // 所以已开页在重新可见时重读；并发写仍由上面的 revision 把关。
-      try {
-        if (ctx.storage && ctx.storage.global && typeof ctx.storage.global.set === "function") {
-          await ctx.storage.global.set(APP_SETTING_BROADCAST_KEY, { revision: next.revision, at: Date.now() });
-        }
-      } catch (e) {
-        log("warn", "设置变更广播写入失败（不影响本次写入）：" + errText(e));
-      }
+      // 变更广播已退场：宿主 App 存储只有 get/set、没有订阅口，已开页在重新可见时自己重读；
+      // 并发写仍由上面的 revision 把关。
       const st = await store.read();
       return {
         revision: st.revision,
@@ -202,6 +198,7 @@ export function defaultDshanaRouteDeps(ctx) {
     },
     start: () => ensureManagedRuntime({}),
     stop: () => stopManagedRuntime(),
+    // 面间通道不存在了：deps 里不再有 facesHub（跨面由同页广播承担）。
   };
 }
 
@@ -224,6 +221,7 @@ export function registerDshanaRoutes(app, deps) {
   const listHostModels = typeof d.listHostModels === "function" ? d.listHostModels : async () => {
     throw new Error("模型候选不可用：deps.listHostModels 未注入");
   };
+  // 面间通道不存在了：不再有 hub 解析（跨面由同页广播承担）。
 
   const json = (c, status, body) => {
     if (typeof c?.json !== "function") {

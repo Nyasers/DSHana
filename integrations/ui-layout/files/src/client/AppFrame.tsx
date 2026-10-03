@@ -145,40 +145,30 @@ export function AppFrame({
   const surface = ROLE_SURFACES[role ?? ''] ?? 'standalone'
 
   // 跨面主面板：本面（workspace）接收 FP 侧栏选中的而行（FP 整面只有侧栏、没有中列，
-  // 面板页只能由本面打开）。读快照一次 + 订阅变化；FP 不在场时本面不动。
+  // 面板页只能由本面打开）。走面间直投通道的通用落地面：登记一件回调，帧到了就落地；
+  // 首挂的快照帧会把当前值送过来，所以不再自己读一次快照。FP 不在场时本面不动。
   useEffect(() => {
     if (surface !== 'workspace') return
     const bridge = (window as {
       __DSHANA__?: {
-        readPanelView?: () => Promise<{ panelId: string | null }>
-        onPanelViewChanged?: (listener: () => void) => () => void
+        registerIntentLanding?: (kind: string, handler: (payload: unknown) => void) => () => void
       }
     }).__DSHANA__
-    const read = bridge?.readPanelView
-    const onChanged = bridge?.onPanelViewChanged
-    if (read === undefined || onChanged === undefined) return
-    let active = true
+    const register = bridge?.registerIntentLanding
+    if (register === undefined) return
     let applied: string | null | undefined
-    const apply = (): void => {
-      void read().then((next) => {
-        if (!active) return
-        const panelId = next?.panelId ?? null
-        if (panelId === applied) return
-        applied = panelId
-        try {
-          actions.selectPanel(panelId as MainPanelId | null)
-        } catch (error: unknown) {
-          // 面板条目还没挂上（本面刚起）或已被摘掉：保持当前选中。
-          console.warn('[dshana/ui-layout] 跨面面板没能落地。', error)
-        }
-      }, () => { /* 读失败保持当前 */ })
-    }
-    const off = onChanged(apply)
-    apply()
-    return () => {
-      active = false
-      off()
-    }
+    const off = register('panel-view', (payload) => {
+      const panelId = (payload as { panelId?: string | null } | null)?.panelId ?? null
+      if (panelId === applied) return
+      applied = panelId
+      try {
+        actions.selectPanel(panelId as MainPanelId | null)
+      } catch (error: unknown) {
+        // 面板条目还没挂上（本面刚起）或已被摘掉：保持当前选中。
+        console.warn('[dshana/ui-layout] 跨面面板没能落地。', error)
+      }
+    })
+    return () => { off() }
   }, [surface, actions])
 
   // Track the frame's own box (not the window): rAF-throttled ResizeObserver.
@@ -370,7 +360,7 @@ export function AppFrame({
           各自就是一幅 app 视图，自己拥有这一层。门必须按“排掉局部面”写而不是枚举整幅面：
           同一套插件集在每个面上各挂一遍，注册到 `shell.overlay` 的条目否则会在每个文档里
           各渲染一份（用户插件尤其明显）。FP 里发起的那些面由整幅面经 surface-bridge 的
-          overlay 意图通道（readIntent / writeIntent / onIntentChanged）落地。 */}
+          overlay 意图通道（publishIntent / registerIntentLanding）落地。 */}
       {surface !== 'navigation' && (
         <div className={css.overlayLayer} data-shell-overlay>
           {overlays}

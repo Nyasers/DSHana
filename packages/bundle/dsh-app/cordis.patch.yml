@@ -458,6 +458,15 @@
 - id: tool-plugin-manager
   disabled: true
 
+# 遥测：上游 base 的 roster 里带两行（otel / session-telemetry-otel），默认 mode=FEEDBACK_ONLY、
+# OTLP 端点默认打 https://dsh-otel-collector.deepseeksvc.com/v1/logs。我们不需要它——本地单用户
+# 应用，不应往外送任何东西。用上游自己开的关闸（行级 disabled），与上面 tool-bash 那一族同一手法；
+# 不改上游文件。
+- id: otel
+  disabled: true
+- id: session-telemetry-otel
+  disabled: true
+
 - id: tool-bash
   disabled: true
 

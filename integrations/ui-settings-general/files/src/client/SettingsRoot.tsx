@@ -51,9 +51,19 @@ export type SettingsView = { open: boolean; section: string | null }
 
 type HanaSettingsBridge = {
   role?: string
-  readSettingsView?: () => Promise<SettingsView>
-  writeSettingsView?: (next: SettingsView) => Promise<void>
-  onSettingsViewChanged?: (listener: () => void) => () => void
+  /** 通用面（settings-view 已上直投通道）：读当前值 / 指名投递 / 登记落地。 */
+  readIntentState?: (kind: string) => Promise<{ value: unknown; at: number } | null>
+  publishIntent?: (kind: string, payload: unknown) => Promise<unknown>
+  registerIntentLanding?: (kind: string, handler: (payload: unknown) => void) => () => void
+}
+
+/** 帧/快照带来的原始载荷归一成本组件认的视图形状。 */
+function normalizeView(raw: unknown): SettingsView {
+  const value = (raw ?? {}) as { open?: unknown; section?: unknown }
+  return {
+    open: value.open === true,
+    section: typeof value.section === 'string' && value.section ? value.section : null,
+  }
 }
 
 function hanaBridge(): HanaSettingsBridge | undefined {
@@ -132,9 +142,14 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   } = props
   const bridge = hanaBridge()
   const role = bridge?.role ?? 'navigation'
-  const readView = bridge?.readSettingsView
-  const writeView = bridge?.writeSettingsView
-  const onViewChanged = bridge?.onSettingsViewChanged
+  const readState = bridge?.readIntentState
+  const writeView = bridge?.publishIntent
+  const registerLanding = bridge?.registerIntentLanding
+  /** 读当前设置视图（通道缓存/首读懒种子；没有当前值就是关且无分区）。 */
+  const readView = useCallback(async (): Promise<SettingsView> => {
+    const hit = readState === undefined ? null : await readState('settings-view')
+    return normalizeView(hit?.value)
+  }, [readState])
   const { open, activeId } = useStore(state => state)
   const shortcut = useShortcuts(rows => rows.find(row => row.id === 'settings.open'))
   const { open: openState, close: closeState, select: selectState, openSection: openSectionState } = actions
@@ -157,7 +172,7 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
       setViewFailure({ kind: 'write', revision })
       return
     }
-    void writeView(next).then(() => {
+    void writeView('settings-view', next).then(() => {
       if (pendingWrite.current?.revision === revision) pendingWrite.current = null
     }, (error: unknown) => {
       if (revision !== viewRevision.current) return
@@ -178,31 +193,36 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
 
   // 跟随共享状态：只有 workspace / standalone 订阅并应用——
   // FP（navigation）是发射端（点设置写出去），主卡是接收端（读进来以模态面板打开）。
+  // 落地走直投通道的落地面：帧到了直接落（不再绕一圈读），首挂的快照帧就是当前值。
   useEffect(() => {
-    if (role === 'navigation' || role === 'settings' || readView === undefined || onViewChanged === undefined) {
+    if (role === 'navigation' || role === 'settings' || registerLanding === undefined || readView === undefined) {
       refreshSettingsView.current = undefined
       return
     }
     let active = true
     let generation = 0
+    const apply = (next: SettingsView): void => {
+      if (!active) return
+      if (next.open) {
+        if (next.section === null) openState()
+        else openSectionState(next.section)
+      } else {
+        closeState()
+      }
+    }
     const refresh = () => {
       const request = ++generation
       const revision = viewRevision.current
       void readView().then((next) => {
         if (!active || request !== generation || revision !== viewRevision.current) return
-        if (next.open) {
-          if (next.section === null) openState()
-          else openSectionState(next.section)
-        } else {
-          closeState()
-        }
+        apply(next)
       }, (error: unknown) => {
         if (!active || request !== generation) return
         console.error('DSH settings view could not be read.', error)
         if (revision === viewRevision.current) setViewFailure({ kind: 'read', revision })
       })
     }
-    const off = onViewChanged(refresh)
+    const off = registerLanding('settings-view', (payload) => { apply(normalizeView(payload)) })
     refreshSettingsView.current = refresh
     refresh()
     return () => {
@@ -211,7 +231,7 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
       if (refreshSettingsView.current === refresh) refreshSettingsView.current = undefined
       off()
     }
-  }, [readView, onViewChanged, role])
+  }, [readView, registerLanding, role])
 
   // The ledger tick keeps the nav rows fresh: registrants re-register with
   // freshly localized text on locale change, and the trigger/header/close

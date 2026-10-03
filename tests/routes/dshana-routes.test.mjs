@@ -63,16 +63,18 @@ function makeFakeDeps(over = {}) {
   };
 }
 
-test("挂载清单：GET boot-state/health/settings/models/card-state + POST start/stop/settings（前缀 dshana）", () => {
+test("挂载清单：GET boot-state/health/settings/models/card-state/faces-poll + POST start/stop/settings/faces-send（前缀 dshana）", () => {
   const { app, routes } = makeFakeApp();
   registerDshanaRoutes(app, makeFakeDeps());
   const paths = routes.map(([m, p]) => m + " " + p).sort();
   assert.deepEqual(paths, [
     "GET /dshana/boot-state",
     "GET /dshana/card-state",
+      // faces 端点已拆（面间不再有 HTTP 面）
     "GET /dshana/health",
     "GET /dshana/models",
     "GET /dshana/settings",
+      // faces 端点已拆（面间不再有 HTTP 面）
     "POST /dshana/settings",
     "POST /dshana/settings/restart",
     "POST /dshana/start",
@@ -485,3 +487,5 @@ test("defaultDshanaRouteDeps: 数据目录取宿主顶层 ctx.dataDir（ctx.conf
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
 });
+
+// （面间通道已拆：两个 faces 端点与 hub 不再存在，相关用例随之一并退出。）

@@ -82,40 +82,23 @@ export function apply(ctx: Context): void {
     return () => { disposeCommand(); disposeSlot() }
   })
 
-  // 落地端：接住 FP 发来的一次性「打开参考框」，用自己的 store 开；落地即清，重载不重放。
+  // 落地端：帧到了就开（直投通道的落地面）；一次性动件，不在通道上重放。
   ctx.effect(() => {
     if (!landsIntent) return () => { /* 发射端与其它面不落地 */ }
     const bridge = forwardBridge()
-    const readIntent = bridge?.readIntent
-    const onIntentChanged = bridge?.onIntentChanged
-    if (readIntent === undefined || onIntentChanged === undefined) return () => { /* 桥不在就不参与 */ }
-    let appliedAt = -1
-    const drain = (): void => {
-      void readIntent('shortcuts-panel').then((intent) => {
-        if (!intent || !intent.pending) return
-        const at = typeof intent.at === 'number' ? intent.at : 0
-        if (at <= appliedAt) return
-        appliedAt = at
-        instance.actions.open()
-        // 清空必须带回刚消费的 at（见 clearIntent 注释：否则会被自己的清空再唤醒）。
-        const clearIntent = bridge?.clearIntent
-        if (clearIntent !== undefined) void clearIntent('shortcuts-panel', at).catch(() => { /* 清不掉下次读再判一次 at */ })
-      }, () => { /* 读失败等下一次变化 */ })
-    }
-    const off = onIntentChanged('shortcuts-panel', drain)
-    // 面比发射端晚开时，把存着的那一条接住（已经是空的说明早已落地）。
-    drain()
-    return () => { if (typeof off === 'function') off() }
+    const registerLanding = bridge?.registerIntentLanding
+    if (registerLanding === undefined) return () => { /* 桥不在就不参与 */ }
+    const off = registerLanding('shortcuts-panel', () => { instance.actions.open() })
+    return () => { off() }
   }, 'ui-shortcuts: 跨面意图的落地')
 }
 
 // ── 跨面转发用到的宿主桥面（壳页挂在 window.__DSHANA__；缺失即整条不参与）───────────
 interface ForwardBridge {
   readonly role?: string
-  writeIntent?(kind: string, value: unknown): Promise<unknown>
-  readIntent?(kind: string): Promise<{ value: unknown; at: number; pending: boolean }>
-  onIntentChanged?(kind: string, listener: () => void): () => void
-  clearIntent?(kind: string, at: number): Promise<unknown>
+  /** 已上直投通道：指名投递 / 登记落地（旧三件名随迁移删除）。 */
+  publishIntent?(kind: string, value: unknown): Promise<{ delivered: number }>
+  registerIntentLanding?(kind: string, handler: (payload: unknown) => void): () => void
 }
 
 function forwardBridge(): ForwardBridge | undefined {
@@ -123,8 +106,8 @@ function forwardBridge(): ForwardBridge | undefined {
   return bridge !== null && typeof bridge === 'object' ? bridge : undefined
 }
 
-/** 发射一条意图（发射端用；桥不在或写失败就当没发出去）。 */
+/** 发一条意图（发射端用；桥不在或发失败就当没发出去）。 */
 function emitIntent(kind: string, value: unknown): void {
-  const written = forwardBridge()?.writeIntent?.(kind, value)
-  if (written !== undefined) void written.catch(() => { /* 写不进则本次不发 */ })
+  const written = forwardBridge()?.publishIntent?.(kind, value)
+  if (written !== undefined) void written.catch(() => { /* 发不出去则本次不发 */ })
 }

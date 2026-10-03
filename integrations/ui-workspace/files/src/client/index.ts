@@ -254,41 +254,19 @@ export function apply(ctx: Context): void {
     showArchived: () => { viewInstance.actions.setArchivedFilter('show') },
   })
 
-  // 落地端：接住发射端写下的一次性意图，用自己的 store 重建那条面；落地即清，重载不重放。
-  // 只认一次性动作（session-rename / session-archive / row-toast）；两个 state 类 kind
-  // （settings-view / panel-view）不归本包。
+  // 落地端：帧到了就落（直投通道的落地面），用自己的 store 重建那条面。
+  // 只认一次性动作（session-rename / session-archive / row-toast）；state 类 kind 不归本包。
   ctx.effect(() => {
     if (!landsIntent) return () => { /* 发射端与其它面不落地 */ }
     const bridge = forwardBridge()
-    const readIntent = bridge?.readIntent
-    const onIntentChanged = bridge?.onIntentChanged
-    if (readIntent === undefined || onIntentChanged === undefined) return () => { /* 桥不在就不参与 */ }
-    const clearIntent = bridge?.clearIntent
-    const appliedAt = new Map<string, number>()
-    const follow = (kind: string, apply: (value: any) => void): (() => void) => {
-      let disposed = false
-      const drain = (): void => {
-        void readIntent(kind).then((intent) => {
-          if (disposed || !intent || !intent.pending) return
-          const at = typeof intent.at === 'number' ? intent.at : 0
-          if (at <= (appliedAt.get(kind) ?? -1)) return
-          appliedAt.set(kind, at)
-          apply(intent.value)
-          // 清空必须带回刚消费的 at（见 clearIntent 注释：否则会被自己的清空再唤醒）。
-          if (clearIntent !== undefined) void clearIntent(kind, at).catch(() => { /* 清不掉下次读再判一次 at */ })
-        }, () => { /* 读失败保持待处理，等下一次变化 */ })
-      }
-      const off = onIntentChanged(kind, drain)
-      // 面比发射端晚开时，把存着的那一条接住（已经是空的说明早已落地）。
-      drain()
-      return () => { disposed = true; if (typeof off === 'function') off() }
-    }
+    const registerLanding = bridge?.registerIntentLanding
+    if (registerLanding === undefined) return () => { /* 桥不在就不参与 */ }
     const disposers = [
-      follow('session-rename', (value: any) => {
+      registerLanding('session-rename', (value: any) => {
         if (!value || typeof value.sessionId !== 'string' || !value.sessionId) return
         renameLocally(SessionId(value.sessionId), typeof value.title === 'string' ? value.title : '')
       }),
-      follow('session-archive', (value: any) => {
+      registerLanding('session-archive', (value: any) => {
         if (!value || typeof value.sessionId !== 'string' || !value.sessionId) return
         archiveRequest.set({
           sessionId: SessionId(value.sessionId),
@@ -296,7 +274,7 @@ export function apply(ctx: Context): void {
           activity: Array.isArray(value.activity) ? value.activity : [],
         })
       }),
-      follow('row-toast', (value: any) => {
+      registerLanding('row-toast', (value: any) => {
         if (!value || value.notice === null || typeof value.notice !== 'object') return
         raiseToast(value.notice as RowToast)
       }),
@@ -409,10 +387,9 @@ function activeSessionRefusal(reason: unknown): readonly SessionActivity[] | und
 // （@dshana/shared/shared-state.ts），这里只按字面用 kind。
 interface ForwardBridge {
   readonly role?: string
-  writeIntent?(kind: string, value: unknown): Promise<unknown>
-  readIntent?(kind: string): Promise<{ value: unknown; at: number; pending: boolean }>
-  onIntentChanged?(kind: string, listener: () => void): () => void
-  clearIntent?(kind: string, at: number): Promise<unknown>
+  /** 已上直投通道：指名投递 / 登记落地（旧三件名随迁移删除）。 */
+  publishIntent?(kind: string, value: unknown): Promise<{ delivered: number }>
+  registerIntentLanding?(kind: string, handler: (payload: unknown) => void): () => void
 }
 
 function forwardBridge(): ForwardBridge | undefined {
@@ -420,8 +397,8 @@ function forwardBridge(): ForwardBridge | undefined {
   return bridge !== null && typeof bridge === 'object' ? bridge : undefined
 }
 
-/** 发射一条意图（发射端用；桥不在或写失败就当没发出去）。 */
+/** 发一条意图（发射端用；桥不在或写失败就当没发出去）。 */
 function emitIntent(kind: string, value: unknown): void {
-  const written = forwardBridge()?.writeIntent?.(kind, value)
-  if (written !== undefined) void written.catch(() => { /* 写不进则本次不发 */ })
+  const written = forwardBridge()?.publishIntent?.(kind, value)
+  if (written !== undefined) void written.catch(() => { /* 发不出去则本次不发 */ })
 }
