@@ -1,0 +1,12 @@
+{
+  "name": "@deepseek-ai/dsh-otel",
+  "version": "0.2.0-rc.2",
+  "private": true,
+  "description": "本仓的 dsh-otel 空实现（见 index.js 头注释；不发布，仅由 pnpm-workspace.yaml 的 overrides 替换上游同名包）",
+  "type": "module",
+  "license": "MPL-2.0",
+  "exports": {
+    ".": "./index.js"
+  },
+  "main": "index.js"
+}
