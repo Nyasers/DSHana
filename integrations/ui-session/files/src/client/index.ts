@@ -760,6 +760,8 @@ function installCrossSurfaceSelection(ctx: Context): void {
   let localAt = 0
   // 只读会话流面：钉住的那一段是否已经开过。开过之后本面不再被任何外部选中改动。
   let pinnedApplied = false
+  // 最近一次收到的共用选中（随通知带来）：有它就不必再回读记录。
+  let notified: { id: string | null; at: number } | null = null
   let seen = mainSessionId(list)
   // 本面所属文档的视图所有者导航面；ui-workspace 到场前缺席（见文件头那一段）。
   let navigate: UiWorkspace | undefined
@@ -767,12 +769,14 @@ function installCrossSurfaceSelection(ctx: Context): void {
   // 面上线时列表已就绪 ⇒ 恢复早已落地，往后的选中变化都算用户动作。
   let settled = snap0.phase === 'ready'
 
-  /** 共用的当前选中（带它的写入时刻；没有就报 null 与 0）。 */
-  const sharedSelection = (): Promise<{ id: string | null; at: number }> =>
-    read().then((next) => ({
+  /** 共用的当前选中（带它的写入时刻；没有就报 null 与 0）。收到过通知就直接用它。 */
+  const sharedSelection = (): Promise<{ id: string | null; at: number }> => {
+    if (notified !== null) return Promise.resolve(notified)
+    return read().then((next) => ({
       id: next?.sessionId ?? null,
       at: typeof next?.at === 'number' ? next.at : 0,
     }))
+  }
 
   /** 本次该显示哪一段：钉住的 sid 优先，否则共用的当前选中。 */
   const desired = async (): Promise<{ id: string | null; at: number }> => {
@@ -832,7 +836,11 @@ function installCrossSurfaceSelection(ctx: Context): void {
 
   ctx.effect(() => {
     // 只读会话流面不听共用选中的广播：它的目标是钉住的那一段，且只认一次（见 applyRemote）。
-    const off = readOnly ? () => {} : onChanged(applyRemote)
+    const off = readOnly ? () => {} : onChanged((sessionId, at) => {
+      // 值随通知来，直接采用，不再回读：省一次取数，也不会读到一个还没写完的值。
+      notified = { id: sessionId ?? null, at }
+      applyRemote()
+    })
     const offList = list.subscribe(() => {
       const snap = list.getSnapshot()
       const current = mainSessionId(list)
@@ -848,9 +856,10 @@ function installCrossSurfaceSelection(ctx: Context): void {
         if (!settled) {
           // 恢复落地的第一跳：只记录，随后与共享状态对一次（谁更新谁说了算）。
           settled = true
-        } else if (!readOnly && current !== null) {
+        } else if (!readOnly && current !== null && current !== notified?.id) {
           // 只读面不宣告本地变化：它只是在看，不该把另一个面的选中拉过来。
           // 本地无选中也不宣告：空值在对面上表示「没有意见」，没有要传达的动作。
+          // 与刚收到的通知同值也不宣告：那是落地回声，写回去就是把一次点击放大成两次写。
           localAt = Date.now()
           void Promise.resolve(write(current)).catch(() => { /* 写失败不回滚本地 */ })
         }

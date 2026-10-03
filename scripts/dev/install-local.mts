@@ -14,7 +14,7 @@
 // 为什么不用 shell 脚本：这条循环每次改完都要走一遍，跨平台 + 能直接读 SHA/包大小/版本，
 // 比在每个平台上各养一份 ps1/sh 划算。
 //
-// 用法：node scripts/dev/install-local.mts --zip releases/<包>.zip [--id dshana] [--home <HANA_HOME>]
+// 用法：node scripts/dev/install-local.mts [--zip] <包>.zip [--id dshana] [--home <HANA_HOME>]
 //        [--no-uninstall] [--timeout <秒>] [--quiet]
 // 退出码：0 = 安装完成且 runtime 就绪；1 = 任一步骤失败或超时；2 = 参数/环境问题。
 
@@ -39,8 +39,20 @@ function fail(code, message): never {
   process.exit(code);
 }
 
-const zipArg = value("--zip");
-if (!zipArg) fail(2, "缺 --zip <包路径>（用法见本文件头注释）");
+/** 取值的旗标：位置参数扫描时要跳过它们的值。--zip 是可省的旧写法，两种都收。 */
+const VALUE_FLAGS = ["--zip", "--id", "--home", "--timeout"];
+/** 第一个位置参数 = 包路径（其余位置参数不用）。 */
+function firstPositional() {
+  for (let i = 0; i < argv.length; i += 1) {
+    const a = argv[i];
+    if (VALUE_FLAGS.includes(a)) { i += 1; continue; }
+    if (typeof a === "string" && !a.startsWith("-")) return a;
+  }
+  return undefined;
+}
+
+const zipArg = value("--zip") || firstPositional();
+if (!zipArg) fail(2, "缺包路径：node scripts/dev/install-local.mts [--zip] <包>.zip（用法见本文件头注释）");
 const zip = resolve(zipArg);
 if (!existsSync(zip)) fail(2, "包不存在：" + zip);
 const appId = value("--id") || "dshana";

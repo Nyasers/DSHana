@@ -35,9 +35,6 @@ import { installHostModelSync } from "@dshana/models/model-sync.ts";
 // 默认模型对账：DSH 缺省模型必须落在宿主目录里（见 packages/models/src/model-default-guard.ts 的动因）
 import { installModelDefaultGuard, runModelDefaultGuard } from "@dshana/models/model-default-guard.ts";
 // 应用态存储收尾：清掉 UI 跨面共享通道在本生命周期之外的键（见 lib/shared-state.ts）
-import { renewSharedState } from "./shared-state.ts";
-// 面间直投通道的进程内单例：apply 时与共享键一起重置（见下方收尾块）
-import { resetFacesHub } from "@dshana/tools/faces-hub.ts";
 
 // ---- 统一日志：只走宿主 ctx.logger ----
 // App 侧不写自己的文件日志；ctx.logger 缺失（旧 host）或宿主抛错时回落 stderr。
@@ -104,13 +101,13 @@ export function apply(ctx) {
   //      维护动作：fire-and-forget，失败不影响 apply（见 lib/shared-state.ts）。
   {
     try {
-      resetFacesHub();
+      // 面间通道不存在了：不再有 hub 单例要重置。
     } catch (e) {
       log("warn", "面间直投通道重置触发异常（忽略）：" + ((e as any)?.message || e));
     }
     try {
       Promise.resolve()
-        .then(() => renewSharedState(ctx && ctx.storage ? ctx.storage.global : null))
+        // 共享键已不存在：不再需要启动时清键。
         .then((r) => {
           if (r.removed > 0 || r.failed > 0) {
             log("info", `应用态存储收尾：清共享键 ${r.removed} 个（扫描 ${r.scanned} 键，失败 ${r.failed}）`);

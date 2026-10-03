@@ -15,7 +15,6 @@ import {
 } from "@dshana/tools/routes/dshana-routes.ts";
 import { initAppRuntime } from "@dshana/runtime/app-runtime.ts";
 import { resetDataSourceStore } from "@dshana/runtime/data-source.ts";
-import { createFacesHub } from "@dshana/tools/faces-hub.ts";
 
 function makeFakeApp() {
   const routes = [];
@@ -71,11 +70,11 @@ test("挂载清单：GET boot-state/health/settings/models/card-state/faces-poll
   assert.deepEqual(paths, [
     "GET /dshana/boot-state",
     "GET /dshana/card-state",
-    "GET /dshana/faces/poll",
+      // faces 端点已拆（面间不再有 HTTP 面）
     "GET /dshana/health",
     "GET /dshana/models",
     "GET /dshana/settings",
-    "POST /dshana/faces/send",
+      // faces 端点已拆（面间不再有 HTTP 面）
     "POST /dshana/settings",
     "POST /dshana/settings/restart",
     "POST /dshana/start",
@@ -489,76 +488,4 @@ test("defaultDshanaRouteDeps: 数据目录取宿主顶层 ctx.dataDir（ctx.conf
   }
 });
 
-// ---- 面间直投通道的两个端点（hub 自身的用例在 tests/routes/faces-hub.test.mjs）----
-
-test("GET /dshana/faces/poll: as 不在面地址词表 → 400（形状错，不当空应答）", async () => {
-  const { app, routes } = makeFakeApp();
-  registerDshanaRoutes(app, makeFakeDeps());
-  const handler = routes.find(([m, p]) => m === "GET" && p === "/dshana/faces/poll")[2];
-  const res = await handler(queryCtx({ card: "c1", as: "sidebar" }));
-  assert.equal(res.status, 400);
-  assert.match(res.body.error, /as 不是面地址/);
-});
-
-test("POST /dshana/faces/send: 词表外的 kind → 400（不退化成随便塞）", async () => {
-  const { app, routes } = makeFakeApp();
-  registerDshanaRoutes(app, makeFakeDeps());
-  const handler = routes.find(([m, p]) => m === "POST" && p === "/dshana/faces/send")[2];
-  const ctx = makeFakeCtx();
-  ctx.req = { json: async () => ({ sub: "m1", from: "navigation", to: "workspace", kind: "overlay", payload: {} }) };
-  const res = await handler(ctx);
-  assert.equal(res.status, 400);
-  assert.match(res.body.error, /kind 不在通道词表里/);
-});
-
-test("faces 端点：注入 hub 后 send 回执 delivered + 主卡下一次挂起补上那帧", async () => {
-  const { app, routes } = makeFakeApp();
-  const hub = createFacesHub({ parkMs: 40 });
-  registerDshanaRoutes(app, makeFakeDeps({ facesHub: hub }));
-  const poll = routes.find(([m, p]) => m === "GET" && p === "/dshana/faces/poll")[2];
-  const send = routes.find(([m, p]) => m === "POST" && p === "/dshana/faces/send")[2];
-
-  // 主卡先挂上（首挂当场拿快照），顺带把自己登记成在场订阅面
-  const born = await poll(queryCtx({ card: "c1", sub: "m1", as: "workspace", since: "0", fresh: "1" }));
-  assert.equal(born.status, 200);
-  assert.equal(born.body.ok, true);
-
-  const ctx = makeFakeCtx();
-  ctx.req = {
-    json: async () => ({
-      card: "c1", sub: "f1", from: "navigation", to: "others", kind: "selection", payload: { sessionId: "s1" }, at: 5,
-    }),
-  };
-  const sent = await send(ctx);
-  assert.equal(sent.status, 200);
-  assert.equal(sent.body.delivered, 1, "主卡在场，收得到");
-  assert.equal(sent.body.seq, 1);
-
-  const next = await poll(queryCtx({ card: "c1", sub: "m1", as: "workspace", since: "0", fresh: "0" }));
-  assert.equal(next.status, 200);
-  assert.equal(next.body.seq, 1);
-  assert.equal(next.body.frames.length, 1, "带上 since 就把缺的那帧补回来");
-  assert.deepEqual(next.body.frames[0].payload, { sessionId: "s1" });
-});
-
-test("faces/poll：查询串里的 since 必须真的起作用（否则每次都全量回放、永不挂起）", async () => {
-  const { app, routes } = makeFakeApp();
-  const hub = createFacesHub({ parkMs: 40 });
-  registerDshanaRoutes(app, makeFakeDeps({ facesHub: hub }));
-  const poll = routes.find(([m, p]) => m === "GET" && p === "/dshana/faces/poll")[2];
-  const send = routes.find(([m, p]) => m === "POST" && p === "/dshana/faces/send")[2];
-
-  const ctx = makeFakeCtx();
-  ctx.req = {
-    json: async () => ({
-      card: "c1", sub: "f1", from: "navigation", to: "others", kind: "selection", payload: { sessionId: "s1" }, at: 5,
-    }),
-  };
-  await send(ctx);
-
-  // 带着 since=1（走查询串，是字符串）再挂：这一帧已经见过了，不该再回放，应答应当挂起到超时。
-  const res = await poll(queryCtx({ card: "c1", sub: "m1", as: "workspace", since: "1", fresh: "0" }));
-  assert.equal(res.status, 200);
-  assert.deepEqual(res.body.frames, [], "since 被当成 0 的话这里会是全量帧，且客户端会立刻再挂——就是那次 poll 洪水");
-  assert.equal(res.body.seq, 1);
-});
+// （面间通道已拆：两个 faces 端点与 hub 不再存在，相关用例随之一并退出。）

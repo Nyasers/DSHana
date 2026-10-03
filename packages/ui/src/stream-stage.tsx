@@ -26,7 +26,6 @@ import {
   postAction,
   surfaceSession,
   withSurfaceTicket,
-  writeShared,
 } from "./surface-bridge.ts";
 
 // ---- 轮询节拍（与壳页同一口径）----
@@ -104,7 +103,7 @@ function publishBootState(s: any): void {
   const sig = bootSig(s);
   if (sig === lastPublishedSig) return;
   lastPublishedSig = sig;
-  writeShared("boot-state", { state: s }).catch(() => { /* 拿不到共享面就当没有，本面照常自取 */ });
+  // boot-state 不再进共享存储：每个面自己取，到终态即停（与壳页同口径）。
 }
 
 // ---- 注入（与 app-shell.ts 的 startInjection 同源，但面固定为 stream）----

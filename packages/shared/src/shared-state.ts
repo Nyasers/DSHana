@@ -47,6 +47,9 @@ export const INTENT_KINDS = [
 /** 一个意图种类。 */
 export type IntentKind = (typeof INTENT_KINDS)[number];
 
+/** 一条跳面 kind。同页广播已承载全部意图，这个别名与 IntentKind 同义。 */
+export type ChannelKind = IntentKind;
+
 /** 认意图种类（词表外的值当场拒）。 */
 export function isIntentKind(value: unknown): value is IntentKind {
   return typeof value === "string" && (INTENT_KINDS as readonly string[]).includes(value);

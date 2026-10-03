@@ -12,7 +12,7 @@
 //   · **不做落地去重**：state 类落地本来就幂等（就是把值装上），command 类在通道上不会被重放
 //     （首挂只给快照）。反倒是“按 at 去重”会误杀：两个面在同一毫秒发出的两条不同意图，at 会撞。
 //   · 单个落地回调抛错只留痕，不拖累别的回调与后续帧。
-import type { ChannelKind } from "@dshana/shared/faces-channel.ts";
+import type { ChannelKind } from "@dshana/shared/shared-state.ts";
 import type { FaceAddress } from "@dshana/shared/face-addresses.ts";
 
 /** 一次落地的上下文（谁发的、什么时候、哪条 kind）。 */
