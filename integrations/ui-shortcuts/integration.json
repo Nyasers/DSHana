@@ -12,7 +12,7 @@
     "批次④：快捷键参考框的跨面转发。",
     "为什么在 ui-shortcuts：这个包把参考框注册在 shell.overlay，而打开它的 `shortcuts.open` 命令在任何面都会",
     "触发（含 FP）。FP 是局部面，app 级 overlay 那一层不归它（ui-layout 的门），于是框在 FP 里没有落点：",
-    "命令把「打开」写成意图，整幅面（workspace / standalone）读进来用自己的 store 开框，落地即 clearIntent。",
+    "命令把「打开」写成意图（面间直投通道的 publishIntent），整幅面（workspace / standalone）读进来用自己的 store 开框（registerIntentLanding），一次性动作、通道不回放。",
     "设置区那一行的打开路径在主卡，不受影响，但同一处收口（openReference）以免两条路分叉。",
     "同批核对结论：ui-plugin-manager 的 refresh-toast 与 ui-schedule 的 delete-toast 不需要转发——",
     "它们的面只在整幅面被发起（插件管理页与任务页都注册在 `main`，FP 只挂面板图标；会话行那两个座位只投影",

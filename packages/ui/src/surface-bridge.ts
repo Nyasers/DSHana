@@ -201,7 +201,12 @@ export interface ForwardedIntent<K extends IntentKind> {
   pending: boolean;
 }
 
-/** 读一条意图（词表外当场拒；载荷先归一，读到的永远是干净形状）。 */
+/**
+ * 读一条意图的当前值（词表外当场拒；载荷先归一，读到的永远是干净形状）。
+ *
+ * 两个用途，都不是主路（七个 kind 都走直投通道）：通道首读的种子，与无凭据页面的退化读
+ * （`readIntentState` 在没凭据时走它）。
+ */
 export function readIntent<K extends IntentKind>(kind: K): Promise<ForwardedIntent<K>> {
   if (!isIntentKind(kind)) return Promise.reject(new Error("未知跨面意图：" + String(kind)));
   return readShared(kind).then((raw) => {
@@ -214,36 +219,16 @@ export function readIntent<K extends IntentKind>(kind: K): Promise<ForwardedInte
   });
 }
 
-/** 写一条意图（落盘前先归一，at 由通道盖章）。 */
+/** 写一条意图（落盘前先归一，at 由通道盖章）——只给无凭据页面的退化写用；主路是 publishIntent。 */
 export function writeIntent<K extends IntentKind>(kind: K, value: IntentPayload<K>): Promise<unknown> {
   if (!isIntentKind(kind)) return Promise.reject(new Error("未知跨面意图：" + String(kind)));
   return writeShared(kind, intentSharedValue(normalizeIntent(kind, value)));
 }
 
-/** 订阅一条意图的变化（词表外不订阅，静默给一个空 disposer）。 */
-export function onIntentChanged(kind: IntentKind, listener: () => void): () => void {
-  if (!isIntentKind(kind)) return () => { /* 词表外不订阅 */ };
-  return onSharedChanged(kind, listener);
-}
-
-/**
- * 清掉一条 command 意图（落地端消费后调，必须把刚消费的 at 原样带回）。
- *
- * 两个细节都是必需的：
- *   · **带原 at**：清空也是一次写，会广播一次变更。盖新时间戳的话，落地端会被自己的清空
- *     再唤醒一次（读到的 at 更新 → 再应用 → 再清空），就是无限循环；带上原 at，回声被
- *     “at ≤ 已应用” 挡住。
- *   · **值写成 null**：面重开时读到的是「这条已经落地过了」（`pending` 为 false），而不是一条
- *     待应用的空指令——载荷本身为空的 kind（快捷键参考框）光看载荷分不出来。
- */
-export function clearIntent(kind: IntentKind, at: number): Promise<unknown> {
-  if (!isIntentKind(kind)) return Promise.reject(new Error("未知跨面意图：" + String(kind)));
-  return writeShared(kind, { value: null, at: typeof at === "number" && at > 0 ? at : 0 });
-}
-
-// 设置视图已搬到直投通道：FP 与主卡的设置入口用 publishIntent('settings-view', …) 指名投递、
-// 主卡与整幅面用 registerIntentLanding('settings-view', …) 落地（见 integrations/ui-settings-general）。
-// 旧的三件名随迁移删除。
+// 旧的四件（readIntent / writeIntent / onIntentChanged / clearIntent）已从公开面撤下：
+//   · readIntent / writeIntent 降为内部工具（通道首读的种子、无凭据页面的退化读写）；
+//   · onIntentChanged / clearIntent 连同那套“待落地 + 消费即清”的协议一起删除——那是广播共享空间的
+//     债（回声、空槽、清空盖新时间戳），而通道的“指名 + 不回放”从根上不需要它。
 
 // ---- 跨面直投通道（面 → 面，指名投递）----
 // 与上面那台共享空间划清分工：共享空间是**广播**（谁都能读、读侧自己判新旧），直投通道是**指名**
@@ -497,14 +482,11 @@ export function clipboardWrite(text: string): Promise<boolean> {
 //   会话坐标 → ui-session 的只读面（readPinnedSession）；
 //   剪贴板 → @dshana/clipboard 的 client 半（同文档，直接调，无消息协议）。
 export const SURFACE_API = {
-  readIntent,
-  writeIntent,
-  onIntentChanged,
-  clearIntent,
-  // 通用面（已上通道的 kind 走这三件；逐一迁移时消费方只换调用名）
+  // 通用面（七个 kind 都走这三件：指名投递 / 读当前值 / 登记落地）
   publishIntent,
   readIntentState,
   registerIntentLanding,
+  // 具名面（消费方按名调，内部坐上面三件）
   readSelection,
   writeSelection,
   onSelectionChanged,

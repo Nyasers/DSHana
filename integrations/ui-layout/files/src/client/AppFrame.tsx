@@ -360,7 +360,7 @@ export function AppFrame({
           各自就是一幅 app 视图，自己拥有这一层。门必须按“排掉局部面”写而不是枚举整幅面：
           同一套插件集在每个面上各挂一遍，注册到 `shell.overlay` 的条目否则会在每个文档里
           各渲染一份（用户插件尤其明显）。FP 里发起的那些面由整幅面经 surface-bridge 的
-          overlay 意图通道（readIntent / writeIntent / onIntentChanged）落地。 */}
+          overlay 意图通道（publishIntent / registerIntentLanding）落地。 */}
       {surface !== 'navigation' && (
         <div className={css.overlayLayer} data-shell-overlay>
           {overlays}
