@@ -146,7 +146,14 @@ export interface ChannelPollRequest {
 export type NormalizeResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
 function numberOr(value: unknown, fallback: number): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  // 查询串进来的永远是字符串：不认数字字符串的话，`since` 会被默默当成 0，
+  // 服务端每次都把整条环形缓冲全量回出去（真机表现为 poll 每秒上百条、从不挂起）。
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
 }
 
 /** 归一订阅面 id（缺了就用 as 兜底：单份文档的场景照样可用）。 */

@@ -534,9 +534,31 @@ test("faces 端点：注入 hub 后 send 回执 delivered + 主卡下一次挂�
   assert.equal(sent.body.delivered, 1, "主卡在场，收得到");
   assert.equal(sent.body.seq, 1);
 
-  const next = await poll(queryCtx({ card: "c1", sub: "m1", as: "workspace", since: "1", fresh: "0" }));
+  const next = await poll(queryCtx({ card: "c1", sub: "m1", as: "workspace", since: "0", fresh: "0" }));
   assert.equal(next.status, 200);
   assert.equal(next.body.seq, 1);
   assert.equal(next.body.frames.length, 1, "带上 since 就把缺的那帧补回来");
   assert.deepEqual(next.body.frames[0].payload, { sessionId: "s1" });
+});
+
+test("faces/poll：查询串里的 since 必须真的起作用（否则每次都全量回放、永不挂起）", async () => {
+  const { app, routes } = makeFakeApp();
+  const hub = createFacesHub({ parkMs: 40 });
+  registerDshanaRoutes(app, makeFakeDeps({ facesHub: hub }));
+  const poll = routes.find(([m, p]) => m === "GET" && p === "/dshana/faces/poll")[2];
+  const send = routes.find(([m, p]) => m === "POST" && p === "/dshana/faces/send")[2];
+
+  const ctx = makeFakeCtx();
+  ctx.req = {
+    json: async () => ({
+      card: "c1", sub: "f1", from: "navigation", to: "others", kind: "selection", payload: { sessionId: "s1" }, at: 5,
+    }),
+  };
+  await send(ctx);
+
+  // 带着 since=1（走查询串，是字符串）再挂：这一帧已经见过了，不该再回放，应答应当挂起到超时。
+  const res = await poll(queryCtx({ card: "c1", sub: "m1", as: "workspace", since: "1", fresh: "0" }));
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body.frames, [], "since 被当成 0 的话这里会是全量帧，且客户端会立刻再挂——就是那次 poll 洪水");
+  assert.equal(res.body.seq, 1);
 });

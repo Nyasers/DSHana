@@ -86,16 +86,21 @@ test("normalizeSend：缺卡片戳时用占位作用域；at 缺省由服务端�
   assert.equal(ok.value.sub, "m1");
 });
 
-test("normalizePoll：as 必须在面地址词表里；since 取非负整数", () => {
+test("normalizePoll：as 必须在面地址词表里；since 取非负整数（含查询串形态）", () => {
   assert.equal(normalizePoll({}).ok, false, "缺 as 不是面地址");
   assert.equal(normalizePoll({ as: "nope" }).ok, false);
   const ok = normalizePoll({ card: "c1", sub: "m1", as: "workspace", since: "9" });
   assert.equal(ok.ok, true);
-  assert.equal(ok.value.since, 0, "非数值的 since 当首挂");
+  assert.equal(ok.value.since, 9, "查询串里的数字必须当数字——当成 0 就会每次全量回放（真机上是 poll 挂不起来）");
+  const bad = normalizePoll({ as: "workspace", since: "9 条" });
+  assert.equal(bad.value.since, 0, "真不是数字的才当首挂");
   const neg = normalizePoll({ as: "workspace", since: -5 });
   assert.equal(neg.value.since, 0);
   const floored = normalizePoll({ as: "workspace", since: 3.7 });
   assert.equal(floored.value.since, 3);
+  assert.equal(normalizePoll({ as: "workspace", since: "4.7" }).value.since, 4);
+  assert.equal(normalizePoll({ as: "workspace", fresh: "1" }).value.fresh, true);
+  assert.equal(normalizePoll({ as: "workspace", fresh: "0" }).value.fresh, false);
 });
 
 test("normalizeScope / normalizeChannelPayload：占位兜底与词表外拒（抛）", () => {
