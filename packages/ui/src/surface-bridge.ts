@@ -241,16 +241,9 @@ export function clearIntent(kind: IntentKind, at: number): Promise<unknown> {
   return writeShared(kind, { value: null, at: typeof at === "number" && at > 0 ? at : 0 });
 }
 
-// 设置视图：{ open, section }。
-export function readSettingsView(): Promise<IntentPayload<"settings-view">> {
-  return readIntent("settings-view").then((r) => r.value);
-}
-export function writeSettingsView(next: { open?: boolean; section?: string | null }): Promise<unknown> {
-  return writeIntent("settings-view", {
-    open: !!(next && next.open === true),
-    section: next && typeof next.section === "string" && next.section ? next.section : null,
-  });
-}
+// 设置视图已搬到直投通道：FP 与主卡的设置入口用 publishIntent('settings-view', …) 指名投递、
+// 主卡与整幅面用 registerIntentLanding('settings-view', …) 落地（见 integrations/ui-settings-general）。
+// 旧的三件名随迁移删除。
 
 // ---- 跨面直投通道（面 → 面，指名投递）----
 // 与上面那台共享空间划清分工：共享空间是**广播**（谁都能读、读侧自己判新旧），直投通道是**指名**
@@ -512,9 +505,6 @@ export const SURFACE_API = {
   publishIntent,
   readIntentState,
   registerIntentLanding,
-  readSettingsView,
-  writeSettingsView,
-  onSettingsViewChanged: (listener: () => void) => onIntentChanged("settings-view", listener),
   readSelection,
   writeSelection,
   onSelectionChanged,

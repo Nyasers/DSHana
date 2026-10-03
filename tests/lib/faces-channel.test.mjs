@@ -31,15 +31,17 @@ test("地址词表：面地址与扇出各认什么", () => {
 });
 
 test("通道词表是意图词表的子集：只有已搬上通道的 kind 能过", () => {
-  assert.deepEqual([...CHANNEL_KINDS], ["selection", "panel-view"]);
+  assert.deepEqual([...CHANNEL_KINDS], ["selection", "panel-view", "settings-view"]);
   assert.equal(isChannelKind("selection"), true);
   assert.equal(isChannelKind("panel-view"), true);
-  assert.equal(isChannelKind("settings-view"), false, "还在共享空间上的 kind 不得走通道");
-  assert.equal(isChannelKind("session-rename"), false);
+  assert.equal(isChannelKind("settings-view"), true);
+  assert.equal(isChannelKind("session-rename"), false, "还没搬的 kind 仍走共享空间");
   assert.equal(CHANNEL_NATURE.selection, "state");
   assert.equal(CHANNEL_NATURE["panel-view"], "state");
+  assert.equal(CHANNEL_NATURE["settings-view"], "state");
   assert.equal(channelRecordKey("selection"), "dshana.selection");
   assert.equal(channelRecordKey("panel-view"), "dshana.panel-view");
+  assert.equal(channelRecordKey("settings-view"), "dshana.settings-view");
 });
 
 test("寻址：指名只投收件人，others 排除发射的那份文档（不是整个角色）", () => {
@@ -98,7 +100,7 @@ test("normalizeScope / normalizeChannelPayload：占位兜底与词表外拒（�
   assert.equal(normalizeScope(undefined), CHANNEL_SCOPE_FALLBACK);
   assert.equal(normalizeScope("  c9 "), "c9");
   assert.deepEqual(normalizeChannelPayload("selection", { sessionId: "s2" }), { sessionId: "s2" });
-  assert.throws(() => normalizeChannelPayload("settings-view", {}), /未知通道 kind/);
+  assert.throws(() => normalizeChannelPayload("session-rename", {}), /未知通道 kind/, "还没搬上通道的 kind 一律拒");
 });
 
 test("描述符表是单一事实源：每个 kind 一条，性质与 INTENT_NATURE 一致", async () => {

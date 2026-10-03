@@ -29,7 +29,7 @@ hana.storage = {
 
 const {
   readIntent, writeIntent, clearIntent, onIntentChanged,
-  readSettingsView, writeSettingsView, readSelection, writeSelection,
+  publishIntent, readIntentState, readSelection, writeSelection,
 } = await import("../../packages/ui/src/surface-bridge.ts");
 
 test("command：写下去是待落地，清空带回同一个 at 且不再待落地", async () => {
@@ -75,10 +75,10 @@ test("下一条命令仍然能盖过上次的消费标记（at 更新即视为�
 });
 
 test("state 类 kind 不吃清空（镜像一定要读得回来）", async () => {
-  await writeSettingsView({ open: true, section: "models" });
-  assert.deepEqual(await readSettingsView(), { open: true, section: "models" });
-  await writeSettingsView({ open: false });
-  assert.deepEqual(await readSettingsView(), { open: false, section: null });
+  await publishIntent("settings-view", { open: true, section: "models" });
+  assert.deepEqual((await readIntentState("settings-view"))?.value, { open: true, section: "models" });
+  await publishIntent("settings-view", { open: false, section: null });
+  assert.deepEqual((await readIntentState("settings-view"))?.value, { open: false, section: null });
   await writeSelection("s3");
   const selection = await readSelection();
   assert.equal(selection.sessionId, "s3");

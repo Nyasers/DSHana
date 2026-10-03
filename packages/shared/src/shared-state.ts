@@ -101,7 +101,13 @@ export interface IntentSpec<K extends IntentKind = IntentKind> {
 
 /** 意图描述符表：词表、性质、载荷归一、参与面的**唯一**来源。 */
 export const INTENT_SPECS = {
-  "settings-view": { nature: "state", normalize: (raw) => normalizeIntent("settings-view", raw) },
+  "settings-view": {
+    nature: "state",
+    normalize: (raw) => normalizeIntent("settings-view", raw),
+    // FP（点设置）与主卡都发射？不——发射端是 FP 与主卡两边的设置入口；落地端是主卡与整幅面
+    // （设置页自身不注入 DSH，不参与）。
+    faces: ["navigation", "workspace", "standalone"],
+  },
   "panel-view": {
     nature: "state",
     normalize: (raw) => normalizeIntent("panel-view", raw),
