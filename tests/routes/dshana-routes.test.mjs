@@ -505,7 +505,7 @@ test("POST /dshana/faces/send: 词表外的 kind → 400（不退化成随便塞
   registerDshanaRoutes(app, makeFakeDeps());
   const handler = routes.find(([m, p]) => m === "POST" && p === "/dshana/faces/send")[2];
   const ctx = makeFakeCtx();
-  ctx.req = { json: async () => ({ sub: "m1", from: "navigation", to: "workspace", kind: "row-toast", payload: {} }) };
+  ctx.req = { json: async () => ({ sub: "m1", from: "navigation", to: "workspace", kind: "overlay", payload: {} }) };
   const res = await handler(ctx);
   assert.equal(res.status, 400);
   assert.match(res.body.error, /kind 不在通道词表里/);

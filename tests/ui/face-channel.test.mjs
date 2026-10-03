@@ -188,7 +188,7 @@ test("停表再开：在飞的那一代的应答不得落地，也不留第二�
 test("词表外的 kind 当场拒（不退化成随便塞）", async () => {
   const io = makeIO();
   const chan = makeChannel(io);
-  await assert.rejects(() => chan.publish("session-rename", {}), /未知通道 kind/);
+  await assert.rejects(() => chan.publish("overlay", {}), /未知通道 kind/);
   assert.equal(io.state.posts.length, 0);
 });
 

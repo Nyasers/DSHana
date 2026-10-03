@@ -44,7 +44,17 @@ export type { FaceAddress, FaceTarget };
 // ---- 词表（试点：只搬会话选中）----
 
 /** 已在定向通道上的 kind。其余 kind 仍走共享空间，逐个迁移。 */
-export const CHANNEL_KINDS = ["selection", "panel-view", "settings-view"] as const;
+/**
+ * 已在定向通道上的 kind：全部意图都搬上来了。
+ *
+ * 留着这个常量而不是到处用 INTENT_KINDS：两者现在是同一批，但“意图词表”与“哪几件走通道”
+ * 是两件事——将来若要某一 kind 回退到广播共享空间（或者新增一个先只在空间上试水的），
+ * 改这里一处即可。
+ */
+export const CHANNEL_KINDS = [
+  "selection", "panel-view", "settings-view",
+  "session-rename", "session-archive", "row-toast", "shortcuts-panel",
+] as const;
 
 /** 一个走了定向通道的 kind。 */
 export type ChannelKind = (typeof CHANNEL_KINDS)[number];

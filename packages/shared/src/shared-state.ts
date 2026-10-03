@@ -120,10 +120,27 @@ export const INTENT_SPECS = {
     // FP 与主卡发射、（未钉住的）会话流卡只读跟随：三面参与，整幅面与设置页不参与。
     faces: ["navigation", "workspace", "stream"],
   },
-  "session-rename": { nature: "command", normalize: (raw) => normalizeIntent("session-rename", raw) },
-  "session-archive": { nature: "command", normalize: (raw) => normalizeIntent("session-archive", raw) },
-  "row-toast": { nature: "command", normalize: (raw) => normalizeIntent("row-toast", raw) },
-  "shortcuts-panel": { nature: "command", normalize: (raw) => normalizeIntent("shortcuts-panel", raw) },
+  "session-rename": {
+    nature: "command",
+    normalize: (raw) => normalizeIntent("session-rename", raw),
+    // 四个 command 的形状一样：FP 发射（行菜单 / 快捷键），主卡与整幅面落地。
+    faces: ["navigation", "workspace", "standalone"],
+  },
+  "session-archive": {
+    nature: "command",
+    normalize: (raw) => normalizeIntent("session-archive", raw),
+    faces: ["navigation", "workspace", "standalone"],
+  },
+  "row-toast": {
+    nature: "command",
+    normalize: (raw) => normalizeIntent("row-toast", raw),
+    faces: ["navigation", "workspace", "standalone"],
+  },
+  "shortcuts-panel": {
+    nature: "command",
+    normalize: (raw) => normalizeIntent("shortcuts-panel", raw),
+    faces: ["navigation", "workspace", "standalone"],
+  },
 } as const satisfies Record<IntentKind, IntentSpec<IntentKind>>;
 
 /** 取一条描述符（词表外的值当场拒）。 */

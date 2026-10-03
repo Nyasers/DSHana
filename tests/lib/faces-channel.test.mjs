@@ -30,17 +30,19 @@ test("地址词表：面地址与扇出各认什么", () => {
   assert.equal(isFaceTarget("somewhere"), false);
 });
 
-test("通道词表是意图词表的子集：只有已搬上通道的 kind 能过", () => {
-  assert.deepEqual([...CHANNEL_KINDS], ["selection", "panel-view", "settings-view"]);
-  assert.equal(isChannelKind("selection"), true);
-  assert.equal(isChannelKind("panel-view"), true);
-  assert.equal(isChannelKind("settings-view"), true);
-  assert.equal(isChannelKind("session-rename"), false, "还没搬的 kind 仍走共享空间");
+test("通道词表：全部意图都已搬上通道（与意图词表同一批）", () => {
+  assert.deepEqual([...CHANNEL_KINDS], [
+    "selection", "panel-view", "settings-view",
+    "session-rename", "session-archive", "row-toast", "shortcuts-panel",
+  ]);
+  for (const kind of CHANNEL_KINDS) assert.equal(isChannelKind(kind), true, kind);
+  assert.equal(isChannelKind("overlay"), false, "词表外的值一律拒");
   assert.equal(CHANNEL_NATURE.selection, "state");
   assert.equal(CHANNEL_NATURE["panel-view"], "state");
   assert.equal(CHANNEL_NATURE["settings-view"], "state");
+  assert.equal(CHANNEL_NATURE["session-rename"], "command");
+  assert.equal(CHANNEL_NATURE["shortcuts-panel"], "command");
   assert.equal(channelRecordKey("selection"), "dshana.selection");
-  assert.equal(channelRecordKey("panel-view"), "dshana.panel-view");
   assert.equal(channelRecordKey("settings-view"), "dshana.settings-view");
 });
 
@@ -62,7 +64,7 @@ test("normalizeSend：形状/词表在外层把关，载荷归一后落成干净
   const now = () => 1234;
   assert.equal(normalizeSend({ from: "sidebar", to: "workspace", kind: "selection" }, now).ok, false);
   assert.equal(normalizeSend({ from: "navigation", to: "sidebar", kind: "selection" }, now).ok, false);
-  assert.equal(normalizeSend({ from: "navigation", to: "workspace", kind: "row-toast" }, now).ok, false);
+  assert.equal(normalizeSend({ from: "navigation", to: "workspace", kind: "overlay" }, now).ok, false);
 
   const ok = normalizeSend(
     { card: "  c1  ", sub: "f1", from: "navigation", to: "workspace", kind: "selection", payload: { sessionId: "s1", extra: 9 } },
@@ -100,7 +102,7 @@ test("normalizeScope / normalizeChannelPayload：占位兜底与词表外拒（�
   assert.equal(normalizeScope(undefined), CHANNEL_SCOPE_FALLBACK);
   assert.equal(normalizeScope("  c9 "), "c9");
   assert.deepEqual(normalizeChannelPayload("selection", { sessionId: "s2" }), { sessionId: "s2" });
-  assert.throws(() => normalizeChannelPayload("session-rename", {}), /未知通道 kind/, "还没搬上通道的 kind 一律拒");
+  assert.throws(() => normalizeChannelPayload("overlay", {}), /未知通道 kind/, "词表外的值一律拒");
 });
 
 test("描述符表是单一事实源：每个 kind 一条，性质与 INTENT_NATURE 一致", async () => {
@@ -113,8 +115,8 @@ test("描述符表是单一事实源：每个 kind 一条，性质与 INTENT_NAT
   assert.deepEqual([...intentFaces("selection")], ["navigation", "workspace", "stream"]);
   assert.equal(faceTakesIntent("selection", "workspace"), true);
   assert.equal(faceTakesIntent("selection", "standalone"), false, "整幅面不参与会话选中");
-  assert.equal(intentFaces("session-rename"), null, "还没迁移的 kind 不声明参与面");
-  assert.equal(faceTakesIntent("session-rename", "standalone"), true, "未声明就一律当真");
+  assert.deepEqual([...intentFaces("session-rename")], ["navigation", "workspace", "standalone"]);
+  assert.equal(faceTakesIntent("session-rename", "standalone"), true);
 });
 
 test("描述符的归一被通道复用（同一份载荷形状）", async () => {
