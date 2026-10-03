@@ -102,7 +102,12 @@ export interface IntentSpec<K extends IntentKind = IntentKind> {
 /** 意图描述符表：词表、性质、载荷归一、参与面的**唯一**来源。 */
 export const INTENT_SPECS = {
   "settings-view": { nature: "state", normalize: (raw) => normalizeIntent("settings-view", raw) },
-  "panel-view": { nature: "state", normalize: (raw) => normalizeIntent("panel-view", raw) },
+  "panel-view": {
+    nature: "state",
+    normalize: (raw) => normalizeIntent("panel-view", raw),
+    // FP 侧栏选中面板行（发射）、主卡把那一页开出来（落地）：两面参与；整幅面与设置页不参与。
+    faces: ["navigation", "workspace"],
+  },
   selection: {
     nature: "state",
     normalize: (raw) => normalizeIntent("selection", raw),

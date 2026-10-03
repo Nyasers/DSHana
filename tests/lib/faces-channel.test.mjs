@@ -31,12 +31,15 @@ test("地址词表：面地址与扇出各认什么", () => {
 });
 
 test("通道词表是意图词表的子集：只有已搬上通道的 kind 能过", () => {
-  assert.deepEqual([...CHANNEL_KINDS], ["selection"]);
+  assert.deepEqual([...CHANNEL_KINDS], ["selection", "panel-view"]);
   assert.equal(isChannelKind("selection"), true);
+  assert.equal(isChannelKind("panel-view"), true);
   assert.equal(isChannelKind("settings-view"), false, "还在共享空间上的 kind 不得走通道");
   assert.equal(isChannelKind("session-rename"), false);
   assert.equal(CHANNEL_NATURE.selection, "state");
+  assert.equal(CHANNEL_NATURE["panel-view"], "state");
   assert.equal(channelRecordKey("selection"), "dshana.selection");
+  assert.equal(channelRecordKey("panel-view"), "dshana.panel-view");
 });
 
 test("寻址：指名只投收件人，others 排除发射的那份文档（不是整个角色）", () => {

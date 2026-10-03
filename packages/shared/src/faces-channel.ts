@@ -44,7 +44,7 @@ export type { FaceAddress, FaceTarget };
 // ---- 词表（试点：只搬会话选中）----
 
 /** 已在定向通道上的 kind。其余 kind 仍走共享空间，逐个迁移。 */
-export const CHANNEL_KINDS = ["selection"] as const;
+export const CHANNEL_KINDS = ["selection", "panel-view"] as const;
 
 /** 一个走了定向通道的 kind。 */
 export type ChannelKind = (typeof CHANNEL_KINDS)[number];

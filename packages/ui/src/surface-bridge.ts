@@ -403,13 +403,10 @@ export function onSelectionChanged(listener: () => void): () => void {
   return registerIntentLanding("selection", () => { listener(); });
 }
 
-// 主面板选中：{ panelId }。DSH 侧栏的面板行在 FP 上没有中列可放，那一页归主卡。
-export function readPanelView(): Promise<IntentPayload<"panel-view">> {
-  return readIntent("panel-view").then((r) => r.value);
-}
-export function writePanelView(panelId: string | null): Promise<unknown> {
-  return writeIntent("panel-view", { panelId: panelId ?? null });
-}
+// 主面板选中已搬到直投通道：FP 侧用 publishIntent('panel-view', …) 指名投递、主卡侧用
+// registerIntentLanding('panel-view', …) 落地（见 integrations/ui-sidebar 与 ui-layout）。
+// 旧的三件名（readPanelView / writePanelView / onPanelViewChanged）随迁移删除——两条路
+// 同时活着就是双投递。
 
 // ---- 会话卡的会话坐标（只认这张卡自己的状态，不读应用态全局）----
 // 两个来源，都在卡自身：
@@ -521,9 +518,6 @@ export const SURFACE_API = {
   readSelection,
   writeSelection,
   onSelectionChanged,
-  readPanelView,
-  writePanelView,
-  onPanelViewChanged: (listener: () => void) => onIntentChanged("panel-view", listener),
   readPinnedSession,
   clipboardWrite,
 };
