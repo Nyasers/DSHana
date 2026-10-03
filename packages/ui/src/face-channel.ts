@@ -79,6 +79,14 @@ const FATAL_PATTERN = /缺少 App surface 会话凭据|appSurfaceSession|HTTP 40
 /** 同一个可恢复错误最多每这么多轮刷一条日志（5s 退避下约一分钟一条）。 */
 const LOG_EVERY_N_FAILURES = 12;
 
+/** 连续这么多次“秒回”就开始退避：正常节奏是「秒回拿到东西 → 下一轮真挂起」。 */
+const INSTANT_STREAK_MAX = 6;
+/** 秒回退避基数（乘超出次数，封顶 NO_PROGRESS_MAX_MS；与失败退避的 retryMax 无关——那条是给“请求本身失败”用的）。 */
+const NO_PROGRESS_SLEEP_MS = 400;
+const NO_PROGRESS_MAX_MS = 2000;
+/** 应答比这个快就认为服务端没有真的挂起过（用来区分“心跳”与“秒回”）。 */
+const INSTANT_MS = 1000;
+
 function errText(e: unknown): string {
   return ((e as { message?: string })?.message as string) || String(e);
 }
@@ -139,11 +147,15 @@ export function createFaceChannel(opts: FaceChannelOptions): FaceChannel {
     else notify({ kind: f.kind, at, from: (f.from as FaceAddress) ?? null, payload: f.payload });
   }
 
-  function applyPoll(raw: unknown): void {
-    const res = raw as { ok?: unknown; seq?: unknown; frames?: unknown; state?: unknown } | null;
-    if (!res || typeof res !== "object" || res.ok !== true) return;
+  function applyPoll(raw: unknown): { ok: boolean; progress: boolean; shape: string } {
+    // 拿到过任何一次应答就不再是首挂——不管里面有没有东西（否则一个坏应答会让首挂一直重来）。
     fresh = false;
-    if (typeof res.seq === "number") since = res.seq;
+    const res = raw as { ok?: unknown; seq?: unknown; frames?: unknown; state?: unknown; reset?: unknown } | null;
+    if (!res || typeof res !== "object" || res.ok !== true) return { ok: false, progress: false, shape: "" };
+    if (typeof res.seq !== "number") return { ok: false, progress: false, shape: "" };
+    since = res.seq;
+    const stateCount = res.state && typeof res.state === "object" ? Object.keys(res.state as object).length : 0;
+    const frameCount = Array.isArray(res.frames) ? res.frames.length : 0;
     if (res.state && typeof res.state === "object") {
       for (const [kind, entry] of Object.entries(res.state as Record<string, unknown>)) {
         if (!isChannelKind(kind)) continue;
@@ -152,6 +164,11 @@ export function createFaceChannel(opts: FaceChannelOptions): FaceChannel {
       }
     }
     if (Array.isArray(res.frames)) for (const frame of res.frames) applyFrame(frame);
+    return {
+      ok: true,
+      progress: frameCount > 0 || stateCount > 0 || res.reset === true,
+      shape: "frames=" + frameCount + " state=" + stateCount + " reset=" + (res.reset === true),
+    };
   }
 
   function pollPath(): string {
@@ -166,15 +183,18 @@ export function createFaceChannel(opts: FaceChannelOptions): FaceChannel {
   /** 这一代还活着吗（仍在跑、且没被新一轮 start/stop 顶掉）。 */
   const current = (gen: number): boolean => running && gen === generation;
 
-  async function pollOnce(gen: number): Promise<void> {
+  async function pollOnce(gen: number): Promise<{ progress: boolean; instant: boolean; shape: string }> {
     const ctl = new AbortController();
     inflight = ctl;
     const timer = setTimeout(() => ctl.abort(), requestTimeoutMs);
+    const startedAt = now();
     try {
       const res = await io.get(pollPath(), ctl.signal);
       // 属于上一代循环的应答不落地：它可能带着已经过期的作用域/序号。
-      if (!current(gen)) return;
-      applyPoll(res);
+      if (!current(gen)) return { progress: false, instant: false, shape: "" };
+      const applied = applyPoll(res);
+      if (!applied.ok) throw new Error("poll 应答形状不对（ok/seq 缺失）");
+      return { progress: applied.progress, instant: now() - startedAt < INSTANT_MS, shape: applied.shape };
     } finally {
       clearTimeout(timer);
       if (inflight === ctl) inflight = null;
@@ -184,11 +204,26 @@ export function createFaceChannel(opts: FaceChannelOptions): FaceChannel {
   async function loop(gen: number): Promise<void> {
     let backoff = retryBase;
     let failures = 0;
+    let instantStreak = 0;
     while (current(gen)) {
       try {
-        await pollOnce(gen);
+        const round = await pollOnce(gen);
         if (!current(gen)) return;
-        // 空应答 = 服务端挂起超时（心跳）：立刻再挂，不算失败、不退避。
+        // 正常节奏是「秒回拿到东西 → 下一轮真挂起（心跳或超时）」。要是一直秒回，
+        // 说明有循环在跑（反复投递或反复空转）——真机上的样子就是每秒上百次请求。
+        // 退避一下并留一条痕（痕里带应答形态，便于定位是谁在循环）。
+        if (round.instant) {
+          instantStreak += 1;
+          if (instantStreak >= INSTANT_STREAK_MAX) {
+            if (instantStreak === INSTANT_STREAK_MAX) {
+              log("面间通道连续 " + instantStreak + " 次秒回应答（" + round.shape + "）：开始退避；持续出现说明有循环在跑");
+            }
+            await sleep(Math.min(NO_PROGRESS_SLEEP_MS * (instantStreak - INSTANT_STREAK_MAX + 1), NO_PROGRESS_MAX_MS), halt.signal);
+            if (!current(gen)) return;
+          }
+        } else {
+          instantStreak = 0;
+        }
         backoff = retryBase;
         failures = 0;
       } catch (e) {
@@ -230,6 +265,15 @@ export function createFaceChannel(opts: FaceChannelOptions): FaceChannel {
       if (!isChannelKind(kind)) throw new Error("未知通道 kind：" + String(kind));
       const at = now();
       const value = normalizeChannelPayload(kind, payload);
+      // state 类：值没变就不重复发。两边都跟着对方写的时候，“发 → 落 → 再发”会成一条互拍
+      // 循环（真机上表现为 poll/send 请求暴涨），而重复发同一个值对接收端本来也是空动作。
+      if (CHANNEL_NATURE[kind] === "state") {
+        const prev = cache.get(kind);
+        if (prev && JSON.stringify(prev.value) === JSON.stringify(value)) {
+          cache.set(kind, { value, at });
+          return { delivered: 0 };
+        }
+      }
       // 发射面自己也看得见自己的写入（不然它的下一读会拿到上一版，白等一次往返）。
       if (CHANNEL_NATURE[kind] === "state") applyState(kind, value, at, null);
       this.start();

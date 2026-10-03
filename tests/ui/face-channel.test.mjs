@@ -213,3 +213,46 @@ test("可恢复的失败不刷屏：同一个错只在头一次与每隔一阵�
   for (let i = 0; i < 5; i += 1) { io.fail(new Error("connection reset")); await tick(8); }
   assert.equal(logs.filter((m) => /轮询失败/.test(m)).length, 1, "5 次失败里只留一条痕");
 });
+
+// ---- 无进展闸与 state 去重：真机上出现过“一秒上百条 poll 请求”的样子 ----
+
+test("重复发同一个 state 值不重复投递（互拍循环从源头掐掉）", async () => {
+  const io = makeIO();
+  const chan = makeChannel(io);
+  const first = await chan.publish("panel-view", { panelId: "plugins" });
+  assert.equal(first.delivered, 2);
+  const again = await chan.publish("panel-view", { panelId: "plugins" });
+  assert.equal(again.delivered, 0, "同值不再发");
+  assert.equal(io.state.posts.length, 1, "只投了一次");
+  // 值真变了还是要发
+  await chan.publish("panel-view", { panelId: "other" });
+  assert.equal(io.state.posts.length, 2);
+});
+
+test("连续秒回应答会退避并留一条痕（不再每秒上百次请求）", async () => {
+  const io = makeIO();
+  const logs = [];
+  const chan = makeChannel(io, { log: (m) => logs.push(m) });
+  chan.start();
+  // 每一条挂起的请求都立刻回一个“什么都没有”的 200：正是真机上那种自我循环的形态。
+  const pump = setInterval(() => {
+    while (io.state.pending.length) io.reply({ ok: true, seq: 0, frames: [] }, 0);
+  }, 1);
+  await tick(600);
+  clearInterval(pump);
+  assert.ok(io.state.gets.length <= 9, "退避生效：600ms 里只有头几次（实际 " + io.state.gets.length + "）");
+  assert.ok(logs.some((m) => /秒回应答/.test(m)), "要留下可查的痕");
+});
+
+test("坏应答（ok 缺失/形状不对）当失败走退避，且不让首挂一直重来", async () => {
+  const io = makeIO();
+  const chan = makeChannel(io);
+  chan.start();
+  await tick();
+  assert.match(io.state.gets[0], /fresh=1/, "第一挂是首挂");
+  io.reply({ ok: false, error: "boom" });
+  await tick(30);
+  assert.ok(io.state.gets.length >= 2);
+  assert.match(io.state.gets[1], /fresh=0/, "坏应答也算拿过一次应答，不再算首挂");
+});
+
