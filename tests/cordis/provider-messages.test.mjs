@@ -107,6 +107,79 @@ test("图片块无解析字节 → UNSUPPORTED_CONTENT", () => {
   assert.throws(() => toHanaMessages({ messages: msgs, images: null }), (e) => e.code === "UNSUPPORTED_CONTENT");
 });
 
+test("replay.blocks 与 content 长度不等 → 整体丢弃签名，其余行为不变", () => {
+  // 宿主 assembler 在剪枝/压缩后会连带剪掉 replay 条目或 content 块；一旦两者长度
+  // 不等，按下标取值就会把签名挂到错误的块上，这里按同样口径整体丢弃。
+  const msgs = [
+    {
+      role: "assistant",
+      content: [
+        { type: "text", text: "保留" },
+        { type: "reasoning", text: "思考" },
+        { type: "tool-call", id: "call-1", name: "read", arguments: "{}" },
+      ],
+      // 只有 2 个 meta，却有 3 个 content 块（content 多出块）
+      source: {
+        kind: "model",
+        provider: "deepseek",
+        model: "m",
+        replayState: { kind: "hana", version: 1, response: {}, blocks: [{ textSignature: "s0" }, { signature: "s1" }] },
+      },
+    },
+  ];
+  const { messages } = toHanaMessages({ messages: msgs, images: null });
+  const content = messages[0].content;
+  // 内容与顺序不变
+  assert.deepEqual(content.map((c) => c.type), ["text", "reasoning", "toolCall"]);
+  assert.equal(content[0].text, "保留");
+  assert.equal(content[1].reasoning, "思考");
+  assert.deepEqual(content[2].arguments, {});
+  // 没有任何签名挂上去（尤其不能错位）
+  assert.equal(content[0].textSignature, undefined);
+  assert.equal(content[1].signature, undefined);
+  assert.equal(content[2].thoughtSignature, undefined);
+});
+
+test("replay.blocks 比 content 短：meta 不被挂到别的块上（错位防护）", () => {
+  // 压缩剪掉了 content 里的尾块、replay 里也少了一条；剩下的那条 meta 属于谁已不可知。
+  // 按下标取值会把它挂到 index 0 的 tool-call 上，这里必须整体丢弃。
+  const msgs = [
+    {
+      role: "assistant",
+      content: [
+        { type: "tool-call", id: "c1", name: "read", arguments: "{}" },
+        { type: "text", text: "尾块" },
+      ],
+      source: {
+        kind: "model",
+        provider: "p",
+        model: "m",
+        replayState: { kind: "hana", version: 1, response: {}, blocks: [{ thoughtSignature: "sig-of-removed-block" }] },
+      },
+    },
+  ];
+  const { messages } = toHanaMessages({ messages: msgs, images: null });
+  const content = messages[0].content;
+  assert.equal(content[0].type, "toolCall");
+  assert.equal(content[0].thoughtSignature, undefined, "长度不等时不得采用任何签名");
+  assert.equal(content[1].textSignature, undefined);
+});
+
+test("replay 信封非 hana / blocks 非数组 → 不采用签名（原有行为）", () => {
+  const base = { role: "assistant", content: [{ type: "text", text: "t" }] };
+  for (const replayState of [
+    { kind: "pi-ai", blocks: [{ textSignature: "x" }] },
+    { kind: "hana", blocks: "not-an-array" },
+    { kind: "hana" },
+  ]) {
+    const { messages } = toHanaMessages({
+      messages: [{ ...base, source: { kind: "model", provider: "p", model: "m", replayState } }],
+      images: null,
+    });
+    assert.equal(messages[0].content[0].textSignature, undefined, JSON.stringify(replayState));
+  }
+});
+
 test("助手 arguments 非法 JSON 回落 {}；collectToolNames/isToolResultMessage", () => {
   const msgs = [
     { role: "assistant", content: [{ type: "tool-call", id: "c2", name: "x", arguments: "{bad" }], source: { kind: "model", provider: "p", model: "m" } },

@@ -69,7 +69,13 @@ export function assistantToHanaContent(message) {
     message.source.replayState.kind === "hana"
       ? message.source.replayState
       : null;
-  const metaBlocks = replay && Array.isArray(replay.blocks) ? replay.blocks : null;
+  // 块数一致才采用签名：replay.blocks 与 content 按下标对齐，长度不等时按下标取值会把
+  // 签名挂到别的块上。宿主 assembler 对自身剪枝已保证等长、否则整体丢弃 replayState
+  // （dsh-llm assembler.assembled()），但落盘消息仍可能不等（例如中断提交以
+  // interruptedBlocks() 裁掉 tool-call 却保留完整 replayState），故此处按同一口径整体
+  // 丢弃。只对齐长度，不逐块校验类型，与改动前一致。
+  const metaBlocks =
+    replay && Array.isArray(replay.blocks) && replay.blocks.length === blocks.length ? replay.blocks : null;
   const out: any[] = [];
   for (let i = 0; i < blocks.length; i += 1) {
     const b = blocks[i];
