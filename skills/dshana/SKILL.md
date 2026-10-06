@@ -1,162 +1,180 @@
 ---
 name: dshana
-description: "dshana App（把 DeepSeek Harness 接进 Hana 的受管子代理执行器）的使用、排错与工具手册。触发场景：提交/查询/取消 DSH 任务、应答审批（dshana action=open/reply/close/get/approve 任一动作前）、DSHana 卡显示未启动/启动中/需要处理（三态自举页）、DSH 起不来或启动超时、DSH 任务失败排查、默认模型怎么配、DSH Web UI 打不开、主题跟随宿主、DeepSeek Harness 相关。遇到 dshana 相关需求优先读本技能再动手。"
+description: "DSHana: DeepSeek Harness as a managed sub-agent in Hana. Read before any dshana call, or for DSH troubleshooting."
 ---
 
-# dshana 使用、排错与工具手册
+# dshana: usage, troubleshooting and tool manual
 
-DSHana 把 DeepSeek Harness（DSH）作为**受管子代理执行器**接进 Hana：App 加载后自动拉起一个受管 Node runtime，里面跑 DSH web 服务；DSH 前端以**同文档注入**方式挂进 DSHana 卡（不是 iframe 内嵌）。DSH 依赖随 App 包物化，**运行时不需要安装任何东西**。
+## When to use this skill
 
-## 架构一句话
+Read it before acting on anything dshana related. In particular:
 
-`apply(ctx)` 注册工具与路由 → 微任务触发 `ctx.runtime.start` 拉起受管 runtime → 壳页轮询 boot 状态 → 就绪后取 DSH index 注入当前页面。DSH 与宿主之间：指令走 runtime 控制面（`/_control` + loopback HTTP RPC），模型推理走宿主 `ctx.models`，凭据不进 DSH 进程。
+- Before calling `dshana` with any action (`open` / `reply` / `close` / `get` / `approve`).
+- Submitting, checking or cancelling a DSH task.
+- The DSHana card shows not-started / starting / needs-attention (the three-state bootstrap page).
+- DSH will not start, or startup times out.
+- A DSH task failed and needs diagnosing.
+- Configuring the default model.
+- The DSH Web UI will not open.
+- The theme does not follow the host.
+- Any other DeepSeek Harness work.
 
-## 首次安装（无需配置）
+DSHana wires DeepSeek Harness (DSH) into Hana as a **managed sub-agent executor**: once the App loads it automatically starts a managed Node runtime that runs the DSH web service; the DSH frontend is mounted into the DSHana card by **same-document injection** (not an iframe embed). DSH and its dependency tree are materialized inside the App package, so **nothing needs to be installed at runtime**.
 
-- **无需装依赖、无需配 Node**：DSH 及其依赖树随包分发在安装目录 `node_modules`，我们的子插件也落在那里（`node_modules/@dshana`）；启动只做 DSH boot + 服务监听，不写数据目录里的任何东西。
-- **无需配 API Key / 模型**：推理经受管 runtime 内 `hana.models` 发起，provider 凭据留在宿主。DSH 自带的两个 LLM adapter 行（`llm-deepseek` / `llm-pi-ai`）在我们组合层的补丁里停掉，llm 路由只剩宿主目录那几条（那两行要凭据库里的 key，而凭据在宿主手里，它们只会摆出选到就报 `no API key` 的路由）；设置里那页「模型」也一并停掉（它只编辑这两行的 settings 段，停掉后没可编辑对象，只剩空壳）。会话的模型跟着「谁开的」走：工具建的会话按**调用方那张角色卡配的模型**开（`agents/<id>/config.yaml` 的 `models.chat`，经 `agent:list` / `agent:config` 读，见 `app/agents.read`）；App 设置页的「会话模型」可以改成「自定义模型」固定一条（`sessionModelProvider` / `sessionModelModel`，可选该模型支持的推理强度 `sessionModelReasoningEffort`；缺省是「复用调用方」）；DSH 自己那格默认模型（`agent-default-model`）本页不经手：你手设过、而已不在宿主目录里时，就地对账换一条可服务的（优先留在原 provider 里换，再退角色卡模型、目录第一条；日志有「默认模型对账」，见 `packages/models/src/model-default-guard.ts`）。
-- **一张会话卡，两个挂载态**：`open` 与 `reply` 的回执都带一张 `details.card`（route 上 `act=` 区分，抬头固定 `DSHana`），落点是 `ui/stream.html`。聊天流里它只画入口行（`act` 对应的小标题 + 目录 / 会话 / 任务三行坐标），不注入 DSH、不带票据，所以不叠也不冻结；用户把这张卡**取出**（聊天卡的右上角菜单 / 拖拽，宿主手势，不经 App 代码）到黑板或拆窗后，宿主把同一 route 装到新的挂载上，页面那时才装配中继、注入完整 DSH 现场。App 不为它声明 manifest 卡、也不调 `hana.cards.open`——卡片中心不占一格，会话历史归 DSH 自己的侧边栏（打开 DSH UI 即可翻看），App 不另存清单。页怎么认挂载态：聊天流卡的 `hana.envelope` 的 height 是 `flexible`，黑板 / 拆窗是 `fixed`（见 `packages/ui/src/stream-entry.ts`）。聊天流态只引轻半（`stream.html` 的内联脚本首帧就写坐标 + `stream-entry.ts` 认态，并把这段会话的跟踪态放进小标题行，detail 走悬停提示）；黑板 / 拆窗态才动态 `import()` 重型 chunk（`stream-stage.tsx`：React 三态 + DSH 注入 + 主题），那一面不带任何 App 状态行。对话底部的任务 chip 仍由宿主派生（`chipVisibility: "show"` 显式声明）。
-- **会话卡带 sid**：卡 route 带 `?sid=<DSH session id>` 时钉住那一段会话；不带 `sid` 的会话卡（例如从入口行取出后又手改过 route）跟随跨面共用的当前选中。会话历史归 DSH 自己的侧边栏（打开 DSH UI 即可翻看），App 不另存清单。
-- **默认模型**：DSH 自己的 `agent-default-model`（`DSH_HOME/settings.yaml`）——用户层为空时回落到 base 层那份官方路由。界面里直接开的会话在 DSH 自己的模型选择器里选一条，候选就是宿主目录那几条；App 设置页只列候选给「会话模型」用，不经手这格。
-- **目录选择器**：DSH 的 workspace 选择对话框由 `directory-picker` seam 提供，组合层（派生自官方 web-app）里的 `directory-picker-auto` 在 win32 + loopback 下挑 native；native 的客户端半优先读页面里的 `__DSH_DIRECTORY_PICKER__`（官方桌面壳由 preload 注入、弹 Electron 对话框），没桥才叫宿主进程的 OS chooser——后者要在宿主进程里 spawn 一个子进程跑 `IFileOpenDialog`（koffi 走 COM，还先合成一次 Alt 抢前台），上游写明它只适合「操作者坐在宿主屏幕前」，而本形态的受管 runtime 是沙箱里的后台子进程，开不出来。壳页在注入 DSH index 前把桥装上（`packages/ui/src/dsh-inject.ts` 的 `installDirectoryPickerBridge`），弹窗改由宿主出：`hana.resources.pick`，`mode=directory`。用户看到的是自己机器上的系统弹窗，选择器不经沙箱。
-- **数据目录**：固定用 App 内置独立目录（App 数据目录下的 `.dsh`），开箱即用；共享已有目录 / 切换数据源暂不提供。
-- `dshana(action="open")` 每次调用**必须显式传 `cwd`**；它必须是**已存在的绝对目录**（提交前校验，分两段：相对路径在 App 侧直接拒掉；「存在 / 是目录」由受管 runtime 的控制面动作 `cwd-check` 判——App 宿主半的 `node:fs` 只覆盖应用自己的目录，用它 stat 用户路径会一律失败，而那个失败与「目录不存在」分不开）。会话一旦建立，cwd 就是记录值，之后每次 spawn（命令、终端）都从它出发——别拿一次性 scratch 目录当会话根。这道存在性校验是**尽力而为**：控制面查询本身失败时只记日志并放行（不拿一次控制面抖动把合法 cwd 一起拒掉），那种情况下不合法的 cwd 会走到建会话那一步，由 provider 级的工作目录守卫在 spawn 时兜住。
+## Architecture in one line
 
-## DSHana 卡三态
+`apply(ctx)` registers tools and routes → a microtask triggers `ctx.runtime.start` to bring up the managed runtime → the shell page polls boot state → once ready it fetches the DSH index and injects it into the current page. Between DSH and the host: commands go over the runtime control plane (`/_control` + loopback HTTP RPC), model inference goes through the host's `ctx.models`, and credentials never enter the DSH process.
 
-壳页轮询 `GET /api/apps/dshana/routes/dshana/boot-state`，按 `phase` 渲染：
+## First install (no configuration needed)
 
-| 状态 | 表现 | 怎么办 |
+- **No dependencies, no Node setup**: DSH and its dependency tree ship inside the install directory's `node_modules`, and our sub-plugins land there too (`node_modules/@dshana`); startup only performs the DSH boot and service listening, and writes nothing into the data directory.
+- **No API key, no model setup**: inference is initiated from `hana.models` inside the managed runtime, and provider credentials stay in the host. The two LLM adapter rows DSH ships with (`llm-deepseek` / `llm-pi-ai`) are disabled in our composition-layer patch, so the llm routes are only the ones in the host catalog (those two rows want keys from the credential store, and the credentials are held by the host; left alone they would only advertise routes that report `no API key` the moment one is selected). The 「模型」 ("Models") page in settings is disabled along with them (it only edits those two rows' settings block, so with them disabled there is nothing to edit and only an empty shell remains). A session's model follows whoever opened it: a tool-created session opens with **the model configured on the calling agent card** (`models.chat` of `agents/<id>/config.yaml`, read through `agent:list` / `agent:config`, see `app/agents.read`); the App settings page's 「会话模型」 ("Session model") can be switched to 「自定义模型」 ("Custom model") to pin one entry (`sessionModelProvider` / `sessionModelModel`, plus `sessionModelReasoningEffort` for a reasoning effort that model supports; the default is 「复用调用方」, "reuse the caller"). DSH's own default-model slot (`agent-default-model`) is not handled by that page: if you set it by hand and that entry is no longer in the host catalog, it is reconciled in place to a serviceable one (preferring another entry in the same provider, then falling back to the agent-card model, then the catalog's first entry; the log records a 「默认模型对账」, "default-model reconciliation", entry — see `packages/models/src/model-default-guard.ts`).
+- **One session card, two mount states**: both `open` and `reply` receipts carry a `details.card` (distinguished by `act=` on the route, always titled `DSHana`), served from `ui/stream.html`. In the chat stream it draws only an entry row (the small heading for `act`, plus a three-line coordinate block: directory / session / task); it does not inject DSH and carries no ticket, so it neither stacks nor freezes. When the user **takes the card out** (the chat card's top-right menu / dragging — a host gesture that does not go through App code) onto the blackboard or into a detached window, the host mounts the same route on the new mount, and only then does the page assemble the relay and inject the full DSH scene. The App does not declare a manifest card for it and does not call `hana.cards.open` — the card center takes no slot, session history belongs to DSH's own sidebar (open the DSH UI to browse it), and the App keeps no separate list. How a page recognizes its mount state: the chat-stream card's `hana.envelope` height is `flexible`, blackboard / detached is `fixed` (see `packages/ui/src/stream-entry.ts`). The chat-stream state pulls in only the light half (`stream.html`'s inline script writes the coordinates on the first frame and `stream-entry.ts` recognizes the state, putting this session's tracking state on the small-heading row with details on hover); only the blackboard / detached state dynamically `import()`s the heavy chunk (`stream-stage.tsx`: React three states + DSH injection + theme), and that face carries no App status rows. The task chip at the bottom of the conversation is still derived by the host (`chipVisibility: "show"`, declared explicitly).
+- **The session card carries a sid**: when a card route has `?sid=<DSH session id>` it pins that session; a card without `sid` (for example one taken out of an entry row and then hand-edited) follows the current selection shared across faces. Session history belongs to DSH's own sidebar (open the DSH UI to browse it), and the App keeps no separate list.
+- **Default model**: DSH's own `agent-default-model` (`DSH_HOME/settings.yaml`) — when the user layer is empty it falls back to the official route in the base layer. A session opened directly in the UI picks one entry in DSH's own model selector, whose candidates come from the host catalog; the App settings page only lists candidates for 「会话模型」 ("Session model") and does not touch this slot.
+- **Directory picker**: DSH's workspace chooser dialog is provided by the `directory-picker` seam, and `directory-picker-auto` in the composition layer (derived from the official web-app) picks the native one on win32 + loopback. The native client half first reads `__DSH_DIRECTORY_PICKER__` from the page (the official desktop shell injects it from preload and pops an Electron dialog); with no bridge it calls the host process's OS chooser — the latter spawns a child process inside the host process to run `IFileOpenDialog` (koffi over COM, synthesizing an Alt first to steal foreground), and upstream states it only suits "the operator sitting in front of the host screen", whereas the managed runtime in this form is a background subprocess inside a sandbox and cannot open one at all. The shell page installs the bridge before injecting the DSH index (`installDirectoryPickerBridge` in `packages/ui/src/dsh-inject.ts`), so the dialog is raised by the host instead: `hana.resources.pick` with `mode=directory`. What the user sees is a system dialog on their own machine, and the picker does not go through the sandbox.
+- **Data directory**: fixed to an App-private directory (`.dsh` under the App data directory), ready out of the box; sharing an existing directory or switching data sources is not offered.
+- Every `dshana(action="open")` call **must pass `cwd` explicitly**, and it must be an **existing absolute directory** (validated before submission, in two stages: relative paths are rejected outright on the App side; "exists / is a directory" is decided by the managed runtime's control-plane action `cwd-check` — the App host half's `node:fs` only covers the App's own directory, and using it to stat a user path would always fail, indistinguishably from "the directory does not exist"). Once a session is created the cwd is the recorded value, and every later spawn (commands, terminal) starts from it — do not use a throwaway scratch directory as a session root. This existence check is **best effort**: if the control-plane query itself fails it only logs and lets the call through (a single control-plane wobble must not reject a valid cwd); in that case an invalid cwd reaches session creation, where the provider-level working-directory guard catches it at spawn time.
+
+## DSHana card: the three states
+
+The shell page polls `GET /api/apps/dshana/routes/dshana/boot-state` and renders by `phase`:
+
+| State | What you see | What to do |
 |---|---|---|
-| 未启动（idle） | 台面只有一行「DSH 未启动」 | 打开本卡会补一次启动请求；也可以等自动链 |
-| 启动中（starting） | 细圆环 + 「正在启动 DSH…」 | 等即可（首次含 DSH boot） |
-| 就绪（ready） | 页面装载 DSH Web UI | 直接用 |
-| 需要处理（error / stopped） | 状态行 + 一块 `<pre>`（code / message / note / runtimeId / port） | 看 `<pre>` 定位；自动链按退避重试，端口占用自动换端口 |
+| Not started (`idle`) | Only one line on the surface: 「DSH 未启动」 ("DSH not started") | Opening this card issues one more start request; you can also wait for the automatic chain |
+| Starting (`starting`) | A thin ring plus 「正在启动 DSH…」 ("starting DSH…") | Just wait (the first one includes the DSH boot) |
+| Ready (`ready`) | The page loads the DSH Web UI | Use it |
+| Needs attention (`error` / `stopped`) | A status line plus a `<pre>` block (code / message / note / runtimeId / port) | Read the `<pre>` to locate the fault; the automatic chain retries with backoff and switches ports when one is occupied |
 
-**读状态的出口**：`boot-state`（壳页与 Agent 都用；含 phase/error/userText）。App 侧不写文件日志——日志一律走宿主 `ctx.logger`，受管子进程输出由宿主运行日志捕获。
+**Where state is read from**: `boot-state` (used by both the shell page and the agent; carries phase/error/userText). The App side writes no file logs — logs always go through the host's `ctx.logger`, and managed-subprocess output is captured by the host run log.
 
-## 工具手册：`dshana(action, …)`
+## Tool manual: `dshana(action, …)`
 
-宿主 Agent 面**仅此一个工具**（一个插件一个同名工具，动作以顶层 `action` 区分），装配见 `packages/tools/src/index.ts`，各动作见 `packages/tools/src/actions/<action>.ts`，每个文件 = 一个同名操作。
+The host agent side has **exactly this one tool** (one plugin, one same-named tool, actions distinguished by the top-level `action`). Assembly is `packages/tools/src/index.ts`, each action is `packages/tools/src/actions/<action>.ts`, and each file is one same-named operation.
 
-语义对齐 subagent：`open` ≈ `subagent`（创建即带任务）、`reply` ≈ `subagent_reply`（按句柄续同一个）、`close` ≈ `subagent_close`（收工）；`get` / `list` / `approve` 是本项目特色（subagent 没有）。
+Semantics mirror subagent: `open` ≈ `subagent` (created with a task already attached), `reply` ≈ `subagent_reply` (continue the same one by handle), `close` ≈ `subagent_close` (wrap up); `get` and `approve` are specific to this project (subagent has no equivalent).
 
-推理经受管 runtime 内 `hana.models` 发起，消耗宿主 provider 额度，provider 凭据留在宿主。
+Inference is initiated from `hana.models` inside the managed runtime, spending host provider quota, and provider credentials stay in the host.
 
-### 参数契约
+### Parameter contract
 
-顶层 `action` 必填，每个子命令只认自己的字段（`oneOf` 分支 + `additionalProperties: false`，所以 `open` 的 schema 里没有 `approvalId`）。
+The top-level `action` is required, and each subcommand accepts only its own fields (`oneOf` branches + `additionalProperties: false`, so `open`'s schema has no `approvalId`).
 
-| action | 必填 | 可选 | 语义 |
+| action | Required | Optional | Semantics |
 |---|---|---|---|
-| `open` | task, cwd | label, timeout, agentPreset, reasoningEffort, provider, model | 开一个 DSH 子代理并交首件活（新建会话 + 立即提交首条 prompt） |
-| `reply` | task | taskId 或 sessionId（二选一）, timeout, agentPreset, reasoningEffort, provider, model | 往同一个子代理续发消息 |
-| `close` | 无 | taskId 或 sessionId（至少一个） | 取消正在跑的任务 |
-| `get` | 无 | taskId 或 sessionId（至少一个） | 回看该会话最近一轮的最终结论 |
-| `approve` | approvalId | outcome, taskId 或 sessionId | 应答挂起审批 |
+| `open` | task, cwd | label, timeout, agentPreset, reasoningEffort, provider, model | Start a DSH sub-agent and hand it a first task (new session + immediately submit the first prompt) |
+| `reply` | task | taskId or sessionId (exactly one), timeout, reasoningEffort, provider, model | Send a follow-up message to the same sub-agent |
+| `close` | none | taskId or sessionId (at least one) | Cancel the task that is running |
+| `get` | none | taskId or sessionId (at least one) | Read back the final conclusion of the session's most recent round |
+| `approve` | approvalId | outcome, taskId or sessionId | Answer a suspended approval |
 
-> 查任务走宿主提供给 Agent 的内置任务查询工具（模型侧，本环境是 `check_pending_tasks`）：dshana 的 open/reply 建的就是本会话的后台任务，本来就出现在那份清单里，不需要本工具另开一扇只读门。
+> To inspect tasks, use the host's built-in task-query tool for the agent (on the model side that is `check_pending_tasks` in this environment): `dshana`'s open/reply create background tasks of this very session, so they already appear in that list; this tool deliberately does not open a second, read-only door for listing.
 
-**句柄与凭证**：`taskId`（open/reply 返回）与 `approvalId` 是**句柄路径**，工具自己解析会话并按宿主记录的来源会话校验归属；`sessionId`（形如 `session-<uuid>`）是**凭证路径**，显式传入即视为"我要跨对话操作"，跳过归属校验。
+**Shared fields**: `timeout` is in seconds (App default `defaultTimeoutSec`), and `label` is a display name shown in the host task list and result notifications. `agentPreset` and `reasoningEffort` are pass-through values whose vocabulary this App does not fix. Accepted preset names are DSH's own (empty leaves it to DSH, and `code` is accepted as an alias of `ptc`), and **the preset belongs to `open` alone**: DSH pins it to the session, rejects a differing value on resume as `agent-preset/conflict`, and locks it outright once a turn has started, so `reply` takes no `agentPreset` (`provider` / `model` / `reasoningEffort`, by contrast, can be changed on every `reply`). Accepted effort levels are the **host's**: the model is the host's, the host validates the level against that model's thinking levels, and an empty value leaves it to DSH. (`supportedEfforts` in `packages/provider/lib/catalog.ts` intersects the host catalog item's declared levels with the canonical effort vocabulary.)
 
-### action=open：开一个子代理并交首件活
+**Choosing the model** (`open` / `reply`): pass `provider` + `model` together to override for this request; passing `reasoningEffort` alone fills the model in from the DSH default; passing none of the three uses the model configured on the calling agent card (`open`) or keeps the session's own choice (`reply`). `provider` / `model` never change DSH's global default.
 
-- **task + cwd 必填**；不允许传 `sessionId`（续会话用 `reply`）
-- **固定异步**：立即返回 `{ content, details: { dsh: { action: "open", taskId, sessionId, rpcId, status: "running", delivery: "next-step", cwd } } }`（回执里只有文本与 dsh 坐标，不挂流内卡）；任务在后台执行，完成/失败按回执里的 `delivery` 档投递回发起会话：结果在下一个输入点自动贴回，不必为等它结束回合（会话空闲时自动起新一轮）；要看过程或最终结论用 `get`
-- **投递档位（回执里的 `delivery`）**：宿主不替作者默选档位，本 App 在 create 时显式声明，档位定死后 update 改不了。`next-step`（当前值）＝结果在下一个输入收集点贴回本会话，相当于 `session:send` 的 `steer`：不打断在途请求，也不要求模型结束回合专门等；`next-turn` 才是本回合结束后另起一轮（`followUp`）。回执里的值就是实际档位，别自行推断。
-- **句柄**：返回值里的 `taskId` 就是后续 `reply` / `close` / `get` 用的句柄，优先用它
-- `label` 是显示名（宿主任务列表与结果通知里可见），缺省按动作给默认前缀
-- 提交链路：`ctx.tasks.create` → 受管 runtime 就绪 → `session.create` →（显式传 provider/model/effort 时才 `selectModel`）→ 绑定回写宿主任务记录（`ctx.tasks.update` 的 `metadata.dsh`，DSH 坐标的事实源）→ `session.prompt`（queue）→ runtime task-bridge 回投终态
+**Handles and credentials**: `taskId` (returned by open/reply) and `approvalId` are the **handle path** — the tool resolves the session itself and checks ownership against the source session recorded by the host; `sessionId` (of the form `session-<uuid>`) is the **credential path** — passing it explicitly means "I intend to operate across conversations", which skips the ownership check.
 
-### action=reply：续同一个子代理
+### action=open: start a sub-agent with a first task
 
-- **task 必填**；目标二选一：`taskId`（句柄，默认推荐）或 `sessionId`（凭证，跨对话用）
-- cwd 沿用会话已有值（持久非活跃会话自动 resume）
-- 同会话多次 reply 由 App 侧串行化，按提交顺序排队，不并发
+- **task + cwd are required**; passing `sessionId` is not allowed (use `reply` to continue a session)
+- **Always asynchronous**: returns immediately with `{ content, details: { dsh: { action: "open", taskId, sessionId, rpcId, status: "running", delivery: "next-step", cwd } } }` (the receipt carries only text and dsh coordinates, with no in-stream card); the task runs in the background and its completion/failure is delivered back to the originating session according to the `delivery` tier in the receipt: the result is pasted back automatically at the next input point, so you do not need to end your turn to wait for it (an idle session starts a new round automatically); use `get` to see progress or the final conclusion
+- **Delivery tiers** (the `delivery` value in the receipt): the host does not pick a tier for the author, the App declares it explicitly at create time, and once fixed a tier cannot be changed by update. `next-step` (the current value) means the result is pasted back into this session at the next input-collection point, equivalent to `session:send` with `steer`: it neither interrupts an in-flight request nor requires the model to end its turn to wait; `next-turn` is what starts a separate round after this turn ends (`followUp`). The value in the receipt is the actual tier, so do not infer one.
+- **Handle**: the `taskId` in the return value is the handle for later `reply` / `close` / `get`; prefer it
+- `label` is a display name (visible in the host task list and result notifications), defaulting to an action-specific prefix
+- Submission chain: `ctx.tasks.create` → managed runtime ready → `session.create` → (only when provider/model/effort are passed explicitly, `selectModel`) → bind and write back to the host task record (`ctx.tasks.update`'s `metadata.dsh`, the source of truth for DSH coordinates) → `session.prompt` (queue) → the runtime task-bridge posts the terminal state back
 
-### action=close：取消正在跑的任务
+### action=reply: continue the same sub-agent
 
-- 目标二选一：`taskId`（句柄，默认）或 `sessionId`（凭证）
-- 链路：通知 DSH `session.cancel`（中止模型流 / 工具 / 终端）→ 收敛为取消终态；只停本工作，不影响共享 runtime 上的其他会话
-- **异步**：回执只说「已请求取消」，**不等确认窗口**（15s 窗口在后台走）；确认或超窗升级的证据随后台任务通知（投递回发起会话）与 App 日志落定。占着工具回调等确认会堵住宿主通道，多张卡同时取消时尤甚
-- **取消打在哪个时刻，结局不同**：砸在“回合还没跑起来”（刚 open / 刚 reply）上，DSH 能确认中止（也常直接走上面那条异步回执）；砸在**回合已跑完**的任务上，没有可中止的在途物，宿主任务会被升级标记 canceled（正常语义：记录跟着最后一条命令走）
-- **与 subagent_close 的差异**：DSH 会话是持久的、随时可 resume，没有实例槽位这回事，`close` 只取消当前活动任务，不“释放实例”
-- 句柄反查不到（任务已被回收 / 宿主记录里的绑定已缺失）会**明确报错**，不会拿猜出来的会话继续操作
+- **task is required**; the target is one of two: `taskId` (handle, the recommended default) or `sessionId` (credential, for cross-conversation use)
+- cwd reuses the session's existing value (a persistent but inactive session resumes automatically)
+- Multiple replies to the same session are serialized by the App side, queued in submission order, never concurrent
 
-### action=get：回看某一轮最终结论
+### action=close: cancel the running task
+
+- The target is one of two: `taskId` (handle, the default) or `sessionId` (credential)
+- Chain: tell DSH to `session.cancel` (aborting the model stream / tools / terminal) → settle into a cancelled terminal state; it stops only this work and does not affect other sessions on the shared runtime
+- **Asynchronous**: the receipt only says "cancellation requested" and **does not wait for the confirmation window** (the 15s window runs in the background); the evidence of either confirmation or escalation past the window is settled afterwards by a background task notification (delivered back to the originating session) and the App log. Holding the tool callback open waiting for confirmation would block the host channel, especially with several cards cancelling at once
+- **When the cancel lands changes the outcome**: landing on a turn that has not started running yet (a fresh open / reply) lets DSH confirm the abort (and it often goes straight down the asynchronous receipt above); landing on a task whose turn has **already finished** leaves nothing in flight to abort, so the host task is escalated to canceled (normal semantics: the record follows the last command issued)
+- **Difference from subagent_close**: a DSH session is persistent and can be resumed at any time; there is no instance slot to release, so `close` only cancels the current active task
+- If the handle cannot be resolved (the task was collected, or the binding in the host record is gone) it **reports the error explicitly** rather than continuing with a guessed session
+
+### action=get: read back one round's final conclusion
 
 | | |
 |---|---|
-| 目标 | `taskId`（句柄）或 `sessionId`（凭证） |
-| 取数 | `session/list` 定该会话读位点 `projections.asOfSeq` → `session/page` 在该 cut 上取尾部一窗 records |
-| 口径 | **最后一次 user 消息之后、最后一次 assistant 输出**就是本轮结论（一次 open/reply = 一轮）；文本截断 ≤4000 |
+| Target | `taskId` (handle) or `sessionId` (credential) |
+| Data | `session/list` to fix the session's read position `projections.asOfSeq` → `session/page` to take a tail window of records at that cut |
+| Rule | **the last assistant output after the last user message** is this round's conclusion (one open/reply = one round); text is truncated to ≤4000 |
+| Title | `session/list` also yields the session title |
 
-会显式标注、不静默篡改的情形：本轮尚无输出（退到更早的最近结论）／窗口内无 user 消息／该轮被中断／**该轮以错误结束**（模型或工具报错时 DSH 只写 `attempt` + `turn/end`，这里把错误原因透出来）／还有更早轮次未读。
+Cases that are labelled explicitly rather than silently altered: this round has no output yet (falls back to the most recent earlier conclusion) / no user message inside the window / the round was interrupted / **the round ended in an error** (when the model or a tool fails, DSH writes only `attempt` + `turn/end`, so the error reason is surfaced here) / earlier rounds remain unread.
 
-注：会话日志是 V3 格式，**App 不自读 `session_projcache.json` / `session.jsonl.zstd`**（格式演进交回官方）；DSH 未启动时 list/get 不可用。
+Note: session logs are V3 format, and **the App does not read `session_projcache.json` / `session.jsonl.zstd` itself** (format evolution goes back to upstream); when DSH is not running, list/get are unavailable.
 
-### action=approve：应答挂起审批
+### action=approve: answer a suspended approval
 
-- **approvalId 必填**（审批通知里带；同一任务可挂起多个审批，逐个应答）——它是唯一句柄，会话由工具解析（句柄路径会校验归属）；`sessionId` 仅在"我要跨对话"时显式传
-- **outcome**：`allowed-once`（默认，放行本次）/ `rejected`（拒绝）
-- **决策看 args（具体要执行什么），不听 reason（模型自述不可尽信）**：合理放行，危险拒绝。审批请求的 `label` 写作“工具名 + 具体操作 + 申请的权限档”，`details` 同源带 `operation` / `escalationMode` / `escalationNote` / `approvalTimeoutMs`
-- **回合边界**：审批通知只在**回合边界**送达。`open`/`reply` 提交后要**结束本回合**，下一回合才会收到 `app-task-approval-requested`（含 `approvalId`）。在同一个回合里空等或连续重发，会撞上宿主工具回调的 30 秒上限（`RPC callback.tools.execute timed out after 30000ms`），而且该会话可能就此卡住（后续 `reply` 一律超时，`close` 也难得到 DSH 确认）；遇到这种会话换新的，不要原地重试
-- 审批超时未应答按 `approvalTimeoutSec` 自动拒绝（本 App 缺省 30 秒；显式设 0 则禁用自动拒绝）。注意宿主自身的 `timeoutMs` 默认是 0（不禁用即不超时）——30 秒是 App 侧策略
+- **approvalId is required** (it comes with the approval notice; one task can have several approvals suspended, answered one by one) — it is the only handle, and the tool resolves the session (the handle path checks ownership); `sessionId` is only passed explicitly for "I intend to cross conversations"
+- **outcome**: `allowed-once` (the default, allow this one) / `rejected` (reject)
+- **Decide on args (what exactly is about to run), not on reason (the model's own account is not trustworthy)**: allow what is reasonable, reject what is dangerous. The approval request's `label` reads "tool name + the concrete operation + the permission tier requested", and `details` carries `operation` / `escalationMode` / `escalationNote` / `approvalTimeoutMs` from the same source
+- **Turn boundary**: approval notices arrive only **at a turn boundary**. After an `open`/`reply` submission you must **end your turn**; only the next turn receives `app-task-approval-requested` (with the `approvalId`). Idling or re-sending within the same turn hits the host tool callback's 30-second limit (`RPC callback.tools.execute timed out after 30000ms`), and that session may wedge from then on (every later `reply` times out and `close` struggles to get a DSH confirmation); start a new session for such a case instead of retrying in place
+- An approval that is not answered within `approvalTimeoutSec` is rejected automatically (this App defaults to 30 seconds; setting it explicitly to 0 disables the auto-reject). Note that the host's own `timeoutMs` defaults to 0 (which does not disable, i.e. does not time out) — the 30 seconds is an App-side policy
 
-### 典型用法
+### Typical usage
 
-- 开活：`open`（新任务）或 `reply`（往已有子代理续；先 `get` 确认）
-- 回看：`get`（最终结论）
-- 止损：`close`；越界权限：`approve`（提交后先让出回合，审批通知下一回合才到）
+- Start work: `open` (new task) or `reply` (continue an existing sub-agent; `get` first to confirm)
+- Read back: `get` (the final conclusion)
+- Stop the bleeding: `close`; out-of-scope permission: `approve` (yield the turn right after submission — the approval notice only arrives next turn)
 
-`sessionId` 即访问凭证；`get` 的取数走受管 runtime 的官方查询面，不读会话文件、不发起推理，DSH 未启动时不可用。
+`sessionId` is an access credential; `get` reads through the managed runtime's official query surface, does not read session files and does not initiate inference, and is unavailable while DSH is not running.
 
-## 改完源码之后（开发循环）
+## After changing source (the development loop)
 
-三件工具都在仓库里，别再造临时脚本：
+All three tools live in the repo; do not hand-roll temporary scripts:
 
-| 要干什么 | 命令 |
+| What you want | Command |
 |---|---|
-| 把本地包装进宿主（卸载 → 提交 staging → 确认 → 等就绪，跨平台） | `pnpm run install:local -- --zip releases/<包>.zip` |
-| 体检**装好的**那棵树（预检：依赖就位 + 定位 DSH + 产物在位） | `pnpm run smoke:packed -- --preflight` |
-| 同上但不加 `--preflight`：完整 boot 到中继有应答 | `pnpm run smoke:packed` |
-| 查宿主能力面：应用能调哪些 bus 动词、不能用哪些事件名（SDK 已发布契约）；某个字面在宿主 bundle 里出现在哪 | `pnpm run probe:host [-- --look models-changed]` |
+| Install a local package into the host (uninstall → submit staging → confirm → wait for ready; cross-platform) | `pnpm run install:local -- --zip releases/<package>.zip` |
+| Inspect the **installed** tree (preflight: dependencies in place + DSH located + artifacts present) | `pnpm run smoke:packed -- --preflight` |
+| The same without `--preflight`: a full boot through to a relay answer | `pnpm run smoke:packed` |
+| Inspect the host capability surface: which bus verbs an App may call, which event names it may not (the published SDK contract); where a literal appears in the host bundle | `pnpm run probe:host [-- --look models-changed]` |
 
-升级 DSH 或重新装包之后先跑一次 `smoke:packed`：仓库树能过不等于装好的树能过（0.1.6 那次 profile-boot 就是只在装好的树里不合格——哈希产物被压缩，导出名全丢）。
+Run `smoke:packed` after upgrading DSH or reinstalling a package: passing in the repo tree does not mean passing in the installed tree (the 0.1.6 profile-boot was the one that only failed in the installed tree — hashed artifacts were compressed and every export name was gone).
 
-## 主题
+## Theme
 
-只有 DSH 主题偏好为 **system** 时跟随宿主配色（经 `@dshana/theme` 子插件注入）；在 DSH 内显式选 light/dark 时完全用 DSH 自己的主题，宿主配色不介入。
-外观里这个选项的文案是**「跟随宿主」**（上游原文是「跟随系统」）——偏好值仍是 `system`，只是措辞按我们的形态改了，见 `integrations/ui-theme` 的覆盖层。
+Host colours are followed only while the DSH theme preference is **system** (injected through the `@dshana/theme` sub-plugin); when light/dark is chosen explicitly inside DSH, DSH's own theme is used entirely and host colours do not intervene. The label for this option in Appearance is **「跟随宿主」** ("follow the host") — upstream's original wording is 「跟随系统」 ("follow the system"); the preference value is still `system`, only the wording was changed to match our form. See the overlay in `integrations/ui-theme`.
 
-## 排错表
+## Troubleshooting
 
-| 现象 | 原因 | 处理 |
+| Symptom | Cause | Handling |
 |---|---|---|
-| 卡在「启动中」很久 | 首次 boot 较慢（含插件就位与服务监听） | 等即可；持续不动看宿主日志与 `error.userText`（boot 快照不带日志尾） |
-| 状态转「需要处理」 | runtime 启动失败 | 看 `error.userText` 与原始错误；日志定位 |
-| 提示端口被占用 | 端口竞争 | 会自动换随机端口重试；持续失败看日志 |
-| DSH Web UI 打不开但状态就绪 | 注入失败 / surface 票据缺失 | 重开卡；反复出现查中继前缀与 surface 授权 |
-| `dshana` 报 runtime 未就绪 | DSH 还没起来 | 等就绪即可（工具首调会重新拉起）；持续失败看 boot 状态与宿主日志 |
-| 改了宿主提供商/模型，DSH 里的候选没变 | DSH 侧的 provider 路由与模型目录是启动快照 | 正常路径由 `models-changed` 订阅经控制面触发重拉（不重启 runtime）；订阅面不可用时重启 runtime |
-| 模型报 `no API key for provider route "deepseek-official"` | 官方自带的 LLM adapter 还在服务那条路由（本形态里它拿不到 key），说明组合层包没随包落地或被人改过 | 确认装好的树 `node_modules/@dshana/dsh-app/cordis.patch.yml` 里 `llm-deepseek` / `llm-pi-ai` 是 `disabled: true`，然后重启 DSH |
-| 默认模型指向宿主没配的提供商/模型（你手设过的那个消失了） | 宿主换过提供商或删了凭据 | 不用手改：App 在 runtime 就绪与宿主模型变更后会对账，换成宿主目录里一条可服务的（日志有「默认模型对账」）；这格现在只由 DSH 自己与对账维护，App 设置页没有它的入口 |
-| 界面里直接开的会话报 `no API key for provider route "deepseek-official"` | `agent-default-model` 的 user 层为空，值落回 base 层那条官方路由（工具建的会话不受影响：它们按调用方角色卡开） | 在 DSH 自己的模型选择器里选一条可服务的（会话级；App 设置页没有默认模型的入口） |
-| 主题没跟随宿主 | DSH 主题偏好是 light/dark 而非 system | 在 DSH 外观里选「跟随宿主」（偏好值 system） |
-| DSH 设置里找不到「模型」页 | 该页（`ui-settings-models`）随两个官方 LLM adapter 一起停掉——它只编辑那两行的 settings 段 | 不是故障：工具建会话用的模型在 App 设置页的「会话模型」里配，模型候选列的是宿主目录；DSH 侧会话在 DSH 自己的模型选择器里选 |
-| 选工作区目录时弹一个错误 | 目录弹窗落到了 DSH 宿主进程的 OS chooser（要在沙箱里 spawn 子进程开 `IFileOpenDialog`），而本形态的 runtime 是后台子进程 | 正常路径不该走到那里：壳页注入的目录桥让弹窗由宿主出（`hana.resources.pick`）。若仍报错，确认桥装上了（`__DSH_DIRECTORY_PICKER__`）且宿主授予了资源选择 |
-| 命令执行里找不到 `bash` 工具 | shell 行按平台互斥挂载：win32 停 `bash` / `bash-sandbox`，只挂 `pwsh` / `pwsh-sandbox` | 用 `pwsh` 工具跑命令（PowerShell）；读写文件仍走文件系统工具 |
-| `reply` 连续 30 秒超时（`RPC callback.tools.execute`）/ 该会话后续提交全失败 | 上一轮的审批没能在回合边界被应答，宿主工具回调超时，会话卡住 | 不要原地重试：换新会话（`open`）；旧会话用 `close` 收敛（回执只说已请求取消，升级标记随后台落定） |
-| `close` 回执只说「已请求取消」 | 正常语义：取消确认不进工具回调（后台结算），升级标记随后台落定 | 不用处理；要确认结局看 `get` 或任务通知 |
-| 窗口（或卡）里的页停在「历史加载失败」/ `gateway/internal` | 该页绑的受管运行体已重建、中继前缀失效，或 surface 凭据缺失 | 重开该窗口；反复出现看 boot 状态与宿主日志 |
+| Stuck on 「启动中」 ("starting") for a long time | The first boot is slow (plugin placement plus service listening) | Just wait; if it never moves, check the host log and `error.userText` (the boot snapshot does not carry the log tail) |
+| State flips to 「需要处理」 ("needs attention") | The runtime failed to start | Read `error.userText` and the original error; locate it via logs |
+| Told the port is occupied | Port contention | It switches to a random port and retries automatically; check logs if it keeps failing |
+| The DSH Web UI will not open although the state is ready | Injection failed / the surface ticket is missing | Reopen the card; if it recurs, check the relay prefix and the surface authorization |
+| `dshana` reports the runtime is not ready | DSH has not come up yet | Just wait for ready (the tool's first call starts it again); check boot state and the host log if it keeps failing |
+| Host providers/models changed but DSH's candidates did not | On the DSH side the provider routes and model catalog are a startup snapshot | The normal path is a re-pull triggered over the control plane by the `models-changed` subscription (no runtime restart); restart the runtime when the subscription surface is unavailable |
+| A model reports `no API key for provider route "deepseek-official"` | The official LLM adapter is still serving that route (it cannot get a key in this form), which means the composition-layer package did not land or was edited | Confirm that `llm-deepseek` / `llm-pi-ai` are `disabled: true` in `node_modules/@dshana/dsh-app/cordis.patch.yml` of the installed tree, then restart DSH |
+| The default model points at a provider/model the host does not have configured (the one you set by hand disappeared) | The host switched providers or deleted credentials | No manual edit: after the runtime becomes ready and after host model changes, the App reconciles to a serviceable entry in the host catalog (the log has 「默认模型对账」, "default-model reconciliation"); this slot is now maintained only by DSH itself and by reconciliation, and the App settings page has no entry for it |
+| A session opened directly in the UI reports `no API key for provider route "deepseek-official"` | `agent-default-model`'s user layer is empty, so the value falls back to that official route in the base layer (tool-created sessions are unaffected: they open by the calling agent card) | Pick a serviceable entry in DSH's own model selector (session-scoped; the App settings page has no entry for the default model) |
+| The theme does not follow the host | The DSH theme preference is light/dark rather than system | Choose 「跟随宿主」 ("follow the host") in DSH Appearance (the preference value is system) |
+| The 「模型」 ("Models") page is missing from DSH settings | That page (`ui-settings-models`) is disabled together with the two official LLM adapters — it only edits those two rows' settings block | Not a fault: configure the model used by tool-created sessions on the App settings page's 「会话模型」 ("Session model"), whose candidates come from the host catalog; choose the model for DSH-side sessions in DSH's own model selector |
+| Picking a workspace directory raises an error | The directory dialog landed on the DSH host process's OS chooser (which has to spawn a subprocess inside the sandbox to open `IFileOpenDialog`), whereas the runtime in this form is a background subprocess | The normal path should never get there: the directory bridge injected by the shell page makes the host raise the dialog (`hana.resources.pick`). If it still errors, confirm the bridge is installed (`__DSH_DIRECTORY_PICKER__`) and that the host granted resource picking |
+| No `bash` tool in command execution | Shell rows are mounted mutually exclusively by platform: on win32 `bash` / `bash-sandbox` are stopped and only `pwsh` / `pwsh-sandbox` are mounted | Run commands with the `pwsh` tool (PowerShell); file reads and writes still go through the filesystem tools |
+| `reply` times out for 30 seconds in a row (`RPC callback.tools.execute`) / every later submission to that session fails | The previous round's approval was never answered at a turn boundary, the host tool callback timed out, and the session is wedged | Do not retry in place: start a new session (`open`); converge the old one with `close` (the receipt only says cancellation was requested, and the escalation mark settles with the background task) |
+| The `close` receipt only says "cancellation requested" | Normal semantics: cancel confirmation does not enter the tool callback (it settles in the background), and the escalation mark settles with the background task | Nothing to do; to confirm the outcome use `get` or the task notification |
+| A page in a window (or card) sits on 「历史加载失败」 ("history failed to load") / `gateway/internal` | The managed runtime that page was bound to was rebuilt and the relay prefix is stale, or the surface credential is missing | Reopen the window; if it recurs, check boot state and the host log |
 
-## 已知限制
+## Known limitations
 
-- **升级 DSH = 装新 App 包 + 重载 App**：DSH 版本由 App 声明的依赖（`@deepseek-ai/dsh`）决定，产物版本段带上它；无独立升级通道。重载会重新 import 服务端入口、重新注册工具与路由，受管 runtime 按自动链重起（不必重启宿主——DSH 跑在受管子进程里，宿主进程内没有它的模块缓存）。一处注意：**已建立的会话**握着上次重建会话状态时解析的工具对象副本，重载后要在那个会话里继续调工具得**压缩上下文**（或开新会话）——工具面会按宿主当前注册表重新解析。
-- **壳页没有「启动 / 重启 DSH」的入口**：台面只报状态。拉起由 `apply` 后的自动链、工具首调、以及打开卡页时补的那一次请求承担，失败按退避重试（5s 起、封顶 5min）。要真正重启只能卸载重装、重载 App 或重启宿主。
-- **拆窗、钉回、切页面都不停 DSH 后台**：只有卸载/重载 App 或退出 Hana，宿主才回收受管 runtime。
-- **数据源固定为 App 内置独立目录**（`<dataDir>/.dsh`，即本形态的 `DSH_HOME`），不碰用户主目录的 `~/.dsh`；共享已有 DSH 目录 / 切换数据源的链未启用（`POST /dshana/settings/restart` 回 503）。
-- **会话↔任务的绑定不落 App 文件**：事实源是宿主任务记录（`metadata.dsh` 的 sessionId / rpcId / timeoutSec / approvalTimeoutMs / cancel），读取失败一律 fail-closed。DSH 未启动时 `list` / `get` 不可用。
-- **越界权限默认走审批，且只能在新回合被应答**：`open` / `reply` 提交后须结束本回合，审批通知（含 `approvalId`）下一回合才到；同回合内空等会撞上宿主工具回调的 30 秒上限，并可能卡住该会话。`approvalTimeoutSec` 内无人应答自动拒绝（缺省 30 秒；显式设 0 禁用）。DSH Web UI 里直接开的会话没有委派任务，审批请求没有应答者，按 fail-closed 处理。
-- **会话流不随任务终结而收线**：页面按 `?sid=` 钉住的那段会话，终态之后照旧可读（历史会话正是用户主动打开来翻看的）。中继侧不设「任务是否活跃」的闸门。
-- **模型分两条路**：工具建的会话按调用方角色卡配的模型开（App 设置可改成固定的自定义那条）；DSH Web UI 里直接开的会话用 DSH 自己的模型选择器选的那条，候选只来自宿主目录、且是启动快照——宿主改提供商后由 `models-changed` 订阅触发重拉，订阅面不可用时才需要重启 runtime。
+- **Upgrading DSH = installing a new App package + reloading the App**: the DSH version is decided by the dependency the App declares (`@deepseek-ai/dsh`) and is carried in the artifact's version segment; there is no separate upgrade channel. A reload re-imports the server entry and re-registers tools and routes, and the managed runtime restarts through the automatic chain (no host restart needed — DSH runs in a managed subprocess, so the host process holds no module cache for it). One caveat: **already-established sessions** hold a copy of the tool objects resolved when their session state was last rebuilt, so continuing to call tools in such a session after a reload requires **compacting the context** (or starting a new session) — the tool surface is re-resolved against the host's current registry.
+- **The shell page has no "start / restart DSH" entry**: the surface only reports state. Bringing it up is the job of the automatic chain after `apply`, the tool's first call, and the extra request issued when the card page is opened; failures retry with backoff (starting at 5s, capped at 5min). A real restart means uninstall+reinstall, reloading the App or restarting the host.
+- **Detaching a window, pinning it back, or switching pages never stops DSH in the background**: only uninstalling/reloading the App or quitting Hana makes the host collect the managed runtime.
+- **The data source is fixed to an App-private directory** (`<dataDir>/.dsh`, i.e. `DSH_HOME` in this form); the user's home `~/.dsh` is not touched, and sharing an existing DSH directory / switching data sources is not enabled (`POST /dshana/settings/restart` answers 503).
+- **The session↔task binding is not written to App files**: the source of truth is the host task record (`sessionId` / `rpcId` / `timeoutSec` / `approvalTimeoutMs` / `cancel` under `metadata.dsh`), and a failed read fails closed. While DSH is not running, `list` / `get` are unavailable.
+- **Out-of-scope permission defaults to approval, and can only be answered in a new turn**: after an `open` / `reply` submission you must end the turn, and the approval notice (carrying the `approvalId`) arrives only next turn; idling inside the same turn hits the host tool callback's 30-second limit and may wedge the session. An approval nobody answers within `approvalTimeoutSec` is rejected automatically (30 seconds by default; setting 0 disables it). A session opened directly in the DSH Web UI has no delegated task, so its approval requests have no responder and are handled fail-closed.
+- **A session stream does not close when its task ends**: a session pinned by `?sid=` stays readable after the terminal state (historical sessions are exactly what the user opens to browse). The relay side has no "is the task active" gate.
+- **Models take two paths**: tool-created sessions open with the model configured on the calling agent card (the App settings page can pin one custom entry instead); sessions opened directly in the DSH Web UI use the entry chosen in DSH's own model selector, whose candidates come only from the host catalog and are a startup snapshot — after the host changes providers, the `models-changed` subscription triggers a re-pull, and only an unavailable subscription surface requires a runtime restart.

@@ -4,7 +4,7 @@
 // tests/lib/tool-ctx.test.mjs — 工具执行上下文必须继承宿主 ctx 的宿主能力。
 //
 // 真机踩到：工具 ctx 手挑几项（只有 dataDir/config/log）就会漏：
-//   · ctx.runtime 缺 → list/get 直接报「宿主不支持 ctx.runtime.fetch（受管服务请求）」；
+//   · ctx.runtime 缺 → list/get 直接报「host does not support ctx.runtime.fetch (managed service requests)」；
 //   · ctx.tasks 缺 → resolveTarget 里的 ctx.tasks.get 恒为 null，句柄路径的归属校验
 //     恒定判「查不到」（fail-closed 变成恒 fail）。
 // 本测试钉住口径：工具 ctx = 宿主 ctx 的浅拷贝 + 换名后的 log。

@@ -7,7 +7,7 @@
 // 固定异步，结果作为后台结果回投来源会话。提交链见 packages/session/src/session-run.ts
 // （ctx.tasks.create → 受管 runtime 就绪 → session.create（带模型）→ 绑定回写宿主任务记录 → prompt）。
 //
-// 模块契约（六个 action 模块共用，见 packages/tools/src/index.ts）：导出 command / summary / fields /
+// 模块契约（五个 action 模块共用，见 packages/tools/src/index.ts）：导出 command / summary / fields /
 // required / readOnly / run；run(input, ctx, deps) 中 deps 仅单测注入提交链。
 import { submitDshTask } from "@dshana/session/session-run.ts";
 import { sessionCard } from "../shared/card.ts";
@@ -32,25 +32,21 @@ export interface SubmitDeps {
 }
 
 export const command = "open";
-export const summary = "开一个 DSH 子代理并交首件活（task/cwd 必填；后台执行，结果回到本会话）";
+export const summary = "start a DSH sub-agent with a first task";
 export const readOnly = false;
 
 export const fields = {
-  task: { type: "string", description: "交给子代理的首件活（任务描述/消息文本）" },
+  task: { type: "string", description: "First task for the sub-agent" },
   cwd: {
     type: "string",
-    description:
-      "沙箱工作目录（bash 与文件系统工具的活动范围，绝对路径；无 defaultCwd 回退，每次调用显式指定）",
+    description: "Absolute sandbox working directory (required; no fallback)",
   },
-  label: { type: "string", description: "可选显示名（便于在宿主任务清单与结果通知里辨认这个子代理）" },
-  timeout: { type: "number", description: "任务超时（秒），缺省用 App 设置 defaultTimeoutSec" },
-  agentPreset: { type: "string", description: "agent 预设（standard/ptc/cordis/minimal）" },
-  reasoningEffort: { type: "string", description: "推理强度（off/high/max）" },
-  provider: { type: "string", description: "显式 provider（随这次请求带上，不改 dsh 的全局默认）" },
-  model: {
-    type: "string",
-    description: "显式 model id（与 provider 一起传时覆盖缺省；不传则：已显式传 effort 时从 dsh 默认补齐，都没传时按调用方角色卡配的模型开）",
-  },
+  label: { type: "string", description: "Optional display name" },
+  timeout: { type: "number", description: "Seconds; defaults to the App's defaultTimeoutSec" },
+  agentPreset: { type: "string", description: "Agent preset (names defined by DSH)" },
+  reasoningEffort: { type: "string", description: "Reasoning effort (host-side levels)" },
+  provider: { type: "string", description: "Explicit provider for this request only" },
+  model: { type: "string", description: "Explicit model id (fallback rules in the SKILL)" },
 };
 export const required = ["task", "cwd"];
 

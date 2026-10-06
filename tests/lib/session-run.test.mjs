@@ -23,8 +23,8 @@ test("绝对路径放过", () => {
 });
 
 test("相对路径被拒（App 与受管 runtime 的解析基准不同）", () => {
-  assert.throws(() => assertAbsoluteSessionCwd("workspace"), /必须是绝对路径/);
-  assert.throws(() => assertAbsoluteSessionCwd(".\\workspace"), /必须是绝对路径/);
+  assert.throws(() => assertAbsoluteSessionCwd("workspace"), /must be an absolute path/);
+  assert.throws(() => assertAbsoluteSessionCwd(".\\workspace"), /must be an absolute path/);
 });
 
 test("runtime 报可用 → 不拒", () => {
@@ -34,7 +34,7 @@ test("runtime 报可用 → 不拒", () => {
 test("runtime 报是文件 → 拒，文案指向「不是目录」", () => {
   const bad = sessionCwdRejection({ ok: true, isDirectory: false }, "/srv/work/file.txt");
   assert.ok(bad);
-  assert.match(bad.message, /不是目录/);
+  assert.match(bad.message, /is not a directory/);
 });
 
 test("ENOENT → 拒，文案说「不存在」", () => {
@@ -43,7 +43,7 @@ test("ENOENT → 拒，文案说「不存在」", () => {
     "/srv/gone",
   );
   assert.ok(bad);
-  assert.match(bad.message, /cwd 不存在/);
+  assert.match(bad.message, /cwd does not exist/);
 });
 
 test("拿不到权限 → 拒，但与「不存在」分开，且 errno 必须露出来", () => {
@@ -52,14 +52,14 @@ test("拿不到权限 → 拒，但与「不存在」分开，且 errno 必须�
     "/srv/x",
   );
   assert.ok(bad);
-  assert.match(bad.message, /cwd 不可用/);
+  assert.match(bad.message, /cwd is unusable/);
   assert.match(bad.message, /EACCES/);
-  assert.doesNotMatch(bad.message, /不存在/);
+  assert.doesNotMatch(bad.message, /does not exist/);
 });
 
 test("回执形状意外（没有 ok）→ 也拒，且不谎称不存在", () => {
   const bad = sessionCwdRejection({ message: "boom" }, "/srv/x");
   assert.ok(bad);
-  assert.match(bad.message, /cwd 不可用/);
-  assert.doesNotMatch(bad.message, /不存在/);
+  assert.match(bad.message, /cwd is unusable/);
+  assert.doesNotMatch(bad.message, /does not exist/);
 });

@@ -40,16 +40,14 @@ const ACTIONS = [openAction, replyAction, closeAction, getAction, approveAction]
 
 export const name = "dshana";
 
+/** description 前缀：模型侧唯一的固定入口（细则一律在 SKILL 全文里，这里不重复）。 */
+const DESCRIPTION_LEAD = "DeepSeek Harness (DSH) sub-agent executor. Actions: ";
+
+/** 工具描述：由各 action 的 summary 汇总（顺序即 ACTIONS 顺序），细则见 SKILL。 */
 export const description =
-  "DSH 子代理（一个插件一个同名工具，CLI subcommand 式调用：action 选动作）：" +
-  "open=开一个 DSH 子代理并交首件活（task/cwd 必填；后台执行，结果回到本会话，之后用返回的 taskId 续/关）；" +
-  "reply=往同一个子代理续发消息（task 必填；taskId 句柄或 sessionId 凭证二选一）；" +
-  "close=取消正在跑的任务（只停本工作，不影响共享 runtime 上的其他会话）；" +
-  "get=回看某一轮最终结论；approve=应答挂起审批（approvalId 必填）。" +
-  "用法心智同 subagent：开、续、关；本项目另有 get/approve 两个特色动作。" +
-  "调用模型：句柄默认（taskId/approvalId，按宿主记录的来源会话校验归属）、凭证显式（sessionId = 我要跨对话）。" +
-  "审批与回合边界：越界/敏感操作会挂起审批，通知（含 approvalId，并可读具体操作）只在回合边界送达——open/reply 提交后请结束本回合，别在同回合内空等或连续重发（同回合内等待会撞上宿主工具回调的 30 秒上限，并可能让该会话卡住）；下一回合再用 approve 应答。" +
-  "完整调用手册见 SKILL: skills/dshana/SKILL.md";
+  DESCRIPTION_LEAD +
+  ACTIONS.map((mod) => mod.command + "=" + mod.summary).join("; ") +
+  ". Full manual: skills/dshana/SKILL.md";
 
 /** 参数 Schema：顶层 action + oneOf 分支（每个子命令独立的参数字段集）。 */
 export const parameters = {
@@ -76,7 +74,7 @@ export async function doExecute(input: DshanaToolInput, ctx: ToolCtx, deps?: unk
   const mod = ACTIONS.find((m) => m.command === action);
   if (!mod) {
     throw new Error(
-      "action 必须是 " + ACTIONS.map((m) => m.command).join(" / ") + "（收到 " + action + "）",
+      "action must be one of " + ACTIONS.map((m) => m.command).join(" / ") + " (got " + action + ")",
     );
   }
   // 每个 action 的 run 参数面各不相同（各自 fields），统一成一个可调用的宽签名再分发。

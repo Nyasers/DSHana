@@ -20,7 +20,7 @@ import { bridgeAccess } from "./managed-runtime.ts";
 export function serviceBase() {
   const access = bridgeAccess();
   if (!access) {
-    throw new Error("DSH 受管 runtime 中继尚未就绪（端口随启动随机分配，无预设值）——请先完成 ensureManagedRuntime。");
+    throw new Error("DSH managed runtime bridge not ready (the port is assigned randomly at startup; there is no preset value) — finish ensureManagedRuntime first.");
   }
   return access.base;
 }
