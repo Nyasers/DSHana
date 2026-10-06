@@ -39,6 +39,10 @@ overrides:
   "@deepseek-ai/dsh-session-telemetry-otel": "file:vendor/stubs/dsh-session-telemetry-otel"
   "@deepseek-ai/dsh-host-product-telemetry-otel": "file:vendor/stubs/dsh-host-product-telemetry-otel"
   "@deepseek-ai/dsh-session-telemetry": "file:vendor/stubs/dsh-session-telemetry"
+  # 安全告警 @modelcontextprotocol/client >=2.0.0 <2.2.0（high，GHSA-6qxp-vccf-f47h：OAuth 凭据可能被送到
+  # MCP server 指定的授权服务器）。整条链只从 dsh-mcp-client 进来（它把版本钉成精确 2.0.0，update 抬不动），
+  # 所以这里直接钉到已修的最小版本 2.2.0。上游 DSH 把范围放开后可撤。
+  "@modelcontextprotocol/client": "2.2.0"
 
 # 已知且暂时无补丁可钉的安全告警——目前**没有**（http-cache-semantics 那条整条链已随 dsh-otel
 # 换空实现离开依赖树）。保留这个段落作位置：将来碰到同类无补丁的告警，在这里记理由与复核时点，
