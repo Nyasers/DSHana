@@ -1,6 +1,6 @@
 {
   "name": "@dshana/dsh-app",
-  "version": "1.0.0-rc.35+dsh-0.2.0-rc.2",
+  "version": "1.0.0+dsh-0.2.0-rc.2",
   "private": true,
   "description": "本 App 的 DSH 组合层：dsh-base 之上的 Web 表层，派生自 @deepseek-ai/dsh-web-app（逐文件上游 sha256 见 provenance.json）",
   "license": "MIT",
