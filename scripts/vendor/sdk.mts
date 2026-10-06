@@ -17,12 +17,14 @@
 // CI 上没有，所以 CI 门禁（derive --check）不含本脚本。
 //
 // 同步后 SDK 内容变了，两处衍生要跟着走：
-//   · 锁文件与依赖树：pnpm install --no-prefer-frozen-lockfile
+//   · 锁文件与依赖树：pnpm update <包名>，再 pnpm install（待办里打出具体命令）
 //   · THIRD_PARTY_NOTICES.md 的版本号：pnpm run derive thirdparty
 //
-// 为什么不是裸 pnpm install：pnpm 对 `file:` tarball 的 resolution 按 specifier 文本判定，
-// 路径没变就「Lockfile is up to date」，于是 integrity 与 node_modules 里的包都停在旧 tgz 上
-// （裸 pnpm install 甚至 --force 都不重算）。--no-prefer-frozen-lockfile 才会重新解析。
+// 锁文件不会因为 vendor 里的 tgz 换了内容就重算：`file:` 依赖的 resolution 按 specifier 里的
+// 路径判定，路径没变时锁文件仍被判为有效，integrity 与 node_modules 里的包都停在旧 tgz 上。
+// 裸 pnpm install、--force、--fix-lockfile、--update-checksums、--no-prefer-frozen-lockfile
+// 都不触发重解析（连 tarball 都不读），只有按包名点名的 pnpm update 才会重读 tarball。
+// pnpm update 在 Windows 上会把 package.json 与锁文件里的 `file:` 路径写成反斜杠，提交前改回正斜杠。
 // 本脚本同步后自检 lock 里的 integrity：没跟上就把它作为待办打出来。
 //
 // 用法：
@@ -48,6 +50,14 @@ const FILES = [
   "hana-plugin-sdk-0.0.0.tgz",
   "source-manifest.json",
 ];
+
+/** tgz → 包名。锁文件重解析按包名点名（pnpm 认路径不认文件内容，见文件头）。 */
+const TGZ_PACKAGES: Record<string, string> = {
+  "hana-app-sdk.tgz": "@hana/app-sdk",
+  "hana-plugin-components-0.0.0.tgz": "@hana/plugin-components",
+  "hana-plugin-protocol-0.0.0.tgz": "@hana/plugin-protocol",
+  "hana-plugin-sdk-0.0.0.tgz": "@hana/plugin-sdk",
+};
 
 const SKILL_SDK = path.join("skills", "hana-app-creator", "assets", "sdk");
 const SERVER_SKILL_SDK = path.join("skills2set", "hana-app-creator", "assets", "sdk");
@@ -115,12 +125,15 @@ function lockBehind(): string[] {
   });
 }
 
-/** 同步后的衍生待办：锁文件，以及 derive（第三方声明与 manifest#minAppVersion 都取自这份快照）。 */
+/** 同步后的衍生待办：锁文件重解析要按包名点名，derive 重建第三方声明与 manifest#minAppVersion。 */
 function reportFollowUps(): void {
   const behind = lockBehind();
   if (behind.length) {
-    console.log(`[sync-vendor-sdk] 锁文件停在旧 tgz（${behind.length} 个 integrity 未更新）：`);
-    console.log("  pnpm install --no-prefer-frozen-lockfile && pnpm run derive");
+    const names = behind.map((f) => TGZ_PACKAGES[f]).filter((n): n is string => Boolean(n));
+    console.log(`[sync-vendor-sdk] 锁文件停在旧 tgz（${behind.length} 个 integrity 未更新），重解析要按包名点名：`);
+    if (names.length) console.log(`  pnpm update ${names.join(" ")}`);
+    console.log("  pnpm run derive");
+    console.log("  （Windows 上 pnpm update 会把 file: 路径写成反斜杠，提交前改回正斜杠）");
     return;
   }
   console.log("[sync-vendor-sdk] 锁文件 integrity 已匹配；THIRD_PARTY_NOTICES 与 manifest#minAppVersion 跑 pnpm run derive 同步");
