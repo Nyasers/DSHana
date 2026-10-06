@@ -16,7 +16,6 @@ import type { ToolInputBase, ToolResult } from "../shared/types.ts";
 export interface ReplyInput extends ToolInputBase {
   task: string;
   timeout?: number;
-  agentPreset?: string;
   reasoningEffort?: string;
   provider?: string;
   model?: string;
@@ -28,27 +27,17 @@ export interface SubmitDeps {
 }
 
 export const command = "reply";
-export const summary = "往同一个 DSH 子代理续发消息（task 必填；taskId 句柄或 sessionId 凭证二选一）";
+export const summary = "continue it";
 export const readOnly = false;
 
 export const fields = {
-  task: { type: "string", description: "续发的消息文本" },
-  taskId: {
-    type: "string",
-    description: "句柄路径（open/reply 返回值里的宿主 task id）：工具自己解析会话并按宿主记录的来源会话校验归属",
-  },
-  sessionId: {
-    type: "string",
-    description: "凭证路径（形如 session-<uuid>）：显式传入即视为“我要跨对话操作”，跳过归属校验",
-  },
-  timeout: { type: "number", description: "任务超时（秒），缺省用 App 设置 defaultTimeoutSec" },
-  agentPreset: { type: "string", description: "agent 预设（standard/ptc/cordis/minimal）" },
-  reasoningEffort: { type: "string", description: "推理强度（off/high/max）" },
-  provider: { type: "string", description: "显式 provider（随这次请求带上，不改 dsh 的全局默认）" },
-  model: {
-    type: "string",
-    description: "显式 model id（与 provider 一起传时覆盖缺省；不传则：已显式传 effort 时从 dsh 默认补齐，否则沿用该会话自己的选择）",
-  },
+  task: { type: "string", description: "Message to send" },
+  taskId: { type: "string", description: "taskId returned by open/reply (handle path)" },
+  sessionId: { type: "string", description: "Session id; passing it means cross-conversation" },
+  timeout: { type: "number", description: "Seconds; defaults to the App's defaultTimeoutSec" },
+  reasoningEffort: { type: "string", description: "Reasoning effort (host-side levels)" },
+  provider: { type: "string", description: "Explicit provider for this request only" },
+  model: { type: "string", description: "Explicit model id (fallback rules in the SKILL)" },
 };
 export const required = ["task"];
 

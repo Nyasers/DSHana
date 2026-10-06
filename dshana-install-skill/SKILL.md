@@ -1,47 +1,42 @@
 ---
 name: dshana-install-skill
-description: "安装 DSHana 的执行手册：有人给出这个仓库（或它的 Release）链接、要你把 DSHana 装上或升级到某版本时，按这里的步骤从发行包安装（含按平台取件）。用 Release 里的 index.v2.json 与条目自留字段 x-dshana-targets 定位本机对应的平台包（win32-x64 / darwin-arm64 / darwin-x64 / linux-x64），没有匹配就回落 universal。触发场景：被要求安装或升级 DSHana、想避开体积最大的通用包、装 DSHana 失败要排查、要把本地包提交给宿主安装。装的是发行包，不是这份手册本身。不触发：与发行包无关的开发、日常问答。"
+description: "Install or upgrade the DSHana App from a GitHub Release, not this manual."
 ---
 
-# 安装 DSHana（执行手册）
+# Installing DSHana (execution manual)
 
-## 什么时候用
+## When to use
 
-有人把这个仓库（或它的 Release）链接给你，要你把 DSHana 装上、或升级到某个版本时，照本手册执行。**装的是 Release 里的发行包**；这份手册是给你读的执行步骤，不需要、也不应该把它当技能装进你自己身上。
+Someone hands you this repo (or one of its Releases) and asks you to install DSHana, or to upgrade it to a version: follow this manual. **What gets installed is the release package**; this manual is the set of steps for you to read and should not, and need not, be installed into yourself as a skill.
 
-装 DSHana 有两条路，装的是同一份发行包：
+Everything below goes through the host endpoints, which is the channel an agent can execute and which lets you pick the smaller per-platform package. A platform package contains only that machine's dependencies and is far smaller than the universal one (which carries every platform's dependency tree); the index format itself has no platform dimension, so a platform artifact has to be fetched by target.
 
-- **手动**：把 `dshana-v<version>[-<target>].zip` 拖进 Hana 的 App 安装界面，在审阅卡上批准权限。不需要取索引。
-- **走宿主端点**（本手册的流程）：适合交给 Agent 执行，且能按平台挑体积更小的包。
+## The reserved field in the index
 
-本手册写的是后者。按平台取件时，平台包只含本机所需的那套依赖，比通用包小得多（通用包把各平台的依赖树都带上）；索引格式本身不带平台维度，平台件只能自己按 target 取。
+Every entry in `index.v2.json` carries one reserved field, `x-dshana-targets`: target name → that target's release package.
 
-## 索引里的自留字段
-
-`index.v2.json` 的每个条目多一块自留字段 `x-dshana-targets`：target 名 → 该 target 的发行包。
-
-| 字段 | 含义 |
+| Field | Meaning |
 |---|---|
-| `url` | 该包的 https 绝对地址，可直接下载 |
-| `sha256` | 该包的 SHA-256，小写 64 位十六进制 |
-| `size` | 该包的字节数（正整数） |
-| `format` | 固定 `"zip"` |
+| `url` | The package's absolute https address, directly downloadable |
+| `sha256` | The package's SHA-256, 64 lowercase hex digits |
+| `size` | The package's size in bytes (positive integer) |
+| `format` | Always `"zip"` |
 
-target 名即产物名里 `-v<版本>` 之后那段（通用包没有后缀，记作 `universal`）。**具体取值以你手上那份索引的实际内容为准**——每版都不同，不要照抄任何写死的数字。
+The target name is the segment after `-v<version>` in the artifact name (the universal package has no suffix and is recorded as `universal`). **Take the concrete values from the index you actually hold** — they differ per release, so do not copy any hard-coded numbers.
 
-### 字段的 schema
+### The field's schema
 
 ```json
 {
   "type": "object",
-  "description": "target 名 → 该 target 的发行包；target 名即产物名里 `-v<版本>` 之后那段（通用包无后缀，记作 universal）",
+  "description": "target name → that target's release package; the target name is the segment after `-v<version>` in the artifact name (the universal package has no suffix and is recorded as universal)",
   "additionalProperties": {
     "type": "object",
     "required": ["url", "sha256", "size", "format"],
     "properties": {
-      "url":    { "type": "string", "pattern": "^https://", "description": "该包的 https 绝对地址" },
-      "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "小写 64 位十六进制" },
-      "size":   { "type": "integer", "minimum": 1, "description": "字节数（正整数）" },
+      "url":    { "type": "string", "pattern": "^https://", "description": "the package's absolute https address" },
+      "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "64 lowercase hex digits" },
+      "size":   { "type": "integer", "minimum": 1, "description": "size in bytes (positive integer)" },
       "format": { "const": "zip" }
     },
     "additionalProperties": false
@@ -49,87 +44,95 @@ target 名即产物名里 `-v<版本>` 之后那段（通用包没有后缀，�
 }
 ```
 
-这四个约束就是宿主对 `archive` 的校验口径（url 必须 https、sha256 必须 64 位小写十六进制、size 必须是正整数、format 必须是 `"zip"`）；按这份 schema 构成的块，宿主将来若真收编这个维度也能直接通过。
+These four constraints are exactly the host's validation rules for `archive` (url must be https, sha256 must be 64 lowercase hex digits, size must be a positive integer, format must be `"zip"`); a block shaped by this schema would pass directly if the host ever did adopt this dimension.
 
-要点：
+Points to note:
 
-- 宿主官方格式的条目只有 `archive` 一格地址（格式版本见索引顶部的 `schemaVersion`），版本这一维默认平铺在条目的 `version` 字段上；只有同一 `kind:id` 存在更旧的版本时，旧的才落进 `versions[]`（数组，每项带 `version`、可选的 `minAppVersion` 和 `archive`）。DSHana 每次发布只出一个版本，`versions[]` 通常不出现——取版本看条目的 `version`，不要指望它。消费侧只按版本文本匹配，**没有平台维度**。`x-dshana-targets` 这块字段是我们自留的，宿主不读它、也不拒它，所以拿平台件要自己按 target 取。
-- 五个 target 的包体积各不相同（通用包最大），选件时按本机平台取，取到的 size 与索引记录对得上再往下走。
-- 条目里的 `archive`（主地址）按约定始终指向 **universal**；平台件只在 `x-dshana-targets` 里。
+- In the host's official format an entry has only one address slot, `archive` (the format version is the index's top-level `schemaVersion`), and the version dimension is flattened onto the entry's `version` field by default; only when a same `kind:id` has an older version does the old one go into `versions[]` (an array, each item carrying `version`, an optional `minAppVersion` and `archive`). DSHana ships one version per release and `versions[]` normally does not appear — read the version from the entry's `version` and do not count on it. The consumer side matches on the version text only and has **no platform dimension**. `x-dshana-targets` is our own reserved field: the host neither reads nor rejects it, which is why fetching a platform artifact means picking it by target yourself.
+- The target packages differ in size (universal is the largest); pick by the local platform and only continue once the fetched `size` matches the index record.
+- An entry's `archive` (the primary address) by convention always points at **universal**; platform artifacts exist only under `x-dshana-targets`.
 
-## 平台对照
+## Platform mapping
 
-| 本机 | target |
+| Local machine | target |
 |---|---|
 | Windows x64 | `win32-x64` |
+| Windows on ARM | `win32-arm64` |
 | macOS Apple Silicon | `darwin-arm64` |
 | macOS Intel | `darwin-x64` |
-| Linux x86_64（glibc） | `linux-x64` |
-| 其它或不确定 | `universal`（通用兜底，体积最大） |
+| Linux x86_64 (glibc) | `linux-x64` |
+| Linux arm64 (glibc) | `linux-arm64` |
+| Anything else, or unsure | `universal` (the universal fallback, largest) |
 
-发布矩阵只出这四个平台 + universal。`linux-arm64` / `win32-arm64` 不在矩阵内，需要时在本仓库点名自出：`pnpm run package --target=<名字>`。
+The release matrix builds these six platform targets plus universal. Another target can still be produced by name in this repo: `pnpm run package --target=<name>`.
 
-## 步骤
+## Steps
 
-1. **取索引**。首选 `latest`（索引文件名固定，不必知道版本号）：
+1. **Find the release, then take its index.** Each release carries one index named `index.v2.json` among its assets. Find the target release first and download the index from it. A new release is normally marked **prerelease**, and `latest` resolves only to a release that is not marked prerelease, so look the release up rather than assuming `latest`:
+
+   ```
+   gh release list -R Nyasers/DSHana        # list tags, prereleases included
+   gh release download <tag> -R Nyasers/DSHana -p index.v2.json
+   ```
+
+   Without gh, the tagged asset URL does the same (a `+` in the tag is written `%2B`):
+
+   ```
+   https://github.com/Nyasers/DSHana/releases/download/v<version>/index.v2.json
+   ```
+
+   `latest` remains usable when you deliberately want the newest release that is not a prerelease:
 
    ```
    https://github.com/Nyasers/DSHana/releases/latest/download/index.v2.json
    ```
 
-   `latest` 只指向**未标 prerelease** 的发布。流水线默认把新发布标为 prerelease（稳定版由人工标 latest），所以目标版本是 prerelease 时 `latest` 不会指向它，改用带 tag 的地址（tag 里的 `+` 写成 `%2B`）或 gh：
+   Package names carry the version (`dshana-v<version>[-<target>].zip`), so there is no shortcut around the index: fetch it first, then download the package from the address inside it.
 
-   ```
-   https://github.com/Nyasers/DSHana/releases/download/v<版本>/index.v2.json
-   gh release download <tag> -R Nyasers/DSHana -p index.v2.json
-   ```
+2. **Pick the entry and the target.** In `items[]` find the one with `kind=app` and the `id` equal to the target App (DSHana has exactly one item), then take `["x-dshana-targets"][<local target>]`. When that key is absent, fall back to `universal` and say that the universal package is large.
 
-   包名带版本（`dshana-v<版本>[-<target>].zip`），所以 `latest` 只能省掉索引这一步；取包先拿索引，再从索引里的地址下载。
+3. **Download and verify.** Download `url`, check that the sha256 matches the index record (case-insensitive) and that the size agrees, then continue.
 
-2. **选条目与 target**。在 `items[]` 里找 `kind=app` 且 `id` 等于目标 App 的那条（DSHana 只有一个 item），再取 `["x-dshana-targets"][<本机 target>]`。该键不存在时回落 `universal`，并说明通用包体积大。
-
-3. **下载并核对**。下 `url`，核对 sha256 与索引记录一致（大小写不敏感）、size 对得上，再往下走。
-
-4. **先卸载旧版**。同一 id 的覆盖安装不受支持，这一步不能省：
+4. **Uninstall the old version first.** Over-installing the same id is not supported and this step cannot be skipped:
 
    ```
    DELETE <host>/api/extensions/app:<id>
    ```
 
-5. **安装（提交 staging）**：
+5. **Install (submit staging)**:
 
    ```
    POST <host>/api/extensions/install
-   { "kind": "app", "source": { "type": "local", "path": "<zip 绝对路径>" } }
+   { "kind": "app", "source": { "type": "local", "path": "<absolute path to the zip>" } }
    ```
 
-   返回 `awaiting_confirmation` 与 `stagedId`。
+   It returns `awaiting_confirmation` and a `stagedId`.
 
-6. **确认**：
+6. **Confirm**:
 
    ```
    POST <host>/api/extensions/staged/<stagedId>/confirm
    ```
 
-   返回 `{"status":"installed", ...}`；`record.approval` 里是本次授予的能力清单。这一步经 token 通道完成，宿主把批准记为**用户决定**（`approval.decidedBy.kind` 为 `user`），中途没有交互确认——确认之前先自己核一遍包与来源。
+   It returns `{"status":"installed", ...}`; `record.approval` holds the capability list granted this time. This step completes over the token channel and the host records the approval as a **user decision** (`approval.decidedBy.kind` is `user`), with no interactive confirmation in between — so verify the package and its origin yourself before confirming.
 
-7. **验证**。`GET <host>/api/extensions` 看该扩展的 `record.version`；再轮询 App 自己的启动状态路由（DSHana 是 `/api/apps/dshana/routes/dshana/boot-state`）。刚装完首次启动要等一会儿，不要要求立即就绪：轮询到 `state.phase === "ready"` 且 `state.ready === true` 才算成功；`error` / `stopped` 视为失败，按 `state.error` 与 runtime 日志排查。
+7. **Verify.** `GET <host>/api/extensions` to see the extension's `record.version`; then poll the App's own boot-state route (for DSHana it is `/api/apps/dshana/routes/dshana/boot-state`). The first start after a fresh install takes a while, so do not demand immediate readiness: only `state.phase === "ready"` together with `state.ready === true` counts as success; treat `error` / `stopped` as failure and diagnose from `state.error` and the runtime log.
 
-## 宿主端点怎么拿
+## How to reach the host endpoints
 
-- 端口与 token：读 `<HANA_HOME>/server-info.json`（`HANA_HOME` 默认 `~/.hanako`）。
-- 认证：`Authorization: Bearer <token>`。
-- 为什么优先用这些 HTTP 端点：它们与 UI 是同一套通道；`extension_manager` 工具的 kind 级动作（install / list 等）可能被 capability 校验拒掉（confirm / discard 不带 kind，不受影响）。
+- Port and token: read `<HANA_HOME>/server-info.json` (`HANA_HOME` defaults to `~/.hanako`).
+- Authentication: `Authorization: Bearer <token>`.
+- Why prefer these HTTP endpoints: they are the same channel the UI uses, whereas the `extension_manager` tool's kind-level actions (install / list and so on) may be rejected by capability validation (confirm / discard take no kind and are unaffected).
 
-## 已知坑
+## Known traps
 
-| 现象 | 原因 | 处理 |
+| Symptom | Cause | Handling |
 |---|---|---|
-| 卸载重装后，本会话里该 App 的工具报 `RPC peer closed; cannot call callback.tools.execute` | 会话引擎在建立时捕获了当时那个 App 实例的工具对象，实例被替换后旧对象失效 | 开新会话或重启宿主；App 本身是好的（路由与 runtime 正常） |
-| `index.v2.json` 的主 `archive.url` 指向某个平台包 | 生成期把不该进清单的 entry 喂给了构建器 | 索引按约定只该指 universal，见 `scripts/release/market-index.mts` 的目标选择 |
-| `latest` 指向的不是你以为的版本 | `latest` 跳过 prerelease，而流水线默认把新发布标为 prerelease | 目标版本是 prerelease 时用带 tag 的地址，或 `gh release download <tag>` |
-| 拿不到 `x-dshana-targets` | 该索引没带这块字段 | 用主 `archive`（universal）兜底，功能等同，只是体积更大 |
+| After uninstall+reinstall, this session reports `RPC peer closed; cannot call callback.tools.execute` for that App's tools | The session engine captured the tool objects of the then-current App instance when it was created, and those objects go stale once the instance is replaced | Open a new session or restart the host; the App itself is fine (routes and runtime are normal) |
+| `index.v2.json`'s primary `archive.url` points at some platform package | The build was fed an entry that should not have entered the manifest | By convention the index should only point at universal, see the target selection in `scripts/release/market-index.mts` |
+| `latest` resolves to a different version than you expected | `latest` skips prereleases, and a new release is normally marked prerelease | Look the release up itself (`gh release list`) and take the index from its tag |
+| `x-dshana-targets` cannot be obtained | That index does not carry this field | Fall back to the primary `archive` (universal), which is functionally identical, only larger |
 
-## 这个目录不进发行包
+## This directory is not part of the release package
 
-打包是从构建产物组装的（`scripts/release/pack/index.mts` 里 `fs.copySync(distDir, pkgDir)`），仓库根目录下的目录都在包外。这份手册只在仓库里给读它的人或 Agent 读，运行时不依赖它。
+Packaging assembles from build artifacts (`fs.copySync(distDir, pkgDir)` in `scripts/release/pack/index.mts`), and every directory at the repository root stays outside the package. This manual exists in the repo only for whoever (or whichever agent) reads it, and nothing at runtime depends on it.

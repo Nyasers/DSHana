@@ -15,15 +15,12 @@ import type { ToolCtx } from "@dshana/shared/host.ts";
 import type { ToolInputBase, ToolResult } from "../shared/types.ts";
 
 export const command = "close";
-export const summary = "取消这个 DSH 子代理正在跑的任务（只停本工作，不影响共享 runtime 上的其他会话）";
+export const summary = "cancel its running task";
 export const readOnly = false;
 
 export const fields = {
-  taskId: {
-    type: "string",
-    description: "句柄路径（默认）：open/reply 返回值里的宿主 task id，工具自己解析会话并校验归属",
-  },
-  sessionId: { type: "string", description: "凭证路径（形如 session-<uuid>）：显式传入即视为“我要跨对话操作”" },
+  taskId: { type: "string", description: "taskId returned by open/reply (handle path)" },
+  sessionId: { type: "string", description: "Session id; passing it means cross-conversation" },
 };
 export const required = [];
 

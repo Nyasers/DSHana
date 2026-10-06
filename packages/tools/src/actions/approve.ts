@@ -19,21 +19,18 @@ export interface ApproveInput extends ToolInputBase {
 }
 
 export const command = "approve";
-export const summary = "应答子代理挂起的审批（approvalId 必填；决策看 args 不听 reason）";
+export const summary = "answer a pending approval";
 export const readOnly = false;
 
 export const fields = {
-  approvalId: { type: "string", description: "审批 id（审批通知里带；同一任务可能挂起多个审批，逐个应答）" },
+  approvalId: { type: "string", description: "From the approval notice" },
   outcome: {
     type: "string",
     enum: ["allowed-once", "rejected"],
-    description: "allowed-once=放行单次（安全默认，仅本次操作）/ rejected=拒绝该请求",
+    description: "allowed-once = this one operation (default) / rejected",
   },
-  taskId: {
-    type: "string",
-    description: "句柄路径：审批归属会话经 open/reply 返回的 taskId 解析（与 sessionId 至少给一个）",
-  },
-  sessionId: { type: "string", description: "凭证路径（形如 session-<uuid>）：显式传入即视为“我要跨对话操作”" },
+  taskId: { type: "string", description: "taskId returned by open/reply (handle path)" },
+  sessionId: { type: "string", description: "Session id; passing it means cross-conversation" },
 };
 export const required = ["approvalId"];
 

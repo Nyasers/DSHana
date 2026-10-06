@@ -31,15 +31,12 @@ import type { ToolInputBase } from "../shared/types.ts";
 import type { ToolResult } from "@dshana/session/tool-result.ts";
 
 export const command = "get";
-export const summary = "回看某个 DSH 子代理最近一轮的最终结论（taskId 句柄或 sessionId 凭证）";
+export const summary = "read the last round's conclusion";
 export const readOnly = true;
 
 export const fields = {
-  taskId: {
-    type: "string",
-    description: "句柄路径（默认）：open/reply 返回值里的宿主 task id，工具自己解析会话并校验归属",
-  },
-  sessionId: { type: "string", description: "凭证路径（形如 session-<uuid>）：显式传入即视为“我要跨对话操作”" },
+  taskId: { type: "string", description: "taskId returned by open/reply (handle path)" },
+  sessionId: { type: "string", description: "Session id; passing it means cross-conversation" },
 };
 export const required = [];
 

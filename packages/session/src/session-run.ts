@@ -59,10 +59,15 @@ export function normalizeCreateSend({ action, input }: { action?: unknown; input
     if (!sessionId) throw new Error("reply 缺少目标会话（应给 taskId 句柄或 sessionId 凭证）");
     if (!isValidSessionId(sessionId)) throw new Error("sessionId 格式非法（应为 session-<UUID>）：" + sessionId);
   }
-  // agent 预设：code → ptc；空值不传（DSH 默认）
-  let preset = String((input && input.agentPreset) || "").trim() || null;
+  // agent 预设：只在 create 生效——DSH 把预设钉在会话上（resume 带不同的值会被拒为
+  // agent-preset/conflict），会话开跑后还会彻底锁定。code → ptc；空值不传（DSH 默认）。
+  const askedPreset = String((input && input.agentPreset) || "").trim();
+  if (act !== "create" && askedPreset) {
+    throw new Error("reply 不能换预设（预设由 open 决定；DSH 只允许在会话开跑前切换）");
+  }
+  let preset = act === "create" ? askedPreset || null : null;
   if (preset === "code") preset = "ptc";
-  // 推理强度/模型：只取工具显式值（off/high/max 词汇不变）；空值不传（DSH 默认处理）
+  // 推理强度/模型：只取工具显式值（档位词汇原样透传，可接受面归宿主、按模型 thinking levels 校验）；空值不传（DSH 默认处理）
   const effort = String((input && input.reasoningEffort) || "").trim() || null;
   const provider = String((input && input.provider) || "").trim() || null;
   const model = String((input && input.model) || "").trim() || null;
@@ -180,7 +185,8 @@ async function waitTaskTerminalWithTimeout(ctx, taskId, sessionId, timeoutSec, l
 // send：目标会话可能 (a) 持久非活跃（runtime 重启后）→ session.list 有它（带 cwd），走
 // session.create resume（{ sessionId, cwd }）；(b) 活跃/空闲在 DSH agent Map（list 不含）
 // → 直接 prompt（无 session.create）；list 也不含 = 会话不存在（prompt admission 会以
-// session/not-found 报错）。
+// session/not-found 报错）。两条路都不带 agentPreset——预设钉在会话上，resume 带不同的值会被
+// DSH 拒为 agent-preset/conflict（api-session-controller 的 assertPresetUnchanged）。
 async function establishSession(ctx, base, parsed, log, modelSelection: ModelSelection | null = null) {
   const withModel = modelSelection ? { model: modelSelection } : {};
   if (parsed.action === "create") {
@@ -209,7 +215,6 @@ async function establishSession(ctx, base, parsed, log, modelSelection: ModelSel
       payload: {
         sessionId: parsed.sessionId,
         cwd: listed.cwd,
-        ...(parsed.agentPreset ? { agentPreset: parsed.agentPreset } : {}),
         ...withModel,
       },
     });
