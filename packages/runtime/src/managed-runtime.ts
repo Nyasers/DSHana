@@ -44,13 +44,13 @@ export const TERMINAL_STATES = new Set(["failed", "exited", "stopped"]);
 export const READY_POLL_MS = 300;
 export const READY_TIMEOUT_MS = 240000; // 首次启动含 DSH boot，需更宽容限
 export const START_ERROR_HINTS = {
-  "port-busy": "端口被占用或 DSH 无法监听（服务代理未就绪）。已自动换随机端口重试，仍失败请查看 runtime 日志并确认本机回环端口可用。",
-  "port-unreachable": "DSH 未在期望端口完成监听（webServer 服务端口与期望不符或探测失败）。查看 runtime 日志定位。",
-  "boot-failed": "DSH runProfile 启动失败（见 runtime 日志）。",
-  deps: "DSH 依赖缺失：包内 node_modules 不完整（依赖应随包物化）。请重新安装本 App。",
-  seed: "产物不在位：包内 node_modules/@dshana 子插件或 roster patch 缺失（请重装本 App）。",
-  "not-authorized": "宿主未授权本 App 启动受管 runtime（local-machine 能力未授予或已撤销）。检查 App 能力与授权状态。",
-  unknown: "受管 runtime 启动失败（见 runtime 日志与状态）。",
+  "port-busy": "port busy or DSH cannot listen (service proxy not ready). A random port retry was already attempted; if it still fails, check the runtime log and confirm a loopback port is available on this machine.",
+  "port-unreachable": "DSH did not finish listening on the expected port (webServer port mismatch or probe failure). Check the runtime log to locate it.",
+  "boot-failed": "DSH runProfile failed to start (see the runtime log).",
+  deps: "DSH dependencies missing: the bundled node_modules is incomplete (dependencies should be materialized with the package). Reinstall this App.",
+  seed: "Artifacts not in place: the bundled node_modules/@dshana sub-plugins or the roster patch are missing (reinstall this App).",
+  "not-authorized": "The host did not authorize this App to start the managed runtime (the local-machine capability is not granted or was revoked). Check the App capabilities and grant state.",
+  unknown: "managed runtime failed to start (see the runtime log and state).",
 };
 
 /** 取错误的可读文本。catch 到的值类型未知，字段访问一律经这里。 */
@@ -509,11 +509,11 @@ async function startWithPortRetry(opts) {
 async function doStartManaged(opts, attempt = 1) {
   const app = getAppRuntime();
   if (!app || !app.ctx || typeof app.ctx.runtime?.start !== "function") {
-    throw new Error("managed-runtime: App 运行包未初始化（apply 未注入 ctx.runtime）");
+    throw new Error("managed-runtime: App runtime not initialized (apply did not inject ctx.runtime)");
   }
   const ctx = app.ctx;
   const dataDir = appDataDir();
-  if (!dataDir) throw new Error("managed-runtime: ctx.dataDir 缺失");
+  if (!dataDir) throw new Error("managed-runtime: ctx.dataDir missing");
   // 数据源：DSH_HOME 由当前源决定（private = <dataDir>/.dsh；shared = 外部目录）。
   // 读设置失败即抛错（不得默认切错源）；设置文件不存在时回落 private 默认。
   // 源默认取当前自持设置；带 dshHome 覆盖时用它（切换链要能在落盘之前先按新源启动）
@@ -566,7 +566,7 @@ async function doStartManaged(opts, attempt = 1) {
     const text = errText(e);
     logApp("error", "[managed-runtime] ctx.runtime.start 被宿主拒绝：" + text);
     const kind = /not authorized|authoriz|DENIED|declined/i.test(text) ? "not-authorized" : "unknown";
-    throw codedError((START_ERROR_HINTS[kind] || START_ERROR_HINTS.unknown) + "（宿主：" + text + "）", kind);
+    throw codedError((START_ERROR_HINTS[kind] || START_ERROR_HINTS.unknown) + " (host: " + text + ")", kind);
   }
   // 子进程已启动：配置已读入（首件事），延迟清理文件；同时记录中继访问面供 App 侧 RPC。
   managed.bridgePort = bridgePort;
@@ -575,7 +575,7 @@ async function doStartManaged(opts, attempt = 1) {
   setTimeout(() => { try { rmSync(configPath, { force: true }); } catch { /* 忽略 */ } }, 10000);
   const runtimeId = info && info.runtimeId;
   if (!runtimeId) {
-    throw new Error("ctx.runtime.start 未返回 runtimeId（宿主契约异常）：" + JSON.stringify(info || null));
+    throw new Error("ctx.runtime.start did not return runtimeId (host contract violation): " + JSON.stringify(info || null));
   }
   managed.runtimeId = runtimeId;
   logApp("info", "[managed-runtime] runtimeId=" + runtimeId + " state=" + (info.state || "starting"));
@@ -603,7 +603,7 @@ async function doStartManaged(opts, attempt = 1) {
       logApp("error", "[managed-runtime] DSH runtime 终态异常：" + state + " exit=" + (cur && cur.exitCode));
       const detail = fatal ? "（" + fatalReportText(fatal) + "）" : "";
       throw codedError(
-        cls.userText + detail + "（runtime state=" + state + " exitCode=" + (cur && cur.exitCode) + "）",
+        cls.userText + detail + " (runtime state=" + state + " exitCode=" + (cur && cur.exitCode) + ")",
         cls.kind,
       );
     }
@@ -613,14 +613,14 @@ async function doStartManaged(opts, attempt = 1) {
       if (fatal) {
         const code = Object.prototype.hasOwnProperty.call(START_ERROR_HINTS, fatal.kind) ? fatal.kind : "timeout";
         throw codedError(
-          fatalReportText(fatal) + "（runtime 未在 " + Math.round(READY_TIMEOUT_MS / 1000) + "s 内就绪）",
+          fatalReportText(fatal) + " (runtime did not become ready within " + Math.round(READY_TIMEOUT_MS / 1000) + "s)",
           code,
         );
       }
       try { rmSync(fatalPath, { force: true }); } catch { /* 忽略 */ }
       throw codedError(
-        "DSH 受管 runtime 启动超时（" + Math.round(READY_TIMEOUT_MS / 1000) + "s 内未就绪）。" +
-          "首次启动含 DSH boot，若仍在进行请稍候；查看 App 日志/runtime 日志。",
+        "DSH managed runtime startup timed out (not ready within " + Math.round(READY_TIMEOUT_MS / 1000) + "s). " +
+          "The first start includes DSH boot; if it is still in progress, wait a moment; check the App log / runtime log.",
         "timeout",
       );
     }

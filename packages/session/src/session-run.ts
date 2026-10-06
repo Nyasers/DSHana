@@ -44,26 +44,26 @@ const errText = (e: unknown): string => ((e as any)?.message as string) || Strin
 // ---- 归一/校验（纯函数面，便于单测）----
 export function normalizeCreateSend({ action, input }: { action?: unknown; input?: any } = {}) {
   const act = action === "send" ? "send" : action === "create" ? "create" : "";
-  if (!act) throw new Error("session-run: action 必须是 create / send");
+  if (!act) throw new Error("session-run: action must be create / send");
   const taskText = String((input && input.task) || "").trim();
   if (!taskText) {
-    throw new Error((act === "create" ? "open" : "reply") + " 必须传 task（任务描述/消息文本）");
+    throw new Error((act === "create" ? "open" : "reply") + " requires task (task description / message text)");
   }
   const cwd = String((input && input.cwd) || "").trim();
   const sessionId = String((input && input.sessionId) || "").trim();
   const label = String((input && input.label) || "").trim() || null;
   if (act === "create") {
-    if (sessionId) throw new Error("open 不允许传 sessionId（新建；续会话用 reply）");
-    if (!cwd) throw new Error("open 必须传 cwd（沙箱工作目录，无 defaultCwd 回退）");
+    if (sessionId) throw new Error("open does not accept sessionId (it creates a new session; use reply to continue one)");
+    if (!cwd) throw new Error("open requires cwd (the sandbox working directory; there is no defaultCwd fallback)");
   } else {
-    if (!sessionId) throw new Error("reply 缺少目标会话（应给 taskId 句柄或 sessionId 凭证）");
-    if (!isValidSessionId(sessionId)) throw new Error("sessionId 格式非法（应为 session-<UUID>）：" + sessionId);
+    if (!sessionId) throw new Error("reply is missing a target session (pass a taskId handle or a sessionId credential)");
+    if (!isValidSessionId(sessionId)) throw new Error("malformed sessionId (expected session-<UUID>): " + sessionId);
   }
   // agent 预设：只在 create 生效——DSH 把预设钉在会话上（resume 带不同的值会被拒为
   // agent-preset/conflict），会话开跑后还会彻底锁定。code → ptc；空值不传（DSH 默认）。
   const askedPreset = String((input && input.agentPreset) || "").trim();
   if (act !== "create" && askedPreset) {
-    throw new Error("reply 不能换预设（预设由 open 决定；DSH 只允许在会话开跑前切换）");
+    throw new Error("reply cannot change the preset (the preset is decided by open; DSH only allows switching before the session starts running)");
   }
   let preset = act === "create" ? askedPreset || null : null;
   if (preset === "code") preset = "ptc";
@@ -105,7 +105,7 @@ export function resolveModelSelection(parsed, dshHome): ModelSelection | null {
   }
   if (!provider || !model) {
     throw new Error(
-      "需要 provider/model：请显式传 provider/model，或在 DSH 自己的模型选择器里选一条（App 设置页只列候选，不设默认模型）",
+      "provider/model required: pass provider/model explicitly, or pick one in DSH's own model selector (the App settings page only lists candidates, it does not set a default model)",
     );
   }
   return { provider, model, ...(e ? { reasoningEffort: e } : {}) };
@@ -125,7 +125,7 @@ function sleep(ms) {
 async function failTask(ctx, taskId, message) {
   try {
     if (ctx && ctx.tasks && typeof ctx.tasks.fail === "function") {
-      await ctx.tasks.fail(taskId, String(message || "dsh 任务失败").slice(0, 3000));
+      await ctx.tasks.fail(taskId, String(message || "dsh task failed").slice(0, 3000));
     }
   } catch {
     /* fail 失败不阻断（终态尽力而为） */
@@ -197,7 +197,7 @@ async function establishSession(ctx, base, parsed, log, modelSelection: ModelSel
     };
     const value = await rpcCall(ctx, base, { method: "session/create", payload: createPayload });
     const sessionId = value && value.sessionId;
-    if (!sessionId) throw new Error("session.create 未返回 sessionId：" + JSON.stringify(value || null));
+    if (!sessionId) throw new Error("session.create did not return sessionId: " + JSON.stringify(value || null));
     return { sessionId, resumed: false, effectiveCwd: parsed.cwd };
   }
   let listed: { sessionId?: string; cwd?: string } | null = null;
@@ -288,7 +288,7 @@ export interface DshSubmitInput {
  */
 export function assertAbsoluteSessionCwd(cwd: string): void {
   if (!isAbsolute(cwd)) {
-    throw new Error("open 的 cwd 必须是绝对路径（相对路径在 App 与受管 runtime 两侧解析基准不同）：" + cwd);
+    throw new Error("open's cwd must be an absolute path (relative paths resolve against different bases in the App and the managed runtime): " + cwd);
   }
 }
 
@@ -296,18 +296,18 @@ export function assertAbsoluteSessionCwd(cwd: string): void {
 export function sessionCwdRejection(check: unknown, cwd: string): Error | null {
   const r = (check || {}) as { ok?: unknown; isDirectory?: unknown; code?: unknown; message?: unknown };
   if (r.ok === true) {
-    return r.isDirectory === false ? new Error("open 的 cwd 不是目录：" + cwd) : null;
+    return r.isDirectory === false ? new Error("open's cwd is not a directory: " + cwd) : null;
   }
   const code = typeof r.code === "string" ? r.code : "";
   if (code === "ENOENT") {
-    return new Error("open 的 cwd 不存在（会话的每次 spawn 都从它出发，先建好目录再开）：" + cwd);
+    return new Error("open's cwd does not exist (every spawn in the session starts from it; create the directory first): " + cwd);
   }
-  if (code === "ENOTDIR") return new Error("open 的 cwd 不是目录：" + cwd);
+  if (code === "ENOTDIR") return new Error("open's cwd is not a directory: " + cwd);
   // 「有但用不了」不许伪装成「不存在」：errno 与原始原因都要带出来，否则排查只能靠猜。
   const reason = code
     ? code + (typeof r.message === "string" && r.message ? "：" + r.message : "")
-    : String(r.message || "未知原因");
-  return new Error("open 的 cwd 不可用（" + reason + "）：" + cwd);
+    : String(r.message || "unknown reason");
+  return new Error("open's cwd is unusable (" + reason + "): " + cwd);
 }
 
 export function submitDshTask({ action, input, callToken, log }: DshSubmitInput): DshSubmitHandle {
@@ -317,15 +317,15 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
   const ctx = appCtx();
   const dataDir = appDataDir();
   if (!ctx || !dataDir) {
-    throw new Error("App 运行包未初始化（apply 未注入宿主 ctx/dataDir）");
+    throw new Error("App runtime not initialized (apply did not inject host ctx/dataDir)");
   }
   if (!ctx.tasks || typeof ctx.tasks.create !== "function") {
-    throw new Error("宿主 ctx.tasks 不可用（缺 app/tasks.manage 能力授予）");
+    throw new Error("host ctx.tasks unavailable (missing the app/tasks.manage capability grant)");
   }
   const token = String(callToken || "").trim();
   if (!token) {
     throw new Error(
-      "create/send 需要宿主工具调用 callToken（任务绑定来源会话）；请在模型工具调用路径下执行本工具（context.callToken 缺失）",
+      "create/send requires the host tool-call callToken (it binds the task to its source session); run this tool from the model tool-call path (context.callToken is missing)",
     );
   }
 
@@ -371,17 +371,17 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
           },
         });
       } catch (e) {
-        throw new Error("Hana task 创建失败：" + errText(e));
+        throw new Error("failed to create the Hana task: " + errText(e));
       }
       taskId = task && task.taskId;
-      if (!taskId) throw new Error("ctx.tasks.create 未返回 taskId（宿主契约异常）");
+      if (!taskId) throw new Error("ctx.tasks.create did not return taskId (host contract violation)");
 
       // ② 受管 runtime 就绪（单例；首启含 DSH boot）
       try {
         const rt = await ensureManagedRuntime({ taskId });
         logLine(log, "[dsh-session] runtime 就绪 runtimeId=" + (rt && rt.runtimeId) + "（task=" + taskId + "）");
       } catch (e) {
-        await failTask(ctx, taskId, "DSH 受管运行时启动失败：" + errText(e));
+        await failTask(ctx, taskId, "DSH managed runtime failed to start: " + errText(e));
         throw e;
       }
       const base = serviceBase();
@@ -431,7 +431,7 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
       try {
         established = await establishSession(ctx, base, parsed, log, modelSelection);
       } catch (e) {
-        await failTask(ctx, taskId, "DSH 会话建立失败：" + errText(e));
+        await failTask(ctx, taskId, "DSH session setup failed: " + errText(e));
         throw e;
       }
       sessionId = established.sessionId;
@@ -493,7 +493,7 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
       // 提交阶段失败：任务 fail（已建时）+ ready reject。绑定记录的终态由宿主状态承担
       // （fail 之后宿主记录 status=failed，读侧即按“已终结”处理），不另写一份结束标记。
       if (taskId) {
-        const msg = "DSH 任务提交失败（" + parsed.action + "）：" + errText(e);
+        const msg = "DSH task submission failed (" + parsed.action + "): " + errText(e);
         await failTask(ctx, taskId, msg);
         const err = new Error(msg) as Error & { sessionId?: string };
         if (sessionId) err.sessionId = sessionId;

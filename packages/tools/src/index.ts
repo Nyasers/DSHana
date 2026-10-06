@@ -74,7 +74,7 @@ export async function doExecute(input: DshanaToolInput, ctx: ToolCtx, deps?: unk
   const mod = ACTIONS.find((m) => m.command === action);
   if (!mod) {
     throw new Error(
-      "action 必须是 " + ACTIONS.map((m) => m.command).join(" / ") + "（收到 " + action + "）",
+      "action must be one of " + ACTIONS.map((m) => m.command).join(" / ") + " (got " + action + ")",
     );
   }
   // 每个 action 的 run 参数面各不相同（各自 fields），统一成一个可调用的宽签名再分发。

@@ -55,7 +55,7 @@ async function ensureReady() {
   try {
     return await ensureManagedRuntime({});
   } catch (e) {
-    throw new Error("DSH 受管运行时未就绪（会话查询需要它在线）：" + ((e as any)?.message || e));
+    throw new Error("DSH managed runtime not ready (session queries need it online): " + ((e as any)?.message || e));
   }
 }
 
@@ -254,11 +254,11 @@ async function findSummary(ctx, sessionId): Promise<SessionSummaryItem | null> {
 // ---------- 读取 ----------
 
 async function readConclusion(sessionId: string, ctx: ToolCtx): Promise<ToolResult> {
-  if (!sessionId) throw new Error("get 必须能解析出 sessionId");
+  if (!sessionId) throw new Error("get must resolve a sessionId");
   // sessionId 格式锁死（session-<UUID>，与 dsh 生成格式一致）：畸形值直接拒，
   // 不把垃圾 id 送到 DSH（本实现不拼文件路径，格式闸仍保留）。
   if (!/^session-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId)) {
-    throw new Error(`sessionId 格式非法（应为 session-<UUID>）：${sessionId}`);
+    throw new Error(`malformed sessionId (expected session-<UUID>): ${sessionId}`);
   }
 
   await ensureReady();

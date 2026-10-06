@@ -37,7 +37,7 @@ export const required = ["approvalId"];
 export async function run(input: ApproveInput, ctx: ToolCtx): Promise<ToolResult> {
   const aid = String((input && input.approvalId) || "").trim();
   if (!aid) {
-    throw new Error("approve 需要 approvalId（审批通知里带；同一任务可挂起多个审批，逐个应答）");
+    throw new Error("approve requires approvalId (carried in the approval notice; one task can have several pending approvals, answer them one by one)");
   }
   const target = await resolveTarget(input, ctx);
   return respondApprovalAction({ input: { ...input, sessionId: target.sessionId }, log: ctx && ctx.log });

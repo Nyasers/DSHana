@@ -17,9 +17,9 @@ import { buildClientRequest, parseServerResponse } from "@dshana/shared/rpc-enve
 /** 低层控制面调用：invoke("rpc", { body }) → runtime 转发 → DSH 的 server-response 原文。 */
 export async function invokeControl(ctx, action, args, opts: { timeoutMs?: number } = {}) {
   const access = bridgeAccess();
-  if (!access || !access.runtimeId) throw new Error("受管 runtime 未就绪：无可用控制面（先 ensureManagedRuntime）");
+  if (!access || !access.runtimeId) throw new Error("managed runtime not ready: no control plane available (call ensureManagedRuntime first)");
   if (!ctx || !ctx.runtime || typeof ctx.runtime.fetch !== "function") {
-    throw new Error("宿主不支持 ctx.runtime.fetch（受管服务请求）——需要 Hana 0.944+");
+    throw new Error("host does not support ctx.runtime.fetch (managed service requests) — requires Hana 0.944+");
   }
   const res = await ctx.runtime.fetch(access.runtimeId, "/_control", {
     method: "POST",
@@ -29,9 +29,9 @@ export async function invokeControl(ctx, action, args, opts: { timeoutMs?: numbe
   });
   const body = await res.json().catch(() => null);
   if (!res.ok) {
-    throw new Error((body && (body.error || body.message)) || ("控制面 HTTP " + res.status));
+    throw new Error((body && (body.error || body.message)) || ("control plane HTTP " + res.status));
   }
-  if (!body || typeof body !== "object") throw new Error("控制面返回非对象（宿主契约异常）");
+  if (!body || typeof body !== "object") throw new Error("control plane returned a non-object (host contract violation)");
   return body;
 }
 

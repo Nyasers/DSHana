@@ -30,7 +30,7 @@ async function readRecord(ctx: NonNullable<ReturnType<typeof appCtx>>, id: strin
   try {
     return await ctx.tasks.get(id);
   } catch (e) {
-    throw new Error("宿主记录读取失败（无法校验审批归属，按 fail-closed 处理）：" + errText(e));
+    throw new Error("failed to read the host record (approval ownership cannot be verified; fail-closed): " + errText(e));
   }
 }
 
@@ -39,34 +39,34 @@ export async function respondApprovalAction({ input, log }): Promise<ToolResult>
   const sessionId = String((input && input.sessionId) || "").trim();
   const approvalId = String((input && input.approvalId) || "").trim();
   const outcome = input && input.outcome === "rejected" ? "rejected" : "allowed-once";
-  if (!sessionId) throw new Error("approve 需要 sessionId（审批所属 DSH 会话）");
-  if (!approvalId) throw new Error("approve 需要 approvalId（审批通知里带；同一任务可挂起多个审批，逐个应答）");
+  if (!sessionId) throw new Error("approve requires sessionId (the DSH session the approval belongs to)");
+  if (!approvalId) throw new Error("approve requires approvalId (carried in the approval notice; one task can have several pending approvals, answer them one by one)");
 
   const ctx = appCtx();
-  if (!ctx) throw new Error("App 运行包未初始化（apply 未注入宿主 ctx/dataDir）");
+  if (!ctx) throw new Error("App runtime not initialized (apply did not inject host ctx/dataDir)");
   if (!ctx.tasks || typeof ctx.tasks.respondApproval !== "function") {
-    throw new Error("宿主 ctx.tasks.respondApproval 不可用（缺 app/tasks.manage 能力授予）");
+    throw new Error("host ctx.tasks.respondApproval unavailable (missing the app/tasks.manage capability grant)");
   }
 
   // 归属校验的事实源是宿主记录：审批记录自带 parentTaskId，父任务的 metadata.dsh.sessionId
   // 必须等于调用方给的会话。不一致/缺失一律拒绝（宁可拒绝一次，不拿来源不明的审批去结算）。
   const approval = await readRecord(ctx, approvalId);
-  if (!approval) throw new Error("找不到审批 " + approvalId + "（可能已被回收或宿主记录已清）");
+  if (!approval) throw new Error("approval " + approvalId + " not found (it may have been reclaimed or the host record cleared)");
   const parentTaskId = typeof (approval as any).parentTaskId === "string" ? String((approval as any).parentTaskId) : "";
   if (!parentTaskId) {
-    throw new Error("审批 " + approvalId + " 的宿主记录缺 parentTaskId（异常状态），已按 fail-closed 拒绝");
+    throw new Error("the host record of approval " + approvalId + " lacks parentTaskId (invalid state); rejected fail-closed");
   }
   const parent = await readRecord(ctx, parentTaskId);
   const binding = taskBindingOf(parent);
   if (!binding || binding.dshSessionId !== sessionId) {
     throw new Error(
-      "审批 " + approvalId + " 不属于会话 " + sessionId + "（宿主记录指向 " +
-        (binding ? binding.dshSessionId : "无绑定") + "），已按 fail-closed 拒绝",
+      "approval " + approvalId + " does not belong to session " + sessionId + " (host record points to " +
+        (binding ? binding.dshSessionId : "no binding") + "); rejected fail-closed",
     );
   }
   const already = (approval as any).outcome;
   if (already === "allowed-once" || already === "rejected") {
-    throw new Error("审批 " + approvalId + " 已应答（" + already + "），勿重复应答");
+    throw new Error("approval " + approvalId + " was already answered (" + already + "); do not answer again");
   }
 
   // 结算宿主审批（权威决策源）；失败（已超时/他方已应答/宿主已终态）直接抛给 Agent
@@ -75,7 +75,7 @@ export async function respondApprovalAction({ input, log }): Promise<ToolResult>
     settled = await ctx.tasks.respondApproval({ approvalId, outcome });
   } catch (e) {
     const msg = errText(e);
-    throw new Error("审批应答未接受（" + msg.slice(0, 300) + "）：可能已超时或被其他方处理，任务侧会自行感知终态");
+    throw new Error("approval answer not accepted (" + msg.slice(0, 300) + "): it may have timed out or been handled by another party; the task side observes the terminal state on its own");
   }
 
   const verb = outcome === "allowed-once" ? "已放行" : "已拒绝";

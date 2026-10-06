@@ -78,16 +78,16 @@ export interface CancelWorkResult {
 
 export async function executeCancel({ sessionId, reason, log }: { sessionId?: string; reason?: string; log?: any }): Promise<CancelWorkResult> {
   const ctx = appCtx();
-  if (!ctx) throw new Error("App 运行包未初始化（apply 未注入宿主 ctx）");
+  if (!ctx) throw new Error("App runtime not initialized (apply did not inject host ctx)");
   const sid = String(sessionId || "").trim();
-  if (!sid) throw new Error("cancel 需要 sessionId");
+  if (!sid) throw new Error("cancel requires sessionId");
   // 绑定读取失败（宿主不可达/记录畸形）按 fail-closed 拒绝取消：状态丢了还发 DSH cancel，
   // 等于在不知道归属的情况下停别人的会话，且后续终态判定没有依据。
   let entry: TaskBinding | null = null;
   try {
     entry = await createTaskBindingIndex((ctx as any).tasks).bySession(sid, { fresh: true });
   } catch (e) {
-    throw new Error("取消前读会话任务绑定失败（fail-closed，未发任何取消）：" + errText(e));
+    throw new Error("failed to read the session task binding before cancelling (fail-closed; no cancel was sent): " + errText(e));
   }
   const plan = planCancel(entry);
   if (!entry) {
@@ -198,7 +198,7 @@ export async function settleCancelTerminal({ taskId, sessionId, reason, confirmM
 /** 缺省升级实现：宿主 ctx.tasks.cancel（无宿主/无该 API 时报错，由调用方落成 unresolved）。 */
 async function defaultCancelHostTask(taskId: string, reason: string): Promise<void> {
   const ctx = appCtx();
-  if (!ctx || typeof ctx.tasks?.cancel !== "function") throw new Error("宿主不支持 ctx.tasks.cancel");
+  if (!ctx || typeof ctx.tasks?.cancel !== "function") throw new Error("host does not support ctx.tasks.cancel");
   await ctx.tasks.cancel(taskId, reason);
 }
 

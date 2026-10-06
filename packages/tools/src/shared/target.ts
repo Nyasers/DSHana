@@ -36,7 +36,7 @@ async function readTaskRecord(ctx: ToolCtx, taskId: string): Promise<HostTaskRec
   try {
     return ctx && ctx.tasks && typeof ctx.tasks.get === "function" ? await ctx.tasks.get(taskId) : null;
   } catch (e) {
-    throw new Error("宿主任务记录读取失败（归属无法校验，按 fail-closed 处理）：" + errText(e));
+    throw new Error("failed to read the host task record (ownership cannot be verified; fail-closed): " + errText(e));
   }
 }
 
@@ -44,14 +44,14 @@ export async function resolveTarget(input: ToolInputBase, ctx: ToolCtx): Promise
   const explicit = String((input && input.sessionId) || "").trim();
   if (explicit) {
     if (!isValidSessionId(explicit)) {
-      throw new Error("sessionId 形态不对（应为 session-<uuid>）：" + explicit);
+      throw new Error("malformed sessionId (expected session-<uuid>): " + explicit);
     }
     return { sessionId: explicit, explicit: true, taskId: null, ownership: "explicit-session-id" };
   }
   const taskIdIn = String((input && input.taskId) || "").trim();
   const approvalIdIn = String((input && input.approvalId) || "").trim();
   if (!taskIdIn && !approvalIdIn) {
-    throw new Error("需要目标：传 taskId（默认，句柄路径）或 sessionId（显式凭证路径）");
+    throw new Error("a target is required: pass taskId (default, handle path) or sessionId (explicit credential path)");
   }
   // 句柄 → 宿主任务记录：taskId 直接是任务；approvalId 经宿主审批记录的 parentTaskId 取父任务。
   let taskId = taskIdIn;
@@ -60,8 +60,8 @@ export async function resolveTarget(input: ToolInputBase, ctx: ToolCtx): Promise
     const parent = approval && typeof (approval as any).parentTaskId === "string" ? String((approval as any).parentTaskId) : "";
     if (!parent) {
       throw new Error(
-        "找不到该审批对应的宿主任务（审批可能已被回收，或宿主记录缺 parentTaskId）：" + approvalIdIn +
-          "。要跨对话操作请显式传 sessionId。",
+        "no host task found for this approval (the approval may have been reclaimed, or the host record lacks parentTaskId): " + approvalIdIn +
+          ". To operate across conversations, pass sessionId explicitly.",
       );
     }
     taskId = parent;
@@ -71,8 +71,8 @@ export async function resolveTarget(input: ToolInputBase, ctx: ToolCtx): Promise
   const sessionId = binding ? binding.dshSessionId : "";
   if (!sessionId) {
     throw new Error(
-      "找不到该句柄对应的 DSH 会话（任务可能已被回收，或宿主记录的 metadata.dsh.sessionId 缺失/非法）：" +
-        (taskIdIn || approvalIdIn) + "。要跨对话操作请显式传 sessionId。",
+      "no DSH session found for this handle (the task may have been reclaimed, or the host record's metadata.dsh.sessionId is missing/invalid): " +
+        (taskIdIn || approvalIdIn) + ". To operate across conversations, pass sessionId explicitly.",
     );
   }
   const sessionPath = input && input.context ? input.context.sessionPath : null;
