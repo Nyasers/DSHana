@@ -6,6 +6,10 @@
     {
       "path": "src/client/index.ts",
       "upstreamSha256": "75df0d00062eb9db67c570f098128ada1db46c44dd5085b2f77973ae7dc7583e"
+    },
+    {
+      "path": "src/client/navigation.ts",
+      "upstreamSha256": "99ca4c11126f9d367576891adead79fdd44a0d477d054c9d32ee7242680ee2bc"
     }
   ],
   "notes": [
@@ -19,6 +23,9 @@
     "`notify` 全部提示。落地只在 workspace / standalone 面订阅；三条都是一次性动作，通道不回放（重开主卡不重放）。",
     "已知代价：归档提示的「筛选已归档」按钮落地在整幅面，而会话列表在 FP——那一格要真的生效，得再有一条",
     "反方向（整幅面 → FP）的列表筛选意图，本批不做。",
-    "不做运行时 shim：与「贴上游 + 构建期哈希闸」的路线一致。旧 path 引用的 contract / shortcuts 等由上游整包提供。"
+    "不做运行时 shim：与「贴上游 + 构建期哈希闸」的路线一致。旧 path 引用的 contract / shortcuts 等由上游整包提供。",
+    "贴 navigation.ts：跨面同步要在 main 面落「清空」这一步，而 UiWorkspace 的公开面没有清空入口（clearMain 是私有的）。",
+    "触发场景：FP 在无工作台时新建会话、或归档当前会话时，上游把主视图清掉并把 dsh.sessions.current 写成空。",
+    "做法：navigation.ts 整体贴进来，在接口上加 clearSelection()，实现转调同一份 clearMain。落点留在覆盖层，不改 vendor。"
   ]
 }
