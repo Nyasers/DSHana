@@ -37,8 +37,7 @@ import {
   var PHASE_CHIP = { idle: "未启动", starting: "启动中", ready: "就绪", error: "失败", stopped: "已停止" };
   var POLL_FAST_MS = 1500;   // 非就绪：较快轮询（starting 日志滚动）
   var POLL_MID_MS = 3000;    // idle/error：中速
-  var POLL_SLOW_MS = 6000;   // 就绪：慢轮询（发现运行态漂移）
-  var POLL_FALLBACK_MS = 30000; // FP 就绪后：只兜底（状态变化走事件，这里管「键没了/订阅断了」的恢复）
+  var POLL_SLOW_MS = 6000;   // 错误面：慢轮询（等自动链重试或注入重试）
   var pollTimer: ReturnType<typeof setTimeout> | null = null;
   var shell: any = null;          // 根元素（data-dshana-shell）
   var isSidebar = false;
@@ -129,14 +128,12 @@ import {
         if (spin) spin.hidden = true;
         if (status) status.textContent = "缺少 App surface 会话凭据";
         if (panel) panel.innerHTML = credMissingHtml();
-        schedulePoll(POLL_SLOW_MS);
         return;
       }
       body.setAttribute("data-view", "ready");
       if (spin) spin.hidden = true;
       if (panel) panel.innerHTML = "";
       ensureInjection(s);
-      schedulePoll(POLL_SLOW_MS);
       return;
     }
 
@@ -164,32 +161,16 @@ import {
   // index 注入本页。私有前缀 = 中继前缀 + surface 路径票据（DSH 前端经原生 fetch 发出的
   // 请求带不了 header，票据必须在路径里）。
   // 装配用的中继前缀里含 runtimeId，而宿主按 runtimeId 解析代理目标：运行时代换（宿主重启、
-  // 运行体重建）之后这份前缀就是死端点——宿主对它的 WS 升级当场断开（浏览器侧看到的是无
-  // 握手的 close），DSH 的流载体连续两次失败后被折成 gateway/internal，界面上就是
-  // 「历史加载失败：…（gateway/internal）」。
-  // 就地重注入救不回来：旧 DSH 前端实例在本文档里还活着（定时器、监听、它自己的载体都在），
-  // 两份实例挤在一个文档里。故本页只在**取到的新快照说 runtimeId 与装配时不同**时整页重载——
-  // 重载带走宿主新发的 surface 凭据，重新装配一次就干净了。判断放在取到快照之后，所以凭据
-  // 本已失效的页面不会去重载（那只会撞上宿主的 403），照旧停在「凭据缺失」的提示上。
-  var injected = { started: false, transport: null as DshTransport | null, runtimeId: null as string | null, reloading: false };
-  /** 装配时代的 runtimeId 与本次快照不同：这份文档的装配面已经指向不存在的运行时。 */
-  function runtimeReplaced(s) {
-    return injected.started && injected.runtimeId !== null
-      && typeof s.runtimeId === "string" && s.runtimeId !== "" && s.runtimeId !== injected.runtimeId;
-  }
-  /** ready 快照下的装配入口：过期的重载，没装过的才装。 */
+  // 运行体重建）之后这份前缀就是死端点。本页不自己发现代换——宿主在代换后会重载 App 页面，
+  // 重载带走新发的 surface 凭据，重新装配一次就干净了。
+  var injected = { started: false, transport: null as DshTransport | null };
+  /** ready 快照下的装配入口：没装过的才装。 */
   function ensureInjection(s) {
-    if (runtimeReplaced(s)) {
-      // 重载只发一次：文档被宿主摘着（未挂载）时 reload 可能不落地，别让它每轮轮询都来一遍。
-      if (!injected.reloading) { injected.reloading = true; location.reload(); }
-      return;
-    }
-    startInjection(s.proxyPrefix, s.runtimeId);
+    startInjection(s.proxyPrefix);
   }
-  function startInjection(prefix, runtimeId) {
+  function startInjection(prefix) {
     if (injected.started) return;
     injected.started = true;
-    injected.runtimeId = typeof runtimeId === "string" && runtimeId ? runtimeId : null;
     var view = resolveView(shell);
     seedView = view;
     var privatePrefix = withSurfaceTicket(prefix, surfaceSession());
@@ -301,8 +282,7 @@ import {
       if (logEl) logEl.hidden = true;
       if (btnStop) btnStop.hidden = true;
       ensureInjection(s);
-      // 整块已让给注入的 DSH 侧栏，本面只剩兜底：慢一拍看不出来。
-      schedulePoll(POLL_FALLBACK_MS);
+      // 就绪后停表（见 fetchOwnState）：本面整块已让给注入的 DSH 侧栏，稳态没有要问的东西。
       return;
     }
     if (btnStop) btnStop.hidden = true;
@@ -367,43 +347,14 @@ import {
     if (pollTimer) clearTimeout(pollTimer);
     pollTimer = setTimeout(poll, ms);
   }
-  // ---- 轮询去重：一份状态只让一个 owner 去取 ----
-  // 事实只有一个（App 侧 boot-state），但主卡与 FP 是两份文档、各有一个定时器——两路轮询同一份
-  // 状态是重复劳动。定为：**主卡是 owner**，取回快照后写进跨面共享存储；FP 只订阅 + 读快照。
-  // 判据只有一条：**快照在不在**。在就渲染，内容对不对由 owner 负责——owner 只在状态变化时写
-  // （见 publishBootState），一变就推 onChanged，FP 立刻跟随；不在才自取，那是 FP 先于 owner
-  // 挂载、或 owner 已下线（pagehide 里删键）。
-  // 不拿「写入时刻够不够新」当判据：状态不变正是健康时的常态，按时刻判会让 FP 在稳态里一直
-  // 误判成过期，自己再打一路 HTTP——去重反而比不去重多一路。
-  // owner 没打招呼就走（没跑到 pagehide）时键会留下，FP 会停在最后一份快照上：靠 POLL_REVERIFY_MS
-  // 这一条封顶——本面自己取到过状态后，每 POLL_REVERIFY_MS 再直取一次真值。判据挂在「距上次
-  // 自取多久」上，是随 now 推进的量，不会像快照时间戳那样在稳态里恒真。
-  // 通道复用设置视图与会话选中那条（hana.storage.global + onChanged），不新开协议。
-  var POLL_REVERIFY_MS = 5 * 60 * 1000;
-  var lastOwnFetchAt = 0;
-  var lastPublishedSig: string | null = null;
-  function bootSig(s) {
-    if (!s) return "";
-    var e = s.error || {};
-    return [
-      s.phase || "", s.ready ? 1 : 0, s.runtimeId || "",
-      (s.service && s.service.port) || "", e.code || "", e.userText || "", s.note || "",
-      Array.isArray(s.logTail) ? s.logTail.join("\n") : "",
-    ].join("|");
-  }
-  // boot-state 不再进全局存储：每个面自己在非终态期间取、到终态即停。
-  function publishBootState(s) {
-    lastPublishedSig = bootSig(s);
-  }
   function fetchOwnState() {
     fetchBootState().then(function (s) {
-      lastOwnFetchAt = Date.now();
-      if (!isSidebar) publishBootState(s);
       applySnapshot(s);
-      // 只有 stopped 停表：ready 的慢轮询是发现运行态漂移（ensureInjection 靠它追上运行时代换后的
-      // 新前缀），error 也还在后台自动重试，停这两态就再也等不到新快照。
+      // ready / stopped 停表：这两态之后再问没有信息增量。运行时代换（宿主重启、运行体重建）
+      // 不靠本页轮询发现——宿主在代换后会重载本页，重新装配自然带上新前缀。
+      // error 继续问：App 侧自动链正在重试，停表就等不到那一次恢复。
       var phase = s && s.phase;
-      if (phase === "stopped") {
+      if (phase === "ready" || phase === "stopped") {
         if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
       }
     }).catch(function (err) {

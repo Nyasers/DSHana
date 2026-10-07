@@ -31,7 +31,7 @@ import {
 // ---- 轮询节拍（与壳页同一口径）----
 const POLL_FAST_MS = 1500;   // 非就绪：较快轮询（starting 日志滚动）
 const POLL_MID_MS = 3000;    // idle/error：中速
-const POLL_SLOW_MS = 6000;   // 就绪：慢轮询（发现运行态漂移）
+const POLL_SLOW_MS = 6000;   // 错误/缺凭据：慢轮询（等自动链重试）
 
 // ---- 三态（booting / ready / error）----
 type View = "idle" | "booting" | "action" | "ready";
@@ -88,41 +88,14 @@ function initialSnapshot(): Snapshot {
   return { view: "idle", state: null, status: "正在读取状态…", diag: "", credMissing: false };
 }
 
-// ---- 跨面共享快照（去重：一份状态只让一个 owner 去取；见 app-shell.ts 的同一套语义）----
-let lastPublishedSig: string | null = null;
-function bootSig(s: any): string {
-  if (!s) return "";
-  const e = (s && s.error) || {};
-  return [
-    s.phase || "", s.ready ? 1 : 0, s.runtimeId || "",
-    (s.service && s.service.port) || "", e.code || "", e.userText || "", s.note || "",
-    Array.isArray(s.logTail) ? s.logTail.join("\n") : "",
-  ].join("|");
-}
-function publishBootState(s: any): void {
-  const sig = bootSig(s);
-  if (sig === lastPublishedSig) return;
-  lastPublishedSig = sig;
-  // boot-state 不再进共享存储：每个面自己取，到终态即停（与壳页同口径）。
-}
-
 // ---- 注入（与 app-shell.ts 的 startInjection 同源，但面固定为 stream）----
 // 装配用的中继前缀里含 runtimeId，而宿主按 runtimeId 解析代理目标：运行时代换（宿主重启 /
-// 运行体重建）之后这份前缀就是死端点。故本页只在**取到的新快照说 runtimeId 与装配时不同**时
-// 整页重载——重载带走宿主新发的 surface 凭据，重新装配一次就干净了。判断放在取到快照之后，
-// 所以凭据本已失效的页面不会去重载（那只会撞上宿主的 403）。
+// 运行体重建）之后这份前缀就是死端点。本台面不自己发现代换——宿主在代换后会重载 App 页面，
+// 重载带走新发的 surface 凭据，重新装配一次就干净了。
 const injected = {
   started: false,
   transport: null as DshTransport | null,
-  runtimeId: null as string | null,
-  reloading: false,
 };
-
-/** 装配时代的 runtimeId 与本次快照不同：这份文档的装配面已经指向不存在的运行时。 */
-function runtimeReplaced(s: any): boolean {
-  return injected.started && injected.runtimeId !== null
-    && typeof s.runtimeId === "string" && s.runtimeId !== "" && s.runtimeId !== injected.runtimeId;
-}
 
 // ---- 主题桥（同文档注入形态）：把宿主主题变量推给 DSH 侧的桥 ----
 const THEME_VARS = [
@@ -197,13 +170,11 @@ function seedDshTokens(): void {
 // ---- 装配入口 ----
 function startInjection(
   prefix: string,
-  runtimeId: string | null,
   onInjected: () => void,
   onError: (msg: string) => void,
 ): void {
   if (injected.started) return;
   injected.started = true;
-  injected.runtimeId = typeof runtimeId === "string" && runtimeId ? runtimeId : null;
   const privatePrefix = withSurfaceTicket(prefix, surfaceSession());
   const base = new URL(privatePrefix, location.origin);
   injected.transport = installTransport(base, {
@@ -240,12 +211,7 @@ function ensureInjection(
   onInjected: () => void,
   onError: (msg: string) => void,
 ): void {
-  if (runtimeReplaced(s)) {
-    // 重载只发一次：文档被宿主摘着（未挂载）时 reload 可能不落地，别让它每轮轮询都来一遍。
-    if (!injected.reloading) { injected.reloading = true; location.reload(); }
-    return;
-  }
-  startInjection(s.proxyPrefix, s.runtimeId, onInjected, onError);
+  startInjection(s.proxyPrefix, onInjected, onError);
 }
 
 // ---- React：三态台面 ----
@@ -271,7 +237,7 @@ function App() {
   const kickedRef = useRef(false);
   const aliveRef = useRef(true);
 
-  // 轮询：一次取快照 → 写共享面 → 记录视图。ready 之后才慢轮询。
+  // 轮询：取一次快照 → 记录视图。ready 即停表；未就绪（含 error / stopped）继续问。
   useEffect(() => {
     aliveRef.current = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -294,7 +260,6 @@ function App() {
     const tick = (): void => {
       fetchBootState().then((s: any) => {
         if (!aliveRef.current) return;
-        publishBootState(s);
         const view = viewOf(s);
         if (view === "ready" && !surfaceSession()) {
           // DSH 已就绪但本页 URL 没带 appSurfaceSession（宿主没发）：代理对无凭据请求一律 403。
@@ -311,7 +276,9 @@ function App() {
           credMissing: false,
         });
         kickStartIfNeeded(s);
-        schedule(view === "ready" ? POLL_SLOW_MS : view === "booting" ? POLL_FAST_MS : POLL_MID_MS);
+        // ready 停表：宿主在运行时代换后会重载本页，台面不需要自己轮询去发现；未就绪才继续问。
+        if (view === "ready") return;
+        schedule(view === "booting" ? POLL_FAST_MS : POLL_MID_MS);
       }).catch((err: any) => {
         const msg = (err && err.message) || String(err);
         apply({
