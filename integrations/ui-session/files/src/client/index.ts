@@ -187,6 +187,13 @@ declare module '@deepseek-ai/dsh-api-session-controller/client' {
   }
 }
 
+declare module '@deepseek-ai/dsh-client-ui-workspace/client' {
+  interface UiWorkspace {
+    /** 清空主视图选中，布局回它的默认面板。上游接口没有这个入口，ui-workspace 覆盖层补的。 */
+    clearSelection?(): void
+  }
+}
+
 declare module '@deepseek-ai/cordis' {
   interface Context {
     /** Session Controller adapter and session-scoped source registry. */
@@ -687,7 +694,7 @@ export function apply(ctx: Context): void {
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // 动因：FP 与主卡是两个文档 = 两个 DSH 客户端实例，选中状态是实例本地的，天然不同步。
-//   两个面都参与，而且是对称的：本地选中变化 → 写壳页共享状态；共享状态变化 → 跟随。
+//   两个面都参与，而且是对称的：本地选中变化 → 宣告出去；对方的选中变化 → 跟随。
 //   于是 FP 点会话主卡跟着切，主卡切工作区/新建会话后 FP 也跟着走。
 //   不打架靠两条：
 //     · 意见带写入时刻 at：只采纳比自己动手更新的。旧的是对方上次留下的陈述，不是指令；
@@ -701,8 +708,8 @@ export function apply(ctx: Context): void {
 //   settings / standalone 不参与。
 // 恢复落地的第一跳不算用户动作（只记 seen，随后与共享状态对一次），否则重载任一面都会
 // 把它自己恢复出来的选中当成新指令宣告出去，把对方拉回去。
-// 启动握手：不靠“广播宣告”，靠**读快照**——载体（App 全局存储）始终有当前值，
-// 没有“接收端晚于发射端启动就错过宣告”的时序窗口。
+// 启动握手：不靠“广播宣告”，靠**读快照**——载体是 main view 自己的持久化（localStorage 的
+// dsh.sessions.current），它始终有当前值，没有“接收端晚于发射端启动就错过宣告”的时序窗口。
 //
 // 会话选中在服务层没有状态：ISessions 既不持有「当前选中」，也不提供选中入口。
 //   选中表达为主视图（ui-workspace）对某一段会话的 mainView 保留，导航归视图所有者：
@@ -802,9 +809,26 @@ function installCrossSurfaceSelection(ctx: Context): void {
         if (readOnly) pinnedApplied = true
         return
       }
-      // 对方此刻没有意见（无选中）不动本地：视图所有者没有「清空」入口，
-      // 而空值只表示对方那一面此刻没有可宣告的选中。
-      if (id === null) return
+      // 目标为空有两义，靠 at 分：
+      //   · at === 0：源读不动（本页那份真值取不到），对方此刻没有可宣告的选中，不动本地；
+      //   · at > 0：真值就是空的——对端把主视图清了（无工作台时新建会话、归档当前会话），
+      //     本面跟着清，布局回它的默认面板。
+      if (id === null) {
+        if (at === 0) return
+        if (navigate === undefined || typeof navigate.clearSelection !== 'function') {
+          if (!warnedAbsentNavigator) {
+            warnedAbsentNavigator = true
+            console.warn('[dshana/ui-session] 本面还没有导航面（uiWorkspace），跨面清空暂不跟随。')
+          }
+          return
+        }
+        try {
+          navigate.clearSelection()
+        } catch (error: unknown) {
+          console.warn('[dshana/ui-session] 跨面清空没能发起。', error)
+        }
+        return
+      }
       if (navigate === undefined) {
         // 导航面还没到场：动态注入的回调会在它到位时重走本函数，这里留一句可查的痕。
         if (!warnedAbsentNavigator) {

@@ -111,8 +111,8 @@ export function credMissingHtml(): string {
 }
 
 // ---- 跨面共享状态：已退场 ----
-// 值不再落盘：同页的两方（FP ↔ main）走 BroadcastChannel，其余面各自独立。
-// 这里只留一个空的下线钩子，给仍在调用它的面（stream-stage）留位。
+// 本层不再落盘任何值。会话选中的真值是 main view 自己的持久化（见 readSelection），跨面通知走
+// BroadcastChannel 与 storage 事件。这里只留一个空的下线钩子，给仍在调用它的面留位。
 /** 下线钩子：共享键已不存在，无需清理。 */
 export function dropShared(): Promise<unknown> {
   return Promise.resolve();
@@ -288,26 +288,54 @@ export function publishIntent<K extends IntentKind>(
   return Promise.resolve({ delivered: linkBroadcast(kind, payload) });
 }
 
-/** 会话选中：{ sessionId }。读 = 当前值（首读直接读权威记录），写 = 指名投递给其余面；
- * at 仍是写入时刻，接收端据此只采纳比自己动手更新的意见（ui-session 的判据不变）。
- *
- * 没凭据的页面（本 App 的页面理论上都有，被别的宿主/裸开时没有）由上面三件自动退到广播共享
- * 空间那条：读侧读的是同一张权威记录（通道服务端半写的镜像），所以两台的读不会各说各话。 */
-/** 会话选中：当前会话由 DSH 自己在初始化时恢复，不归我们记也不归我们读。
- * 这里一律回“没有主张”（at = 0 表示不参与新旧比较）；跨面的实时跟随靠广播，不靠取数。 */
+// ---- 会话选中的真值 ----
+// 真值是 main view 自己的持久化：ui-workspace 把目标身份写在 localStorage 的
+// `dsh.sessions.current`（`{ sessionId }`，清空时写 `{}`）。两个面同源，这个键本来就是两个
+// 文档之间共享的当前值，不必另开一份存储。
+const DSH_SELECTION_KEY = "dsh.sessions.current";
+
+/** 读当前选中。读的是**当前值**而不是某一次宣告，所以接收端晚于发射端启动也不会错过。
+ * 值本身没有时间戳，而 ui-session 的判据 `at <= localAt` 要一个正数时刻，就用读到的当下时刻：
+ * 「这是眼下的真值」正是要表达的意思。没有这个键、值里没有 sessionId、或读不动时回「没有主张」
+ * （at = 0，不参与新旧比较）。 */
 export function readSelection(): Promise<{ sessionId: string | null; at: number }> {
-  return Promise.resolve({ sessionId: null, at: 0 });
+  let raw: string | null = null;
+  try { raw = localStorage.getItem(DSH_SELECTION_KEY); } catch { return Promise.resolve({ sessionId: null, at: 0 }); }
+  if (raw === null) return Promise.resolve({ sessionId: null, at: 0 });
+  try {
+    const parsed = JSON.parse(raw) as { sessionId?: unknown };
+    const sid = typeof parsed?.sessionId === "string" && parsed.sessionId ? parsed.sessionId : null;
+    return Promise.resolve({ sessionId: sid, at: Date.now() });
+  } catch {
+    return Promise.resolve({ sessionId: null, at: 0 });
+  }
 }
 export function writeSelection(sessionId: string | null): Promise<{ delivered: number }> {
   return publishIntent("selection", { sessionId: sessionId ?? null });
 }
-/** 会话选中变化：把值（sessionId 与它的写入时刻）直接交给监听者，消费侧不必再回读一次记录。 */
+/** 会话选中变化：两条来源都接。
+ *  · 同页广播（别的面调 writeSelection 时投出）：快，但发那一刻不在场的面收不到；
+ *  · `storage` 事件（main view 自己写 localStorage 的键）：浏览器原生跨文档通知，接住 DSH 自己
+ *    发起的选中变化（侧栏点新建会话就属于这一路），也覆盖「接收端晚于发射端启动」那一段。
+ * 两条都只是**触发**，值一律回读 readSelection，所以重复通知不会产生分歧。 */
 export function onSelectionChanged(listener: (sessionId: string | null, at: number) => void): () => void {
-  return registerIntentLanding("selection", (payload, meta) => {
+  const off = registerIntentLanding("selection", (payload, meta) => {
     const value = payload as { sessionId?: unknown } | null;
     const at = meta && typeof meta.at === "number" ? meta.at : 0;
     listener(value && typeof value.sessionId === "string" ? value.sessionId : null, at);
   });
+  const onStorage = (event: StorageEvent): void => {
+    if (event.key !== DSH_SELECTION_KEY) return;
+    void readSelection().then(
+      (next) => listener(next.sessionId, next.at),
+      () => { /* 读失败保持本地 */ },
+    );
+  };
+  try { window.addEventListener("storage", onStorage); } catch { /* 无 window：只留广播 */ }
+  return () => {
+    off();
+    try { window.removeEventListener("storage", onStorage); } catch { /* 忽略 */ }
+  };
 }
 
 // 主面板选中已搬到直投通道：FP 侧用 publishIntent('panel-view', …) 指名投递、主卡侧用
