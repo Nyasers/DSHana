@@ -20,7 +20,8 @@
 //     把「工位」与「组装台」分开，就是不让构建输入混进安装包；组装出包后立即删。
 //
 // 分模块：目标表在 targets.mts，出包前断言在 assert.mts，依赖物化与精简在 materialize.mts，
-// 集成补丁覆盖在 overlays.mts，静态件压缩在 minify.mts；本文件是主流程（校验 → 组装 → zip）。
+// 集成补丁覆盖在 overlays.mts，静态件压缩在 minify.mts，交付面裁剪在 trim.mts；
+// 本文件是主流程（校验 → 组装 → 裁剪 → zip）。
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
@@ -38,6 +39,7 @@ import { materializeProdDeps } from "./materialize.mts";
 import { minifyCordisStatics } from "./minify.mts";
 import { applyIntegrations } from "./overlays.mts";
 import { failUsage, targetSpec } from "./targets.mts";
+import { describeTrim, trimDeliveryTree } from "./trim.mts";
 
 // 版本单一事实源：package.json（唯一来源；不支持命令行传版本，显式传的版本会与 manifest 不同步）。
 // 版本同步走 pnpm version 发版流程，由 scripts/release/version.mts 收口。
@@ -150,6 +152,11 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
   const leftover = excludedPackages().filter((n) => fs.pathExistsSync(join(pkgDir, "node_modules", n)));
   if (leftover.length > 0) throw new Error(`被排除的包仍在产物里：${leftover.join("、")}`);
   console.log(`[pack] 排除表层/私货包 ${pruned.length} 个（产物里不留槽位）：${pruned.join(", ")}`);
+  // 交付面裁剪：依赖树里运行时不读的东西（测试目录、包内源码与类型声明、构建元数据、文档与夹具）。
+  // 规则与判据见 trim.mts 头注；只动 node_modules，跳过 @dshana。放在必需产物断言之前，
+  // 断言因此检查的是裁完的树（裁过头会当场抛错）。
+  const trim = trimDeliveryTree(pkgDir);
+  console.log(describeTrim(trim));
   // @dshana 的两个 scope 内容落进安装树的 node_modules（与 @deepseek-ai/* 同锚点）：DSH 的 runtime
   // 解析模式从安装树 + bundle 依赖图算解析代、不建链接，它们因此不能住在安装树外的位置。两者本来
   // 都不在交付面里（产物在 .cache/cordis 与 .cache/bundle），到这一步才按交付布局落进
