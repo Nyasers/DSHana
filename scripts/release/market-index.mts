@@ -233,6 +233,8 @@ function main(): void {
 
   // 0) 投稿条目：文件名是官方市场的取件名，一份对一个版本，所以只写选中的那个 target；
   //    自留字段是自托管侧的东西，投稿这份删掉。
+  //    archive.url 保留 `{{BASE_URL}}/` 占位符是协议要求：市场同步器按这个前缀取出资产名，
+  //    再去 Release 资产里找同名 zip；写成绝对地址会被判成非法条目。索引里的绝对地址由同步器自己填。
   const enrollmentZip = chosen[0];
   const enrollmentEntry = buildEntry(enrollmentZip, targets);
   delete enrollmentEntry["x-dshana-targets"];
