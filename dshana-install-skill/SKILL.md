@@ -9,48 +9,35 @@ description: "Install or upgrade the DSHana App from a GitHub Release, not this 
 
 Someone hands you this repo (or one of its Releases) and asks you to install DSHana, or to upgrade it to a version: follow this manual. **What gets installed is the release package**; this manual is the set of steps for you to read and should not, and need not, be installed into yourself as a skill.
 
-Everything below goes through the host endpoints, which is the channel an agent can execute and which lets you pick the smaller per-platform package. A platform package contains only that machine's dependencies and is far smaller than the universal one (which carries every platform's dependency tree); the index format itself has no platform dimension, so a platform artifact has to be fetched by target.
+Everything below goes through the host endpoints, which is the channel an agent can execute, and lets you pick the smaller per-platform package. A platform package contains only that machine's dependencies and is far smaller than the universal one (which carries every platform's dependency tree). The catalogue's entry format has no platform dimension, so a platform artifact is fetched by target straight from the release assets.
 
-## The reserved field in the index
+## Picking a package from the release assets
 
-Every entry in `index.v2.json` carries one reserved field, `x-dshana-targets`: target name → that target's release package.
+A release carries one `.zip` per target, so the package to install is chosen by name:
 
-| Field | Meaning |
-|---|---|
-| `url` | The package's absolute https address, directly downloadable |
-| `sha256` | The package's SHA-256, 64 lowercase hex digits |
-| `size` | The package's size in bytes (positive integer) |
-| `format` | Always `"zip"` |
-
-The target name is the segment after `-v<version>` in the artifact name (the universal package has no suffix and is recorded as `universal`). **Take the concrete values from the index you actually hold** — they differ per release, so do not copy any hard-coded numbers.
-
-### The field's schema
-
-```json
-{
-  "type": "object",
-  "description": "target name → that target's release package; the target name is the segment after `-v<version>` in the artifact name (the universal package has no suffix and is recorded as universal)",
-  "additionalProperties": {
-    "type": "object",
-    "required": ["url", "sha256", "size", "format"],
-    "properties": {
-      "url":    { "type": "string", "pattern": "^https://", "description": "the package's absolute https address" },
-      "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "64 lowercase hex digits" },
-      "size":   { "type": "integer", "minimum": 1, "description": "size in bytes (positive integer)" },
-      "format": { "const": "zip" }
-    },
-    "additionalProperties": false
-  }
-}
+```
+dshana-v<version>-<target>.zip     # the six platform targets
+dshana-v<version>.zip              # universal, no target segment
 ```
 
-These four constraints are exactly the host's validation rules for `archive` (url must be https, sha256 must be 64 lowercase hex digits, size must be a positive integer, format must be `"zip"`); a block shaped by this schema would pass directly if the host ever did adopt this dimension.
+The target name is the segment after `-v<version>` in the artifact name; the universal package has no suffix and is recorded as `universal`.
+
+**Take the concrete values from the release you actually hold** — they differ per release, so do not copy any hard-coded numbers. GitHub reports each asset's size and its `sha256` digest, and those are the values the host's `archive` validation expects:
+
+| Field | Source | Constraint |
+|---|---|---|
+| `url` | `https://github.com/Nyasers/DSHana/releases/download/<tag>/<asset name>` | must be https |
+| `sha256` | the asset's `digest`, without the `sha256:` prefix | 64 lowercase hex digits |
+| `size` | the asset's `size` | positive integer |
+| `format` | always `zip` | — |
+
+These four constraints are exactly the host's validation rules for `archive` (url must be https, sha256 must be 64 lowercase hex digits, size must be a positive integer, format must be `"zip"`).
 
 Points to note:
 
-- In the host's official format an entry has only one address slot, `archive` (the format version is the index's top-level `schemaVersion`), and the version dimension is flattened onto the entry's `version` field by default; only when a same `kind:id` has an older version does the old one go into `versions[]` (an array, each item carrying `version`, an optional `minAppVersion` and `archive`). DSHana ships one version per release and `versions[]` normally does not appear — read the version from the entry's `version` and do not count on it. The consumer side matches on the version text only and has **no platform dimension**. `x-dshana-targets` is our own reserved field: the host neither reads nor rejects it, which is why fetching a platform artifact means picking it by target yourself.
-- The target packages differ in size (universal is the largest); pick by the local platform and only continue once the fetched `size` matches the index record.
-- An entry's `archive` (the primary address) by convention always points at **universal**; platform artifacts exist only under `x-dshana-targets`.
+- The published entry (`app-dshana-<version>.entry.json`) has a single address slot, `archive`, and by convention it always points at **universal**. Platform packages are described nowhere in the entry; they exist only as release assets and are picked by target here.
+- The consumer side matches on the version text and has **no platform dimension**, which is why one entry cannot carry several platform addresses.
+- The target packages differ in size (universal is the largest); pick by the local platform and only continue once the fetched `size` matches the listing.
 
 ## Platform mapping
 
@@ -68,30 +55,31 @@ The release matrix builds these six platform targets plus universal. Another tar
 
 ## Steps
 
-1. **Find the release, then take its index.** Each release carries one index named `index.v2.json` among its assets. Find the target release first and download the index from it. A new release is normally marked **prerelease**, and `latest` resolves only to a release that is not marked prerelease, so look the release up rather than assuming `latest`:
+1. **Find the release, then list its assets.** A new release is normally marked **prerelease**, and `latest` resolves only to a release that is not marked prerelease, so look the release up rather than assuming `latest`:
 
    ```
    gh release list -R Nyasers/DSHana        # list tags, prereleases included
-   gh release download <tag> -R Nyasers/DSHana -p index.v2.json
+   gh release view <tag> -R Nyasers/DSHana --json assets \
+     --jq '.assets[] | "\(.name)  \(.size)  \(.digest)"'
    ```
 
-   Without gh, the tagged asset URL does the same (a `+` in the tag is written `%2B`):
+   Without gh, the release page lists the same assets, and an asset URL works directly (a `+` in the tag is written `%2B`):
 
    ```
-   https://github.com/Nyasers/DSHana/releases/download/v<version>/index.v2.json
+   https://github.com/Nyasers/DSHana/releases/download/v<version>/dshana-v<version>-<target>.zip
    ```
 
    `latest` remains usable when you deliberately want the newest release that is not a prerelease:
 
    ```
-   https://github.com/Nyasers/DSHana/releases/latest/download/index.v2.json
+   https://github.com/Nyasers/DSHana/releases/latest/download/dshana-v<version>.zip
    ```
 
-   Package names carry the version (`dshana-v<version>[-<target>].zip`), so there is no shortcut around the index: fetch it first, then download the package from the address inside it.
+   Package names carry the version (`dshana-v<version>[-<target>].zip`). The asset listing is the authority for both the size and the sha256 — read them from there rather than assuming any URL scheme will produce them.
 
-2. **Pick the entry and the target.** In `items[]` find the one with `kind=app` and the `id` equal to the target App (DSHana has exactly one item), then take `["x-dshana-targets"][<local target>]`. When that key is absent, fall back to `universal` and say that the universal package is large.
+2. **Pick the target.** Map the local machine to a target, then take the asset named `dshana-v<version>-<target>.zip`. When that asset is absent, fall back to `dshana-v<version>.zip` (universal) and say that the universal package is large.
 
-3. **Download and verify.** Download `url`, check that the sha256 matches the index record (case-insensitive) and that the size agrees, then continue.
+3. **Download and verify.** Download the asset, check that its sha256 matches the `digest` the listing reported (case-insensitive) and that the size agrees, then continue.
 
 4. **Uninstall the old version first.** Over-installing the same id is not supported and this step cannot be skipped:
 
@@ -129,9 +117,9 @@ The release matrix builds these six platform targets plus universal. Another tar
 | Symptom | Cause | Handling |
 |---|---|---|
 | After uninstall+reinstall, this session reports `RPC peer closed; cannot call callback.tools.execute` for that App's tools | The session engine captured the tool objects of the then-current App instance when it was created, and those objects go stale once the instance is replaced | Open a new session or restart the host; the App itself is fine (routes and runtime are normal) |
-| `index.v2.json`'s primary `archive.url` points at some platform package | The build was fed an entry that should not have entered the manifest | By convention the index should only point at universal, see the target selection in `scripts/release/market-index.mts` |
-| `latest` resolves to a different version than you expected | `latest` skips prereleases, and a new release is normally marked prerelease | Look the release up itself (`gh release list`) and take the index from its tag |
-| `x-dshana-targets` cannot be obtained | That index does not carry this field | Fall back to the primary `archive` (universal), which is functionally identical, only larger |
+| The digest you read does not match the downloaded package | The download was truncated or redirected to something else | Re-download and compare both the size and the digest; the listing's `size` catches truncation before the hash does |
+| `latest` resolves to a different version than you expected | `latest` skips prereleases, and a new release is normally marked prerelease | Look the release up itself (`gh release list`) and take its assets from that tag |
+| No asset matches the local target | The matrix built six platform targets plus universal; some other target has to be built by name in the repo | Fall back to `dshana-v<version>.zip` (universal), which is functionally identical, only larger |
 
 ## This directory is not part of the release package
 

@@ -1,0 +1,9 @@
+{
+  "kind": "app",
+  "id": "dshana",
+  "repository": "Nyasers/DSHana",
+  "publisher": "Nyasers",
+  "upstream": "liliMozi/hana-marketplace",
+  "fork": "Nyasers/hana-marketplace",
+  "defaultBranch": "main"
+}
