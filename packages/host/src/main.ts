@@ -204,13 +204,13 @@ function makeShutdown(state, exitCodeLog) {
 }
 
 /**
- * 产物在位检查（fail-closed）：四个 @dshana/dsh-* 子插件与组合层包（@dshana/dsh-app）都得在。
+ * 产物在位检查（fail-closed）：三个 @dshana/dsh-* 子插件与组合层包（@dshana/dsh-app）都得在。
  * 缺了就在这里报清楚，而不是等 DSH 自己把「bundle/插件找不到」抛上来。
  * @returns 缺失项（空数组 = 齐备）。
  */
 function missingArtifacts(depsRoot: string): string[] {
   const missing: string[] = [];
-  for (const name of ["dsh-provider", "dsh-session", "dsh-theme", "dsh-clipboard"]) {
+  for (const name of ["dsh-provider", "dsh-session", "dsh-theme"]) {
     const dir = join(depsRoot, "@dshana", name);
     if (!existsSync(join(dir, "index.js"))) missing.push(dir);
   }

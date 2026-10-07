@@ -24,6 +24,7 @@ import fs from "fs-extra";
 import { join } from "node:path";
 
 import { CACHE_DIR, ROOT } from "../../shared/paths.mts";
+import { cordisPkgDirs, cordisPkgFullName } from "../../shared/version.mts";
 
 /** 上游 app-boot 源码里那份「可选表层」名单（我们直接读它，不另维护一份）。 */
 function upstreamOptionalBundles(): string[] {
@@ -147,7 +148,10 @@ export function pruneExcluded(nodeModulesDir: string, names: string[] = excluded
   return pruned;
 }
 
-/** 交付树里必须出现的包（fail-closed 断言的正面清单）。 */
+/** 交付树里必须出现的包（fail-closed 断言的正面清单）。
+ * 子插件名单派生自包现场（packages/dsh 下带 cordis.config.mjs 的包）：加一个自动纳入，
+ * 下线一个不会留一条永远失败的断言。 */
 export function requiredPackages(): string[] {
-  return ["@deepseek-ai/dsh-base", "@dshana/dsh-app", "@dshana/dsh-provider", "@dshana/dsh-session", "@dshana/dsh-theme", "@dshana/dsh-clipboard"];
+  const plugins = cordisPkgDirs().map((rel) => cordisPkgFullName(rel));
+  return ["@deepseek-ai/dsh-base", "@dshana/dsh-app", ...plugins];
 }

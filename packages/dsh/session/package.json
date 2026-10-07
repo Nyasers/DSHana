@@ -1,6 +1,7 @@
 {
   "name": "@dshana/dsh-session",
   "version": "1.0.0+dsh-0.2.0-rc.2",
+  "description": "Session operations for DSHana: task create and settle, session reuse, prompt, cancel and approval.",
   "private": true,
   "type": "module",
   "main": "index.js",

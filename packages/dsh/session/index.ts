@@ -8,8 +8,8 @@
 // 宿主侧编排（工具面、回执、卡片字面量、callToken 接收与下传）在同域的另一个包
 // @dshana/session 的 src/ 下：两个包各持自己的形态，不共享代码，本包没有 src/ 可 import。
 //
-// 自持性约束：随包物化的成品树只带 cordis 子插件（node_modules/@dshana 下 dsh-clipboard /
-// dsh-provider / dsh-session / dsh-theme 与组合层 dsh-app），开发期的 @dshana/* 兄弟包不在其中。所以本半只许依赖
+// 自持性约束：随包物化的成品树只带 cordis 子插件（node_modules/@dshana 下 dsh-provider /
+// dsh-session / dsh-theme 与组合层 dsh-app），开发期的 @dshana/* 兄弟包不在其中。所以本半只许依赖
 // DSH 侧服务与 node 内建，不 import 任何 @dshana/* 包——要复用的东西得随本半一起打包进来。
 //
 // 分工（见 specs/current/session-plugin/spec.md §4.1）：

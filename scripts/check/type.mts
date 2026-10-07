@@ -16,6 +16,7 @@ import { join } from "node:path";
 
 import { ROOT } from "../shared/root.mts";
 import { isDirectRun } from "../shared/run.mts";
+import { cordisPkgDirs } from "../shared/version.mts";
 import { classifyDiagnostics, formatDiagnostics, parseTsDiagnostics } from "../shared/ts-diagnostics.mts";
 import { errText } from "../shared/err-text.mts";
 
@@ -64,11 +65,8 @@ const DOMAINS = [
   {
     name: "cordis",
     config: "tsconfig.cordis.json",
-    ours: (file) =>
-      file.startsWith("packages/dsh/clipboard/")
-      || file.startsWith("packages/dsh/provider/")
-      || file.startsWith("packages/dsh/session/")
-      || file.startsWith("packages/dsh/theme/"),
+    // 子插件清单派生自包现场，不在这里列目录名。
+    ours: (file) => cordisPkgDirs().some((rel) => file.startsWith(rel + "/")),
   },
   {
     name: "bundle",

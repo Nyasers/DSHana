@@ -43,7 +43,7 @@ export function uiDirOf(repoRoot: string): string {
 
 export const UI_DIR = uiDirOf(ROOT);
 
-/** cordis 子插件包（provider / theme / clipboard）：pack 落进包内 node_modules/@dshana。 */
+/** cordis 子插件包（packages/dsh/*，除组合层 app 外）：pack 落进包内 node_modules/@dshana。 */
 export const CORDIS_DIR = path.join(ROOT, CACHE, "cordis");
 
 /** 组合层包（packages/dsh/app）的构建产物：pack 落进包内 node_modules/@dshana。 */

@@ -9,7 +9,6 @@
     "./*": "./src/*"
   },
   "dependencies": {
-    "@dshana/dsh-clipboard": "workspace:*",
     "@dshana/models": "workspace:*",
     "@dshana/dsh-provider": "workspace:*",
     "@dshana/runtime": "workspace:*",
