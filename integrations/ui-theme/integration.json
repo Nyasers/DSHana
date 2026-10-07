@@ -15,7 +15,7 @@
     "所以这是纯显示层的一处措辞，不影响任何跟随逻辑。",
     "",
     "为什么走 overlay 而不是运行时改写：locale 服务的 register 对同一 (ns, locale) 只允许一个",
-    "“持有者（重复注册直接抛），settings.theme 这个 NS 已经归 ui-theme，我们的 @dshana/dsh-theme”",
+    "持有者（重复注册直接抛），settings.theme 这个 NS 已经归 ui-theme，我们的 @dshana/dsh-theme",
     "客户端半边注册不进去。所以文案的事实源只能是上游那个文件，改它就得贴一份。",
     "",
     "en 字典对 zh 键集有完整性检查（satisfies Record<ThemeKey, string>），两个字典的键集保持不动，",
