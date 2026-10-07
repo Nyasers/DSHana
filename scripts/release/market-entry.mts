@@ -133,30 +133,26 @@ function main(): void {
     );
   }
 
-  const all = injectedFacts !== null
-    ? Object.keys(injectedFacts).filter((f: string) => f.startsWith(`${manifest.id}-v${version}`) && f.endsWith(".zip"))
-    : fs
-      .readdirSync(RELEASES)
-      .filter((f: string) => f.startsWith(`${manifest.id}-v${version}`) && f.endsWith(".zip"));
-  if (all.length === 0) {
-    console.error(`[market-entry] 没有 ${manifest.id}-v${version}-*.zip 的事实来源（releases/ 或 --facts-dir）—— 先出包：pnpm run package --target ${target}`);
+  // 要哪个包就把名字拼出来、精确匹配：前缀判定会把同前缀的别的版本（1.0.2 之于 1.0.20）一起收进来，
+  // 释当的“平台名不匹配”判定也会放行 dshana-v1.0.2-<其它平台>.zip，两者都能把错的包与 hash 写进条目。
+  const expected = `${manifest.id}-v${version}${target === "universal" ? "" : `-${target}`}.zip`;
+  if (!hasFacts(expected)) {
+    const all = injectedFacts !== null
+      ? Object.keys(injectedFacts).filter((f: string) => f.startsWith(`${manifest.id}-v`) && f.endsWith(".zip"))
+      : fs.readdirSync(RELEASES).filter((f: string) => f.startsWith(`${manifest.id}-v`) && f.endsWith(".zip"));
+    console.error(
+      `[market-entry] 找不到 ${expected} 的事实来源（releases/ 或 --facts-dir）—— ` +
+        (all.length === 0
+          ? `先出包：pnpm run package --target ${target}`
+          : `现有：${all.join(", ")}`),
+    );
     process.exit(1);
   }
 
-  const chosen = all.filter((f: string) => f.includes(`-${target}.zip`) || (target === "universal" && !/-(win32|darwin|linux)-/.test(f)));
-  if (chosen.length === 0) {
-    console.error(`[market-entry] 没有 target=${target} 的包（现有：${all.join(", ")}）`);
-    process.exit(1);
-  }
-  if (!hasFacts(chosen[0])) {
-    console.error(`[market-entry] ${chosen[0]} 没有可用事实（releases/ 里没有这份 zip，也不在 --facts-dir 表里）`);
-    process.exit(1);
-  }
-
-  const entry = buildEntry(chosen[0]);
+  const entry = buildEntry(expected);
   const out = join(RELEASES, `${KIND}-${manifest.id}-${version}.entry.json`);
   fs.writeFileSync(out, `${JSON.stringify(entry, null, 2)}\n`, "utf8");
-  console.log(`[market-entry] 投稿条目 ${out}（archive 指向 ${chosen[0]}，${entry.archive.size} 字节）`);
+  console.log(`[market-entry] 投稿条目 ${out}（archive 指向 ${expected}，${entry.archive.size} 字节）`);
 }
 
 main();

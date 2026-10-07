@@ -65,7 +65,20 @@ function exec(bin: string, args: string[], cwd = ROOT): string {
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-/** 等 Release 出现并带齐投稿条目；返回条目对象。`wait=false` 时只探一次（--dry-run 用）。 */
+/** gh release view 取回的那几栏。写成命名接口，不用 `typeof info`：在 `let info: T | null = null`
+ *  之后，`typeof info` 取到的是已被收窄成 null 的类型，解码出来的对象就落到 never 上。 */
+interface ReleaseInfo {
+  isDraft: boolean;
+  isPrerelease: boolean;
+  assets: { name: string }[];
+}
+
+/** 等投稿条目就位（CI 出包），并确认 Release 已可上架；返回条目对象。
+ *  市场只收既不是 draft、也不是 prerelease 的正式 Release，而流水线建的是 draft pre-release、publish
+ *  只去 draft 而保留 prerelease——标稳定版（--prerelease=false --latest）是「要不要上架」的人工决定，
+ *  不属于发版流程，所以这里**不等**它：已经稳定就继续，否则直接报错并给出该跑的命令。
+ *  条目本身要等（CI 出包要十几分钟），那是构建在跑、不是人在决策。
+ *  `wait=false` 时连条目也只探一次（--dry-run 用）。 */
 async function waitForRelease(
   tag: string,
   repo: string,
@@ -74,17 +87,32 @@ async function waitForRelease(
 ): Promise<{ sha256: string; size: number }> {
   const deadline = Date.now() + (wait ? WAIT_MS : 0);
   for (;;) {
-    let assets: { name: string }[] = [];
+    let info: ReleaseInfo | null = null;
     try {
-      const raw = exec("gh", ["release", "view", tag, "--repo", repo, "--json", "assets"]);
-      assets = (JSON.parse(raw) as { assets: { name: string }[] }).assets;
+      const raw = exec("gh", ["release", "view", tag, "--repo", repo, "--json", "isDraft,isPrerelease,assets"]);
+      info = JSON.parse(raw) as ReleaseInfo;
     } catch {
       // Release 尚未创建：出包作业还在跑，下一轮再看
     }
-    if (assets.some((a) => a.name === entryName)) break;
-    if (!wait) throw new Error(`${tag} 还没有 ${entryName}（当前 ${assets.length} 个资产）——--dry-run 不等出包`);
+    const hasEntry = info !== null && info.assets.some((a: { name: string }) => a.name === entryName);
+    const stable = info !== null && !info.isDraft && !info.isPrerelease;
+    if (hasEntry) {
+      if (!stable) {
+        throw new Error(
+          `${tag} 还不是可上架的正式 Release（draft=${info!.isDraft} prerelease=${info!.isPrerelease}）。\n` +
+            `  要上架就先标稳定版，再跑本脚本：\n` +
+            `    gh release edit ${tag} --repo ${repo} --prerelease=false --latest`,
+        );
+      }
+      break;
+    }
+    if (!wait) {
+      throw new Error(
+        info === null ? `${tag} 还不存在——--dry-run 不等出包` : `${tag} 还没有 ${entryName}——--dry-run 不等出包`,
+      );
+    }
     if (Date.now() > deadline) throw new Error(`等 ${tag} 的 ${entryName} 超时（${WAIT_MS / 60000} 分钟）`);
-    log(`等 ${entryName} 就位（当前 ${assets.length} 个资产）…`);
+    log(`等 ${entryName} 就位（出包作业在跑）…`);
     await sleep(POLL_MS);
   }
   const dir = join(WORK, "_entry");
@@ -127,7 +155,13 @@ async function main(): Promise<void> {
   const enr = fs.readJsonSync(join(ROOT, "market", "enrollment.json")) as Enrollment;
   const manifest = fs.readJsonSync(join(ROOT, "manifest.json")) as { version: string };
   const tag = arg("--tag") || `v${manifest.version}`;
-  const entryName = `${enr.kind}-${enr.id}-${manifest.version}.entry.json`;
+  // 条目名按**所选 tag** 的版本取，不按本地 manifest：--tag 指旧版本时，拿当前 manifest 去搜那个 Release
+  // 只会一直等不到。两者不一致时提示一声（正常发版流程里它们相等）。
+  const version = tag.replace(/^v/, "");
+  if (version !== manifest.version) {
+    log(`注意：--tag ${tag} 与本地 manifest 的 ${manifest.version} 不同，按 tag 的版本找条目`);
+  }
+  const entryName = `${enr.kind}-${enr.id}-${version}.entry.json`;
 
   log(`登记 ${enr.kind}/${enr.id} · tag ${tag}`);
   const { sha256, size } = await waitForRelease(tag, enr.repository, entryName, !dryRun);
