@@ -4,10 +4,10 @@
 // packages/app/src/cordis.ts — App 域的 cordis 子插件组装入口
 //
 // 子插件本身是 packages/dsh/ 下的包（`@dshana/dsh-clipboard` / `@dshana/dsh-provider` /
-// `@dshana/dsh-theme` / `@dshana/dsh-session-runtime`；位置即判据，包里那份自持构建描述
+// `@dshana/dsh-session` / `@dshana/dsh-theme`；位置即判据，包里那份自持构建描述
 // `cordis.config.mjs` 是它的构建说明）；本文件是它们的组装器，归 `@dshana/app`。
-//   .cache/cordis/<包名去 scope>：4 子插件（dsh-provider / dsh-theme / dsh-clipboard /
-//     dsh-session-runtime）：service 半 rspack（源 index.ts → 产物 index.js bundle），theme 与
+//   .cache/cordis/<包名去 scope>：4 子插件（dsh-clipboard / dsh-provider / dsh-session /
+//     dsh-theme）：service 半 rspack（源 index.ts → 产物 index.js bundle），theme 与
 //     clipboard 另出 client 半（client.ts → client.js，tsdown closure-factory）。目录名取**包名**
 //     而不是源码目录名：DSH 按包名从安装树解析，两者必须对得上。
 // 组合（roster 行、对官方行的取值、@dshana/* insert）不在这里：那是组合层包
