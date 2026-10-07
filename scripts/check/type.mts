@@ -64,12 +64,16 @@ const DOMAINS = [
   {
     name: "cordis",
     config: "tsconfig.cordis.json",
-    ours: (file) => file.startsWith("packages/clipboard/") || file.startsWith("packages/provider/") || file.startsWith("packages/theme/"),
+    ours: (file) =>
+      file.startsWith("packages/dsh/clipboard/")
+      || file.startsWith("packages/dsh/provider/")
+      || file.startsWith("packages/dsh/session/")
+      || file.startsWith("packages/dsh/theme/"),
   },
   {
     name: "bundle",
     config: "tsconfig.bundle.json",
-    ours: (file) => file.startsWith("packages/bundle/"),
+    ours: (file) => file.startsWith("packages/dsh/app/"),
   },
   {
     name: "scripts",

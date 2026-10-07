@@ -2,7 +2,8 @@
 # workspace 协议。仓库根仍是构建入口所在的项目（scripts/、integrations/）。
 packages:
   - "packages/*"
-  # 组合层住得更深一层（packages/bundle/dsh-app），与上游 packages/bundle/* 的布局对齐。
+  # DSH 侧的东西住 packages/dsh/ 下（子插件与组合层，包名一律 @dshana/dsh-*），宿主侧源码域
+  # 住在 packages/ 的其余目录。
   - "packages/*/*"
 
 # pnpm 构建脚本白名单。pnpm 11 起 allowBuilds 取代 pnpm 10 的 onlyBuiltDependencies 一族
@@ -34,7 +35,7 @@ overrides:
   # 安全告警 http-cache-semantics <=4.2.0（high）整条链只从 `dsh-otel` 进来（pnpm why got：唯一依赖者
   # 就是它），所以这里把 dsh-otel 换成空实现，got/cacheable-request/http-cache-semantics 一起离开树
   # （见 vendor/stubs/dsh-otel/）。前提：引用它的只有 base roster 那两行遥测，而那两行已在组合层
-  # （packages/bundle/dsh-app/cordis.patch.yml）按 id 关掉。
+  # （packages/dsh/app/cordis.patch.yml）按 id 关掉。
   "@deepseek-ai/dsh-otel": "file:vendor/stubs/dsh-otel"
   "@deepseek-ai/dsh-session-telemetry-otel": "file:vendor/stubs/dsh-session-telemetry-otel"
   "@deepseek-ai/dsh-host-product-telemetry-otel": "file:vendor/stubs/dsh-host-product-telemetry-otel"

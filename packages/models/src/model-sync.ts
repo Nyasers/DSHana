@@ -3,7 +3,7 @@
 //
 // packages/models/src/model-sync.ts — 宿主模型/提供商变更 → 受管 runtime 重拉目录
 //
-// 为什么要有这一层：DSH 侧的 provider 路由与模型目录是**启动快照**——@dshana/provider 在
+// 为什么要有这一层：DSH 侧的 provider 路由与模型目录是**启动快照**——@dshana/dsh-provider 在
 // 插件激活时读一次 hana.models.list()。宿主改了提供商（设置页加/改凭据、models.json、
 // 模型信息目录刷新）之后，DSH 里那份目录不会跟着变，得等 runtime 重启。宿主自己有变更广播：
 // 它在 app_event 通道上发 { type: "app_event", event: { type: "models-changed", payload } }

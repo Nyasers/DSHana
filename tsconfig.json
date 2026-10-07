@@ -34,11 +34,9 @@
   // scripts/check/overlay.mts 那条专门通道），不在这里，免得编辑期噪声压住真问题。
   "include": [
     "packages/app/src/**/*.ts",
-    "packages/clipboard/**/*.ts",
-    "packages/provider/**/*.ts",
-    "packages/theme/**/*.ts",
-    // 组合层（packages/bundle/dsh-app）：派生自上游 web-app 的组合补丁与粘合插件。
-    "packages/bundle/dsh-app/**/*.ts",
+    "packages/dsh/**/*.ts",
+    // 组合层（packages/dsh/app）：派生自上游 web-app 的组合补丁与粘合插件。
+    "packages/dsh/app/**/*.ts",
     "packages/shared/src/**/*.ts",
     "packages/host/src/**/*.ts",
     "packages/models/src/**/*.ts",

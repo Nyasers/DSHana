@@ -21,7 +21,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { TOKEN_MAP, PASSTHROUGH } from "../../packages/theme/token-map.ts";
+import { TOKEN_MAP, PASSTHROUGH } from "../../packages/dsh/theme/token-map.ts";
 import { tagForVersion } from "../../scripts/integrations/verify.mts";
 import { ROOT, dshPin } from "../../scripts/shared/version.mts";
 

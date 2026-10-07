@@ -17,13 +17,13 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import vm from "node:vm";
 
-import { TOKEN_MAP } from "../../packages/theme/token-map.ts";
-import { compileRules } from "../../packages/theme/adapter.ts";
+import { TOKEN_MAP } from "../../packages/dsh/theme/token-map.ts";
+import { compileRules } from "../../packages/dsh/theme/adapter.ts";
 import { FACE_BACKDROP, VIEW_SEEDS, SEED_TOKEN_KEYS, seedTokensForView, seedsForDshPreference } from "@dshana/ui/seed-tokens.ts";
 import { FACE_VIEWS } from "@dshana/ui/face-role.ts";
 
 const BRIDGE_SRC = readFileSync(
-  new URL("../../packages/theme/assets/theme-bridge.js", import.meta.url),
+  new URL("../../packages/dsh/theme/assets/theme-bridge.js", import.meta.url),
   "utf8",
 );
 const SHELL_SRC = readFileSync(new URL("../../packages/ui/src/app-shell.ts", import.meta.url), "utf8");
@@ -34,7 +34,7 @@ const SIDEBAR_BG = "#202020";
 const HOST_VARS = { "--bg": BG, "--sidebar-bg": SIDEBAR_BG };
 
 /**
- * 跑一次桥脚本，返回它写进 @dshana/theme-dyn 的 CSS 正文与它校准过的明暗状态。
+ * 跑一次桥脚本，返回它写进 @dshana/dsh-theme-dyn 的 CSS 正文与它校准过的明暗状态。
  * @param backdrop 壳页写在 <html> 的 data-dshana-backdrop（null → 不写该属性）
  * @param options  appearance（宿主明暗）/ preference（dsh 侧偏好，默认 system；显式传 null =
  *                 属性尚未被 presenter 投影，即偏好未知）
@@ -117,7 +117,7 @@ function runBridge(backdrop, options) {
   // pack 的 terser 去注释，见 index.ts 与 pack.mjs）。
   const code = BRIDGE_SRC.replaceAll("__DSH_THEME_TOKENS__", JSON.stringify(compileRules(TOKEN_MAP)));
   vm.runInNewContext(code, sandbox);
-  const tag = styleTags.find((el) => el.id === "@dshana/theme-dyn");
+  const tag = styleTags.find((el) => el.id === "@dshana/dsh-theme-dyn");
   // 这几格用 getter：观察者回调会再写一次，快照式取值会把断言变成空转（读到的是跑桥那一刻的值）。
   return {
     get css() { return tag ? tag.textContent : ""; },

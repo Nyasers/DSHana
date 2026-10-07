@@ -1,0 +1,21 @@
+{
+  "name": "@dshana/dsh-clipboard",
+  "version": "1.0.0+dsh-0.2.0-rc.2",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "cordis": {
+    "name": "@dshana/dsh-clipboard"
+  }
+}

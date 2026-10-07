@@ -149,5 +149,5 @@ export function pruneExcluded(nodeModulesDir: string, names: string[] = excluded
 
 /** 交付树里必须出现的包（fail-closed 断言的正面清单）。 */
 export function requiredPackages(): string[] {
-  return ["@deepseek-ai/dsh-base", "@dshana/dsh-app", "@dshana/provider", "@dshana/theme", "@dshana/clipboard"];
+  return ["@deepseek-ai/dsh-base", "@dshana/dsh-app", "@dshana/dsh-provider", "@dshana/dsh-session", "@dshana/dsh-theme", "@dshana/dsh-clipboard"];
 }

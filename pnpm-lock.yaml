@@ -306,29 +306,32 @@ importers:
 
   packages/app:
     dependencies:
-      '@dshana/clipboard':
+      '@dshana/dsh-clipboard':
         specifier: workspace:*
-        version: link:../clipboard
+        version: link:../dsh/clipboard
+      '@dshana/dsh-provider':
+        specifier: workspace:*
+        version: link:../dsh/provider
+      '@dshana/dsh-session':
+        specifier: workspace:*
+        version: link:../dsh/session
+      '@dshana/dsh-theme':
+        specifier: workspace:*
+        version: link:../dsh/theme
       '@dshana/models':
         specifier: workspace:*
         version: link:../models
-      '@dshana/provider':
-        specifier: workspace:*
-        version: link:../provider
       '@dshana/runtime':
         specifier: workspace:*
         version: link:../runtime
       '@dshana/shared':
         specifier: workspace:*
         version: link:../shared
-      '@dshana/theme':
-        specifier: workspace:*
-        version: link:../theme
       '@dshana/tools':
         specifier: workspace:*
         version: link:../tools
 
-  packages/bundle/dsh-app:
+  packages/dsh/app:
     dependencies:
       '@deepseek-ai/cordis':
         specifier: ~4.0.4
@@ -690,15 +693,18 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: ~3.18.4
         version: 3.18.4
-      '@dshana/clipboard':
+      '@dshana/dsh-clipboard':
         specifier: workspace:*
-        version: link:../../clipboard
-      '@dshana/provider':
+        version: link:../clipboard
+      '@dshana/dsh-provider':
         specifier: workspace:*
-        version: link:../../provider
-      '@dshana/theme':
+        version: link:../provider
+      '@dshana/dsh-session':
         specifier: workspace:*
-        version: link:../../theme
+        version: link:../session
+      '@dshana/dsh-theme':
+        specifier: workspace:*
+        version: link:../theme
       commander:
         specifier: ^15.0.0
         version: 15.0.0
@@ -706,7 +712,13 @@ importers:
         specifier: ^11.0.0
         version: 11.0.4
 
-  packages/clipboard: {}
+  packages/dsh/clipboard: {}
+
+  packages/dsh/provider: {}
+
+  packages/dsh/session: {}
+
+  packages/dsh/theme: {}
 
   packages/host:
     dependencies:
@@ -725,8 +737,6 @@ importers:
       '@dshana/shared':
         specifier: workspace:*
         version: link:../shared
-
-  packages/provider: {}
 
   packages/runtime:
     dependencies:
@@ -747,8 +757,6 @@ importers:
         version: link:../shared
 
   packages/shared: {}
-
-  packages/theme: {}
 
   packages/tools:
     dependencies:

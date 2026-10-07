@@ -177,7 +177,7 @@ function makeShutdown(state, exitCodeLog) {
       state.bridge = null;
     }
     try {
-      // @dshana/provider 等子插件经该句柄取 hana client（见本文件上方子插件钩子说明）
+      // @dshana/dsh-provider 等子插件经该句柄取 hana client（见本文件上方子插件钩子说明）
       if (globalThis.__dshanaHana === hana) globalThis.__dshanaHana = null;
     } catch { /* 忽略 */ }
     try {
@@ -204,13 +204,13 @@ function makeShutdown(state, exitCodeLog) {
 }
 
 /**
- * 产物在位检查（fail-closed）：三个 @dshana 子插件与组合层包（@dshana/dsh-app）都得在。
+ * 产物在位检查（fail-closed）：四个 @dshana/dsh-* 子插件与组合层包（@dshana/dsh-app）都得在。
  * 缺了就在这里报清楚，而不是等 DSH 自己把「bundle/插件找不到」抛上来。
  * @returns 缺失项（空数组 = 齐备）。
  */
 function missingArtifacts(depsRoot: string): string[] {
   const missing: string[] = [];
-  for (const name of ["provider", "theme", "clipboard"]) {
+  for (const name of ["dsh-provider", "dsh-session", "dsh-theme", "dsh-clipboard"]) {
     const dir = join(depsRoot, "@dshana", name);
     if (!existsSync(join(dir, "index.js"))) missing.push(dir);
   }
@@ -362,7 +362,7 @@ export async function main(argv: string[]): Promise<number> {
   state.hana = hana;
   // 受管子进程内子插件经该句柄调用宿主
   // tasks/models/network（connectAppRuntime 的 client 对象；与插件同进程，globalThis
-  // 共享——provider adapter 重建见 packages/provider/index.ts v2）。关闭顺序：
+  // 共享——provider adapter 重建见 packages/dsh/provider/index.ts v2）。关闭顺序：
   // 先停 task-bridge/流，再 ctx dispose，最后 hana.close()（流纪律）。
   try {
     globalThis.__dshanaHana = hana;

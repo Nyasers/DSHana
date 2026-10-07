@@ -4,7 +4,7 @@
 // packages/models/src/host-models.ts — 宿主模型目录（ctx.models.list）的归一化与查询
 //
 // 宿主目录是「这条路走不走得通」的唯一事实源：受管 runtime 里的 provider 路由由
-// @dshana/provider 按它注册，目录里没有的 provider/model 选下去只会在提交时报
+// @dshana/dsh-provider 按它注册，目录里没有的 provider/model 选下去只会在提交时报
 // model-unavailable。所以凡是要判断「这个模型能不能用」的地方（默认模型对账、按调用方角色卡
 // 补会话模型）都读这一份。
 //

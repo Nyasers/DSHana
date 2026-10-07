@@ -14,7 +14,7 @@
 //                                             排第一，因为它改的是后面几个任务的源）
 //   manifest     主 package.json#version + SDK 快照 packedVersion → manifest.json（仓库根；宿主读的 App 契约）
 //   cordis       主 package.json#version         → packages/{clipboard,provider,theme}/package.json（profile loader 读的包）
-//   bundle       主 package.json#version         → packages/bundle/dsh-app/package.json（组合层包）
+//   bundle       主 package.json#version         → packages/dsh/app/package.json（组合层包）
 //   thirdparty   vendor/hana-app-sdk 的 manifest → THIRD_PARTY_NOTICES.md（分发合规）
 //   paths        镜像包清单                       → integrations/tsconfig.paths.json（编辑器）
 //   vendor       packages/host 声明的 dsh 版本     → vendor/deepseek-harness 的 checkout（状态型）
@@ -118,12 +118,12 @@ const cordisTask: FileTask = {
   plan: () => versionFiles(cordisPkgPaths()),
 };
 
-/** 任务：bundle —— 主版本 → 组合层包（packages/bundle/dsh-app，随包发布、无独立版本线）。
+/** 任务：bundle —— 主版本 → 组合层包（packages/dsh/app，随包发布、无独立版本线）。
  * 它的版本会被 pack 的 assertBundleArtifacts 拿主版本对拍：漏同步这里，出包当场拒。 */
 const bundleTask: FileTask = {
   kind: "file",
   name: "bundle",
-  about: "package.json#version → packages/bundle/dsh-app/package.json",
+  about: "package.json#version → packages/dsh/app/package.json",
   plan: () => versionFiles(bundlePkgPaths()),
 };
 

@@ -6,7 +6,7 @@
 // 为什么要替掉它：
 //   · 上游 base 的 roster 带两行遥测（`otel` / `session-telemetry-otel`），default mode=FEEDBACK_ONLY、
 //     OTLP 端点默认指向 https://dsh-otel-collector.deepseeksvc.com/v1/logs。我们是本地单用户应用，
-//     不往外送任何东西，所以那两行在组合层按 id 关掉了（packages/bundle/dsh-app/cordis.patch.yml）。
+//     不往外送任何东西，所以那两行在组合层按 id 关掉了（packages/dsh/app/cordis.patch.yml）。
 //   · 而 `dsh-otel` 是整棵依赖树里 `got → cacheable-request → http-cache-semantics` 的**唯一入口**
 //     （`pnpm why got`：只有一个依赖者），带一条 high 级 advisory（GHSA-ch52-4w7c-c8xp），且上游
 //     还没发补丁版（registry 上最新就是 4.2.0）。既然它的唯一消费者是那两行已关的 roster，

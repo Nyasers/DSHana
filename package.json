@@ -12,7 +12,7 @@
     "build:ui": "node packages/ui/src/build.ts",
     "build:app": "node packages/app/src/build.ts",
     "build:cordis": "node packages/app/src/cordis.ts",
-    "build:bundle": "node packages/bundle/dsh-app/build.ts",
+    "build:bundle": "node packages/dsh/app/build.ts",
     "build:integrations": "node scripts/integrations/index.mts build",
     "verify:integrations": "node scripts/integrations/index.mts verify",
     "verify:bundle": "node scripts/check/bundle.mts",

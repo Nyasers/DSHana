@@ -19,7 +19,7 @@
 //   · 句柄解析 / 取消标记 / 终态判定走 fresh 读（一次会话/任务一跳），宁可多一跳也不吃陈旧值。
 //
 // 进程内还有一处跨 bundle 的交付：受管 runtime 把同一个索引挂到
-// globalThis[TASK_BINDING_GLOBAL_KEY]，供 cordis 子插件 @dshana/provider 的身份判定读取
+// globalThis[TASK_BINDING_GLOBAL_KEY]，供 cordis 子插件 @dshana/dsh-provider 的身份判定读取
 // （两个 bundle 同进程但不能互相 import——与 __dshanaHana / __dshanaActiveModelRequests
 // 同款约定；键名字面在 provider 侧复制为 TASK_BINDING_GLOBAL_KEY）。
 //
@@ -293,7 +293,7 @@ export function createTaskBindingIndex(tasks: any, { ttlMs = TASK_BINDING_TTL_MS
 }
 
 /**
- * 把索引暴露到 globalThis（受管 runtime 在挂桥时调用），供 cordis 子插件 @dshana/provider
+ * 把索引暴露到 globalThis（受管 runtime 在挂桥时调用），供 cordis 子插件 @dshana/dsh-provider
  * 的身份判定读取。返回 dispose（卸载时清掉——只清自己挂的那一个）。
  */
 export function publishTaskBindingIndex(index: TaskBindingIndex): () => void {

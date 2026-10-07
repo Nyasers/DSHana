@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// scripts/check/bundle.mts — 组合层包（packages/bundle/dsh-app）的两道闸。
+// scripts/check/bundle.mts — 组合层包（packages/dsh/app）的两道闸。
 //
 // 为什么需要它们：本包是从上游 @deepseek-ai/dsh-web-app 派生的一份**组合文档 + 粘合插件**，
 // 它替上游那一层。于是有两类静默漂移没人拦：
@@ -35,7 +35,7 @@ import { listMirrorFiles, mirrorHasTag, readUpstreamFromMirror } from "../integr
 import { sha256 } from "../integrations/verify.mts";
 
 /** 本包在仓内的位置（组合文档、presets、粘合源码与 provenance 都在这里）。 */
-export const BUNDLE_PKG_REL = "packages/bundle/dsh-app";
+export const BUNDLE_PKG_REL = "packages/dsh/app";
 
 /** 上游两层 patch（id 反查表与"行落点"的来源）。 */
 const UPSTREAM_PATCH_DIRS = ["packages/bundle/base", "packages/bundle/web-app"];
