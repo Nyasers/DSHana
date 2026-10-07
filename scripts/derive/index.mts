@@ -13,7 +13,7 @@
 //   version-metadata packages/host 声明的 dsh 依赖 → package.json#version 的 +dsh- 段（状态型；
 //                                             排第一，因为它改的是后面几个任务的源）
 //   manifest     主 package.json#version + SDK 快照 packedVersion → manifest.json（仓库根；宿主读的 App 契约）
-//   cordis       主 package.json#version         → packages/{clipboard,provider,theme}/package.json（profile loader 读的包）
+//   cordis       主 package.json#version         → packages/dsh/*/package.json（profile loader 读的包）
 //   bundle       主 package.json#version         → packages/dsh/app/package.json（组合层包）
 //   thirdparty   vendor/hana-app-sdk 的 manifest → THIRD_PARTY_NOTICES.md（分发合规）
 //   paths        镜像包清单                       → integrations/tsconfig.paths.json（编辑器）
@@ -114,7 +114,7 @@ const manifestTask: FileTask = {
 const cordisTask: FileTask = {
   kind: "file",
   name: "cordis",
-  about: "package.json#version → packages/{clipboard,provider,theme}/package.json",
+  about: "package.json#version → packages/dsh/*/package.json",
   plan: () => versionFiles(cordisPkgPaths()),
 };
 

@@ -12,9 +12,9 @@
 //                                              catch { return false } }
 //       …document.execCommand('copy') 兜底**只在 writeText 不存在时**才走
 //     也就是「原生一失败就直接 false，没有第二条路」——所以影子必须在属性被读到之前就位。
-//   · DSH 的 client 插件（@dshana/dsh-clipboard 的 client 半）是 boot manifest 里按需激活的
-//     （dsh-client-modules 把每条声明成 { id, inject, immediately }，只有 immediately 才在启动
-//     时就激活），装得晚且不保证被激活；壳页在注入 DSH 之前装，才是真正的「全局 + 最早」。
+//   · 壳页这一层在注入 DSH 之前就装，是真正的「全局 + 最早」；DSH 侧的 client 插件走 boot
+//     manifest 按需激活（dsh-client-modules 把每条声明成 { id, inject, immediately }），
+//     装得晚且不保证被激活，不能指望它兜底。
 //
 // 顺序：**桥优先**（__DSHANA__.clipboardWrite → 宿主能力 app/ui/clipboard-write）。理由：嵌入
 // 场景里原生必然先失败，若「先试原生」每次复制都要先撞一次已经关死的门（控制台刷 violation）

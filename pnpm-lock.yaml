@@ -306,9 +306,6 @@ importers:
 
   packages/app:
     dependencies:
-      '@dshana/dsh-clipboard':
-        specifier: workspace:*
-        version: link:../dsh/clipboard
       '@dshana/dsh-provider':
         specifier: workspace:*
         version: link:../dsh/provider
@@ -693,9 +690,6 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: ~3.18.4
         version: 3.18.4
-      '@dshana/dsh-clipboard':
-        specifier: workspace:*
-        version: link:../clipboard
       '@dshana/dsh-provider':
         specifier: workspace:*
         version: link:../provider
@@ -711,8 +705,6 @@ importers:
       open:
         specifier: ^11.0.0
         version: 11.0.4
-
-  packages/dsh/clipboard: {}
 
   packages/dsh/provider: {}
 

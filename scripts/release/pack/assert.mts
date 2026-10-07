@@ -7,6 +7,8 @@
 import fs from "fs-extra";
 import { join } from "node:path";
 
+import { cordisPkgDirs, cordisPkgName } from "../../shared/version.mts";
+
 /**
  * 交付树不得出现 package.json（fail-closed）。
  * App 入口是 index.mjs，Node 按扩展名就判 ESM，安装树不需要「最近一份 package.json 的 type」，
@@ -24,8 +26,7 @@ export function assertNoProductPackage(outDir) {
 }
 
 /**
- * cordis 子插件的产物断言（防回归，与 manifest 校验对称）：子插件（dsh-provider / dsh-theme /
- * dsh-clipboard / dsh-session）
+ * cordis 子插件的产物断言（防回归，与 manifest 校验对称）：子插件清单派生自包现场
  * version 与主 package.json 同批由 derive/version（pnpm version 发版流程）同步，pack 时读产物校验
  * 一致——手改/漏同步即出包版本漂移。
  * @param cordisDir 子插件产物目录（.cache/cordis）
@@ -38,9 +39,9 @@ export function assertCordisArtifacts(cordisDir, version) {
   }
   // 完整性：子插件全部存在且 package.json 版本一致——缺失/部分产物（含 count=0）
   // 一律拒包，防 build 失败后残留部分产物被误打包。
-  const required = [
-    "dsh-clipboard", "dsh-provider", "dsh-session", "dsh-theme",
-  ];
+  // 名单派生自包现场（packages/dsh/*/cordis.config.mjs），不在这里再写一份：加一个子插件就自动
+  // 纳入，下线一个也不会留一条永远失败的断言。
+  const required = cordisPkgDirs().map((rel) => cordisPkgName(rel));
   let count = 0;
   for (const name of required) {
     const pj = join(cordisDir, name, "package.json");

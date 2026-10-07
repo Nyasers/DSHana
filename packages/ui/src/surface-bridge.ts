@@ -436,7 +436,7 @@ export function clipboardWrite(text: string): Promise<boolean> {
 //   具名面保留按名的包装，内部坐上面三件：
 //     会话选中 → integrations/ui-session；主面板选中 → ui-sidebar（FP 发射）与 ui-layout（主卡落地）；
 //   会话坐标 → ui-session 的只读面（readPinnedSession）；
-//   剪贴板 → @dshana/dsh-clipboard 的 client 半（同文档，直接调，无消息协议）。
+//   剪贴板 → 壳页的 clipboardWrite（宿主能力 clipboard.writeText；DSH 侧那个 client 半已下线）。
 export const SURFACE_API = {
   // 通用面（七个 kind 都走这三件：指名投递 / 读当前值 / 登记落地）
   publishIntent,
