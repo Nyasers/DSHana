@@ -284,7 +284,15 @@ export function apply(ctx: Context): void {
   const browserInjected = (): WorkspaceBrowserInjected => ({
     // Explicit group actions keep their target; unscoped New Session inherits
     // the current Session Workspace before the recent-Workspace fallback.
-    startSession: (workspaceId) => { uiWorkspace.startSession(workspaceId) },
+    // 没有工作区时上游会走 clearMain：清掉主视图占用、把 dsh.sessions.current 写成空，界面回到
+    // 「选工作台」那屏。这一步要显式宣告：空选中不是一次通常的选中变化，另一面（主卡）靠它才会
+    // 跟着回初始页。本地存储那条路也走，但值没变时不派发 storage 事件，不能只靠它。
+    startSession: (workspaceId) => {
+      uiWorkspace.startSession(workspaceId)
+      if (workspaceId === undefined && workspaces.list.getSnapshot().items.length === 0) {
+        emitIntent('selection', { sessionId: null })
+      }
+    },
     open: openSession,
     searchSessions,
     searchResultLimit: sessions.searchResultLimit,
