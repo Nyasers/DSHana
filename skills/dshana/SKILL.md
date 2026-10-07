@@ -36,6 +36,18 @@ DSHana wires DeepSeek Harness (DSH) into Hana as a **managed sub-agent executor*
 - **Data directory**: fixed to an App-private directory (`.dsh` under the App data directory), ready out of the box; sharing an existing directory or switching data sources is not offered.
 - Every `dshana(action="open")` call **must pass `cwd` explicitly**, and it must be an **existing absolute directory** (validated before submission, in two stages: relative paths are rejected outright on the App side; "exists / is a directory" is decided by the managed runtime's control-plane action `cwd-check` — the App host half's `node:fs` only covers the App's own directory, and using it to stat a user path would always fail, indistinguishably from "the directory does not exist"). Once a session is created the cwd is the recorded value, and every later spawn (commands, terminal) starts from it — do not use a throwaway scratch directory as a session root. This existence check is **best effort**: if the control-plane query itself fails it only logs and lets the call through (a single control-plane wobble must not reject a valid cwd); in that case an invalid cwd reaches session creation, where the provider-level working-directory guard catches it at spawn time.
 
+## Updating DSHana
+
+Updating means **installing a new App package and reloading the App**; there is no separate upgrade channel. The DSH version is fixed by the dependency the App declares (`@deepseek-ai/dsh`) and shows up in the artifact's version segment.
+
+1. **Pick the package for this machine.** A release carries one `.zip` per target (`dshana-v<version>-<target>.zip`) plus `dshana-v<version>.zip` for universal. Take the platform one, which is far smaller: it carries only that machine's dependency tree. The full target table and the exact commands live in `dshana-install-skill/SKILL.md` in the repository — that manual is deliberately not shipped inside the package, so read it from the repo.
+2. **Verify against the release's own metadata.** GitHub reports each asset's `size` and `sha256` `digest`; compare both before installing. Nothing else publishes those values for the platform packages.
+3. **Uninstall the old version first.** Over-installing the same id is not supported, so the uninstall call (`DELETE <host>/api/extensions/app:dshana`) comes before the install submission.
+4. **Install and reload.** Submit the package, confirm the staged install, then reload the App so the server entry is re-imported and tools and routes are re-registered. The managed runtime restarts through the automatic chain; no host restart is needed.
+5. **Re-check readiness.** Poll the App's boot-state route until `state.phase === "ready"` and `state.ready === true`. A first start after an install takes a while.
+
+One caveat that bites after any update: **already-established sessions** hold the tool objects resolved when their session state was last rebuilt, so continuing to call tools in such a session needs a **context compaction** (or a new session) — the tool surface is re-resolved against the host's current registry.
+
 ## DSHana card: the three states
 
 The shell page polls `GET /api/apps/dshana/routes/dshana/boot-state` and renders by `phase`:
@@ -170,7 +182,6 @@ Host colours are followed only while the DSH theme preference is **system** (inj
 
 ## Known limitations
 
-- **Upgrading DSH = installing a new App package + reloading the App**: the DSH version is decided by the dependency the App declares (`@deepseek-ai/dsh`) and is carried in the artifact's version segment; there is no separate upgrade channel. A reload re-imports the server entry and re-registers tools and routes, and the managed runtime restarts through the automatic chain (no host restart needed — DSH runs in a managed subprocess, so the host process holds no module cache for it). One caveat: **already-established sessions** hold a copy of the tool objects resolved when their session state was last rebuilt, so continuing to call tools in such a session after a reload requires **compacting the context** (or starting a new session) — the tool surface is re-resolved against the host's current registry.
 - **The shell page has no "start / restart DSH" entry**: the surface only reports state. Bringing it up is the job of the automatic chain after `apply`, the tool's first call, and the extra request issued when the card page is opened; failures retry with backoff (starting at 5s, capped at 5min). A real restart means uninstall+reinstall, reloading the App or restarting the host.
 - **Detaching a window, pinning it back, or switching pages never stops DSH in the background**: only uninstalling/reloading the App or quitting Hana makes the host collect the managed runtime.
 - **The data source is fixed to an App-private directory** (`<dataDir>/.dsh`, i.e. `DSH_HOME` in this form); the user's home `~/.dsh` is not touched, and sharing an existing DSH directory / switching data sources is not enabled (`POST /dshana/settings/restart` answers 503).
