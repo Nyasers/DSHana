@@ -1,0 +1,30 @@
+{
+  "package": "@deepseek-ai/dsh-host-open-in-app",
+  "upstreamVersion": "0.2.0-rc.2",
+  "upstreamDir": "packages/host/open-in-app",
+  "halves": {
+    "client": false,
+    "server": {
+      "entry": "src/index.ts",
+      "out": "lib/index.js"
+    }
+  },
+  "files": [
+    {
+      "path": "src/catalog.ts",
+      "upstreamSha256": "7e41fce50d05350fd33c165197157d71920d490026ab26d2df06523133172cfa"
+    }
+  ],
+  "notes": [
+    "目录那侧的预置启动器里，编辑器 / IDE / Git GUI 全部去掉，只留文件管理器与终端（12 项）。",
+    "它们会把工作区状态与索引写进 `~`，而受管运行时把 `~` 换成了宿主分配的 `.runtime-tmp`；",
+    "文件管理器只把目录交给系统的 open verb（`shell-open`，不起进程），终端只开一个壳。",
+    "与 api-session-controller 那个集成配套：那边把 `workspacePathApplications` 改成返回空表，",
+    "于是文件控件的「打开方式」列表也空了。两处一起做，路径选择这件事才只剩「显示文件位置」",
+    "（client 硬编码的 footer 项）与目录侧的启动器，不再有会把数据写进受管工位的应用。",
+    "不用注释：server 半的 preset 是 minimize: false（对齐上游未压缩产物），注释会连里面的",
+    "代码一起原样进产物，字节一个不省。要恢复某一项时从 vendor 镜像取回原文补进表。",
+    "server 半边（halves.client=false）：host 包没有 client 产物，entry 走上游 src/index.ts，",
+    "重打入口后 catalog 随依赖一起进 lib/index.js。"
+  ]
+}
