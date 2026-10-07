@@ -11,6 +11,10 @@
   },
   "files": [
     {
+      "path": "src/index.ts",
+      "upstreamSha256": "e66d55e979936a49a942cc68adc126a31c8ae59f7032596060721a6bf03338fc"
+    },
+    {
       "path": "src/types.ts",
       "upstreamSha256": "10e8460f23f897b6d65b6ce979e26d56e386589201e063bdb076b7a9b5322cf2"
     },
@@ -29,6 +33,11 @@
     }
   ],
   "notes": [
+    "本形态不端出 OS 关联的「打开方式」：workspacePathApplications 恒返回空表。那样应用会把",
+    "工作区状态与索引写进 ~，而受管运行时把 ~ 换成了宿主分配的 .runtime-tmp。空表的效果：",
+    "文件控件只留「显示文件位置」（OpenTargetButton 的 footer 项，client 硬编码，不经过本接口），",
+    "而目录控件走的是 catalog（另一条路），不受影响。",
+    "openWorkspacePath（reveal 与显式打开走它）不动。",
     "批次：调用方自带的模型选择（「模型随请求走」，不落 settings.yaml）。",
     "缝选在这里：session/create 与 session/prompt 的请求多一个可选 model，服务端按会话就地装上；",
     "这是唯一一条「模型配置跟着请求走」的入口（唯一收模型的选择 API session/selectModel 会顺带",

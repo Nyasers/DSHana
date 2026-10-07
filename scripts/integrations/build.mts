@@ -146,9 +146,22 @@ export function patchGeneratedRequestModel(text, schemaNames, label = "生成物
   return out;
 }
 
-/** 包名 → 本机依赖树里的原版包目录（模板与 externals 来源）。 */
+/**
+ * 包名 → 本机依赖树里的原版包目录（模板与 externals 来源）。
+ *
+ * 先看 .pnpm/node_modules：pnpm 把**非直接依赖**提升进那里；直接依赖留在顶层 node_modules/，
+ * 而覆盖层的包往往正是直接依赖（要有它的类型与产物就得自己声明）。顶层链接在 Windows 长
+ * 路径下可能是 dangling，所以不拼路径，交给 Node 的解析拿实际位置。解不到时返回原路径，
+ * 让调用方报出与从前一致的缺失信息。
+ */
 export function templatePackageDir(pkgName, repoRoot = REPO_ROOT) {
-  return join(repoRoot, "node_modules", ".pnpm", "node_modules", pkgName);
+  const hoisted = join(repoRoot, "node_modules", ".pnpm", "node_modules", pkgName);
+  if (existsSync(hoisted)) return hoisted;
+  try {
+    return dirname(createRequire(join(repoRoot, "package.json")).resolve(`${pkgName}/package.json`));
+  } catch {
+    return hoisted;
+  }
 }
 
 /**
