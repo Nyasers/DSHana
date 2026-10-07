@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/cordis/theme-tokens.test.mjs — 适配规则表（packages/theme/token-map.ts）与编译
-// （packages/theme/adapter.ts）的形状单测。
+// tests/cordis/theme-tokens.test.mjs — 适配规则表（packages/dsh/theme/token-map.ts）与编译
+// （packages/dsh/theme/adapter.ts）的形状单测。
 //
 // 这张表是主题跟随的唯一数据面：服务端把规则编译成 [token, cssValue, hostVars] 三元组，
 // 随桥脚本下发，浏览器侧逐条写成 body{--dsw-*: <cssValue>!important}。改错一个 token 名、
@@ -15,8 +15,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { TOKEN_MAP, PASSTHROUGH } from "../../packages/theme/token-map.ts";
-import { compileRules, compileTarget, targetHostVars } from "../../packages/theme/adapter.ts";
+import { TOKEN_MAP, PASSTHROUGH } from "../../packages/dsh/theme/token-map.ts";
+import { compileRules, compileTarget, targetHostVars } from "../../packages/dsh/theme/adapter.ts";
 import { FACE_VIEWS } from "@dshana/ui/face-role.ts";
 import { VIEW_SEEDS, FACE_BACKDROP, seedTokensForView } from "@dshana/ui/seed-tokens.ts";
 

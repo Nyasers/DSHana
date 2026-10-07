@@ -15,24 +15,47 @@ import { ROOT } from "./root.mts";
 export { ROOT };
 
 // cordis 子插件包目录清单（相对 ROOT；随包发布、随主版本同步，不独立发版）。
-// 判据是包内有自持构建描述 cordis.config.mjs，而依赖方向由包图声明：@dshana/app 必须把这几个
-// 包写进自己的 dependencies（spec §2 的 app → clipboard / provider / theme 那条边），漏声明
-// 直接抛——否则它会被静默漏构建。组合层包（packages/bundle/dsh-app）不走这个判据（它的形态是
-// bundle 而不是子插件），版本同步另见 bundlePkgPaths()。
+// 位置先划一半：packages/dsh/ 下住的是 **DSH 侧的包**（宿侧源码域住在 packages/ 的其余目录），
+// 形态再由包自己那份描述文件说：子插件（一行）带 cordis.config.mjs，组合层（一层）带 dsh.bundle。
+// 两者都不是的目录直接抛（位置给了归属，描述给不出形态就是放错了）。子插件另要依赖方向成立：
+// @dshana/app 必须把这几个 **包名** 写进自己的 dependencies（spec §2 的 app → 子插件那条边），
+// 静默漏构建。组合层包（packages/dsh/app）不经这里构建，版本同步另见 bundlePkgPaths()。
 export function cordisPkgDirs() {
   const declared = new Set(Object.keys(readPkg("packages/app/package.json")?.dependencies ?? {}));
   const dirs: string[] = [];
-  const packagesDir = path.join(ROOT, "packages");
-  for (const name of fs.readdirSync(packagesDir)) {
-    const dir = `packages/${name}`;
-    if (!fs.existsSync(path.join(ROOT, dir, "cordis.config.mjs"))) continue;
-    if (!declared.has(`@dshana/${name}`)) {
-      throw new Error(`${dir} 是 cordis 子插件，但 packages/app/package.json 未声明 @dshana/${name}`);
+  for (const entry of fs.readdirSync(path.join(ROOT, "packages", "dsh"), { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const dir = `packages/dsh/${entry.name}`;
+    const isPlugin = fs.existsSync(path.join(ROOT, dir, "cordis.config.mjs"));
+    if (!isPlugin) {
+      if (readPkg(`${dir}/package.json`)?.dsh?.bundle) continue; // 组合层：形态是 bundle，不经这里构建
+      throw new Error(`${dir} 在 packages/dsh/ 下，但既不是子插件（缺 cordis.config.mjs）也不是组合层（缺 dsh.bundle）`);
+    }
+    const name = cordisPkgFullName(dir);
+    if (!declared.has(name)) {
+      throw new Error(`${dir} 是 cordis 子插件（${name}），但 packages/app/package.json 未声明它`);
     }
     dirs.push(dir);
   }
-  if (dirs.length === 0) throw new Error("没找到 cordis 子插件包（判据：packages/*/cordis.config.mjs）");
+  if (dirs.length === 0) throw new Error("没找到 cordis 子插件包（判据：packages/dsh/*/cordis.config.mjs）");
   return dirs.sort();
+}
+
+/**
+ * 子插件包名（@dshana/dsh-provider）：取自它自己的 package.json，形状必须是 @dshana/dsh-*。
+ * 交付树里的目录名取 cordisPkgName()（去 scope 的那段）：DSH 按**包名**解析安装树，两者必须对得上。
+ */
+export function cordisPkgFullName(dir: string) {
+  const name = readPkg(`${dir}/package.json`)?.name;
+  if (typeof name !== "string" || !/^@dshana\/dsh-[a-z0-9-]+$/.test(name)) {
+    throw new Error(`${dir}/package.json 的 name 不是 @dshana/dsh-* 包名：${name}`);
+  }
+  return name;
+}
+
+/** 子插件在 .cache/cordis 与安装树里的目录名（包名去 scope：@dshana/dsh-provider → dsh-provider）。 */
+export function cordisPkgName(dir: string) {
+  return cordisPkgFullName(dir).slice("@dshana/".length);
 }
 
 /** 上面那批包各自的 package.json（版本同步的写回目标）。 */
@@ -40,10 +63,10 @@ export function cordisPkgPaths() {
   return cordisPkgDirs().map((dir) => `${dir}/package.json`);
 }
 
-// 组合层包（packages/bundle/dsh-app）：它不是 cordis 子插件（没有自持构建描述、也不进 .cache/cordis），
+// 组合层包（packages/dsh/app）：它不是 cordis 子插件（没有自持构建描述、也不进 .cache/cordis），
 // 但同样是随包发布、随主版本同步的包，所以版本写回单列一条——漏了它不会报错，只会静默落后一版。
 export function bundlePkgPaths() {
-  return ["packages/bundle/dsh-app/package.json"];
+  return ["packages/dsh/app/package.json"];
 }
 
 // 派生同步目标（随主版本同步的文件）：manifest.json（仓库根，App 契约）+ cordis 包 + 组合层包
@@ -111,7 +134,7 @@ export function dshPin() {
  * 两者都剔除 workspace 在仓项。
  *
  * 为什么是并集：树 = **内核闭包 ∪ 组合层闭包**。内核（@deepseek-ai/dsh）的闭包给 boot 机制
- * 与共享底座；组合层包（packages/bundle/dsh-app）的依赖才是那 121 个表层插件包——它们以前是
+ * 与共享底座；组合层包（packages/dsh/app）的依赖才是那 121 个表层插件包——它们以前是
  * 随官方 web-app 自己进来的（官方那份声明了同样一批），现在那一层归我们，就得由这里说。
  * 同名依赖必须同规格（通常是内核 pin 的版本），不同就当场拒——两个写手写同一个事实是漏的温床。
  * 仓内包（@dshana/*）在构建期被 rspack 内联进各自 bundle，安装树里没有对应物，也解析不了
@@ -124,7 +147,7 @@ export function shipDependencies() {
     if (typeof spec === "string" && spec.startsWith("workspace:")) continue;
     out[name] = spec as string;
   }
-  const bundlePkg = readPkg("packages/bundle/dsh-app/package.json");
+  const bundlePkg = readPkg("packages/dsh/app/package.json");
   for (const [name, spec] of Object.entries(bundlePkg?.dependencies ?? {})) {
     if (typeof spec !== "string" || spec.startsWith("workspace:")) continue;
     const existing = out[name];

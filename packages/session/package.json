@@ -1,6 +1,6 @@
 {
   "name": "@dshana/session",
-  "version": "0.0.0",
+  "version": "1.0.0+dsh-0.2.0-rc.2",
   "private": true,
   "description": "会话编排：open/reply 提交链、同会话串行化、取消链、审批应答、任务归属与工具返回契约",
   "license": "MPL-2.0",

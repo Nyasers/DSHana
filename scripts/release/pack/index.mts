@@ -153,13 +153,14 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
   // @dshana 的两个 scope 内容落进安装树的 node_modules（与 @deepseek-ai/* 同锚点）：DSH 的 runtime
   // 解析模式从安装树 + bundle 依赖图算解析代、不建链接，它们因此不能住在安装树外的位置。两者本来
   // 都不在交付面里（产物在 .cache/cordis 与 .cache/bundle），到这一步才按交付布局落进
-  // node_modules/@dshana：三个子插件 + 组合层包（dsh-app，profile 层列里被选中的那一层）。
+  // node_modules/@dshana：子插件 + 组合层包（dsh-app，profile 层列里被选中的那一层）。
   if (!fs.pathExistsSync(CORDIS_DIR)) throw new Error(".cache/cordis 缺失：先跑 pnpm run build 再打包");
   if (!fs.pathExistsSync(BUNDLE_DIR)) throw new Error(".cache/bundle/dsh-app 缺失：先跑 pnpm run build 再打包");
   fs.copySync(CORDIS_DIR, join(pkgDir, "node_modules", "@dshana"), { overwrite: true });
   fs.copySync(BUNDLE_DIR, join(pkgDir, "node_modules", "@dshana", "dsh-app"));
   for (const rel of [
-    join("node_modules", "@dshana", "provider", "index.js"),
+    join("node_modules", "@dshana", "dsh-provider", "index.js"),
+    join("node_modules", "@dshana", "dsh-session", "index.js"),
     join("node_modules", "@dshana", "dsh-app", "lib", "index.js"),
   ]) {
     if (!fs.pathExistsSync(join(pkgDir, rel))) throw new Error(`包内产物缺失：${rel}（拒绝出包）`);
@@ -167,7 +168,7 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
   // 层列要的那两层必须在：缺 base 或少我们的组合层包，boot 都起不来，宁可不打包。
   const absent = requiredPackages().filter((n) => !fs.pathExistsSync(join(pkgDir, "node_modules", n, "package.json")));
   if (absent.length > 0) throw new Error(`产物缺必需的包：${absent.join("、")}（拒绝出包）`);
-  console.log("[pack] @dshana 产物就位（3 子插件 + 组合层包 dsh-app -> node_modules/@dshana），必需包齐备")
+  console.log("[pack] @dshana 产物就位（4 子插件 + 组合层包 dsh-app -> node_modules/@dshana），必需包齐备")
   // 只躺在 node_modules 里不够：DSH 按「安装树 + 被选中 bundle 的依赖图」算解析代，真机上
   // profile 在数据目录里向上解析走不到安装树，得由被选中 bundle 认领才进解析代（见 bundle-deps.mts）。
   declareInstallationPlugins(join(pkgDir, "node_modules"));

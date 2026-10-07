@@ -3,7 +3,7 @@
 //
 // packages/host/src/provider-hooks.ts — 受管 runtime 内「provider 目录重载」钩子的键约定
 //
-// 装钩子的是 @dshana/provider 子插件（cordis 插件 bundle），用钩子的是 dsh-host 入口
+// 装钩子的是 @dshana/dsh-provider 子插件（cordis 插件 bundle），用钩子的是 dsh-host 入口
 // （本 runtime bundle）：两者同进程但不能互相 import（与 lib/model-requests.ts 的
 // MODEL_REQUEST_GLOBAL_KEY、__dshanaHana 同款约定），所以键名在两侧字面一致。
 //

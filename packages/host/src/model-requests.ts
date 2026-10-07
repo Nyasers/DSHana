@@ -7,13 +7,13 @@
 // hana.models.cancel(requestId)；但取消链要求显式
 // models.cancel 兜底——宿主任务 canceled/aborted 反向触发 DSH cancel 时，task-bridge
 // 需要知道「该会话此刻在跑哪些模型流」，才能只停本工作、不误停他人（单例 runtime 多
-// 会话）。requestId 由受管 runtime 内 @dshana/provider adapter 创建/自管，task-bridge
+// 会话）。requestId 由受管 runtime 内 @dshana/dsh-provider adapter 创建/自管，task-bridge
 // 与 provider 是两个 bundle（cordis 插件 vs dsh-host 入口），不能互相 import——
 // 经 globalThis 同进程共享（与 __dshanaHana 同款约定）：
 //
 //   globalThis.__dshanaActiveModelRequests = Map<dshSessionId, Set<requestId>>
 //
-// provider（packages/provider/index.ts）流开始 add、流收尾 delete；本模块是
+// provider（packages/dsh/provider/index.ts）流开始 add、流收尾 delete；本模块是
 // 消费侧读取/定向取消助手（task-bridge 用）。键名在两侧字面一致（见 provider 注释；
 // 若未来双 bundle 共用源码再抽共享模块）。
 export const MODEL_REQUEST_GLOBAL_KEY = "__dshanaActiveModelRequests";

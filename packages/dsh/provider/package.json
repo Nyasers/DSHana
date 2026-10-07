@@ -1,0 +1,10 @@
+{
+  "name": "@dshana/dsh-provider",
+  "version": "1.0.0+dsh-0.2.0-rc.2",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "cordis": {
+    "name": "@dshana/dsh-provider"
+  }
+}

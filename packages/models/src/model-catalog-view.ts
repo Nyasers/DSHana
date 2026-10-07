@@ -11,7 +11,7 @@
 //
 // 推理档：宿主按模型声明 defaultThinkingLevel / xhigh / thinkingLevels / customThinkingLevels，
 // 可用档取它与 off..max 词表的交集；一条都没声明但条目声明了 reasoning 时给保守面 [off, high]
-// （DSH agent 的默认档 high 必须可被接受）。受管 runtime 侧 @dshana/provider 的 lib/catalog.ts
+// （DSH agent 的默认档 high 必须可被接受）。受管 runtime 侧 @dshana/dsh-provider 的 lib/catalog.ts
 // 持有同一套词表与优先序——两份实现分属 App 主进程与 cordis 子插件两个 bundle，不能互相 import。
 
 /** 宿主与 pi-ai 共用的推理档词表（off..max 升序）。 */

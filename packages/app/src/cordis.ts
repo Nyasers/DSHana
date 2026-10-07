@@ -3,19 +3,21 @@
 //
 // packages/app/src/cordis.ts — App 域的 cordis 子插件组装入口
 //
-// 子插件本身是 packages/ 下的包（`@dshana/clipboard` / `@dshana/provider` / `@dshana/theme`，判据：
-// 包内有自持构建描述 `cordis.config.mjs`）；本文件是它们的组装器，归 `@dshana/app`。
-//   .cache/cordis/**：3 子插件（provider / theme / clipboard）：service 半 rspack（源 index.ts →
-//     产物 index.js bundle），theme 与 clipboard 另出 client 半（client.ts → client.js，tsdown
-//     closure-factory）。
+// 子插件本身是 packages/dsh/ 下的包（`@dshana/dsh-clipboard` / `@dshana/dsh-provider` /
+// `@dshana/dsh-session` / `@dshana/dsh-theme`；位置即判据，包里那份自持构建描述
+// `cordis.config.mjs` 是它的构建说明）；本文件是它们的组装器，归 `@dshana/app`。
+//   .cache/cordis/<包名去 scope>：4 子插件（dsh-clipboard / dsh-provider / dsh-session /
+//     dsh-theme）：service 半 rspack（源 index.ts → 产物 index.js bundle），theme 与
+//     clipboard 另出 client 半（client.ts → client.js，tsdown closure-factory）。目录名取**包名**
+//     而不是源码目录名：DSH 按包名从安装树解析，两者必须对得上。
 // 组合（roster 行、对官方行的取值、@dshana/* insert）不在这里：那是组合层包
-// packages/bundle/dsh-app 的 cordis.patch.yml，随包由 profile 的层列选中（层列钉在
+// packages/dsh/app 的 cordis.patch.yml，随包由 profile 的层列选中（层列钉在
 // packages/host/src/main.ts）。
 // node_modules/@dshana/**：把上面那份 scope 照原样再落一份——仓库树扮演「安装树」，
 //   DSH 的 runtime 解析模式从安装树 + bundle 依赖图算解析代、不建链接。出包时 pack 作同样的事。
 // 用法：node packages/app/src/cordis.ts [RSPACK_ENV=<构建环境目录>]
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { basename, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 
 import fs from "fs-extra";
 import { serviceBundle } from "./cordis/service-config.mts"; // preset 层（本目录 cordis/）
@@ -23,7 +25,7 @@ import { buildClientBundle } from "./cordis/client-config.mts";
 import { collectSource, makeUrlRewriter, assertNoStaticFileUrl } from "../../../scripts/build/common.mts"; // scripts/build/ 共享
 // 交付目录常量（dist、.cache/cordis）与 cordis 子插件包清单（本入口以 TypeScript 直跑，依赖原生类型剥离）
 import { CORDIS_DIR, DIST_DIR } from "../../../scripts/shared/paths.mts";
-import { cordisPkgDirs } from "../../../scripts/shared/version.mts";
+import { cordisPkgDirs, cordisPkgFullName, cordisPkgName } from "../../../scripts/shared/version.mts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", ".."); // packages/app/src → 仓库根
 
@@ -59,10 +61,10 @@ function buildCordisStatic(outRoot) {
   fs.removeSync(outRoot);
   fs.ensureDirSync(outRoot);
   const dirs = cordisPkgDirs();
-  if (dirs.length === 0) throw new Error("没找到 cordis 子插件包（判据：packages/*/cordis.config.mjs）");
+  if (dirs.length === 0) throw new Error("没找到 cordis 子插件包（判据：packages/dsh/*/cordis.config.mjs）");
   const pkgNames: string[] = [];
   for (const rel of dirs) {
-    const name = basename(rel);
+    const name = cordisPkgName(rel);
     const pkgSrc = join(ROOT, rel);
     const pkgOut = join(outRoot, name);
     fs.ensureDirSync(pkgOut);
@@ -86,7 +88,7 @@ async function loadCordisPackageConfigs() {
     const cfgPath = join(pkgDir, "cordis.config.mjs");
     if (!fs.pathExistsSync(cfgPath)) throw new Error(`cordis 包缺构建描述：${cfgPath}`);
     const mod = await import(pathToFileURL(cfgPath).href);
-    list.push({ name: basename(rel), pkgDir, cfg: mod.default ?? {} });
+    list.push({ name: cordisPkgName(rel), fullName: cordisPkgFullName(rel), pkgDir, cfg: mod.default ?? {} });
   }
   return list;
 }
@@ -113,10 +115,10 @@ async function buildServiceHalves(packages, outRoot) {
 // client 半（tsdown，有 client 描述字段的包）
 async function buildClientHalves(packages, outRoot) {
   let count = 0;
-  for (const { name, pkgDir, cfg } of packages) {
+  for (const { name, fullName, pkgDir, cfg } of packages) {
     if (!cfg.client) continue;
     await buildClientBundle({
-      id: `@dshana/${name}`,
+      id: fullName,
       pkgDir,
       outDir: join(outRoot, name),
       externals: cfg.client.externals,

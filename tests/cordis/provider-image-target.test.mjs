@@ -16,7 +16,7 @@ import {
   REQUEST_IMAGE_MAX_DIMENSION,
   REQUEST_IMAGE_FALLBACK_WIDTH,
   REQUEST_IMAGE_FALLBACK_HEIGHT,
-} from "../../packages/provider/lib/image-target.ts";
+} from "../../packages/dsh/provider/lib/image-target.ts";
 
 test("requestImageDimensions: 小图不放大", () => {
   assert.deepEqual(requestImageDimensions(100, 50, REQUEST_IMAGE_MAX_PIXELS), { width: 100, height: 50 });

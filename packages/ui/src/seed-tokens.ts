@@ -19,7 +19,7 @@
 //     那么它身后那一层（.frame 的 --dsw-alias-bg-base，DSH 加载屏也在这一层）也得是侧栏色，
 //     否则自举台面已是侧栏色、DSH 一加载又退回中列色，看着像加载时换了一次底。
 //
-// 映射关系必须与 packages/theme/token-map.ts 一致：每面垫的值 = 这一面可见底 token
+// 映射关系必须与 packages/dsh/theme/token-map.ts 一致：每面垫的值 = 这一面可见底 token
 // （FACE_BACKDROP）在映射表里的宿主变量，单测盯着这一点——映射改了而这里没跟，测试直接红。
 // 宿主变量取不到就跳过——不发明用户没选过的颜色。
 

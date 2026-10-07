@@ -1,0 +1,234 @@
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 Nyasers
+//
+// packages/dsh/provider/lib/messages.ts — DSH llm Message[] → hana.models 消息（纯函数）
+//
+// 目标消息形状（迁移核对记录，host models.stream 逐消息校验）：
+//   user      content: string | [{ type:"text", text } | { type:"image", data(base64),
+//             mimeType }]
+//   assistant content: [{ type:"text", text, textSignature? } | { type:"reasoning",
+//             reasoning, signature?, redacted? } | { type:"toolCall", id, name,
+//             arguments: OBJECT, thoughtSignature? }]
+//   toolResult role:"toolResult" { toolCallId, toolName, isError, content: text/image[] }
+// DSH 侧等价（@deepseek-ai/dsh-llm）：
+//   user/assistant Message.content 是 ContentBlock[]（text/reasoning/image/tool-call）；
+//   tool 结果是一条独立的 role:"tool" 消息，带 toolCallId/content/isError
+//   （createToolResultMessage，source.kind === "tool"）；assistant 消息 source.replayState
+//   是我们存的 'hana' 回放信封（每块一个 metadata，见 lib/stream.ts）。
+//   历史兼容：user 消息 content 内的 { type:"tool-result", toolCallId, content, isError }
+//   块同样按工具结果处理。
+// 转换纪律：DSH 文本/推理块原样搬进 hana 内容项；tool-call 的 arguments 是 JSON **字符串**，
+// 需 parse 成对象（失败回落 {}）；工具结果转成独立 toolResult 消息（toolName 从同批
+// 前置 assistant 的 tool-call 反查）；图片块必须已解析为 base64（images 参数），缺失抛错。
+// 零依赖纯函数（node --test 可直接 import）。抛错带 .code 供 adapter 映射 LlmError。
+
+/** 该消息承载工具结果：role:"tool" 消息，或 user 消息 content 内嵌的 tool-result 块。 */
+export function isToolResultMessage(message) {
+  if (!message || !Array.isArray(message.content)) return false;
+  if (message.role === "tool") return true;
+  return message.role === "user" && message.content.some((b) => b && b.type === "tool-result");
+}
+
+/** 预扫描 assistant 消息的 tool-call 块：callId → toolName（toolResult 反查用）。 */
+export function collectToolNames(messages) {
+  const map = new Map<string, string>();
+  for (const m of messages || []) {
+    if (!m || m.role !== "assistant" || !Array.isArray(m.content)) continue;
+    for (const b of m.content) {
+      if (b && b.type === "tool-call" && typeof b.id === "string" && b.id) {
+        map.set(b.id, typeof b.name === "string" ? b.name : "");
+      }
+    }
+  }
+  return map;
+}
+
+function parseArgumentsJson(raw) {
+  if (raw === undefined || raw === null) return {};
+  if (typeof raw === "object") return raw;
+  try {
+    const v = JSON.parse(String(raw));
+    return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * assistant 消息 → hana assistant content 项（含回放签名）。
+ * @param {object} message DSH assistant Message
+ * @returns {Array} hana assistant content 项
+ */
+export function assistantToHanaContent(message) {
+  const blocks = Array.isArray(message && message.content) ? message.content : [];
+  const replay =
+    message &&
+    message.source &&
+    message.source.replayState &&
+    typeof message.source.replayState === "object" &&
+    message.source.replayState.kind === "hana"
+      ? message.source.replayState
+      : null;
+  // 块数一致才采用签名：replay.blocks 与 content 按下标对齐，长度不等时按下标取值会把
+  // 签名挂到别的块上。宿主 assembler 对自身剪枝已保证等长、否则整体丢弃 replayState
+  // （dsh-llm assembler.assembled()），但落盘消息仍可能不等（例如中断提交以
+  // interruptedBlocks() 裁掉 tool-call 却保留完整 replayState），故此处按同一口径整体
+  // 丢弃。只对齐长度，不逐块校验类型，与改动前一致。
+  const metaBlocks =
+    replay && Array.isArray(replay.blocks) && replay.blocks.length === blocks.length ? replay.blocks : null;
+  const out: any[] = [];
+  for (let i = 0; i < blocks.length; i += 1) {
+    const b = blocks[i];
+    if (!b) continue;
+    const meta = metaBlocks && metaBlocks[i] && typeof metaBlocks[i] === "object" ? metaBlocks[i] : null;
+    if (b.type === "text") {
+      const item: { type: string; text: string; textSignature?: string } = { type: "text", text: String(b.text ?? "") };
+      if (meta && typeof meta.textSignature === "string" && meta.textSignature) {
+        item.textSignature = meta.textSignature;
+      }
+      out.push(item);
+    } else if (b.type === "reasoning") {
+      const item: { type: string; reasoning: string; signature?: string; redacted?: boolean } = { type: "reasoning", reasoning: String(b.text ?? "") };
+      if (meta && typeof meta.signature === "string" && meta.signature) {
+        item.signature = meta.signature;
+      }
+      if (b.redacted === true) item.redacted = true;
+      out.push(item);
+    } else if (b.type === "tool-call") {
+      const item: { type: string; id: string; name: string; arguments: any; thoughtSignature?: string } = {
+        type: "toolCall",
+        id: String(b.id ?? ""),
+        name: String(b.name ?? ""),
+        arguments: parseArgumentsJson(b.arguments),
+      };
+      if (meta && typeof meta.thoughtSignature === "string" && meta.thoughtSignature) {
+        item.thoughtSignature = meta.thoughtSignature;
+      }
+      out.push(item);
+    }
+    // 其余类型（image 等）在 assistant 侧为前向兼容，不转换
+  }
+  return out;
+}
+
+function normalizeImage(block, images) {
+  const attId =
+    block && block.attachment && typeof block.attachment.attachmentId === "string"
+      ? block.attachment.attachmentId
+      : null;
+  const info = attId && images && images.get(attId) ? images.get(attId) : null;
+  if (!info || typeof info.data !== "string" || typeof info.mimeType !== "string") {
+    const err = new Error(
+      "消息含图片块但未解析到图片字节（attachmentId=" + String(attId || "?") + "）；DSH→Hana 图片需要 attachment 服务解析（base64+MIME），本部署暂不可用",
+    ) as Error & { code: string };
+    err.code = "UNSUPPORTED_CONTENT";
+    throw err;
+  }
+  return { type: "image", data: info.data, mimeType: info.mimeType };
+}
+
+function textBlockToHana(b) {
+  return { type: "text", text: String(b.text ?? "") };
+}
+
+/**
+ * 工具结果的内层内容块 → hana toolResult content 项。
+ * @param blocks DSH ToolResultBlock.content（text/image）
+ * @param images 已解析的图片字节表
+ * @returns hana toolResult content 项（空内容落一个空文本项）
+ */
+function toolResultContent(blocks, images) {
+  const inner = Array.isArray(blocks) ? blocks : [];
+  const out: any[] = [];
+  for (const ib of inner) {
+    if (!ib) continue;
+    if (ib.type === "image") out.push(normalizeImage(ib, images));
+    else if (ib.type === "text") out.push(textBlockToHana(ib));
+  }
+  if (out.length === 0) out.push({ type: "text", text: "" });
+  return out;
+}
+
+/**
+ * DSH 消息数组 → hana models.stream 消息数组。
+ * @param {object} o { messages: DSH Message[], images: Map<string,{data,mimeType}>|null }
+ * @returns {{ messages: Array, systemPrompt?: string }}
+ */
+export function toHanaMessages({ messages, images }) {
+  const list = Array.isArray(messages) ? messages : [];
+  const toolNames = collectToolNames(list);
+  const out: any[] = [];
+  let systemPrompt: string | undefined = undefined;
+  for (const m of list) {
+    if (!m || typeof m.role !== "string") continue;
+    if (m.role === "system") {
+      const text = textOf(m);
+      if (text) systemPrompt = (systemPrompt ? systemPrompt + "\n" : "") + text;
+      continue;
+    }
+    if (m.role === "assistant") {
+      const content = assistantToHanaContent(m);
+      if (content.length > 0) out.push({ role: "assistant", content });
+      continue;
+    }
+    // tool：DSH 工具结果消息（role:"tool"，见 createToolResultMessage）
+    if (m.role === "tool") {
+      const callId = String(m.toolCallId ?? (m.source && m.source.callId) ?? "");
+      out.push({
+        role: "toolResult",
+        toolCallId: callId,
+        toolName: toolNames.get(callId) || "tool",
+        content: toolResultContent(m.content, images),
+        isError: m.isError === true,
+      });
+      continue;
+    }
+    // user（可能携带 tool-result / 文本 / 图片）
+    if (m.role === "user") {
+      const contentBlocks = Array.isArray(m.content) ? m.content : [];
+      const textItems: any[] = [];
+      const imageItems: any[] = [];
+      for (const b of contentBlocks) {
+        if (!b) continue;
+        if (b.type === "tool-result") {
+          if (textItems.length || imageItems.length) {
+            // 与工具结果混排的纯文本：先落一条 user 消息
+            out.push({ role: "user", content: [...textItems, ...imageItems] });
+            textItems.length = 0;
+            imageItems.length = 0;
+          }
+          const callId = String(b.toolCallId ?? "");
+          out.push({
+            role: "toolResult",
+            toolCallId: callId,
+            toolName: toolNames.get(callId) || "tool",
+            content: toolResultContent(b.content, images),
+            isError: b.isError === true,
+          });
+          continue;
+        }
+        if (b.type === "image") {
+          imageItems.push(normalizeImage(b, images));
+          continue;
+        }
+        if (b.type === "text") {
+          textItems.push(textBlockToHana(b));
+        }
+      }
+      if (textItems.length || imageItems.length) {
+        out.push({ role: "user", content: [...textItems, ...imageItems] });
+      }
+      continue;
+    }
+    // 其他角色：跳过
+  }
+  return { messages: out, systemPrompt };
+}
+
+function textOf(m) {
+  const content = Array.isArray(m && m.content) ? m.content : [];
+  return content
+    .filter((b) => b && b.type === "text" && typeof b.text === "string")
+    .map((b) => b.text)
+    .join("");
+}

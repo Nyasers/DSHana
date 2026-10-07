@@ -6,7 +6,7 @@
 // 为什么必须声明：DSH 的 runtime 解析模式按「安装树 + **被选中 bundle 的依赖图**」算一份解析代
 // （app-boot 的 profile-resolution），一行 loader 插件的 import 以这份解析代为基准解析。包内
 // node_modules/@dshana/* 只解决「这份文件在不在」；进不了解析代，真机上下载面照旧报
-//   Cannot find package '@dshana/provider' imported from <DSH_HOME>/profiles/dshana/
+//   Cannot find package '@dshana/dsh-provider' imported from <DSH_HOME>/profiles/dshana/
 // 因为 profile 住在数据目录里，向上 node 解析永远走不到安装树的 node_modules。官方在
 // healProfileModuleFallback / resolveModuleFallbackEntries 里给这种情况留了口子：**只被选中
 // bundle 携带**的包按 profile 作用域补进解析代（并按需在 profile 下 reconcile 一条自有链接），

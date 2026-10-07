@@ -46,7 +46,7 @@ export const UI_DIR = uiDirOf(ROOT);
 /** cordis 子插件包（provider / theme / clipboard）：pack 落进包内 node_modules/@dshana。 */
 export const CORDIS_DIR = path.join(ROOT, CACHE, "cordis");
 
-/** 组合层包（packages/bundle/dsh-app）的构建产物：pack 落进包内 node_modules/@dshana。 */
+/** 组合层包（packages/dsh/app）的构建产物：pack 落进包内 node_modules/@dshana。 */
 export const BUNDLE_DIR = path.join(ROOT, CACHE, "bundle", "dsh-app");
 
 /** 集成层编译出的补丁包目录（每个集成一个子目录，见 integrations/README.md）。 */

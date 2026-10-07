@@ -10,7 +10,7 @@
 // temperature）、非 2xx 与空消息报错。
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { buildHanaAdapter } from "../../packages/provider/index.ts";
+import { buildHanaAdapter } from "../../packages/dsh/provider/index.ts";
 import { TASK_BINDING_GLOBAL_KEY } from "@dshana/shared/task-binding.ts";
 
 const SID = "session-11111111-2222-3333-4444-555555555555";

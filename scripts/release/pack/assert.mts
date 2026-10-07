@@ -24,7 +24,8 @@ export function assertNoProductPackage(outDir) {
 }
 
 /**
- * cordis 子插件的产物断言（防回归，与 manifest 校验对称）：子插件（provider / theme / clipboard）
+ * cordis 子插件的产物断言（防回归，与 manifest 校验对称）：子插件（dsh-provider / dsh-theme /
+ * dsh-clipboard / dsh-session）
  * version 与主 package.json 同批由 derive/version（pnpm version 发版流程）同步，pack 时读产物校验
  * 一致——手改/漏同步即出包版本漂移。
  * @param cordisDir 子插件产物目录（.cache/cordis）
@@ -38,7 +39,7 @@ export function assertCordisArtifacts(cordisDir, version) {
   // 完整性：子插件全部存在且 package.json 版本一致——缺失/部分产物（含 count=0）
   // 一律拒包，防 build 失败后残留部分产物被误打包。
   const required = [
-    "clipboard", "provider", "theme",
+    "dsh-clipboard", "dsh-provider", "dsh-session", "dsh-theme",
   ];
   let count = 0;
   for (const name of required) {

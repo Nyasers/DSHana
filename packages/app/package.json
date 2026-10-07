@@ -9,12 +9,13 @@
     "./*": "./src/*"
   },
   "dependencies": {
-    "@dshana/clipboard": "workspace:*",
+    "@dshana/dsh-clipboard": "workspace:*",
     "@dshana/models": "workspace:*",
-    "@dshana/provider": "workspace:*",
+    "@dshana/dsh-provider": "workspace:*",
     "@dshana/runtime": "workspace:*",
+    "@dshana/dsh-session": "workspace:*",
     "@dshana/shared": "workspace:*",
-    "@dshana/theme": "workspace:*",
+    "@dshana/dsh-theme": "workspace:*",
     "@dshana/tools": "workspace:*"
   }
 }
