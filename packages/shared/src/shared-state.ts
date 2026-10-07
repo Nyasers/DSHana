@@ -41,6 +41,8 @@ export const INTENT_KINDS = [
   "selection",       // 当前选中会话（切会话）
   "session-rename",  // 重命名弹窗
   "session-archive", // 归档确认
+  "workspace-rename", // 工作区重命名框（FP 发射，整幅面弹）
+  "workspace-delete", // 工作区删除确认（同上）
   "row-toast",      // 会话行提示
   "shortcuts-panel", // 快捷键参考框
 ] as const;
@@ -86,6 +88,8 @@ export interface IntentPayloadMap {
   selection: { sessionId: string | null };
   "session-rename": { sessionId: string | null; title: string };
   "session-archive": { sessionId: string | null; displayTitle: string; activity: unknown[] };
+  "workspace-rename": { workspaceId: string | null; title: string };
+  "workspace-delete": { workspaceId: string | null; title: string };
   "row-toast": { notice: Record<string, unknown> | null };
   "shortcuts-panel": Record<string, never>;
 }
@@ -152,6 +156,17 @@ export const INTENT_SPECS = {
   "session-archive": {
     nature: "command",
     normalize: (raw) => normalizeIntent("session-archive", raw),
+    faces: ["navigation", "workspace", "standalone"],
+  },
+  "workspace-rename": {
+    nature: "command",
+    normalize: (raw) => normalizeIntent("workspace-rename", raw),
+    // 与四条会话行面同形状：FP 发射（行菜单），主卡与整幅面落地。
+    faces: ["navigation", "workspace", "standalone"],
+  },
+  "workspace-delete": {
+    nature: "command",
+    normalize: (raw) => normalizeIntent("workspace-delete", raw),
     faces: ["navigation", "workspace", "standalone"],
   },
   "row-toast": {
@@ -225,6 +240,8 @@ export function normalizeIntent<K extends IntentKind>(kind: K, raw: unknown): In
         displayTitle: typeof v.displayTitle === "string" ? v.displayTitle : "",
         activity: Array.isArray(v.activity) ? v.activity : [],
       };
+      case "workspace-rename":
+      case "workspace-delete": return { workspaceId: nonEmptyOrNull(v.workspaceId), title: typeof v.title === "string" ? v.title : "" };
       case "row-toast": return { notice: v.notice && typeof v.notice === "object" ? (v.notice as Record<string, unknown>) : null };
       case "shortcuts-panel": return {};
     }
