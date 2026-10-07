@@ -286,7 +286,8 @@ export function apply(ctx: Context): void {
     // the current Session Workspace before the recent-Workspace fallback.
     // 没有工作区时上游会走 clearMain：清掉主视图占用、把 dsh.sessions.current 写成空，界面回到
     // 「选工作台」那屏。这一步要显式宣告：空选中不是一次通常的选中变化，另一面（主卡）靠它才会
-    // 跟着回初始页。本地存储那条路也走，但值没变时不派发 storage 事件，不能只靠它。
+    // 跟着回初始页。也不能只靠本地存储：本面的 store 只在启动时 hydrate 一次、之后不跟外部变化，
+    // 它内存里那份值可能本来就是空，set({}) 在它自己看等于没变，不会写下去，也就没有 storage 事件。
     startSession: (workspaceId) => {
       uiWorkspace.startSession(workspaceId)
       if (workspaceId === undefined && workspaces.list.getSnapshot().items.length === 0) {
