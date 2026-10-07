@@ -82,6 +82,28 @@ test("规则命中的依赖树文件被裁掉，清单与许可留下", () => {
   }
 });
 
+test("dist 下的 doc / test 目录不按名字裁（yaml 的 dist/doc 是运行时代码）", () => {
+  const { dir, done } = fixture();
+  try {
+    sample(dir);
+    put(dir, "node_modules/foo/dist/doc/directives.js");
+    put(dir, "node_modules/foo/dist/test/helper.js");
+    trimDeliveryTree(dir);
+    assert.equal(
+      existsSync(join(dir, "node_modules", "foo", "dist", "doc", "directives.js")),
+      true,
+      "嵌套的 doc 目录可能是运行时代码（yaml 的 dist/doc 就是），不能按名字裁",
+    );
+    assert.equal(
+      existsSync(join(dir, "node_modules", "foo", "dist", "test", "helper.js")),
+      true,
+      "嵌套的 test 目录不按名字裁",
+    );
+  } finally {
+    done();
+  }
+});
+
 test("没有编译产物的包不裁源码（否则包会失去运行入口）", () => {
   const { dir, done } = fixture();
   try {

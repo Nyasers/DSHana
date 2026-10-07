@@ -7,9 +7,10 @@
 // 带着一批运行时不读的东西。以 universal 包为样本（12,453 条）统计，测试目录与包内源码/
 // 类型声明两项合计约 4 MB（压缩后），去掉它们不经过任何一条运行路径。
 //
-// 判据而不是名单：规则只按路径形态与「包内是否存在编译产物」判断，不写包名。样本里带 .ts 的
-// 18 个包全部同时带 .js/.mjs/.cjs，所以「有产物即源码」这条派生判据对样本内每个包都成立；
-// 真出现只发源码的包，该包的源码会被整包保留（判据不成立就不裁）。
+// 判据而不是名单，但名字也不是判据：`yaml` 包的 `dist/doc/` 存的是 YAML document 模型（运行时代码），
+// 所以测试与文档目录只认包根位置，不在任意层级按目录名猜。样本里带 .ts 的 18 个包全部同时带
+// .js/.mjs/.cjs，所以「有产物即源码」这条派生判据对样本内每个包都成立；真出现只发源码的包，
+// 该包的源码会被整包保留（判据不成立就不裁）。
 //
 // 只动依赖树：本模块只扫 `node_modules/`，并跳过 `node_modules/@dshana/`（我们自己的产物）。
 // 因此 App 交付面（manifest.json / bin / ui / skills / 图标 / NOTICE）与每个包的 package.json、
@@ -30,21 +31,35 @@ const PRODUCT_RE = /\.(js|mjs|cjs)$/;
 /** 包根级的许可与清单文件，永远保留（合规与包解析都依赖）。 */
 const KEPT_FILE_RE = /(^|\/)(package\.json|LICENSE|LICENCE|license|NOTICE|NOTICE\.md|THIRD_PARTY_NOTICES\.md)$/;
 
+/** 去掉包名后的包内相对路径（`<pkg>/rest` → `rest`），供「只认包根」的规则使用。 */
+function withinPackage(rel: string): string {
+  const m = /^(@[^/]+\/[^/]+|[^/]+)\/(.*)$/.exec(rel);
+  return m ? m[2] : rel;
+}
+
 /** 默认规则表。顺序无关，命中即裁。 */
 export const TRIM_RULES: TrimRule[] = [
   {
     name: "测试目录",
-    test: (p) => /(^|\/)(test|tests|__tests__)(\/|$)/i.test(p),
+    // test / tests 只认包根；__tests__ 命名专用，允许任意层级。
+    test: (p) => /^(test|tests)\//i.test(withinPackage(p)) || /(^|\/)__tests__(\/|$)/.test(p),
   },
   {
     name: "构建与仓库元数据",
-    test: (p) =>
-      /(^|\/)(\.yarn|\.github)(\/|$)/.test(p) ||
-      /(^|\/)(tsconfig[^/]*\.json|\.npmignore|\.gitignore|\.eslintrc[^/]*|\.editorconfig|\.npmrc|\.babelrc[^/]*)$/.test(p),
+    test: (p) => {
+      const inner = withinPackage(p);
+      if (/^\.yarn\//.test(inner) || /^\.github\//.test(inner)) return true;
+      // 包根下的配置文件（路径里不含分隔符）
+      return (
+        !inner.includes("/") &&
+        /^(tsconfig[^/]*\.json|\.npmignore|\.gitignore|\.eslintrc[^/]*|\.editorconfig|\.npmrc|\.babelrc[^/]*)$/.test(inner)
+      );
+    },
   },
   {
     name: "文档与示例",
-    test: (p) => /(^|\/)(doc|docs|example|examples)(\/|$)/i.test(p),
+    // 同测试目录：只认包根。dist/doc 这种名字在依赖里可能是运行时代码。
+    test: (p) => /^(docs?|examples?)\//i.test(withinPackage(p)),
   },
   {
     name: "快照与夹具",
