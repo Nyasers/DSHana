@@ -5,7 +5,7 @@
 //
 // .cache/ 是两条流水线的中途站：构建写它（.cache/{ui,cordis,integrations,integrations-src}），
 // 打包也用它（.cache/{pkg,pkg-root}）。里面的东西全部可由下一次构建/打包再生，真正的产物只有
-// dist/ 与 releases/ 下的 zip + sha256。出包之后整片清掉，让仓库里长期只剩源码与那两个落点。
+// dist/ 与 releases/ 下的 zip。出包之后整片清掉，让仓库里长期只剩源码与那两个落点。
 //
 // 为什么单独成脚本而不是内联在 pack 脚本尾部：
 //   · 声明式——package.json 里一眼可见"打包后要清中间区"这条纪律；

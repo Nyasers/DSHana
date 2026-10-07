@@ -10,7 +10,7 @@
 //
 // 流程：读 manifest.json（仓库根）+ package.json → 收本版本各 zip 的事实（字节数 + sha256）→ 写
 //   <zip>.entry.json（索引构建器的输入）→ 用官方 extension-index-build.mjs 拼 index.v2.json。
-//   事实默认从 releases/ 里那份 zip 与它的 .sha256 取；`--facts-dir <目录>` 时改从该目录下所有
+//   事实默认从 releases/ 里那份 zip 现算（读整包取字节数与哈希）；`--facts-dir <目录>` 时改从该目录下所有
 //   `package-facts.json` 合并出的表取（CI 里事实由出包作业记好、当 artifact 带过来）。
 //
 // 两种条目文件，别混：
@@ -28,8 +28,9 @@
 //   node scripts/release/market-index.mts --publisher Nyasers --out releases/index.v2.json
 //   node scripts/release/market-index.mts --facts-dir facts            # 事实从目录下的小票合并（CI 场景）
 import fs from "fs-extra";
-import { basename, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { basename, join, resolve } from "node:path";
 
 import { ROOT } from "../shared/root.mts";
 import { mergeFacts, type PackageFacts } from "./facts.mts";
@@ -127,25 +128,24 @@ function defaultBaseUrl(version: string): string | null {
 }
 
 /**
- * 产物事实的来源：默认本地读产物（releases/ 里那份 zip 与它的 .sha256）；`--facts-dir <目录>`
+ * 产物事实的来源：默认对本地那份 zip 现算（字节数 + sha256）；`--facts-dir <目录>`
  * 时改从该目录下（含子目录）所有 `package-facts.json` 合并出的表取 —— CI 里清单与出包是两个
  * 作业，事实由出包作业记好当 artifact 带过来，zip 不必再落到本地一遍。
  */
 const factsDir = arg("--facts-dir");
 const injectedFacts: PackageFacts | null = factsDir === null ? null : mergeFacts(factsDir);
 
-/** 该 zip 是否有可用事实（注入表里有，或本地那份 .sha256 在）。 */
+/** 该 zip 是否有可用事实（注入表里有，或本地那份 zip 在）。 */
 function hasFacts(zipName: string): boolean {
-  return injectedFacts !== null ? Object.hasOwn(injectedFacts, zipName) : fs.existsSync(join(RELEASES, `${zipName}.sha256`));
+  return injectedFacts !== null ? Object.hasOwn(injectedFacts, zipName) : fs.existsSync(join(RELEASES, zipName));
 }
 
-/** 产物事实：字节数 + .sha256（归一成小写）。 */
+/** 产物事实：字节数 + sha256；注入表优先，否则对本地那份 zip 现算。 */
 function zipFacts(zipName: string): { size: number; sha256: string } {
   const injected = injectedFacts?.[zipName];
   if (injected) return { size: injected.size, sha256: String(injected.sha256).trim().toLowerCase() };
-  const size = fs.statSync(join(RELEASES, zipName)).size;
-  const sha256 = fs.readFileSync(join(RELEASES, `${zipName}.sha256`), "utf8").trim().split(/\s+/)[0].toLowerCase();
-  return { size, sha256 };
+  const path = join(RELEASES, zipName);
+  return { size: fs.statSync(path).size, sha256: createHash("sha256").update(fs.readFileSync(path)).digest("hex") };
 }
 
 /** target 名：`<id>-v<version>-<target>.zip` → `<target>`；无后缀（通用包）→ `universal`。 */
@@ -170,7 +170,6 @@ function buildTargets(zips: string[], version: string, baseUrl: string): Record<
 function buildEntry(zipName: string, targets: Record<string, Archive>): Entry {
   const manifest = fs.readJsonSync(join(ROOT, "manifest.json"));
   const pkg = fs.readJsonSync(join(ROOT, "package.json"));
-  // scripts/release/pack/index.mts 写的 .sha256 是「纯大写哈希」（不带文件名）——取第一个空白段再归一成小写
   const { size, sha256 } = zipFacts(zipName);
   const entry: Entry = {
     kind: KIND,
@@ -206,7 +205,7 @@ function main(): void {
     ? Object.keys(injectedFacts).filter((f: string) => f.startsWith(`${manifest.id}-v${version}`) && f.endsWith(".zip"))
     : fs
       .readdirSync(RELEASES)
-      .filter((f: string) => f.startsWith(`${manifest.id}-v${version}`) && f.endsWith(".zip") && !f.endsWith(".sha256"));
+      .filter((f: string) => f.startsWith(`${manifest.id}-v${version}`) && f.endsWith(".zip"));
   if (all.length === 0) {
     console.error(`[market-index] 没有 ${manifest.id}-v${version}-*.zip 的事实来源（releases/ 或 --facts-dir）—— 先出包：pnpm run package --target ${target}`);
     process.exit(1);
@@ -245,7 +244,7 @@ function main(): void {
   const entries: string[] = [];
   for (const zip of all) {
     if (!hasFacts(zip)) {
-      console.warn(`[market-index] 跳过 ${zip}：没有事实来源（releases/${zip}.sha256 或 --facts 里都没有）`);
+      console.warn(`[market-index] 跳过 ${zip}：本地没有这份 zip，也不在 --facts 表里`);
       continue;
     }
     const entryPath = join(RELEASES, `${zip.replace(/\.zip$/, "")}.entry.json`);

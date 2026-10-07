@@ -4,10 +4,11 @@
 // tests/build/package-facts.test.mjs — 产物事实的记录与合并（scripts/release/facts.mts）
 //
 // 这两步存在的理由是「清单作业不该为取 size 把上百 MB 的包搬第二遍」，而它们的出错方式都很隐蔽：
-// 量到 artifact 归档的 size（不是包的大小）、按固定层级找小票、或拿 fs-extra 的 API 去调 node:fs。
+// 量到 artifact 归档的 size（不是包的大小）、把旁路小票当成事实源、或拿 fs-extra 的 API 去调 node:fs。
 // 这里把口径钉住。
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,17 +21,18 @@ function fixture() {
   return { dir, done: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
-test("recordFacts 记下 zip 的字节数与归一化的小写 sha256，缺 .sha256 的 zip 跳过", () => {
+test("recordFacts 记下每个 zip 的字节数与现算的 sha256，非 zip 不参与", () => {
   const { dir, done } = fixture();
   try {
     writeFileSync(join(dir, "a.zip"), "x".repeat(1234));
-    writeFileSync(join(dir, "a.zip.sha256"), "ABCDEF01\n");
-    writeFileSync(join(dir, "b.zip"), "y"); // 没有配套 .sha256
+    writeFileSync(join(dir, "b.zip"), "y");
     writeFileSync(join(dir, "note.txt"), "不是产物");
     const facts = recordFacts(dir);
-    assert.deepEqual(Object.keys(facts), ["a.zip"]);
+    assert.deepEqual(Object.keys(facts).sort(), ["a.zip", "b.zip"]);
     assert.equal(facts["a.zip"].size, 1234);
-    assert.equal(facts["a.zip"].sha256, "abcdef01");
+    assert.equal(facts["a.zip"].sha256, createHash("sha256").update("x".repeat(1234)).digest("hex"));
+    assert.equal(facts["b.zip"].size, 1);
+    assert.equal(facts["b.zip"].sha256, createHash("sha256").update("y").digest("hex"));
   } finally {
     done();
   }

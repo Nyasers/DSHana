@@ -7,8 +7,9 @@
 // 一个 job 边界，没有共享磁盘。让出包作业顺手记一份几百字节的事实文件当 artifact，清单作业合并
 // 它即可——不必把上百 MB 的包搬第二遍。量 artifact 归档自身的 size 是不行的：那是外层 zip 的
 // 大小，与包的字节数不是一个数。
-import fs from "fs-extra";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
+import fs from "fs-extra";
 
 /** 一个包的产物事实：字节数与 sha256（小写）。 */
 export interface PackageFact {
@@ -20,8 +21,9 @@ export interface PackageFact {
 export type PackageFacts = Record<string, PackageFact>;
 
 /**
- * 读一个 releases 目录里每个 zip 与它旁边的 .sha256，记成事实表。
- * 缺 .sha256 的 zip 跳过（那不是本流程产出的完整件），目录不存在则视为空。
+ * 记一个 releases 目录里每个 zip 的字节数与 sha256。
+ * 事实从 zip 本身现算：产物不留旁路小票，就不会出现小票与包对不上这种失败。
+ * 目录不存在则视为空表。
  * @param releases - 产物所在目录。
  */
 export function recordFacts(releases: string): PackageFacts {
@@ -29,11 +31,10 @@ export function recordFacts(releases: string): PackageFacts {
   if (!fs.existsSync(releases)) return facts;
   for (const name of fs.readdirSync(releases)) {
     if (!name.endsWith(".zip")) continue;
-    const shaFile = join(releases, `${name}.sha256`);
-    if (!fs.existsSync(shaFile)) continue;
+    const path = join(releases, name);
     facts[name] = {
-      size: fs.statSync(join(releases, name)).size,
-      sha256: fs.readFileSync(shaFile, "utf8").trim().split(/\s+/)[0].toLowerCase(),
+      size: fs.statSync(path).size,
+      sha256: createHash("sha256").update(fs.readFileSync(path)).digest("hex"),
     };
   }
   return facts;

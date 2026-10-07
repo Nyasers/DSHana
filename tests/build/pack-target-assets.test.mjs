@@ -118,7 +118,7 @@ test("release.yml 的发布矩阵与必需资产清单跟目标表一致", () =>
     [...platforms].sort(),
     "必需资产的目标集与平台目标表不一致",
   );
-  assert.match(workflow, /REQUIRED="\$REQUIRED dshana-v\$\{VER\}\.zip dshana-v\$\{VER\}\.zip\.sha256"/, "通用包与市场清单的必需资产行缺失");
+  assert.match(workflow, /REQUIRED="\$REQUIRED dshana-v\$\{VER\}\.zip"/, "通用包的必需资产行缺失");
 });
 
 /**
