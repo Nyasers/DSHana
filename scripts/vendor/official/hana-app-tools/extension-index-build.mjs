@@ -21,9 +21,7 @@ function z(e) {
   const r = e.indexOf("/");
   return r > 0 && r === e.lastIndexOf("/") && r < e.length - 1;
 }
-// I = index schemaVersion。E = 单条目 archive 的字节上限：宿主侧同款上限（bundle 里的 IVe）也取 50MB，
-// 而 universal 包体量超过 50MB（宿主会先放宽，这一侧先不设限）。
-const I = 2, E = Number.POSITIVE_INFINITY;
+const I = 2, E = 300 * 1024 * 1024;
 function p(e) {
   return !!e && typeof e == "object" && !Array.isArray(e);
 }
