@@ -51,6 +51,11 @@ import { ForkSessionMenuItem } from './session-actions/ForkSession.tsx'
 import { PinSessionMenuItem, PinSessionRowButton } from './session-actions/PinSession.tsx'
 import { RenameSessionMenuItem, SessionRenameDialog } from './session-actions/RenameSession.tsx'
 import { RowActionToast } from './session-actions/RowActionToast.tsx'
+import {
+  WorkspaceDeleteDialog, WorkspaceRenameDialog,
+  type WorkspaceDeleteDialogInjected, type WorkspaceDeleteRequest,
+  type WorkspaceRenameDialogInjected, type WorkspaceRenameRequest,
+} from './rows/WorkspaceBrowser.tsx'
 import { WorkspacePicker } from './WorkspacePicker.tsx'
 import { en, zh, type WorkspaceKey } from './locales.ts'
 
@@ -173,6 +178,9 @@ export function apply(ctx: Context): void {
   // its bound hook.
   const renameRequest = derive(shortcutControls.state, state => state.renameTarget)
   const archiveRequest = createSnapshotStore<SessionArchiveConfirmRequest | null>(null)
+  // 工作区重命名 / 删除的待处理请求：FP 里不开框（那是窄文档），发射意图到这里，由整幅面的 overlay 开。
+  const workspaceRenameRequest = createSnapshotStore<WorkspaceRenameRequest | null>(null)
+  const workspaceDeleteRequest = createSnapshotStore<WorkspaceDeleteRequest | null>(null)
   const unarchiveSession = (sessionId: SessionId): void => {
     uiWorkspace.unarchiveSession(sessionId).catch((reason: unknown) => {
       console.warn('session unarchive rejected:', reason)
@@ -247,6 +255,16 @@ export function apply(ctx: Context): void {
     settleSessionRename: shortcutControls.closeRename,
     renameSession,
   })
+  const workspaceRenameDialogInjected = (): WorkspaceRenameDialogInjected => ({
+    hooks: { workspaceRenameRequest },
+    settleWorkspaceRename: () => { workspaceRenameRequest.set(null) },
+    renameWorkspace: async (workspaceId, title) => { await workspaces.rename(workspaceId, title) },
+  })
+  const workspaceDeleteDialogInjected = (): WorkspaceDeleteDialogInjected => ({
+    hooks: { workspaceDeleteRequest },
+    settleWorkspaceDelete: () => { workspaceDeleteRequest.set(null) },
+    deleteWorkspace: async (workspaceId) => { await workspaces.delete(workspaceId) },
+  })
   const rowToastInjected = (): RowToastInjected => ({
     hooks: { toast: rowToast },
     dismissToast: () => { rowToast.set(null) },
@@ -277,6 +295,21 @@ export function apply(ctx: Context): void {
       registerLanding('row-toast', (value: any) => {
         if (!value || value.notice === null || typeof value.notice !== 'object') return
         raiseToast(value.notice as RowToast)
+      }),
+      // 工作区的两个框：FP 只发射，框在本面（整幅面的 overlay）开。
+      registerLanding('workspace-rename', (value: any) => {
+        if (!value || typeof value.workspaceId !== 'string' || !value.workspaceId) return
+        workspaceRenameRequest.set({
+          workspaceId: value.workspaceId,
+          title: typeof value.title === 'string' ? value.title : '',
+        })
+      }),
+      registerLanding('workspace-delete', (value: any) => {
+        if (!value || typeof value.workspaceId !== 'string' || !value.workspaceId) return
+        workspaceDeleteRequest.set({
+          workspaceId: value.workspaceId,
+          title: typeof value.title === 'string' ? value.title : '',
+        })
       }),
     ]
     return () => { for (const dispose of disposers) dispose() }
@@ -368,6 +401,13 @@ export function apply(ctx: Context): void {
     yield ctx.slots.register({
       name: 'shell.overlay', id: 'workspace.row-toast', locale: NS, store: viewStore, inject: rowToastInjected,
     }, RowActionToast)
+    // 工作区自己的两个框：它们仍在 FP 的行菜单里发起，但框落到这里（app 级 overlay 归整幅面）。
+    yield ctx.slots.register({
+      name: 'shell.overlay', id: 'workspace.rename', locale: NS, inject: workspaceRenameDialogInjected,
+    }, WorkspaceRenameDialog)
+    yield ctx.slots.register({
+      name: 'shell.overlay', id: 'workspace.delete', locale: NS, inject: workspaceDeleteDialogInjected,
+    }, WorkspaceDeleteDialog)
   })
   ctx.slots.inject('conversation.hero.workspace', () => ctx.slots.register(
     {

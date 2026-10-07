@@ -10,6 +10,10 @@
     {
       "path": "src/client/navigation.ts",
       "upstreamSha256": "99ca4c11126f9d367576891adead79fdd44a0d477d054c9d32ee7242680ee2bc"
+    },
+    {
+      "path": "src/client/rows/WorkspaceBrowser.tsx",
+      "upstreamSha256": "21549a2c39407538e3793822862903e95f56119253d9e6daa38b9a58c2df4650"
     }
   ],
   "notes": [
@@ -26,6 +30,11 @@
     "不做运行时 shim：与「贴上游 + 构建期哈希闸」的路线一致。旧 path 引用的 contract / shortcuts 等由上游整包提供。",
     "贴 navigation.ts：跨面同步要在 main 面落「清空」这一步，而 UiWorkspace 的公开面没有清空入口（clearMain 是私有的）。",
     "触发场景：FP 在无工作台时新建会话、或归档当前会话时，上游把主视图清掉并把 dsh.sessions.current 写成空。",
-    "做法：navigation.ts 整体贴进来，在接口上加 clearSelection()，实现转调同一份 clearMain。落点留在覆盖层，不改 vendor。"
+    "做法：navigation.ts 整体贴进来，在接口上加 clearSelection()，实现转调同一份 clearMain。落点留在覆盖层，不改 vendor。",
+    "贴 WorkspaceBrowser.tsx：工作区重命名与删除的框原本在组件内部，而那个组件只住在 FP（窄文档），",
+    "Modal 又 portal 到本文档 body，于是框只铺满侧栏那一块。",
+    "改法与设置页同路：FP 只发射意图（在打开框那一步分叉），整幅面把框注册到 shell.overlay。",
+    "两个框组件写在同一份 WorkspaceBrowser.tsx 里导出——覆盖层清单只收「上游文件 + delta」，",
+    "没有位置放本仓自写的文件（每项都要上游哈希）；上游自己也把确认框和行放在一个文件里。"
   ]
 }
