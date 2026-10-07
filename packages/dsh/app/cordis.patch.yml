@@ -163,6 +163,9 @@
 
     # Ordinary provider for the parsed Web flags. Its plugin-level injection
     # waits for cmdlineArgs; no launcher metadata or special row kind is needed.
+    # 它在插件列表里是一条独立行，而 DSH 读显示元数据是按**完整 specifier** 拼路径的
+    # （见 boot/app-boot 的 readPluginMeta）——所以包的 exports 放行了 `./startup/*` 落到包根，
+    # 那条行才拿得到 package.json 里那句 description，而不是只显一行裸 specifier。
     - id: web-startup
       name: '@dshana/dsh-app/startup'
 

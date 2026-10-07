@@ -9,6 +9,7 @@
   "exports": {
     ".": "./lib/index.js",
     "./startup": "./lib/startup.js",
+    "./startup/*": "./*",
     "./package.json": "./package.json"
   },
   "dsh": {
