@@ -3,9 +3,9 @@
 //
 // packages/shared/src/shared-state.ts — UI 跨面共享通道的纯词表（键前缀、值构造、读侧挑选）。
 //
-// 通道：应用态存储（hana.storage.global → <dataDir>/storage/global.json）。主卡与 FP 用它对齐
-// 视图状态，也是跨面转发（FP 发射意图 → 整幅面落地）的载体：boot 快照、设置视图、会话选中、
-// 主面板选中、会话行面（读写实现见 ui/surface-bridge.ts，词表见下方 INTENT_KINDS）。
+// 通道：同页广播（BroadcastChannel，按卡片实例分作用域）。主卡与 FP 用它对齐视图状态，也是跨面
+// 转发（FP 发射意图 → 整幅面落地）的载体：boot 快照、设置视图、会话选中、主面板选中、会话行面
+// （读写实现见 ui/surface-bridge.ts，词表见下方 INTENT_KINDS）。
 //
 // 键形如 `dshana.<kind>`，**不带卡片实例**：本 App 单 DSH 源、单主卡，宿主给主卡与其 FP 同一个
 // cardInstanceId，按实例分段没有区分度。于是这批键的寿命就是一次 App 生命周期——没有哪一个键
@@ -35,6 +35,7 @@ export const SELECTION_SHARED_KEY = SHARED_KEY_PREFIX + "selection";
 
 /** 可跨面转发的意图种类。 */
 export const INTENT_KINDS = [
+  "boot-state",      // DSH 启动快照（主卡取，FP 跟随；运行时全局一份，不各取一份）
   "settings-view",   // 设置面板开/关与当前分区
   "panel-view",      // 主面板选中（FP 点面板行、主卡把那页打开）
   "selection",       // 当前选中会话（切会话）
@@ -68,6 +69,18 @@ export function intentSharedValue<T>(value: T, at: number = Date.now()): IntentE
 
 /** 各 kind 的载荷形状（读写两端共用一份；写侧归一后再落盘，读侧直接拿到这个形状）。 */
 export interface IntentPayloadMap {
+  "boot-state": {
+    phase: string;
+    ready: boolean;
+    runtimeId: string | null;
+    /** 中继前缀：FP 拿它装配 DSH（带 surface 票据）。 */
+    proxyPrefix: string | null;
+    port: number | null;
+    note: string | null;
+    errorCode: string | null;
+    errorText: string | null;
+    logTail: string[];
+  };
   "settings-view": { open: boolean; section: string | null };
   "panel-view": { panelId: string | null };
   selection: { sessionId: string | null };
@@ -104,6 +117,13 @@ export interface IntentSpec<K extends IntentKind = IntentKind> {
 
 /** 意图描述符表：词表、性质、载荷归一、参与面的**唯一**来源。 */
 export const INTENT_SPECS = {
+  "boot-state": {
+    nature: "state",
+    normalize: (raw) => normalizeIntent("boot-state", raw),
+    // 主卡取、FP 跟随：DSH 运行时全局一份，两个面各取一份是重复劳动。FP 仍留一次首取自兜，
+    // 因为广播只在主卡取到快照时发（它停表之后就不再发），后挂载的 FP 收不到那一次。
+    faces: ["workspace", "navigation"],
+  },
   "settings-view": {
     nature: "state",
     normalize: (raw) => normalizeIntent("settings-view", raw),
@@ -185,6 +205,17 @@ export function normalizeIntent<K extends IntentKind>(kind: K, raw: unknown): In
   const v = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const out = (() => {
     switch (kind) {
+      case "boot-state": return {
+        phase: typeof v.phase === "string" ? v.phase : "",
+        ready: v.ready === true,
+        runtimeId: nonEmptyOrNull(v.runtimeId),
+        proxyPrefix: nonEmptyOrNull(v.proxyPrefix),
+        port: typeof v.port === "number" && Number.isFinite(v.port) ? v.port : null,
+        note: nonEmptyOrNull(v.note),
+        errorCode: nonEmptyOrNull(v.errorCode),
+        errorText: nonEmptyOrNull(v.errorText),
+        logTail: Array.isArray(v.logTail) ? v.logTail.filter((line) => typeof line === "string") as string[] : [],
+      };
       case "settings-view": return { open: v.open === true, section: nonEmptyOrNull(v.section) };
       case "panel-view": return { panelId: nonEmptyOrNull(v.panelId) };
       case "selection": return { sessionId: nonEmptyOrNull(v.sessionId) };

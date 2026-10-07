@@ -309,7 +309,8 @@ import {
       logEl.scrollTop = logEl.scrollHeight;
     }
     bindSidebarActions();
-    schedulePoll(view === "booting" ? POLL_FAST_MS : POLL_MID_MS);
+    // FP 不自己轮询：主卡取到快照就播（见 fetchOwnState），这里只跟广播；首屏那次自取在 begin()。
+    // 自己再排一路就与广播重复，等于把刚拆掉的双取装回来。
   }
   function bindSidebarActions() {
     var main = $("[data-dshana-shell]");
@@ -347,9 +348,49 @@ import {
     if (pollTimer) clearTimeout(pollTimer);
     pollTimer = setTimeout(poll, ms);
   }
+  // ---- boot 快照的跨面广播（主卡 → FP）----
+  // DSH 运行时全局一份，两个面各去取是重复劳动。主卡取到就播，FP 只跟；FP 仍留一次首取自兜，
+  // 因为主卡停表之后不再播，后挂载的 FP 收不到那一次。
+  /** 快照 → 广播载荷（只带渲染与装配要用的字段，形状见 @dshana/shared/shared-state.ts）。 */
+  function bootBroadcastPayload(s) {
+    var svc = (s && s.service) || {};
+    var err = (s && s.error) || {};
+    return {
+      phase: (s && s.phase) || "",
+      ready: !!(s && s.ready),
+      runtimeId: (s && s.runtimeId) || null,
+      proxyPrefix: (s && s.proxyPrefix) || null,
+      port: typeof svc.port === "number" ? svc.port : null,
+      note: (s && s.note) || null,
+      errorCode: err.code || null,
+      errorText: err.userText || null,
+      logTail: s && Array.isArray(s.logTail) ? s.logTail : [],
+    };
+  }
+  /** 广播载荷 → 快照形状（喂给 applySnapshot 的那一种）。 */
+  function bootSnapshotFromBroadcast(p) {
+    return {
+      phase: p.phase,
+      ready: p.ready,
+      runtimeId: p.runtimeId,
+      proxyPrefix: p.proxyPrefix,
+      service: p.port === null || p.port === undefined ? null : { port: p.port },
+      note: p.note,
+      error: (p.errorCode || p.errorText) ? { code: p.errorCode, userText: p.errorText } : null,
+      logTail: Array.isArray(p.logTail) ? p.logTail : [],
+    };
+  }
+  function broadcastBootState(s) {
+    try {
+      var sent = SURFACE_API.publishIntent("boot-state", bootBroadcastPayload(s));
+      void sent.catch(function () { /* 发不出去就只当这次没播 */ });
+    } catch (e) { /* 桥不在就不播 */ }
+  }
   function fetchOwnState() {
     fetchBootState().then(function (s) {
       applySnapshot(s);
+      // 主卡是这份快照的 owner：取到就播给同卡的其他面（FP 只听不问，只留首取自兜）。
+      if (!isSidebar) broadcastBootState(s);
       // ready / stopped 停表：这两态之后再问没有信息增量。运行时代换（宿主重启、运行体重建）
       // 不靠本页轮询发现——宿主在代换后会重载本页，重新装配自然带上新前缀。
       // error 继续问：App 侧自动链正在重试，停表就等不到那一次恢复。
@@ -605,7 +646,15 @@ import {
       began = true;
       var view = resolveView(root);
       isSidebar = view === "sidebar";
-      // FP 也是自己取：boot-state 不进全局存储了，下面这句 poll() 就是它的首屏与后续。
+      // FP 只听不问：主卡取到快照就播，这里到即渲染。首取自兜（下面那句 poll）排在订阅之后，
+      // 所以 FP 先于主卡挂载也不会空着。
+      if (isSidebar) {
+        try {
+          SURFACE_API.registerIntentLanding("boot-state", function (payload) {
+            applySnapshot(bootSnapshotFromBroadcast(payload));
+          });
+        } catch (e) { /* 桥不在就只走首取自兜 */ }
+      }
       // 卸载释放注入的 transport（WS 载体等）
       window.addEventListener("pagehide", function () {
         if (injected.transport) { try { injected.transport.dispose(); } catch (e) { /* 忽略 */ } }
