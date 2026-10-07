@@ -39,7 +39,7 @@ const releases = parsed.values.dir ?? join(ROOT, "releases");
 const out = parsed.values.out ?? "package-facts.json";
 
 const facts = recordFacts(releases);
-if (Object.keys(facts).length === 0) fail(1, `${releases} 里没有带 .sha256 的 zip`);
+if (Object.keys(facts).length === 0) fail(1, `${releases} 里没有 zip`);
 writeFacts(out, facts);
 console.log(`[package-facts] 记下 ${Object.keys(facts).length} 份事实 → ${out}`);
 for (const [name, fact] of Object.entries(facts)) {

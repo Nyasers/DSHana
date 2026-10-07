@@ -8,7 +8,7 @@
 // 解压即断）。物化在 .cache/pkg-root/ 隔离进行，不触碰仓库 node_modules。
 // 流程：复制交付清单（prepackage 钩子已先行 build）→ 物化生产依赖 → 断言多平台资产 → zip → SHA256。
 // 用法：pnpm run package --target <名字>（prepackage 自动前置 build；单独 node scripts/release/pack/index.mts 要求 dist 已构建）
-// 产出：releases/dshana-v<version>[-<target>].zip + .sha256。**zip 根 = 包根**：manifest.json、
+// 产出：releases/dshana-v<version>[-<target>].zip。**zip 根 = 包根**：manifest.json、
 //   bin/、node_modules/、ui/ 等全部在 zip 根级，不得套一层目录（宿主安装时在包根读 manifest.json）。
 // 两个台子的分工（都在 .cache/ 下，起手清残留、用完即清、收尾由 postpackage 钩子清）：
 //   · .cache/pkg-root/<target>：依赖物化**工位**。要跑一次真 install，就得有个像独立项目的目录——
@@ -204,7 +204,6 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
   const sha = createHash("sha256").update(buf).digest("hex").toUpperCase();
   console.log(`[pack] ${zipPath}`);
   console.log(`[pack] zip ${(buf.length / 1048576).toFixed(1)} MB · SHA256 ${sha}`);
-  fs.writeFileSync(`${zipPath}.sha256`, sha, "utf8");
   // 铺平目录已入包，即用即清
   fs.removeSync(pkgDir);
 }

@@ -10,8 +10,13 @@
 //
 // 流程：读 manifest.json（仓库根）+ package.json → 收本版本各 zip 的事实（字节数 + sha256）→ 写
 //   <zip>.entry.json（索引构建器的输入）→ 用官方 extension-index-build.mjs 拼 index.v2.json。
-//   事实默认从 releases/ 里那份 zip 与它的 .sha256 取；`--facts-dir <目录>` 时改从该目录下所有
+//   事实默认从 releases/ 里那份 zip 现算（读整包取字节数与哈希）；`--facts-dir <目录>` 时改从该目录下所有
 //   `package-facts.json` 合并出的表取（CI 里事实由出包作业记好、当 artifact 带过来）。
+//
+// 两种条目文件，别混：
+//   <zip>.entry.json（内部）：按 zip 名派生，喂索引构建器，可带 `x-dshana-targets` 自留字段。
+//   <kind>-<id>-<version>.entry.json（投稿）：官方市场按这个名在 Release 资产里找条目，一份对一个版本，
+//   所以只对选中的那个 target 写；自留字段不进公开目录——官方索引原样透传未知字段，平台包清单不必跟着走。
 //
 // ⚠ 索引模型的限制（与 githana 一致）：index.v2.json 的条目只有 `archive.url` 一个地址，
 //   **没有平台维度**，构建器按 `kind:id` 分组，多平台 zip 不可能各占一条。故默认只把
@@ -23,13 +28,17 @@
 //   node scripts/release/market-index.mts --publisher Nyasers --out releases/index.v2.json
 //   node scripts/release/market-index.mts --facts-dir facts            # 事实从目录下的小票合并（CI 场景）
 import fs from "fs-extra";
-import { basename, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { basename, join, resolve } from "node:path";
 
 import { ROOT } from "../shared/root.mts";
 import { mergeFacts, type PackageFacts } from "./facts.mts";
 const HANA_HOME = process.env.HANA_HOME || join(process.env.USERPROFILE || process.env.HOME || "", ".hanako");
 const RELEASES = join(ROOT, "releases");
+
+/** 市场条目里的扩展种类：本仓库只出 App。 */
+const KIND = "app";
 
 interface Archive {
   url: string;
@@ -119,25 +128,24 @@ function defaultBaseUrl(version: string): string | null {
 }
 
 /**
- * 产物事实的来源：默认本地读产物（releases/ 里那份 zip 与它的 .sha256）；`--facts-dir <目录>`
+ * 产物事实的来源：默认对本地那份 zip 现算（字节数 + sha256）；`--facts-dir <目录>`
  * 时改从该目录下（含子目录）所有 `package-facts.json` 合并出的表取 —— CI 里清单与出包是两个
  * 作业，事实由出包作业记好当 artifact 带过来，zip 不必再落到本地一遍。
  */
 const factsDir = arg("--facts-dir");
 const injectedFacts: PackageFacts | null = factsDir === null ? null : mergeFacts(factsDir);
 
-/** 该 zip 是否有可用事实（注入表里有，或本地那份 .sha256 在）。 */
+/** 该 zip 是否有可用事实（注入表里有，或本地那份 zip 在）。 */
 function hasFacts(zipName: string): boolean {
-  return injectedFacts !== null ? Object.hasOwn(injectedFacts, zipName) : fs.existsSync(join(RELEASES, `${zipName}.sha256`));
+  return injectedFacts !== null ? Object.hasOwn(injectedFacts, zipName) : fs.existsSync(join(RELEASES, zipName));
 }
 
-/** 产物事实：字节数 + .sha256（归一成小写）。 */
+/** 产物事实：字节数 + sha256；注入表优先，否则对本地那份 zip 现算。 */
 function zipFacts(zipName: string): { size: number; sha256: string } {
   const injected = injectedFacts?.[zipName];
   if (injected) return { size: injected.size, sha256: String(injected.sha256).trim().toLowerCase() };
-  const size = fs.statSync(join(RELEASES, zipName)).size;
-  const sha256 = fs.readFileSync(join(RELEASES, `${zipName}.sha256`), "utf8").trim().split(/\s+/)[0].toLowerCase();
-  return { size, sha256 };
+  const path = join(RELEASES, zipName);
+  return { size: fs.statSync(path).size, sha256: createHash("sha256").update(fs.readFileSync(path)).digest("hex") };
 }
 
 /** target 名：`<id>-v<version>-<target>.zip` → `<target>`；无后缀（通用包）→ `universal`。 */
@@ -162,10 +170,9 @@ function buildTargets(zips: string[], version: string, baseUrl: string): Record<
 function buildEntry(zipName: string, targets: Record<string, Archive>): Entry {
   const manifest = fs.readJsonSync(join(ROOT, "manifest.json"));
   const pkg = fs.readJsonSync(join(ROOT, "package.json"));
-  // scripts/release/pack/index.mts 写的 .sha256 是「纯大写哈希」（不带文件名）——取第一个空白段再归一成小写
   const { size, sha256 } = zipFacts(zipName);
   const entry: Entry = {
-    kind: "app",
+    kind: KIND,
     id: manifest.id,
     name: manifest.name || manifest.id,
     publisher: arg("--publisher") || pkg.publisher || pkg.name || manifest.id,
@@ -198,7 +205,7 @@ function main(): void {
     ? Object.keys(injectedFacts).filter((f: string) => f.startsWith(`${manifest.id}-v${version}`) && f.endsWith(".zip"))
     : fs
       .readdirSync(RELEASES)
-      .filter((f: string) => f.startsWith(`${manifest.id}-v${version}`) && f.endsWith(".zip") && !f.endsWith(".sha256"));
+      .filter((f: string) => f.startsWith(`${manifest.id}-v${version}`) && f.endsWith(".zip"));
   if (all.length === 0) {
     console.error(`[market-index] 没有 ${manifest.id}-v${version}-*.zip 的事实来源（releases/ 或 --facts-dir）—— 先出包：pnpm run package --target ${target}`);
     process.exit(1);
@@ -224,11 +231,22 @@ function main(): void {
   }
   const targets = buildTargets(all, version, baseUrl);
 
+  // 0) 投稿条目：文件名是官方市场的取件名，一份对一个版本，所以只写选中的那个 target；
+  //    自留字段是自托管侧的东西，投稿这份删掉。
+  //    archive.url 保留 `{{BASE_URL}}/` 占位符是协议要求：市场同步器按这个前缀取出资产名，
+  //    再去 Release 资产里找同名 zip；写成绝对地址会被判成非法条目。索引里的绝对地址由同步器自己填。
+  const enrollmentZip = chosen[0];
+  const enrollmentEntry = buildEntry(enrollmentZip, targets);
+  delete enrollmentEntry["x-dshana-targets"];
+  const enrollmentPath = join(RELEASES, `${KIND}-${manifest.id}-${version}.entry.json`);
+  fs.writeFileSync(enrollmentPath, `${JSON.stringify(enrollmentEntry, null, 2)}\n`, "utf8");
+  console.log(`[market-index] 投稿条目 ${enrollmentPath}（archive 指向 ${enrollmentZip}）`);
+
   // 1) 为所有本版本产物写 entry（多目标各一份，便于以后按平台取用）
   const entries: string[] = [];
   for (const zip of all) {
     if (!hasFacts(zip)) {
-      console.warn(`[market-index] 跳过 ${zip}：没有事实来源（releases/${zip}.sha256 或 --facts 里都没有）`);
+      console.warn(`[market-index] 跳过 ${zip}：本地没有这份 zip，也不在 --facts 表里`);
       continue;
     }
     const entryPath = join(RELEASES, `${zip.replace(/\.zip$/, "")}.entry.json`);
@@ -275,7 +293,7 @@ function main(): void {
   } finally {
     fs.removeSync(stageDir);
   }
-  console.log(`[market-index] 完成 ${out}（entry 见 releases/*.entry.json）`);
+  console.log(`[market-index] 完成 ${out}（索引输入见 releases/*.entry.json，投稿条目见 ${basename(enrollmentPath)}）`);
 }
 
 main();
