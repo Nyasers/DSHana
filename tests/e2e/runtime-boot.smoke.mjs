@@ -90,15 +90,40 @@ function forkEntry(configPath) {
   console.log("[smoke] entry=" + entry);
   console.log("[smoke]   dataDir=" + dataDir + "\n  depsRoot=" + depsRoot);
   const child = fork(entry, [configPath], {
-    stdio: ["ignore", "inherit", "inherit", "ipc"], // 子进程日志直接进本进程 stdout/stderr
+    stdio: ["ignore", "pipe", "pipe", "ipc"], // 日志照样进本进程，同时留一份给激活断言
     env: { ...process.env },
   });
+  for (const [stream, sink] of [[child.stdout, process.stdout], [child.stderr, process.stderr]]) {
+    stream.setEncoding("utf8");
+    stream.on("data", (chunk) => {
+      sink.write(chunk);
+      childLog.push(chunk);
+    });
+  }
   let exit = null;
   child.once("exit", (code, signal) => {
     exit = { code, signal };
     console.log("[smoke] child exit code=" + code + " signal=" + (signal || ""));
   });
   return { child, exit: () => exit };
+}
+
+/** 子进程 stdout/stderr 全文（boot 激活断言用）。 */
+const childLog = [];
+
+/**
+ * cordis loader 的「条目没激活」：`<id> (<name>): failed to import`。
+ * boot 起得来不等于插件可用——子插件导入失败时 loader 只告警，服务照样监听，所以这里 fail-closed。
+ * @returns 失败的条目名；只拿到 loader 的汇总行、认不出名字时给一条占位
+ */
+function activationFailures(text) {
+  const names = [];
+  for (const line of text.split(/\r?\n/)) {
+    const m = /^(.+?): (?:failed to import|failed to activate|failed to load)$/.exec(line.trim());
+    if (m) names.push(m[1]);
+  }
+  if (names.length === 0 && /\bdid not activate\b/.test(text)) names.push("（loader 报告有条目未激活，未给出条目名）");
+  return names;
 }
 
 async function stopChild(child, exitOf) {
@@ -138,6 +163,11 @@ async function runBoot() {
   }
   if (ok) console.log("[smoke] BOOT_OK：中继端口 " + bridgePort + " 有 HTTP 应答（DSH 已就绪）");
   else console.log("[smoke] BOOT_FAIL：" + (exit() ? "子进程提前退出" : "等待超时（" + Math.round(READY_TIMEOUT_MS / 1000) + "s）"));
+  const unactivated = activationFailures(childLog.join(""));
+  if (unactivated.length > 0) {
+    console.log("[smoke] ACTIVATION_FAIL：子插件没激活 → " + unactivated.join(" / "));
+    ok = false;
+  }
   await stopChild(child, exit);
   // 成功判据 = 就绪探测通过。收尾用 SIGTERM 杀子进程，exit.code 为 null / signal=SIGTERM 属预期，不算失败。
   return ok;
