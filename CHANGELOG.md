@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.0.1+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0%2Bdsh-0.2.0-rc.2...v1.0.1%2Bdsh-0.2.0-rc.2) (2026-10-07)
+
+### Features
+
+* **dsh,session:** 新增 DSH 侧会话子插件 @dshana/dsh-session ([9c07578](https://github.com/Nyasers/DSHana/commit/9c075781d2e7f70a0add7a48be58e647a04d0f86))
+* **release:** 交付面裁剪，剔掉依赖树里运行时不读的文件 ([6b3e409](https://github.com/Nyasers/DSHana/commit/6b3e40986031b1c79b5a56879b7abfd284dd6092))
+* **release:** 投稿条目按市场取件名落 Release 资产 ([aa9b1ac](https://github.com/Nyasers/DSHana/commit/aa9b1ac2c5e3b253bd6e0595c83c59cb54be4cb7))
+
+### Bug Fixes
+
+* **dsh:** 让 dsh-app/startup 那条插件行拿到包根的 description ([ce29249](https://github.com/Nyasers/DSHana/commit/ce292494349b5b2479b45aa666193e7f97e0b170))
+* **e2e:** smoke:packed 改 fail-closed，未激活 / 导入失败即判失败 ([c9e98f0](https://github.com/Nyasers/DSHana/commit/c9e98f0b4ccbbd1a9caf184460912edc3e5b88c6))
+* **release:** 文档与测试目录只认包根，避免按名字误裁运行时代码 ([e8ed5c1](https://github.com/Nyasers/DSHana/commit/e8ed5c11251f9cab15992994951c21567c81b4b5))
+* **tools,session,runtime:** 模型可读的报错文案统一英文 ([27dc373](https://github.com/Nyasers/DSHana/commit/27dc37378091efdea4bdaf97b92659b69910260c))
+* **tools,skill:** reply 去掉落不到实处的 agentPreset，描述与 SKILL 统一英文 ([e56ec57](https://github.com/Nyasers/DSHana/commit/e56ec5703258932f07b6bdc67d822aca963cc0ed))
+* **ui:** 【新会话】在无工作区时显式宣告清空 ([314d18d](https://github.com/Nyasers/DSHana/commit/314d18dfb8928cc4de1b55d17db62b54c8b82f05))
+* **ui:** 工作区重命名 / 删除的框转到整幅面 ([4b49166](https://github.com/Nyasers/DSHana/commit/4b49166990d5abfd8aec8392f7c1e66d73a44a47))
+* **ui:** 就绪后停表，扫掉停表留下的死码 ([2a650c6](https://github.com/Nyasers/DSHana/commit/2a650c69bde4bb55158febcd088f4e344ec6f07a))
+* **ui:** 跨面会话选中接回真值，补上「清空」这一路 ([0320132](https://github.com/Nyasers/DSHana/commit/03201325461d17d61787ebfdc9a0f28f316a9a4e))
+
+### Performance Improvements
+
+* **ui:** boot 快照由主卡广播，FP 不再各取一份 ([f648e96](https://github.com/Nyasers/DSHana/commit/f648e96e9853b792cf1c4acadc83f7f26c62e18e))
+
 ## [1.0.0+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.35%2Bdsh-0.2.0-rc.2...v1.0.0%2Bdsh-0.2.0-rc.2) (2026-10-06)
 
 ## [1.0.0-rc.35+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.0-rc.34%2Bdsh-0.2.0-rc.2...v1.0.0-rc.35%2Bdsh-0.2.0-rc.2) (2026-10-04)
@@ -691,6 +715,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
