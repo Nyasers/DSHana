@@ -13,6 +13,11 @@
 //   事实默认从 releases/ 里那份 zip 与它的 .sha256 取；`--facts-dir <目录>` 时改从该目录下所有
 //   `package-facts.json` 合并出的表取（CI 里事实由出包作业记好、当 artifact 带过来）。
 //
+// 两种条目文件，别混：
+//   <zip>.entry.json（内部）：按 zip 名派生，喂索引构建器，可带 `x-dshana-targets` 自留字段。
+//   <kind>-<id>-<version>.entry.json（投稿）：官方市场按这个名在 Release 资产里找条目，一份对一个版本，
+//   所以只对选中的那个 target 写；自留字段不进公开目录——官方索引原样透传未知字段，平台包清单不必跟着走。
+//
 // ⚠ 索引模型的限制（与 githana 一致）：index.v2.json 的条目只有 `archive.url` 一个地址，
 //   **没有平台维度**，构建器按 `kind:id` 分组，多平台 zip 不可能各占一条。故默认只把
 //   `universal` 包放进清单，平台包留在 release 资产里按名取用。
@@ -30,6 +35,9 @@ import { ROOT } from "../shared/root.mts";
 import { mergeFacts, type PackageFacts } from "./facts.mts";
 const HANA_HOME = process.env.HANA_HOME || join(process.env.USERPROFILE || process.env.HOME || "", ".hanako");
 const RELEASES = join(ROOT, "releases");
+
+/** 市场条目里的扩展种类：本仓库只出 App。 */
+const KIND = "app";
 
 interface Archive {
   url: string;
@@ -165,7 +173,7 @@ function buildEntry(zipName: string, targets: Record<string, Archive>): Entry {
   // scripts/release/pack/index.mts 写的 .sha256 是「纯大写哈希」（不带文件名）——取第一个空白段再归一成小写
   const { size, sha256 } = zipFacts(zipName);
   const entry: Entry = {
-    kind: "app",
+    kind: KIND,
     id: manifest.id,
     name: manifest.name || manifest.id,
     publisher: arg("--publisher") || pkg.publisher || pkg.name || manifest.id,
@@ -224,6 +232,15 @@ function main(): void {
   }
   const targets = buildTargets(all, version, baseUrl);
 
+  // 0) 投稿条目：文件名是官方市场的取件名，一份对一个版本，所以只写选中的那个 target；
+  //    自留字段是自托管侧的东西，投稿这份删掉。
+  const enrollmentZip = chosen[0];
+  const enrollmentEntry = buildEntry(enrollmentZip, targets);
+  delete enrollmentEntry["x-dshana-targets"];
+  const enrollmentPath = join(RELEASES, `${KIND}-${manifest.id}-${version}.entry.json`);
+  fs.writeFileSync(enrollmentPath, `${JSON.stringify(enrollmentEntry, null, 2)}\n`, "utf8");
+  console.log(`[market-index] 投稿条目 ${enrollmentPath}（archive 指向 ${enrollmentZip}）`);
+
   // 1) 为所有本版本产物写 entry（多目标各一份，便于以后按平台取用）
   const entries: string[] = [];
   for (const zip of all) {
@@ -275,7 +292,7 @@ function main(): void {
   } finally {
     fs.removeSync(stageDir);
   }
-  console.log(`[market-index] 完成 ${out}（entry 见 releases/*.entry.json）`);
+  console.log(`[market-index] 完成 ${out}（索引输入见 releases/*.entry.json，投稿条目见 ${basename(enrollmentPath)}）`);
 }
 
 main();
