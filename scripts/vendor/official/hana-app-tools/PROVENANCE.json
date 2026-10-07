@@ -2,11 +2,11 @@
   "note": "Hana 自带作者工具的原样拷贝（verbatim），让本仓库与 CI 不依赖本机 Hana 装。收录判定只看依赖闭包。",
   "tools": {
     "extension-index-build.mjs": {
-      "source": "<HANA_HOME>/artifacts/server/0.970.9-win32-x64/scripts/extension-index-build.mjs",
-      "hanaVersion": "0.970.9",
-      "copiedAt": "2026-09-13",
-      "bytes": 11058,
-      "sha256": "0a4f26a06d55abdde9ed6a64686b73c188729b0cfa647c98817cad3cbac84c41",
+      "source": "<HANA_HOME>/artifacts/server/1.0.4-beta-win32-x64-1ba6b7dc6f2217b9-gca567bfd32ee29d4/scripts/extension-index-build.mjs",
+      "hanaVersion": "1.0.4-beta",
+      "copiedAt": "2026-10-07",
+      "bytes": 11059,
+      "sha256": "900143e0e5b09e917a52db0256b6528e904d3fd2806ebddb79fc5e7d0e7c9da2",
       "externalDeps": [],
       "license": "该文件自身未随附许可声明，许可以 Hana 自身分发为准"
     }
