@@ -17,13 +17,17 @@
 //   逐字比（等价于"把通用包下下来再哈希"，但一个字节都不下），再拿已上架索引比一次主号不倒退。
 //   完整性真正的强校验（下载 + 哈希）留给市场 PR 的 CI 在远端做，本地不重复付那 153 MB；要在这边
 //   也跑同一道强校验就加 --deep-check（它会下载已批准的包）。
+//   开出来的 draft PR 形状对齐维护者（liliMozi）的更新型 PR：标题 `chore: approve <kind>/<id> <tag>`，
+//   正文是 Release / SHA-256 / Changes（待人工补）三段 + 一行本地核对说明。skill / recipe 没有版本号
+//   （`entry.version` 恒为 0.0.0、按内容哈希更新），标题那一位本来就是 tag，条目名也不带版本段。
 //   审阅材料（PR 模板那几栏）不由脚本填，draft 留着人工补。
 //
 // 用法：
 //   node scripts/release/market-pr.mts                       # 等 Release 就绪 → API 侧核对 → 备 draft PR
-//   node scripts/release/market-pr.mts --dry-run             # 只打印将要做的改动，不推不改远端
+//   node scripts/release/market-pr.mts --dry-run             # 只打印将要提交的标题/正文，不推不改远端
 //   node scripts/release/market-pr.mts --deep-check          # 额外跑市场同步器的强校验（会下载已批准的包）
 //   node scripts/release/market-pr.mts --tag v1.0.2+dsh-0.2.0-rc.2
+//   node scripts/release/market-pr.mts --tag recipe-2026-10-08   # skill/recipe 无版本号，tag 必须显式给
 //
 // 退出码 0 的三种情形：已备好 PR（打印 URL）、该版本已登记（无事可做）、--dry-run 走完。
 import fs from "fs-extra";
@@ -36,6 +40,10 @@ import { errText } from "../shared/err-text.mts";
 
 /** fork 的本地工作副本：在 .cache/ 下，随出包清缓存一起清掉，不留痕。 */
 const WORK = join(ROOT, ".cache", "market-fork");
+/** skill / recipe 没有版本号：按内容哈希更新，`entry.version` 恒为 `0.0.0`，条目名也不带版本
+ *  （`<kind>-<id>.entry.json`），Release tag 由作者自己定（形如 `recipe-2026-10-08`）。
+ *  app / connector / role / bundle 走 `<kind>-<id>-<version>.entry.json` 与 `v<version>`。 */
+const VERSIONLESS_KINDS = new Set(["skill", "recipe"]);
 /** 等 Release 就绪的上限：CI 出六个平台包加通用包，实测十几分钟。 */
 const WAIT_MS = 40 * 60 * 1000;
 const POLL_MS = 15 * 1000;
@@ -212,11 +220,16 @@ function preflightPublished(enr: Enrollment, version: string, entryPublisher: st
     log(`索引里还没有 ${enr.kind}/${enr.id}（首次上架）`);
     return;
   }
-  if (coreDowngrade(version, pub.version)) {
-    throw new Error(`版本倒退：本次 ${version} < 已上架 ${pub.version}，市场侧的 historyFor 会拒`);
-  }
   if (pub.publisher && pub.publisher !== enr.publisher) {
     log(`注意：发布者与已上架不同（${pub.publisher} → ${enr.publisher}），PR 正文里要写明登记变更`);
+  }
+  // skill / recipe 按内容哈希更新，`0.0.0` 不是版本语义，比版本没意义（市场侧 historyFor 同样跳过）。
+  if (VERSIONLESS_KINDS.has(enr.kind)) {
+    log(`${enr.kind} 没有版本号（按内容哈希），跳过版本比对`);
+    return;
+  }
+  if (coreDowngrade(version, pub.version)) {
+    throw new Error(`版本倒退：本次 ${version} < 已上架 ${pub.version}，市场侧的 historyFor 会拒`);
   }
   log(`已上架 ${pub.version} → 本次 ${version}（主号不降级）`);
 }
@@ -259,16 +272,26 @@ function runDeepMarketCheck(): void {
 async function main(): Promise<void> {
   const enr = fs.readJsonSync(join(ROOT, "market", "enrollment.json")) as Enrollment;
   const manifest = fs.readJsonSync(manifestPath(ROOT)) as { version: string };
-  const tag = arg("--tag") || `v${manifest.version}`;
+  const versioned = !VERSIONLESS_KINDS.has(enr.kind);
+  // 默认 tag 只有带版本的扩展推得出来（`v<manifest 版本>`）；skill / recipe 没有版本号，必须显式给 --tag。
+  const tag = arg("--tag") || (versioned ? `v${manifest.version}` : null);
+  if (!tag) {
+    throw new Error(
+      `${enr.kind} 没有版本号（按内容哈希更新），默认 tag 推不出来——用 --tag 指定 Release tag（形如 recipe-2026-10-08）`,
+    );
+  }
   // 条目名按**所选 tag** 的版本取，不按本地 manifest：--tag 指旧版本时，拿当前 manifest 去搜那个 Release
   // 只会一直等不到。两者不一致时提示一声（正常发版流程里它们相等）。
   const version = tag.replace(/^v/, "");
-  if (version !== manifest.version) {
+  if (versioned && version !== manifest.version) {
     log(`注意：--tag ${tag} 与本地 manifest 的 ${manifest.version} 不同，按 tag 的版本找条目`);
   }
-  const entryName = `${enr.kind}-${enr.id}-${version}.entry.json`;
+  // 条目名分两形：带版本的扩展带版本段，skill / recipe 不带（它们的 entry.version 恒为 0.0.0）。
+  const entryName = versioned
+    ? `${enr.kind}-${enr.id}-${version}.entry.json`
+    : `${enr.kind}-${enr.id}.entry.json`;
 
-  log(`登记 ${enr.kind}/${enr.id} · tag ${tag}`);
+  log(`登记 ${enr.kind}/${enr.id} · tag ${tag}${versioned ? "" : "（无版本号，按内容哈希）"}`);
   const { sha256, size, publisher } = await waitForRelease(tag, enr.repository, entryName, !dryRun);
   log(`条目 sha256 ${sha256}（${size} 字节）`);
 
@@ -308,7 +331,25 @@ async function main(): Promise<void> {
 
   preflightPublished(enr, version, publisher);
 
+  // PR 形状对齐维护者（liliMozi）的更新型 PR：标题 `chore: approve <kind>/<id> <tag>`；正文三段
+  // （Release / SHA-256 / Changes）+ 一行本地核对说明。tag 原样用（带 `v` 前缀；skill/recipe 本来就是
+  // tag），去 `v` 前缀只用于拼条目名。
+  const title = `chore: approve ${enr.kind}/${enr.id} ${tag}`;
+  const releaseUrl = `https://github.com/${enr.repository}/releases/tag/${tag.replace(/\+/g, "%2B")}`;
+  const body = [
+    `Approve the new ${enr.id} ${enr.kind} release.`,
+    "",
+    `- Release: ${releaseUrl}`,
+    `- SHA-256: \`${sha256}\`（照抄自条目 JSON 的 \`archive.sha256\`）`,
+    "- Changes: （本次变更，人工补）",
+    "",
+    "Local check: 条目与 Release 资产按 API 核对一致（sha256 digest + 字节数），未下载安装包。",
+    "",
+    "由 `pnpm run market:pr` 生成。",
+  ].join("\n");
+
   if (dryRun) {
+    log(`--dry-run：将提交的 draft PR\n  标题：${title}\n  正文：\n${body}`);
     log("--dry-run：到此为止，未推分支、未开 PR");
     return;
   }
@@ -322,16 +363,6 @@ async function main(): Promise<void> {
   exec("git", ["push", "--force", "origin", branch], WORK);
   log(`已推 ${enr.fork}:${branch}`);
 
-  const title = `${enr.id} ${tag}`;
-  const body = [
-    `Enroll/update \`${enr.kind}/${enr.id}\` at \`${tag}\`.`,
-    "",
-    `- repository: ${enr.repository}`,
-    `- publisher: ${enr.publisher}`,
-    `- sha256: \`${sha256}\` (copied from the entry JSON's \`archive.sha256\`)`,
-    "",
-    "Draft opened automatically by `pnpm run market:pr`; review materials still need filling in.",
-  ].join("\n");
   const prUrl = exec("gh", [
     "pr", "create",
     "--repo", enr.upstream,
