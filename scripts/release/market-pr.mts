@@ -26,9 +26,10 @@
 //   `-F <文件>` 整份读；给了就用它（首行当标题）。只想补"这次改了什么"那一行就用 `--changes`，
 //   其余（Release / SHA-256 / Local check）都是脚本能自证的事实，不用手抄。
 //
-//   署名与 GitHana 的 git_commit 同款：提交身份用跑脚本的人自己的 git 身份与签名 key（全局 user.* +
-//   commit.gpgsign）——身份一旦被 `-c user.name/email` 覆盖，签名 key 与身份就对不上，GitHub 会判
-//   unknown_key / Unverified；agent 的署名走 Co-authored-by 尾注（已有同款就不重复追加），不冒充提交身份。
+//   署名与 GitHana 的 git_commit 同款：提交签名复用 GitHana 的隔离环（`GIT_CONFIG_GLOBAL` 指向它的
+//   隔离 gitconfig、`GNUPGHOME` 指向它的 gnupg），身份与密钥都取自那份——密钥不出那个 App 的边界，
+//   也不碰用户个人的 `~/.gitconfig` 与个人 GPG 环。签名 key 与提交身份对不上时 GitHub 会判
+//   unknown_key / Unverified（PR #29 的 81fc18e 就是这样）；agent 的署名走 Co-authored-by 尾注。
 //
 // 用法：
 //   node scripts/release/market-pr.mts                       # 等 Release 就绪 → API 侧核对 → 备 PR
@@ -43,6 +44,7 @@
 // 退出码 0 的三种情形：已备好 PR（打印 URL）、该版本已登记（无事可做）、--dry-run 走完。
 import fs from "fs-extra";
 import { execFileSync } from "node:child_process";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { ROOT } from "../shared/root.mts";
@@ -125,11 +127,28 @@ const cliMessage = submissionMessage();
 const cliChanges = arg("--changes");
 if (cliMessage && cliChanges) throw new Error("已用 -m/-F 给整份提交信息，就不要再给 --changes");
 
+/** 宿主根（GitHana 的隔离签名环在它的 app-data 下）。 */
+const HANA_HOME = process.env.HANA_HOME || join(homedir(), ".hanako");
+
+/** 提交签名复用 GitHana 的隔离环：`GIT_CONFIG_GLOBAL` 指向它的隔离 gitconfig（user.* / commit.gpgsign /
+ *  gpg.program 都在那份里），`GNUPGHOME` 指向它的 gnupg。key 不出那个 App 的边界，也不碰用户个人的
+ *  `~/.gitconfig` 与个人 GPG 环——签出来的是与 GitHana 的 git_commit 同一把钥匙（我们仓库里那些
+ *  Verified 提交就是它签的）。缺了 fail-closed：没有隔离环就宁可停，不拿个人环偷偷签。 */
+function signingEnv(): Record<string, string> {
+  const dataDir = join(HANA_HOME, "app-data", "githana");
+  const gitconfig = join(dataDir, "gitconfig");
+  const gnupg = join(dataDir, "gnupg");
+  if (!fs.existsSync(gitconfig) || !fs.existsSync(gnupg)) {
+    throw new Error(`找不到 GitHana 的隔离签名环（${dataDir}）：先在 GitHana 里生成 GPG 密钥，再跑本脚本`);
+  }
+  return { GIT_CONFIG_GLOBAL: gitconfig, GNUPGHOME: gnupg, GIT_TERMINAL_PROMPT: "0" };
+}
+
 /** 无代理环境下跑 gh / git，并给 git 固定 HTTP/1.1。
  *  宿主环境里的 HTTP(S)_PROXY 可能指向已停的代理，会让 gh 连接失败；而 HTTP/2 过某些代理中转会
  *  Recv failure: Connection was reset。两者都在这里绕开，不依赖跑脚本的人先改好环境。 */
-function exec(bin: string, args: string[], cwd = ROOT): string {
-  const env = { ...process.env };
+function exec(bin: string, args: string[], cwd = ROOT, extraEnv: Record<string, string> = {}): string {
+  const env = { ...process.env, ...extraEnv };
   for (const k of ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy"]) delete env[k];
   const finalArgs = bin === "git" ? ["-c", "http.version=HTTP/1.1", ...args] : args;
   return execFileSync(bin, finalArgs, { cwd, encoding: "utf8", env }).trim();
@@ -421,10 +440,10 @@ async function main(): Promise<void> {
   const branch = `enroll/${tag.replace(/^v/, "").replace(/\+/g, "-")}`;
   exec("git", ["checkout", "-B", branch], WORK);
   exec("git", ["add", "registry.json", "approvals.json"], WORK);
-  // 提交身份不自造（见文件头“署名与 GitHana 同款”）：用局部的 git 身份与签名 key，
-  // 署名走 Co-authored-by 尾注；提交信息用同一份标题 + 正文。
+  // 提交签名复用 GitHana 的隔离环（见文件头“署名与 GitHana 同款”），提交信息用同一份标题 + 正文。
+  // 推送不注这个 env：隔离 gitconfig 里没有凭据助手，推还是走环境自己的凭据。
   const trailer = `${title}\n${body}`.includes("Co-authored-by: HanaAgent") ? [] : ["-m", AGENT_SIGNATURE];
-  exec("git", ["commit", "-m", title, ...(body ? ["-m", body] : []), ...trailer], WORK);
+  exec("git", ["commit", "-m", title, ...(body ? ["-m", body] : []), ...trailer], WORK, signingEnv());
   exec("git", ["push", "--force", "origin", branch], WORK);
   log(`已推 ${enr.fork}:${branch}`);
 
