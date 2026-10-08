@@ -1,6 +1,5 @@
 {
   "package": "@deepseek-ai/dsh-subprocess-local",
-  "upstreamVersion": "0.1.7-rc.1",
   "upstreamDir": "packages/subprocess/subprocess-local",
   "halves": {
     "client": false,

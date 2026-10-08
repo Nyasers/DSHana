@@ -1,6 +1,5 @@
 {
   "package": "@deepseek-ai/dsh-client-ui-shortcuts",
-  "upstreamVersion": "0.2.0-rc.2",
   "upstreamDir": "packages/client/ui-shortcuts",
   "files": [
     {

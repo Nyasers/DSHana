@@ -21,6 +21,7 @@ import {
   loadIntegrations,
   stageIntegrations,
 } from "../../scripts/integrations/mirror.mts";
+import { dshPin } from "../../scripts/shared/version.mts";
 import { extractRequires, duplicateCssClasses, patchGeneratedRequestModel } from "../../scripts/integrations/build.mts";
 import { cssScopeOf, scopedClassName, scopeSelector } from "../../packages/app/src/cordis/client-config.mts";
 
@@ -134,10 +135,27 @@ test("仓库真实清单：能解析、字段齐（当前为批次①两枚、�
     // 版本戳段不写在清单里：它只从主 package.json 派生（手写字段会被 loadIntegrations 拒）。
     assert.equal(it.hana, undefined);
     assert.equal(it.revision, undefined);
+    // 上游版本同样不写在清单里：loadIntegrations 从 pin 派生挂上（dshPin 是全链唯一那处声明）。
+    assert.equal(it.upstreamVersion, dshPin(), `${it.dir} 的上游版本应由 pin 派生`);
     assert.ok(Array.isArray(it.files));
   }
   const names = list.map((x) => x.dir);
   assert.ok(names.includes("ui-layout") && names.includes("ui-sidebar"));
+});
+
+test("闸会响：清单手写 upstreamVersion（上游版本由 pin 派生）", () => {
+  const root = mkdtempSync(join(tmpdir(), "hana-int-"));
+  try {
+    const itRoot = join(root, "integrations", "demo");
+    mkdirSync(itRoot, { recursive: true });
+    writeFileSync(
+      join(itRoot, "integration.json"),
+      JSON.stringify({ package: "p", upstreamDir: "d", upstreamVersion: "0.1.7-rc.1", files: [] }),
+    );
+    assert.throws(() => loadIntegrations(root), /不得带 upstreamVersion 字段/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("patchVersion：补丁包版本戳只从主 package.json 派生（无手写修订号）", async () => {

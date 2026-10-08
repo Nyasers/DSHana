@@ -1,6 +1,5 @@
 {
   "package": "@deepseek-ai/dsh-api-terminal-controller",
-  "upstreamVersion": "0.1.7-rc.1",
   "upstreamDir": "packages/api/terminal-controller",
   "halves": {
     "client": false,

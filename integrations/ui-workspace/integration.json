@@ -1,6 +1,5 @@
 {
   "package": "@deepseek-ai/dsh-client-ui-workspace",
-  "upstreamVersion": "0.2.0-rc.2",
   "upstreamDir": "packages/client/ui-workspace",
   "files": [
     {
