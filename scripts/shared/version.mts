@@ -10,6 +10,7 @@
 // git 收口见 scripts/release/version.mts）。
 import fs from "node:fs";
 import path from "node:path";
+import { MANIFEST_REL } from "./contract-assets.mts";
 import { ROOT } from "./root.mts";
 
 export { ROOT };
@@ -69,10 +70,10 @@ export function bundlePkgPaths() {
   return ["packages/dsh/app/package.json"];
 }
 
-// 派生同步目标（随主版本同步的文件）：manifest.json（仓库根，App 契约）+ cordis 包 + 组合层包
+// 派生同步目标（随主版本同步的文件）：App 契约 manifest（路径见 contract-assets）+ cordis 包 + 组合层包
 //（不含主 package.json——主是事实源，由 bump 阶段改；这里指"跟随"它的文件）
 export function derivedVersionTargets() {
-  return ["manifest.json", ...cordisPkgPaths(), ...bundlePkgPaths()];
+  return [MANIFEST_REL, ...cordisPkgPaths(), ...bundlePkgPaths()];
 }
 
 // 版本文件全集（含主 package.json——version-hook 提交范围用：pnpm version 已改主待收口）

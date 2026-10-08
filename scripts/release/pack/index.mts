@@ -32,6 +32,7 @@ import fs from "fs-extra";
 import { errText } from "../../shared/err-text.mts";
 import { BUNDLE_DIR, CORDIS_DIR, DIST_DIR, PKG_DIR, STAGING_ROOT } from "../../shared/paths.mts";
 import { ROOT } from "../../shared/root.mts";
+import { manifestPath } from "../../shared/contract-assets.mts";
 import { assertBundleArtifacts, assertCordisArtifacts, assertNoProductPackage, assertUiTree } from "./assert.mts";
 import { declareInstallationBundle, declareInstallationPlugins } from "./bundle-deps.mts";
 import { excludedPackages, pruneExcluded, requiredPackages } from "./exclude.mts";
@@ -47,7 +48,7 @@ const repoPkg = fs.readJsonSync(join(ROOT, "package.json"));
 const version = repoPkg.version;
 if (!version) throw new Error("package.json version 缺失");
 // 版本一致性校验：打包版本必须同时等于 manifest.json 的 version，只同步一处会出发布包版本与 tag 不一致的包。
-const manifestVersion = fs.readJsonSync(join(ROOT, "manifest.json")).version;
+const manifestVersion = fs.readJsonSync(manifestPath(ROOT)).version;
 if (version !== manifestVersion)
   throw new Error(
     `版本不一致：package.json ${version} ≠ manifest.json ${manifestVersion}（manifest 未同步，跑 node scripts/derive/index.mts 同步后再打包）`,
@@ -58,8 +59,8 @@ if (version !== manifestVersion)
 //    这里只补清单外的文本件；包根即 App 安装目录，不套 dist 这层目录。不在清单里的东西各有其宿主：
 //    · routes/ —— v2 走 ctx.routes.register，route 在 index.mjs 里注册，无目录产物；
 //    · app/（卡片脚本与样式）—— 构建时内联进 index.mjs bundle；
-//    · manifest.json / assets/ / skills/ —— 都从仓库根取（App 契约与随包静态件）：manifest/skills 原样拷，
-//      assets/ 下的相对路径就是产物里相对包根的路径（`icon.png` 到产物根、`ui/cover.png` 到产物 `ui/`）；
+//    · skills/ —— 从仓库根取（随包静态件）原样拷；manifest 与身份图标在 App 域
+//      （packages/app/src/），随 dist/ 一起进包根，本步不补；卡面图由 ui 域产出；
 //    · package.json —— 不生成也不随包：入口是 index.mjs，Node 按扩展名判 ESM，安装树不需要包清单；
 //      仓库那份带 scripts / devDependencies / packageManager / imports，是构建入口（上面的断言拒收）。
 //    · pnpm-workspace.yaml / pnpm-lock.yaml —— 不随包：装机侧不执行 pnpm install（依赖已物化进包）。

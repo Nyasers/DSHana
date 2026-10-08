@@ -12,7 +12,7 @@
 // 一个任务 = 一类读者（再细就成"一个文件一个任务"，derive: 后面排长队反而难用）：
 //   version-metadata packages/host 声明的 dsh 依赖 → package.json#version 的 +dsh- 段（状态型；
 //                                             排第一，因为它改的是后面几个任务的源）
-//   manifest     主 package.json#version + SDK 快照 packedVersion → manifest.json（仓库根；宿主读的 App 契约）
+//   manifest     主 package.json#version + SDK 快照 packedVersion → packages/app/src/manifest.json（App 契约）
 //   cordis       主 package.json#version         → packages/dsh/*/package.json（profile loader 读的包）
 //   bundle       主 package.json#version         → packages/dsh/app/package.json（组合层包）
 //   thirdparty   vendor/hana-app-sdk 的 manifest → THIRD_PARTY_NOTICES.md（分发合规）
@@ -33,6 +33,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { mirrorPathEntries } from "../shared/mirror-paths.mts";
+import { MANIFEST_REL } from "../shared/contract-assets.mts";
 import { ROOT } from "../shared/root.mts";
 import { isDirectRun } from "../shared/run.mts";
 import { bundlePkgPaths, cordisPkgPaths, readPkg } from "../shared/version.mts";
@@ -101,12 +102,12 @@ function versionFiles(rels: string[]): DerivedFile[] {
 const manifestTask: FileTask = {
   kind: "file",
   name: "manifest",
-  about: "package.json#version + vendor SDK 的 packedVersion → manifest.json（仓库根，App 契约）",
+  about: "package.json#version + vendor SDK 的 packedVersion → packages/app/src/manifest.json（App 契约）",
   plan: () => {
-    const j = readPkg("manifest.json");
+    const j = readPkg(MANIFEST_REL);
     j.version = readPkg("package.json").version;
     j.minAppVersion = packedVersion();
-    return [{ rel: "manifest.json", content: jsonText(j) }];
+    return [{ rel: MANIFEST_REL, content: jsonText(j) }];
   },
 };
 

@@ -30,7 +30,7 @@
     "postsync": "pnpm run derive",
     "sync:vendor": "pnpm run sync:vendor:sdk && pnpm run sync:vendor:dsh",
     "sync:vendor:sdk": "node scripts/vendor/sdk.mts",
-    "postsync:vendor:sdk": "pnpm install",
+    "postsync:vendor:sdk": "pnpm install && node scripts/derive/index.mts manifest thirdparty",
     "sync:vendor:dsh": "node scripts/vendor/dsh.mts",
     "changelog": "node scripts/release/changelog.mts",
     "prepackage": "pnpm run derive && pnpm run build",

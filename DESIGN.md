@@ -53,11 +53,10 @@ CI 直接失败的风险。`engines.node` 不参与 lockfile 解析，改这个�
 
 ## App 契约的派生
 
-`manifest.json`（仓库根）的两个字段都来自 derive，不手写：`version` 取主 `package.json`，
+`manifest.json`（`packages/app/src/`，App 域的契约件）的两个字段都来自 derive，不手写：`version` 取主 `package.json`，
 `minAppVersion` 取 `vendor/hana-app-sdk/source-manifest.json` 的 `packedVersion`（随包 SDK 快照
 打包时的宿主版本，也就是 App 要求的最低宿主版本）。两者由**同一个** manifest 任务产出完整内容
-（同文件两个任务会互相覆盖）。同步随包 SDK 后跑 `pnpm run derive`，`derive --check` 会在漂移时
-报出来。
+（同文件两个任务会互相覆盖）。版本事实源都落在 `package.json`：主号归 `pnpm version`，`+dsh-…` 段归 derive 从 `packages/host/package.json` 声明的内核版本派生（根 `devDependencies` 里那份同名声明由 integrations 校验对拍，两处不得分家），manifest、cordis 与组合层子包的版本一律跟随，不手改。唯一不经过 `package.json` 的是 `minAppVersion`：它取自随包 SDK 快照自带的 `packedVersion`（该快照按哈希清单同步，且全仓只此一处读取，没有第二份拄本）。同步随包 SDK 由 `postsync:vendor:sdk` 钩子顺带刷这两处（`node scripts/derive/index.mts manifest thirdparty`，同步完就走，不必另记一歩），`derive --check` 是漂移闸。
 
 ## 架构总览（受管 runtime）
 
@@ -156,12 +155,12 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
 
 **manifest / apply 入口 / 设置 / 工具注册（迁移步骤 1）：**
 
-- `manifest.json`（仓库根，源码形态与产物形态对齐）是 App v2 契约：`version` 由 derive 取主 `package.json`，`minAppVersion` 取随包 SDK 快照（现 `0.1023.1`）；capabilities 十一项（tools / tasks / session / models / agents.read / resources / runtime 三项 / ui 两项，清单见文件）。v1 专属字段（`author`、`trust`、`activationEvents`、`ui.hostCapabilities`、`network` 白名单）不在清单里。
+- `manifest.json`（`packages/app/src/`，App 域；derive 写回，构建拷进交付根）是 App v2 契约：`version` 由 derive 取主 `package.json`，`minAppVersion` 取随包 SDK 快照（现 `0.1023.1`）；capabilities 十一项（tools / tasks / session / models / agents.read / resources / runtime 三项 / ui 两项，清单见文件）。v1 专属字段（`author`、`trust`、`activationEvents`、`ui.hostCapabilities`、`network` 白名单）不在清单里。
 - `packages/app/src/app.ts` 导出 `apply(ctx)`（兼导出 `default { apply }`）；apply 注册完即返回。统一日志只走宿主 `ctx.logger`；globalThis 宿主单例退役 → `packages/runtime/src/app-runtime.ts` module-scope 运行包。
 - 工具注册：`ctx.tools.register`，工具名 `dshana`（一个插件一个同名工具 + subcommand；v2 不自动加 `pluginId_` 前缀、重名被宿主当场拒）。动作五个：`open`/`reply`/`get`/`close`/`approve`，装配见 `packages/tools/src/index.ts`、手册见 `skills/dshana/SKILL.md`。
 - 设置：`contributes.settings` 的 UI 由 App 自绘设置页承担（`ui.route: /settings.html`，宿主设置区渲染）；键与缺省以 `packages/runtime/src/config.ts` 为准，读写落 `dataDir/settings.json`（旧 `config.json` 只在两键缺位时作读侧兼容）。
 - 数据读路径迁到 `ctx.dataDir`（宿主 `app-data/<id>/`）：list/get 读当前源的 `<DSH_HOME>/...`（projcache + jsonl zstd）；旧插件数据迁移见 `packages/runtime/src/legacy-migrate.ts` 与 `scripts/migrate/legacy.mts`。
-- 构建：`node packages/app/src/build.ts` 产物 `dist/` = App 安装目录形态（根只放宿主读的契约件与目录：`manifest.json` + `icon.png` + `skills/` + `ui/`；代码全在 `bin/`：入口 `index.mjs` + 主体 `app.mjs` + runtime `dsh.mjs`）。源码形态与交付形态同形：`manifest.json` / `skills/` 与随包静态件都在仓库根（静态件在 `assets/` 下，其相对路径 = 产物里相对包根的路径：`assets/icon.png` → 产物根 `icon.png`，`assets/ui/cover.png` → 产物 `ui/cover.png`）；`packages/app/src/` 放壳源与主体。壳的文档侧另出 `.cache/ui/`（`node packages/ui/src/build.ts`），App 域构建整树拷进 `ui/`。cordis 子插件包另出 `.cache/cordis/`（`node packages/app/src/cordis.ts`）：它们不是安装态里的东西，出包时由 pack 落进包内 `node_modules/@dshana`。
+- 构建：`node packages/app/src/build.ts` 产物 `dist/` = App 安装目录形态（根只放宿主读的契约件与目录：`manifest.json` + `icon.png` + `skills/` + `ui/`；代码全在 `bin/`：入口 `index.mjs` + 主体 `app.mjs` + runtime `dsh.mjs`）。App 契约件 `manifest.json` 与身份图标都在 App 域（`packages/app/src/`），随包 `skills/` 在仓库根，壳源与主体也在 `packages/app/src/`；卡面图归 ui 域（`packages/ui/src/face.png` → 产物 `ui/face.png`，face.image 是 ui/ 相对路径，随 ui 整树产出）。源位映射收在 `scripts/shared/contract-assets.mts`（构建摆位、投稿条目与派生同步共用一份）。壳的文档侧另出 `.cache/ui/`（`node packages/ui/src/build.ts`），App 域构建整树拷进 `ui/`。cordis 子插件包另出 `.cache/cordis/`（`node packages/app/src/cordis.ts`）：它们不是安装态里的东西，出包时由 pack 落进包内 `node_modules/@dshana`。
 
 **受管 Node runtime：local-machine/external + readyMarker 就绪门（迁移步骤 2）：**
 

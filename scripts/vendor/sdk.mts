@@ -125,18 +125,18 @@ function lockBehind(): string[] {
   });
 }
 
-/** 同步后的衍生待办：锁文件重解析要按包名点名，derive 重建第三方声明与 manifest#minAppVersion。 */
+/** 同步后的衍生待办：锁文件重解析要按包名点名；派生文件（第三方声明与 manifest#minAppVersion）
+ *  由 postsync:vendor:sdk 钩子顺带刷新，不在这里要求人手跑 derive。 */
 function reportFollowUps(): void {
   const behind = lockBehind();
   if (behind.length) {
     const names = behind.map((f) => TGZ_PACKAGES[f]).filter((n): n is string => Boolean(n));
     console.log(`[sync-vendor-sdk] 锁文件停在旧 tgz（${behind.length} 个 integrity 未更新），重解析要按包名点名：`);
     if (names.length) console.log(`  pnpm update ${names.join(" ")}`);
-    console.log("  pnpm run derive");
     console.log("  （Windows 上 pnpm update 会把 file: 路径写成反斜杠，提交前改回正斜杠）");
     return;
   }
-  console.log("[sync-vendor-sdk] 锁文件 integrity 已匹配；THIRD_PARTY_NOTICES 与 manifest#minAppVersion 跑 pnpm run derive 同步");
+  console.log("[sync-vendor-sdk] 锁文件 integrity 已匹配；THIRD_PARTY_NOTICES 与 manifest#minAppVersion 由 postsync 钩子顺带刷新");
 }
 
 function main(): void {
