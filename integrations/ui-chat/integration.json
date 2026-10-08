@@ -1,6 +1,5 @@
 {
   "package": "@deepseek-ai/dsh-client-ui-chat",
-  "upstreamVersion": "0.1.7-rc.1",
   "upstreamDir": "packages/client/ui-chat",
   "files": [
     {

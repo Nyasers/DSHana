@@ -10,15 +10,22 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync } from "node:f
 import { dirname, join } from "node:path";
 
 import { ROOT } from "../shared/root.mts";
+import { dshPin } from "../shared/version.mts";
 
 export const REPO_ROOT = ROOT;
 export const MIRROR = join(REPO_ROOT, "vendor", "deepseek-harness");
 
-/** 读 integrations 下各短名目录的 integration.json，附带 dir 与 root。 */
+/**
+ * 读 integrations 下各短名目录的 integration.json，附带 dir、root 与**派生的** upstreamVersion。
+ *
+ * upstreamVersion 取自 dshPin()（全链唯一的内核声明入口，镜像 tag、产物版本串都从它取），
+ * 清单里不写它：手写就是第二事实源，pin 一动就漂。
+ */
 export function loadIntegrations(rootDir = REPO_ROOT) {
   const dir = join(rootDir, "integrations");
   if (!existsSync(dir)) return [];
   const out: any[] = [];
+  const upstreamVersion = dshPin();
   for (const ent of readdirSync(dir, { withFileTypes: true })) {
     if (!ent.isDirectory()) continue;
     const manifest = join(dir, ent.name, "integration.json");
@@ -30,7 +37,13 @@ export function loadIntegrations(rootDir = REPO_ROOT) {
           + "修订号由 git 历史派生（revisionOf），手写就是第二事实源",
       );
     }
-    out.push({ ...it, dir: ent.name, root: join(dir, ent.name) });
+    if (it.upstreamVersion !== undefined) {
+      throw new Error(
+        `集成 ${ent.name}: integration.json 不得带 upstreamVersion 字段——`
+          + "上游版本由 pin 派生（dshPin），手写就是第二事实源",
+      );
+    }
+    out.push({ ...it, dir: ent.name, root: join(dir, ent.name), upstreamVersion });
   }
   return out;
 }

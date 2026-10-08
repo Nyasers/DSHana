@@ -66,7 +66,7 @@ const COMMANDS = {
   },
   list: async () => {
     for (const it of loadIntegrations()) {
-      console.log(`${it.dir}  → ${it.package}  overlay=${(it.files || []).length}`);
+      console.log(`${it.dir}  → ${it.package}  上游 ${it.upstreamVersion}  overlay=${(it.files || []).length}`);
     }
   },
   verify: async ({ tag, version }: CommandContext) => {

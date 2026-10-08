@@ -1,6 +1,5 @@
 {
   "package": "@deepseek-ai/dsh-host-open-in-app",
-  "upstreamVersion": "0.2.0-rc.2",
   "upstreamDir": "packages/host/open-in-app",
   "halves": {
     "client": false,

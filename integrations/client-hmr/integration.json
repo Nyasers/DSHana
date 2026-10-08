@@ -1,11 +1,21 @@
 {
   "package": "@deepseek-ai/dsh-client-hmr",
-  "upstreamVersion": "0.1.7-rc.1",
   "upstreamDir": "packages/client/hmr",
+  "halves": {
+    "client": true,
+    "server": {
+      "entry": "src/index.ts",
+      "out": "lib/index.js"
+    }
+  },
   "files": [
     {
       "path": "src/client/index.ts",
       "upstreamSha256": "569fb912a465a69ec3c971e73de5a6982f624bab8c3fafba293de1ca09313b42"
+    },
+    {
+      "path": "src/index.ts",
+      "upstreamSha256": "c44bd4146a459aae2ebf75adaa31a5db96e3e5d17279ec6d80cb3682c1e17534"
     }
   ],
   "notes": [
@@ -16,6 +26,22 @@
     "  我们:      new EventSource(globalThis.__DSHANA__?.runtimeUrl?.(EVENTS_ENDPOINT) ?? EVENTS_ENDPOINT)",
     "桥缺席（非 App 文档）回落裸路径，与上游一致。__DSHANA__.runtimeUrl 由 packages/ui/src/dsh-inject.ts",
     "在 installTransport 里发布（与 __DSH_TRANSPORT__ 同一处，privateBase 已在手）。",
-    "上游路径注意：包名 @deepseek-ai/dsh-client-hmr，镜像目录 packages/client/hmr（不同名）。"
+    "上游路径注意：包名 @deepseek-ai/dsh-client-hmr，镜像目录 packages/client/hmr（不同名）。",
+    "host 半（/plugins/events 的空闲心跳）：这条通道是 DSH 前端唯一一条会长久静默的普通 HTTP 响应，",
+    "而链路上每一跳转发都走 undici 的 fetch —— 它的 bodyTimeout 是「响应体空闲 300 秒」计时器",
+    "（onBody 每来一块刷新，静默满则 UND_ERR_BODY_TIMEOUT；本机 node 26.8.1 / undici 8.10 实测 306.5 秒），",
+    "静默即被掐断，浏览器报 ERR_INCOMPLETE_CHUNKED_ENCODING 200 (OK)。上游只在开通道时写一条",
+    "': connected' 注释，此后直到有重建才写；打包形态里没有重建，于是每条连接都死在五分钟，EventSource",
+    "重连后循环——所以这个端点的请求「基本都是」这个报错。delta = 把这句注释改成周期写（240 秒：",
+    "链路上两跳 fetch 的 undici 空闲上界都是 300 秒、实测 306.5 秒触发，留一分钟余量；若哪天要走",
+    "隧道（那条约 100 秒）这个值得再降）：EventSource 跳过注释行，",
+    "而这几字节把链路各层 fetch 的计时器都刷住。",
+    "没选「在中继里注入」：那要给 body 做行边界解析，还要绕开 bridge 的零依赖去关它自己那一跳的 bodyTimeout；",
+    "也没选「客户端到点重连」：那只是把截断换成主动换连接，churn 照旧。",
+    "halves 因此多出 server 半：上游这份包的 lib/index.js 是单文件 ESM（只 import node:fs 与",
+    "@deepseek-ai/schemastery），必须由我们重打才带得上 delta —— 只把 src/index.ts 贴进 files 而不声明",
+    "server 半，交付树里的 lib/index.js 仍是原版（产物才是交付物）。",
+    "另记一条不归我们的：宿主的 app runtime 代理路由（hana-server）同样用 fetch 转发受管服务，对",
+    "text/event-stream 没关 bodyTimeout —— 任何经它的长流都会在五分钟被截。这条要宿主侧自己收口。"
   ]
 }

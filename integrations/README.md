@@ -24,7 +24,6 @@ integrations/<短名>/
 ```json
 {
   "package": "@deepseek-ai/dsh-client-ui-layout",
-  "upstreamVersion": "0.1.7-alpha.1",
   "upstreamDir": "packages/client/ui-layout",
   "files": [
     { "path": "src/client/index.ts", "upstreamSha256": "<写入时上游同名文件的 sha256>" }
