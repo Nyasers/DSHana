@@ -1,6 +1,6 @@
 {
   "generatedBy": "npm run pack:plugin-sdk",
-  "packedVersion": "1.0.4-beta",
+  "packedVersion": "1.0.6-beta",
   "packages": {
     "@hana/plugin-protocol": {
       "dir": "packages/plugin-protocol",
@@ -197,7 +197,7 @@
         "bundle/desktop/src/react/services/server-connection.ts": "22041ec2e70b5b4037ac623bbb508f2b02bb12e4665571c531719d3cd353fa0b",
         "bundle/desktop/src/react/services/studio-access.ts": "4ee366fd38ff7752ec82eb5763fed868adfc442c597a6fc671524d3f5426af55",
         "bundle/desktop/src/react/settings/api.ts": "433325a3185f4a47f77ce53df7b4c5d2ebf227b94509f88b48dad67c5d69e4fe",
-        "bundle/desktop/src/react/settings/extensions-api.ts": "ae406a4fbe552653a7cc2c84e280a41d7b9cec0cb0722b76a877966aac7f058e",
+        "bundle/desktop/src/react/settings/extensions-api.ts": "883d6828fdec13abbcef1fbbb57632bd64aab4ad1bc5c7f70cdce26d5e6514f2",
         "bundle/desktop/src/react/settings/resource-state.ts": "8c3f7c29d8cc43244f3769503aa0c533621998f273edbfc360c4afd1d5871bee",
         "bundle/desktop/src/react/settings/store.ts": "b2750076bdc75fa6d9c14e92ced69ed35143140320b31ab38b41ca019c6ad687",
         "bundle/desktop/src/react/stores/activity-slice.ts": "9f177c183284f71f09de65fb6c567d9f8335b7104f5f2cd35999733c9fccf3f3",
@@ -265,7 +265,7 @@
         "bundle/desktop/src/react/stores/workspace-ui-state-actions.ts": "cbbf87b02b6bc29375cee5739f91703fcfdd0008428c7f1b5ceec39564c6fbba",
         "bundle/desktop/src/react/stores/workspace-ui-surface.ts": "4be6d9a2afa87e36d17fe1d2147ddc5dcc0b77099ff073e45558a38a05960be0",
         "bundle/desktop/src/react/ui/AnchoredPortal.tsx": "46524fb4b78048d2e434f73c8c9361ec0a15e2f5f7ae371b6f0c1f95a1956dfd",
-        "bundle/desktop/src/react/ui/AnimationPrimitives.tsx": "8b29aad298ee3d6d92ea8e8239f3c351e3b4614d687ee319dcbff5b8752f5532",
+        "bundle/desktop/src/react/ui/AnimationPrimitives.tsx": "8c1b195e0142718f5d0acf27685009cef71a545b5dfa71e82af07c0eb29abbd1",
         "bundle/desktop/src/react/ui/Badge.module.css": "1f3e8ea6f16b89b6d3deeceea9e645b495370a6a95e0e73b4db2a7a65d294dee",
         "bundle/desktop/src/react/ui/Badge.tsx": "783d79c40696580910ff8ae43ff8ba3f885d64b699b560ce60ec031dff2daff2",
         "bundle/desktop/src/react/ui/ButtonLink.tsx": "18dec1751de47719265cb19069676bc3ab86f16d8e798f9d7cfa2641eadfff1b",
@@ -340,7 +340,7 @@
         "bundle/desktop/src/react/utils/session-status-aggregation.ts": "0730b0c63cbec9485c65958f0178c03dbe5eedcbda558ffbcaf07ab1062d772a",
         "bundle/desktop/src/react/utils/ui-helpers.ts": "93cddb8acc27cf79964a560dad6968424278585c3f3d589548f9de4b1bbb8d3a",
         "bundle/desktop/src/react/utils/workspace-content-ref.ts": "4a4f125794e2c27ba63d4bb7a0e78503a3b03be90c34caced78fbfab0033e8d0",
-        "bundle/desktop/src/shared/appearance-preferences.ts": "07509651acef88dfd7ba6ce48cf7bab11d6b57b8e835be639612aa747d5e7754",
+        "bundle/desktop/src/shared/appearance-preferences.ts": "204bd39b92e3f5a339a26c397cc7e3c80ba38b7510c96de48ab9b54e86a09017",
         "bundle/desktop/src/shared/theme-registry-data.json": "c6ae22d0d2e2c811410e9e58c032ab1b848116ef88d624f72de7672a3947474b",
         "bundle/desktop/src/shared/theme-registry.ts": "8cba244be4b5dd1ed6df6228a65ebfc4ffe57694a349ff183c31e3d86101b006",
         "bundle/desktop/src/shared/ui-surface-mode.ts": "73bef4653879d5c69c92c002f841c64945f45ff1bcdb597ed362238d8817dea5",
@@ -1045,7 +1045,7 @@
               },
               {
                 "path": "desktop/src/react/settings/extensions-api.ts",
-                "bytes": 36727
+                "bytes": 37422
               },
               {
                 "path": "desktop/src/react/settings/resource-state.ts",
@@ -1321,7 +1321,7 @@
               },
               {
                 "path": "desktop/src/react/ui/AnimationPrimitives.tsx",
-                "bytes": 6512
+                "bytes": 6588
               },
               {
                 "path": "desktop/src/react/ui/AntButton.module.css",
@@ -1761,7 +1761,7 @@
               },
               {
                 "path": "desktop/src/shared/appearance-preferences.ts",
-                "bytes": 5231
+                "bytes": 5226
               },
               {
                 "path": "desktop/src/shared/theme-registry-data.json",
@@ -2788,7 +2788,7 @@
         "tasks.ts": "e40fbf317fe3e1f037e3c152bc2fbafacb7afa0eb78fd9cc9bf2d4c1c1156cda",
         "windows.ts": "3a832f4947637eccd4ff326aaaee6435f10ee2818baa144f50ed0c2e4f8233bc",
         "workspace.ts": "44c01bbde7bb6fda9221c95a2ea44a3369bc6ca1f49da25ae827c1f4f3fff289",
-        "package.json": "4346a84dbcf6d981a396f76fbcbcbab2cd26965bfcdf00ff65d8dcbcfb131e16",
+        "package.json": "e613bae6a8f0074c2514489a83c084466596d63e4918dd41c0b22ec9fb2bd97a",
         "bundle/desktop/src/assets/textures/rice-paper.png": "a09b093b715fc9e8fd0f91ac02fcdc68636e825fa9555820ef8d6b8b7889d64b",
         "bundle/desktop/src/react/ui/ActionFeedbackIcons.tsx": "4bff0cd2c5de939dee7610b23986be040e9cb821a9eeea2db435fac5b408f19f",
         "bundle/desktop/src/react/ui/AntButton.module.css": "68b63e9aaee03a8beb0b71257ecd907e1744e540389b28f787e97f2672434191",
@@ -2921,7 +2921,7 @@
         "bundle/desktop/src/react/services/server-connection.ts": "22041ec2e70b5b4037ac623bbb508f2b02bb12e4665571c531719d3cd353fa0b",
         "bundle/desktop/src/react/services/studio-access.ts": "4ee366fd38ff7752ec82eb5763fed868adfc442c597a6fc671524d3f5426af55",
         "bundle/desktop/src/react/settings/api.ts": "433325a3185f4a47f77ce53df7b4c5d2ebf227b94509f88b48dad67c5d69e4fe",
-        "bundle/desktop/src/react/settings/extensions-api.ts": "ae406a4fbe552653a7cc2c84e280a41d7b9cec0cb0722b76a877966aac7f058e",
+        "bundle/desktop/src/react/settings/extensions-api.ts": "883d6828fdec13abbcef1fbbb57632bd64aab4ad1bc5c7f70cdce26d5e6514f2",
         "bundle/desktop/src/react/settings/resource-state.ts": "8c3f7c29d8cc43244f3769503aa0c533621998f273edbfc360c4afd1d5871bee",
         "bundle/desktop/src/react/settings/store.ts": "b2750076bdc75fa6d9c14e92ced69ed35143140320b31ab38b41ca019c6ad687",
         "bundle/desktop/src/react/stores/activity-slice.ts": "9f177c183284f71f09de65fb6c567d9f8335b7104f5f2cd35999733c9fccf3f3",
@@ -2989,7 +2989,7 @@
         "bundle/desktop/src/react/stores/workspace-ui-state-actions.ts": "cbbf87b02b6bc29375cee5739f91703fcfdd0008428c7f1b5ceec39564c6fbba",
         "bundle/desktop/src/react/stores/workspace-ui-surface.ts": "4be6d9a2afa87e36d17fe1d2147ddc5dcc0b77099ff073e45558a38a05960be0",
         "bundle/desktop/src/react/ui/AnchoredPortal.tsx": "46524fb4b78048d2e434f73c8c9361ec0a15e2f5f7ae371b6f0c1f95a1956dfd",
-        "bundle/desktop/src/react/ui/AnimationPrimitives.tsx": "8b29aad298ee3d6d92ea8e8239f3c351e3b4614d687ee319dcbff5b8752f5532",
+        "bundle/desktop/src/react/ui/AnimationPrimitives.tsx": "8c1b195e0142718f5d0acf27685009cef71a545b5dfa71e82af07c0eb29abbd1",
         "bundle/desktop/src/react/ui/Badge.module.css": "1f3e8ea6f16b89b6d3deeceea9e645b495370a6a95e0e73b4db2a7a65d294dee",
         "bundle/desktop/src/react/ui/Badge.tsx": "783d79c40696580910ff8ae43ff8ba3f885d64b699b560ce60ec031dff2daff2",
         "bundle/desktop/src/react/ui/ButtonLink.tsx": "18dec1751de47719265cb19069676bc3ab86f16d8e798f9d7cfa2641eadfff1b",
@@ -3064,7 +3064,7 @@
         "bundle/desktop/src/react/utils/session-status-aggregation.ts": "0730b0c63cbec9485c65958f0178c03dbe5eedcbda558ffbcaf07ab1062d772a",
         "bundle/desktop/src/react/utils/ui-helpers.ts": "93cddb8acc27cf79964a560dad6968424278585c3f3d589548f9de4b1bbb8d3a",
         "bundle/desktop/src/react/utils/workspace-content-ref.ts": "4a4f125794e2c27ba63d4bb7a0e78503a3b03be90c34caced78fbfab0033e8d0",
-        "bundle/desktop/src/shared/appearance-preferences.ts": "07509651acef88dfd7ba6ce48cf7bab11d6b57b8e835be639612aa747d5e7754",
+        "bundle/desktop/src/shared/appearance-preferences.ts": "204bd39b92e3f5a339a26c397cc7e3c80ba38b7510c96de48ab9b54e86a09017",
         "bundle/desktop/src/shared/theme-registry-data.json": "c6ae22d0d2e2c811410e9e58c032ab1b848116ef88d624f72de7672a3947474b",
         "bundle/desktop/src/shared/theme-registry.ts": "8cba244be4b5dd1ed6df6228a65ebfc4ffe57694a349ff183c31e3d86101b006",
         "bundle/desktop/src/shared/ui-surface-mode.ts": "73bef4653879d5c69c92c002f841c64945f45ff1bcdb597ed362238d8817dea5",
