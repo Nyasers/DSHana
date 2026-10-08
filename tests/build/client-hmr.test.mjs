@@ -106,7 +106,7 @@ async function startHostHalf(t, { pollIntervalMs = 1_000 } = {}) {
   return { staged, ctx, route, disposeAll };
 }
 
-test("host 半：开通道写注释与当前图，随后每 20 秒一条注释心跳", async (t) => {
+test("host 半：开通道写注释与当前图，随后每 240 秒一条注释心跳", async (t) => {
   const { route, disposeAll, staged } = await startHostHalf(t);
   assert.equal(staged.name, "client-hmr");
   assert.deepEqual(staged.inject, ["clientModules", "webServer"]);
@@ -121,18 +121,18 @@ test("host 半：开通道写注释与当前图，随后每 20 秒一条注释�
   assert.equal(res.status, 200);
   assert.equal(res.headers["content-type"], "text/event-stream");
 
-  t.mock.timers.tick(19_999);
+  t.mock.timers.tick(239_999);
   assert.equal(res.lines.length, 2, "心跳间隔未到，链路上什么都不发");
 
   t.mock.timers.tick(1);
   assert.deepEqual(res.lines.slice(2), [": heartbeat\n\n"], "到点发一条注释（EventSource 会跳过它）");
 
-  t.mock.timers.tick(60_000);
-  assert.equal(res.lines.length, 6, "每 20 秒一条，持续到连接结束");
+  t.mock.timers.tick(720_000);
+  assert.equal(res.lines.length, 6, "每 240 秒一条，持续到连接结束");
 
   disposeAll();
   assert.equal(res.destroyed, true, "disposer 收掉活连接");
-  t.mock.timers.tick(60_000);
+  t.mock.timers.tick(720_000);
   assert.equal(res.lines.length, 6, "disposer 之后不再写");
 });
 
@@ -148,7 +148,7 @@ test("host 半：已经结束/已销毁的连接被心跳跳过（close 摘除�
   ended.writableEnded = true;
   gone.destroyed = true;
 
-  t.mock.timers.tick(20_000);
+  t.mock.timers.tick(240_000);
   assert.deepEqual(live.lines.slice(2), [": heartbeat\n\n"]);
   assert.deepEqual(ended.lines.slice(2), [], "已结束的响应不再写");
   assert.deepEqual(gone.lines.slice(2), [], "已销毁的响应不再写");
@@ -161,7 +161,7 @@ test("host 半：非 GET/HEAD 仍是 405 且不进连接集", async (t) => {
   route.handler({ method: "POST" }, res);
   assert.equal(res.status, 405);
   assert.deepEqual(res.lines, [], "405 不带体，也不入连接集");
-  t.mock.timers.tick(60_000);
+  t.mock.timers.tick(240_000);
   assert.deepEqual(res.lines, []);
   disposeAll();
 });

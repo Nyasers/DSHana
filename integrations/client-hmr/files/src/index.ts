@@ -161,11 +161,11 @@ export function apply(ctx: Context, config: Config): void {
    * (production never rebuilds), while every hop forwarding it — the App relay and the
    * host's managed-service route, both plain `fetch` — carries undici's 300 s
    * response-body idle timeout: a silent body is cut with UND_ERR_BODY_TIMEOUT at about
-   * 5 min, which the browser surfaces as ERR_INCOMPLETE_CHUNKED_ENCODING. 20 s sits well
-   * inside every idle limit in front of this channel (a Cloudflare tunnel drops an idle
-   * HTTP stream at about 100 s).
+   * 5 min, which the browser surfaces as ERR_INCOMPLETE_CHUNKED_ENCODING. 240 s is that
+   * 300 s bound with a minute of margin. A hop with a tighter idle limit (a Cloudflare
+   * tunnel drops an idle HTTP stream at about 100 s) requires lowering this value.
    */
-  const HEARTBEAT_INTERVAL_MS = 20_000
+  const HEARTBEAT_INTERVAL_MS = 240_000
   const connections = new Set<ServerResponse>()
 
   const publishGraph = (): void => {
