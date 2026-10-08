@@ -1,6 +1,6 @@
 {
   "name": "@dshana/dsh-theme",
-  "version": "1.0.3+dsh-0.2.0-rc.2",
+  "version": "1.0.4+dsh-0.2.0-rc.2",
   "description": "Applies Hana's host theme colors to the embedded DSH web UI.",
   "private": true,
   "type": "module",
