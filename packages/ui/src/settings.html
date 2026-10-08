@@ -33,11 +33,20 @@
      也只在收到 hana.theme.changed 时才应用 cssUrl——不自己贴，第一帧就会吃样式表里写死的
      纸张 fallback（模块那条路径要等一次 fetch，太晚）。此后的变化由 packages/ui/src/host-theme.ts
      订阅跟随。
-     回退用的 /api/apps/theme.css 是**宿主路由**（公开、无需凭据；dsh-inject.ts 的
-     HOST_PATH_PREFIXES 把 /api/apps/ 划为宿主前缀），不是本 App 自己的资源——页面内仍然不出现
-     自身资源的根路径绝对 URL（那些一律相对路径）。
+     样式表 URL 分三档（与 host-theme.ts 的 themeCssUrlFor 同一条规则，两侧各半）：
+       ① 宿主给了 hana-css —— 直接用（主卡 / 设置页走这条）；
+       ② 没给 hana-css 但有 hana-theme —— 按主题拼 /api/apps/theme.css?theme=<id>（FP 走这条：
+          它的 surface URL 只带 hana-theme / hana-theme-appearance，不带 hana-css）；
+       ③ 两者都没有 —— **不贴**。裸 /api/apps/theme.css 返回的是**默认主题**（暖纸），不是用户
+          当前主题；猜出来的颜色比不画更糟，所以宁可留白、让页面回落到自己 CSS 里的兜底色
+          （官方口径同此：a failed swap keeps the current theme rather than falling back to a
+          built-in palette）。
+     /api/apps/theme.css 是**宿主路由**（公开、无需凭据；dsh-inject.ts 的 HOST_PATH_PREFIXES
+     把 /api/apps/ 划为宿主前缀），不是本 App 自己的资源——页面内仍然不出现自身资源的根路径
+     绝对 URL（那些一律相对路径）。
      贴过的 URL 记在 <html> 的 data-hana-theme-css 上：host-theme.ts 的 THEME_CSS_ATTR 读它，
-     据此跳过同一个 URL 的重复 fetch（契约两侧各半，被上面的回归闸锁住）。
+     据此跳过同一个 URL 的重复 fetch（契约两侧各半，被上面的回归闸锁住）；没贴时这条属性不写，
+     模块侧因此不会误判「已贴过」。
      失败（URL 畸形 / 拿不到主题）一律不阻断页面：留着兜底色继续走。 */
   (function () {
     "use strict";
@@ -48,8 +57,10 @@
     try {
       var theme = get("hana-theme");
       var appearance = get("hana-theme-appearance");
-      /* hana-css 为空（宿主没带 / 参数畸形）时回退宿主自己的主题路由。 */
-      var css = get("hana-css") || "/api/apps/theme.css";
+      var css = get("hana-css");
+      /* 没有 hana-css 但有主题 id：按主题拼确定的宿主路由（必须带 theme 参数）。 */
+      if (!css && theme) css = "/api/apps/theme.css?theme=" + encodeURIComponent(theme);
+      /* css 仍为空 = 主题完全未知：不贴表（贴一张默认主题的比不贴更糟）。 */
       if (theme) root.setAttribute("data-theme", theme);
       if (appearance === "light" || appearance === "dark") root.setAttribute("data-appearance", appearance);
       if (css) {

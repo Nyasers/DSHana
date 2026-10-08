@@ -22,6 +22,9 @@
 // 去重（与内联片段的两半契约）：内联片段把「已经贴过的样式表 URL」记在 <html> 的
 // THEME_CSS_ATTR 上；本模块遇到同一个 URL 就跳过那次 fetch——内联那张 <link> 早已在文档里
 // （它挡过首次绘制），再取一遍只是白花一次请求（主题 CSS 可达 47KB）。
+// 片段**没贴**时（主题完全未知，见 themeCssUrlFor 第 ③ 档）那条属性根本不写，本模块读回空串、
+// 与任何非空 URL 都比不上，于是不会误判「已贴过」——该取就取。反过来，本模块自己也不会在主题
+// 未知时贴表（不贴一张默认主题的），两边的「未知」口径一致。
 //
 // 壳页与设置页两处同此纪律，共用这一份实现，免得各写一套再各自漂移。
 // 分工：本模块只管通用部分（贴样式表、写 data-theme / data-appearance、首屏读快照与订阅）；
@@ -45,6 +48,26 @@ export function inlineThemeCssUrl(): string {
   } catch {
     return "";
   }
+}
+
+/**
+ * 主题载荷 → 该贴的样式表 URL（三档，与页面 <head> 内联片段里那段同一条规则，两侧各半）：
+ *   ① 有 cssUrl —— 直接用（宿主给了 hana-css，主卡 / 设置页走这条）；
+ *   ② 没 cssUrl 但有 theme —— 按主题拼宿主路由 `/api/apps/theme.css?theme=<id>`。FP
+ *      （slot=function-panel）的 surface URL 只带 hana-theme / hana-theme-appearance、**不带
+ *      hana-css**，所以这条是 FP 的主路径，不是罕见回退。
+ *   ③ 两者都没有 —— 返回空串，调用方**不贴**。裸 `/api/apps/theme.css`（不带 theme）返回的是
+ *      **默认主题**（暖纸），不是用户当前主题；贴一张概率上是错的主题表，比不贴更糟——宁可留白，
+ *      让页面回落到自己 CSS 里的兜底色（官方口径：a failed swap keeps the current theme rather
+ *      than falling back to a built-in palette）。猜出来的颜色比不画更糟。
+ * encodeURIComponent 与内联片段用的是同一个，两边拼出的串逐字相同（去重靠这一点）。
+ */
+export function themeCssUrlFor(theme?: string | null, cssUrl?: string | null): string {
+  const direct = typeof cssUrl === "string" ? cssUrl.trim() : "";
+  if (direct) return direct;
+  const id = typeof theme === "string" ? theme.trim() : "";
+  if (!id) return "";
+  return "/api/apps/theme.css?theme=" + encodeURIComponent(id);
 }
 
 /** 宿主主题载荷（hana.theme.getSnapshot() 与 hana.theme.changed 的同一形状）。 */
@@ -149,6 +172,7 @@ export function applyHostThemeStylesheet(cssUrl: string | null | undefined, onSt
 
 /**
  * 应用一次主题载荷：把主题身份写进 <html>（data-theme / data-appearance），再贴样式表。
+ * 贴哪张由 themeCssUrlFor 定（cssUrl 优先，缺则按 theme 拼；两者都缺则**不贴**——见那里）。
  * 返回值与载荷同形，便于调用方接着做面相关的事。
  */
 export function applyHostTheme(
@@ -166,7 +190,8 @@ export function applyHostTheme(
     // 明暗缺失/非法时也得把上一轮写的 color-scheme 收回去，否则原生控件停在旧明暗上。
     if (options.syncColorScheme) root.style.colorScheme = "";
   }
-  applyHostThemeStylesheet(snap.cssUrl, options.onStylesApplied);
+  // 主题未知时 themeCssUrlFor 给空串，applyHostThemeStylesheet 会直接返回：不贴错表。
+  applyHostThemeStylesheet(themeCssUrlFor(snap.theme, snap.cssUrl), options.onStylesApplied);
   if (options.onApplied) {
     try { options.onApplied(snap); } catch { /* 忽略 */ }
   }
