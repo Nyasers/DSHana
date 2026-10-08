@@ -19,7 +19,7 @@ import { errText } from "../shared/err-text.mts";
 import { isDirectRun } from "../shared/run.mts";
 import { dshPin, readPkg } from "../shared/version.mts";
 import { buildIntegrations } from "./build.mts";
-import { REPO_ROOT, loadIntegrations, mirrorHasTag, readUpstreamFromMirror, stageIntegrations } from "./mirror.mts";
+import { loadIntegrations, mirrorHasTag, readUpstreamFromMirror, stageIntegrations } from "./mirror.mts";
 import { sha256, tagForVersion, verifyIntegrations } from "./verify.mts";
 
 interface CommandContext {

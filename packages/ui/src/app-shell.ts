@@ -23,7 +23,6 @@ import { followHostTheme } from "./host-theme.ts";
 import {
   SURFACE_API,
   SURFACE_MISSING,
-  clipboardWrite,
   credMissingHtml,
   fetchBootState,
   postAction,

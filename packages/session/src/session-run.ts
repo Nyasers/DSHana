@@ -25,7 +25,7 @@
 // 词汇映射：工具面动作是 open/reply（见 packages/tools/src/actions/open.ts、packages/tools/src/actions/reply.ts），本模块内部沿用
 // create/send 描述「新建会话 / 续已有会话」这两个动作，映射在 packages/tools/src/actions/open.ts 与
 // packages/tools/src/actions/reply.ts 的 submit 调用处完成。
-import { isAbsolute, join } from "node:path";
+import { isAbsolute } from "node:path";
 import { appCtx, appDataDir } from "@dshana/runtime/app-runtime.ts";
 import { currentDshHome } from "@dshana/runtime/data-source.ts";
 import { ensureManagedRuntime } from "@dshana/runtime/managed-runtime.ts";

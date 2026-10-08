@@ -32,7 +32,7 @@
 //
 // 依赖注入（可测性）：deps = { appId, version, getSnapshot(), start(), stop(), log() }。
 // 默认实现经 packages/runtime/src/managed-runtime.ts 读取真实单例；测试注入 fake。
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { managedRuntimeDetails, ensureManagedRuntime, stopManagedRuntime, bridgeAccess } from "@dshana/runtime/managed-runtime.ts";
 import { buildBootSnapshot, APP_ID } from "@dshana/runtime/boot-state.ts";
