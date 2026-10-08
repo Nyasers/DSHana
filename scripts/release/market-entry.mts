@@ -8,10 +8,10 @@
 //   身上；投稿条目是**对已出产物的派生**，放这里可以按需重跑，也不必让 pack 知道市场的事
 //   （单一职责：产物是产物，市场是市场）。
 //
-// 流程：读 manifest.json（仓库根）+ package.json → 收目标那个 zip 的事实（字节数 + sha256）→ 写
+// 流程：读 manifest.json（仓库根）+ package.json → 对 releases/ 里目标那个 zip 现算事实（字节数 + sha256）→ 写
 //   <kind>-<id>-<version>.entry.json，文件名就是官方市场的取件名。
-//   事实默认从 releases/ 里那份 zip 现算（读整包取字节数与哈希）；`--facts-dir <目录>` 时改从该目录下所有
-//   `package-facts.json` 合并出的表取（CI 里事实由出包作业记好、当 artifact 带过来，zip 不必再落本地一遍）。
+//   事实只能对包现算：条目与包在同一条线上（CI 里同属于出通用包的那个作业），zip 就在本地，
+//   不必经什么小票中转，也就没有「小票与包对不上」这条失败路径。
 //
 // 一份对一个版本：官方市场按这个名在 Release 资产里找条目，一份对一个版本，所以只写选中的那个 target。
 // archive.url 保留 `{{BASE_URL}}/` 占位符是协议要求：市场同步器按这个前缀取出资产名、再去 Release 资产里
@@ -24,13 +24,11 @@
 //   node scripts/release/market-entry.mts                    # 当前版本 + universal
 //   node scripts/release/market-entry.mts --target win32-x64
 //   node scripts/release/market-entry.mts --publisher Nyasers
-//   node scripts/release/market-entry.mts --facts-dir facts  # 事实从目录下的小票合并（CI 场景）
 import fs from "fs-extra";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
 import { ROOT } from "../shared/root.mts";
-import { mergeFacts, type PackageFacts } from "./facts.mts";
 const RELEASES = join(ROOT, "releases");
 
 /** 市场条目里的扩展种类：本仓库只出 App。 */
@@ -80,22 +78,10 @@ function iconDataUri(iconRel: string): string | undefined {
 }
 
 /**
- * 产物事实的来源：默认对本地那份 zip 现算（字节数 + sha256）；`--facts-dir <目录>`
- * 时改从该目录下（含子目录）所有 `package-facts.json` 合并出的表取 —— CI 里投稿条目与出包是两个
- * 作业，事实由出包作业记好当 artifact 带过来，zip 不必再落到本地一遍。
+ * 产物事实：字节数 + sha256，对 releases/ 里那份 zip 现算。
+ * 事实从 zip 本身算：产物不留旁路小票，就不会出现小票与包对不上这种失败。
  */
-const factsDir = arg("--facts-dir");
-const injectedFacts: PackageFacts | null = factsDir === null ? null : mergeFacts(factsDir);
-
-/** 该 zip 是否有可用事实（注入表里有，或本地那份 zip 在）。 */
-function hasFacts(zipName: string): boolean {
-  return injectedFacts !== null ? Object.hasOwn(injectedFacts, zipName) : fs.existsSync(join(RELEASES, zipName));
-}
-
-/** 产物事实：字节数 + sha256；注入表优先，否则对本地那份 zip 现算。 */
 function zipFacts(zipName: string): { size: number; sha256: string } {
-  const injected = injectedFacts?.[zipName];
-  if (injected) return { size: injected.size, sha256: String(injected.sha256).trim().toLowerCase() };
   const path = join(RELEASES, zipName);
   return { size: fs.statSync(path).size, sha256: createHash("sha256").update(fs.readFileSync(path)).digest("hex") };
 }
@@ -136,12 +122,10 @@ function main(): void {
   // 要哪个包就把名字拼出来、精确匹配：前缀判定会把同前缀的别的版本（1.0.2 之于 1.0.20）一起收进来，
   // 释当的“平台名不匹配”判定也会放行 dshana-v1.0.2-<其它平台>.zip，两者都能把错的包与 hash 写进条目。
   const expected = `${manifest.id}-v${version}${target === "universal" ? "" : `-${target}`}.zip`;
-  if (!hasFacts(expected)) {
-    const all = injectedFacts !== null
-      ? Object.keys(injectedFacts).filter((f: string) => f.startsWith(`${manifest.id}-v`) && f.endsWith(".zip"))
-      : fs.readdirSync(RELEASES).filter((f: string) => f.startsWith(`${manifest.id}-v`) && f.endsWith(".zip"));
+  if (!fs.existsSync(join(RELEASES, expected))) {
+    const all = fs.readdirSync(RELEASES).filter((f: string) => f.startsWith(`${manifest.id}-v`) && f.endsWith(".zip"));
     console.error(
-      `[market-entry] 找不到 ${expected} 的事实来源（releases/ 或 --facts-dir）—— ` +
+      `[market-entry] releases/ 里没有 ${expected} —— ` +
         (all.length === 0
           ? `先出包：pnpm run package --target ${target}`
           : `现有：${all.join(", ")}`),

@@ -97,7 +97,7 @@ test("资产清单不声明 Office 转换栈：那一条链不进产物（转换
   }
 });
 
-/** 发布流水线里与目标表重复的两份清单：矩阵目标名、必需资产循环里的目标名。 */
+/** 发布流水线里与目标表重复的两份清单：矩阵目标名（平台目标）、必需资产循环里的目标名。 */
 test("release.yml 的发布矩阵与必需资产清单跟目标表一致", () => {
   const workflow = readFileSync(join(ROOT, ".github", "workflows", "release.yml"), "utf8");
   const names = supportedTargetNames();
@@ -107,8 +107,8 @@ test("release.yml 的发布矩阵与必需资产清单跟目标表一致", () =>
   assert.ok(matrix, "release.yml 里找不到 package 矩阵的 target 列表");
   assert.deepEqual(
     matrix[1].split(",").map((name) => name.trim()).sort(),
-    [...names].sort(),
-    "发布矩阵的目标集与 supportedTargetNames() 不一致（顺序不算契约）",
+    [...platforms].sort(),
+    "发布矩阵只应列出平台目标：universal 与投稿条目走 universal-market 那条线（顺序不算契约）",
   );
 
   const loop = /for t in ([^;]+); do/.exec(workflow);
@@ -125,11 +125,30 @@ test("release.yml 的发布矩阵与必需资产清单跟目标表一致", () =>
  * 内联在 workflow 里的脚本没有任何静态检查（字符串，typecheck 与测试都碰不到）——已经因此有过一次
  * 只在 CI 上才暴露的错误。所以这里守着「脚本外置」这条口径。
  */
-test("release.yml 不内联脚本，事实两步走仓库里的入口", () => {
+test("release.yml 不内联脚本，投稿条目与通用包在同一作业里派生", () => {
   const workflow = readFileSync(join(ROOT, ".github", "workflows", "release.yml"), "utf8");
   assert.ok(!workflow.includes("node -e"), "workflow 里又出现内联 node 脚本：外置才能进 typecheck 与测试");
-  assert.match(workflow, /run: pnpm run facts:record/, "出包作业没调 facts:record");
-  assert.match(workflow, /--facts-dir facts\b/, "清单作业没从事实目录取数");
+  assert.match(workflow, /pnpm run market:entry/, "通用包那条线没调 market:entry");
+});
+
+/**
+ * 通用包与投稿条目合成一条线之后，事实就该在同一个作业里对刚出的包现算。跨作业的 pkg-facts
+ * 小 artifact 一旦回来，就等于又出现一个可能与包对不上的中间物，或一个只为搬事实而存在的下载步骤。
+ */
+test("release.yml 不再经 pkg-facts 中转事实", () => {
+  const workflow = readFileSync(join(ROOT, ".github", "workflows", "release.yml"), "utf8");
+  assert.ok(!workflow.includes("pkg-facts"), "workflow 里又出现 pkg-facts artifact");
+  assert.ok(!workflow.includes("facts:record"), "workflow 里又在出包作业记事实小票");
+  assert.ok(!workflow.includes("--facts-dir"), "market:entry 不该再从事实目录取数");
+  assert.ok(!workflow.includes("download-artifact"), "workflow 里又出现跨作业的 artifact 下载");
+  // 通用包那条线要出包、要派生条目、要在 tag 场景直传通用包与条目：三者同在一个作业里
+  const from = workflow.indexOf("\n  universal-market:");
+  assert.ok(from > 0, "找不到 universal-market 作业");
+  const to = workflow.indexOf("\n  publish:", from);
+  const universal = workflow.slice(from, to > 0 ? to : workflow.length);
+  assert.match(universal, /run: pnpm run package --target=universal/, "universal-market 没出通用包");
+  assert.match(universal, /releases\/dshana-v\*\.zip/, "universal-market 直传时没带上通用包");
+  assert.match(universal, /releases\/app-\*\.entry\.json/, "universal-market 直传时没带上投稿条目");
 });
 
 /**
