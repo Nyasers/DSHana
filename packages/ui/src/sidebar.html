@@ -13,7 +13,9 @@
      就绪后同文档注入 DSH 侧栏（data-dshana-view="sidebar" → app-shell.js 取它 → role=navigation），
      同时收起本页自带的标题/状态/按钮 chrome（[data-dsh-chrome]），整块让给侧栏（DSH sidebar
      自带 brand 行，叠一层会重复）；未就绪时才露 chrome 充当占位（启动按钮 + 日志尾）。
-     页面无 iframe 壳（#frame-wrap / [data-dsh-frame]）：DSH 以同文档注入挂进本页。 -->
+     页面无 iframe 壳（#frame-wrap / [data-dsh-frame]）：DSH 以同文档注入挂进本页。
+     主题：首帧由下面 <head> 里的内联片段贴样式表（在本页 <style> 之后，宿主变量因此覆盖
+     默认值），此后由 packages/ui/src/host-theme.ts 订阅跟随（app-shell.js 侧接上）。 -->
 <style>
   html, body { margin: 0; padding: 0; height: 100%; }
   html { color-scheme: light dark; }
@@ -24,7 +26,8 @@
     /* 加载底色要落在“注入后 DSH 侧栏真正的填色”上，不是纸张底：
        DSH 侧栏画的是 --dsw-specific-sidebar-fill，而 token-map 里它映的是宿主 --sidebar-bg。
        于是这里的取色顺序：DSH 主题桥落地后读它自己的 token；未落地时读同一个宿主变量
-       （值相同，所以不跳色）；连宿主主题样式表都还没到位时才用纸张兜底。 */
+       （值相同，所以不跳色）；连宿主主题样式表都还没到位时才用纸张兜底——而首帧那张样式表
+       由 head 内联片段同步贴出，所以这个纸张兜底只在主题真的拿不到时才会被看到。 */
     background: var(--dsw-specific-sidebar-fill, var(--sidebar-bg, #F5EFE4));
   }
   .panel { padding: 12px 14px; box-sizing: border-box; height: 100%; display: flex; flex-direction: column; }
@@ -57,6 +60,45 @@
   }
   .log::-webkit-scrollbar { display: none; }
 </style>
+<!-- dshana:first-frame-theme —— 首帧主题片段（五个页面逐字相同，回归闸 tests/ui/first-frame-theme.test.mjs）：
+     位置固定在 <head> 内、所有静态 <link rel="stylesheet"> 之后、模块脚本之前；内容同步
+     （不依赖 SDK、不 await），因为 <link> 阻塞首次绘制——第一帧就是宿主配色。 -->
+<script>
+  /* 首帧主题（同步）：宿主把主题参数附在 App surface iframe 的 URL 上（hana-theme /
+     hana-theme-appearance / hana-css），但「把样式表贴进页面」宿主不代劳，@hana/plugin-sdk
+     也只在收到 hana.theme.changed 时才应用 cssUrl——不自己贴，第一帧就会吃样式表里写死的
+     纸张 fallback（模块那条路径要等一次 fetch，太晚）。此后的变化由 packages/ui/src/host-theme.ts
+     订阅跟随。
+     回退用的 /api/apps/theme.css 是**宿主路由**（公开、无需凭据；dsh-inject.ts 的
+     HOST_PATH_PREFIXES 把 /api/apps/ 划为宿主前缀），不是本 App 自己的资源——页面内仍然不出现
+     自身资源的根路径绝对 URL（那些一律相对路径）。
+     贴过的 URL 记在 <html> 的 data-hana-theme-css 上：host-theme.ts 的 THEME_CSS_ATTR 读它，
+     据此跳过同一个 URL 的重复 fetch（契约两侧各半，被上面的回归闸锁住）。
+     失败（URL 畸形 / 拿不到主题）一律不阻断页面：留着兜底色继续走。 */
+  (function () {
+    "use strict";
+    var root = document.documentElement;
+    var q = null;
+    try { q = new URLSearchParams(location.search); } catch (e) { /* 畸形 URL：当没带参数 */ }
+    var get = function (k) { try { return q ? String(q.get(k) || "").trim() : ""; } catch (e) { return ""; } };
+    try {
+      var theme = get("hana-theme");
+      var appearance = get("hana-theme-appearance");
+      /* hana-css 为空（宿主没带 / 参数畸形）时回退宿主自己的主题路由。 */
+      var css = get("hana-css") || "/api/apps/theme.css";
+      if (theme) root.setAttribute("data-theme", theme);
+      if (appearance === "light" || appearance === "dark") root.setAttribute("data-appearance", appearance);
+      if (css) {
+        var link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = css;
+        link.setAttribute("data-hana-theme-inline", "");
+        (document.head || root).appendChild(link);
+        root.setAttribute("data-hana-theme-css", css);
+      }
+    } catch (e) { /* 主题拿不到就用 fallback，不阻断 */ }
+  }());
+</script>
 </head>
 <body>
 <div class="panel" data-dshana-shell data-dshana-view="sidebar" data-phase="idle">

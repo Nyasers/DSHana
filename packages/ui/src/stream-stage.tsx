@@ -339,7 +339,9 @@ function App() {
  * @param stageEl tpl-stage 实例化出来的 #dsh-stage 节点（React 接管它的内容）
  */
 export function mountStreamStage(stageEl: HTMLElement): void {
-  // 首屏跟随宿主主题（事件驱动，不轮询）；应用后垫 DSH 首帧底色，样式表落地后再推一次。
+  // 首帧那一张样式表由 stream.html <head> 里的内联片段贴（所有静态样式表之后）；这里接的是此后
+  // 那一段：首屏快照 + 订阅（事件驱动，不轮询），内联片段已贴过的 URL 会跳过重复 fetch。
+  // 应用后垫 DSH 首帧底色，样式表落地后再推一次。
   followHostTheme(hana, {
     onApplied: () => seedDshTokens(),
     onStylesApplied: () => pushThemeNow(),

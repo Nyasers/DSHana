@@ -459,9 +459,11 @@ import {
     pushThemeToSelf();
   }
   // 宿主主题：宿主经 App surface iframe 的 URL 参数给 hana-theme / hana-css /
-  // hana-theme-appearance，变更再经 hana.theme.changed 推同一组值。「贴样式表」那一步的
-  // 契约与实现见 packages/ui/src/host-theme.ts（壳页 / 设置页 / 会话卡共用一份）；壳页只额外做面
-  // 相关的事：应用后垫 DSH 首帧底色 token，样式表落地后把主题推给内层桥。
+  // hana-theme-appearance，变更再经 hana.theme.changed 推同一组值。**首帧那一张样式表由页面
+  // <head> 里的内联片段贴**（main / default / sidebar 三个壳页都有，所有静态样式表之后）；
+  // 本模块（packages/ui/src/host-theme.ts）接的是此后那一段：首屏读一次快照 + 订阅，遇到内联
+  // 片段已贴过的 URL 会跳过重复 fetch。壳页只额外做面相关的事：应用后垫 DSH 首帧底色 token，
+  // 样式表落地后把主题推给内层桥。
 
   // ---- 注入前先垫上 DSW 自己的底色 token（见 packages/ui/src/seed-tokens.ts）----
   // 写 body 的内联 style、不加 !important：赢过 DSH 的静态样式表，输给主题桥的 !important。
@@ -506,7 +508,8 @@ import {
       if (backdropValue) document.body.style.backgroundColor = backdropValue;
     }
   }
-  // 首屏跟随 + 订阅（共用 packages/ui/src/host-theme.ts）。分面差异只在两个钩子：应用后垫 DSH 首帧
+  // 首屏快照 + 订阅（共用 packages/ui/src/host-theme.ts）。首帧那张样式表由页面 <head> 里的内联
+  // 片段贴（早于本模块，且已贴过的 URL 会被跳过）；分面差异只在两个钩子：应用后垫 DSH 首帧
   // 底色 token；样式表落地后推一次主题给内层桥。
   followHostTheme(hana, {
     onApplied: function () { seedDshTokens(); pushThemeNow(); },

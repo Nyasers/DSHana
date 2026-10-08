@@ -129,7 +129,10 @@ DSH 的 workspace 选择对话框来自 `directory-picker` seam（宿主半列�
 
 `@dshana/dsh-theme` 经 `tapIndex` 注入 index 响应：静态 fallback + 动态桥脚本，向壳页索取宿主主题 vars → 写 body 层 `!important` 覆盖 `--dsw-alias-*` / `--dsw-specific-*`。
 
-**App 页面这一侧要自己贴样式表**：宿主把主题参数附在 App surface iframe 的 URL 上（`hana-theme` / `hana-css` / `hana-theme-appearance`），变化时再推 `hana.theme.changed`；但把样式表贴进页面这件事宿主不代劳，而 SDK 只在收到 `hana.theme.changed` 时才应用 `cssUrl`——页面不自己贴首帧，就会一路吃 HTML 里写死的纸张 fallback，直到第一次主题变化才跟上。壳页 / 设置页 / 会话卡共用 `packages/ui/src/host-theme.ts` 做这一步（首屏读快照 + URL 兜底 + 订阅）。
+**App 页面这一侧要自己贴样式表，而且分两段**：宿主把主题参数附在 App surface iframe 的 URL 上（`hana-theme` / `hana-css` / `hana-theme-appearance`），变化时再推 `hana.theme.changed`；但把样式表贴进页面这件事宿主不代劳，而 SDK 只在收到 `hana.theme.changed` 时才应用 `cssUrl`——页面不自己贴首帧，就会一路吃 HTML 里写死的纸张 fallback，直到第一次主题变化才跟上。
+
+- **首帧（第一次绘制之前）**：五个页面（`main` / `default` / `sidebar` / `settings` / `stream.html`）在 `<head>` 内各带一段**逐字相同**的内联片段（标记注释 `dshana:first-frame-theme`），位置固定在所有静态 `<link rel="stylesheet">` 之后、模块脚本之前。它同步读 URL 参数、把 `data-theme` / `data-appearance` 写到 `<html>`、append 一张 `<link>`（`<link>` 阻塞首次绘制，所以第一帧就是宿主配色）；`hana-css` 为空时回退宿主自己的公开主题路由 `/api/apps/theme.css`（宿主路由，不是本 App 的资源）。回归闸 `tests/ui/first-frame-theme.test.mjs` 锁住「五个页面都带、逐字相同、位置正确、真的读 `hana-css`」——以后新增页面忘了贴会被挡住。
+- **快照与订阅（此后）**：`packages/ui/src/host-theme.ts` 首屏读一次 SDK 快照（兜住内联片段因故没跑的页面），此后按 `hana.theme.changed` 事件驱动地贴样式表（壳页 / 设置页 / 会话卡共用一份）。内联片段把已贴的 URL 记在 `<html>` 的 `data-hana-theme-css` 上，本模块据此跳过同一 URL 的重复 fetch（主题 CSS 可达 47KB）；两侧契约各半，同样被上面那条测试锁住。
 
 **跟随语义（有意自持）**：仅当 DSH 主题偏好为 `system` 时跟随宿主配色；显式 `light`/`dark` 时完全用 DSH 自己的主题，宿主配色不介入。偏好变更经事件驱动重读（不再周期轮询）。此语义与官方样例的「无条件双 palette 替换」不同，是保留项。
 
@@ -328,6 +331,9 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
   （Z8t 防目录逃逸；scoped surface 路径 `/api/apps/<appId>/ui/_surface/<sessionToken>/...`
   由 iframe-ticket 端点下发 uiBasePath——页面相对资源在此 base 下继承授权）。App 自身 ui/
   页面资源一律相对路径（指南 `10` 禁根绝对 URL）；face 映射 `/api/apps/<appId>/ui/<image>`。
+  唯一例外是首帧主题片段里的宿主主题路由 `/api/apps/theme.css`（见「主题跟随」）：那是**宿主
+  路由**（公开、无需凭据，`packages/ui/src/dsh-inject.ts` 的 `HOST_PATH_PREFIXES` 也把
+  `/api/apps/` 划为宿主前缀），不是本 App 自己的资源。
 - **contributes.cards v2 字段白名单**（宿主 readManifest 实证）：
   `id/title/description/route/embedUrl/cardForm/titlebar/realization/pageOf/siteNavEntry/
   fpFullPanel/functionPanel/face/formFactors`——realization:"page" + siteNavEntry、pageOf 均

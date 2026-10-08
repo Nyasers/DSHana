@@ -15,6 +15,8 @@
          中继、注入完整 DSH 现场（./face-stage.css 的台面 → DSH Web UI）。
      两种进入方式共用这一页：聊天卡带 sid=<DSH session id> 钉住一段会话；主题、surface
     凭据与「认面」都走壳脚本那一套（见 stream-entry.ts / stream-stage.tsx / face-role.ts）。
+    主题：首帧由下面 <head> 里的内联片段贴样式表（所有静态样式表之后），此后由
+    packages/ui/src/host-theme.ts 订阅跟随（stream-entry.ts 侧接上）。
     
     **首帧坐标不排在任何握手后面**：入口行就在下面的 DOM 里，紧跟其后的内联脚本在**求值时**
     按 location.search 把 sid / tid / cwd 写进去——不依赖 SDK、不依赖宿主 context、不依赖
@@ -29,7 +31,8 @@
       注入的 DSH UI 就是那段会话本身：这一面不带 App 侧的状态行。
     相对资源纪律：页面里不出现根路径绝对 URL；重型 chunk 也走相对路径（rspack 的
     output.chunkFilename，见 packages/ui/src/rspack.config.mts），所以宿主以 /api/apps/<id>/ui/stream.html
-      服务本页时它照样取得到。 -->
+      服务本页时它照样取得到。唯一例外是下面首帧片段里那条宿主主题路由 /api/apps/theme.css
+      （宿主路由、公开，不是本 App 自己的资源；见该片段内的说明）。 -->
 <link rel="stylesheet" href="./face-stage.css">
 <style>
   /* 聊天流入口态：一行抬头 + 三行坐标（会话 / 目录 / 任务），宽扁卡（8:1）装得下。
@@ -59,6 +62,45 @@
   }
 
 </style>
+<!-- dshana:first-frame-theme —— 首帧主题片段（五个页面逐字相同，回归闸 tests/ui/first-frame-theme.test.mjs）：
+     位置固定在 <head> 内、所有静态 <link rel="stylesheet"> 之后、模块脚本之前；内容同步
+     （不依赖 SDK、不 await），因为 <link> 阻塞首次绘制——第一帧就是宿主配色。 -->
+<script>
+  /* 首帧主题（同步）：宿主把主题参数附在 App surface iframe 的 URL 上（hana-theme /
+     hana-theme-appearance / hana-css），但「把样式表贴进页面」宿主不代劳，@hana/plugin-sdk
+     也只在收到 hana.theme.changed 时才应用 cssUrl——不自己贴，第一帧就会吃样式表里写死的
+     纸张 fallback（模块那条路径要等一次 fetch，太晚）。此后的变化由 packages/ui/src/host-theme.ts
+     订阅跟随。
+     回退用的 /api/apps/theme.css 是**宿主路由**（公开、无需凭据；dsh-inject.ts 的
+     HOST_PATH_PREFIXES 把 /api/apps/ 划为宿主前缀），不是本 App 自己的资源——页面内仍然不出现
+     自身资源的根路径绝对 URL（那些一律相对路径）。
+     贴过的 URL 记在 <html> 的 data-hana-theme-css 上：host-theme.ts 的 THEME_CSS_ATTR 读它，
+     据此跳过同一个 URL 的重复 fetch（契约两侧各半，被上面的回归闸锁住）。
+     失败（URL 畸形 / 拿不到主题）一律不阻断页面：留着兜底色继续走。 */
+  (function () {
+    "use strict";
+    var root = document.documentElement;
+    var q = null;
+    try { q = new URLSearchParams(location.search); } catch (e) { /* 畸形 URL：当没带参数 */ }
+    var get = function (k) { try { return q ? String(q.get(k) || "").trim() : ""; } catch (e) { return ""; } };
+    try {
+      var theme = get("hana-theme");
+      var appearance = get("hana-theme-appearance");
+      /* hana-css 为空（宿主没带 / 参数畸形）时回退宿主自己的主题路由。 */
+      var css = get("hana-css") || "/api/apps/theme.css";
+      if (theme) root.setAttribute("data-theme", theme);
+      if (appearance === "light" || appearance === "dark") root.setAttribute("data-appearance", appearance);
+      if (css) {
+        var link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = css;
+        link.setAttribute("data-hana-theme-inline", "");
+        (document.head || root).appendChild(link);
+        root.setAttribute("data-hana-theme-css", css);
+      }
+    } catch (e) { /* 主题拿不到就用 fallback，不阻断 */ }
+  }());
+</script>
 </head>
 <body data-view="idle" data-dshana-view="stream">
   <!-- 入口行：聊天流态的最终内容。坐标由紧跟其后的内联脚本在求值时写入（不碰 SDK / 宿主握手）；
@@ -76,30 +118,18 @@
     <div class="entry-row"><span class="entry-key">任务</span><span class="entry-val" data-dsh-entry-tid></span></div>
   </div>
   <script>
-    /* 求值时做两件事，都不依赖 SDK / 宿主 context / hana.envelope：
-       ① 主题：宿主把主题参数附在卡页 URL（hana-theme / hana-css / hana-theme-appearance）。
-          这里同步写好身份属性并贴一张 <link> 样式表——样式表会挡住首次绘制，所以第一帧就是
-          宿主配色，而不是 HTML 里那套纸张 fallback（模块那一步要等一次 fetch，太晚）。
-       ② 坐标：?sid= &tid= &cwd=（字段与 packages/tools/src/shared/card.ts 的 route 查询串同源，
-          都经 encodeURIComponent）。
-       失败（URL 畸形 / 拿不到主题）一律不阻断页面：留着占位文案继续走。 */
+    /* 求值时只做坐标这件事，不依赖 SDK / 宿主 context / hana.envelope：
+       ?sid= &tid= &cwd=（字段与 packages/tools/src/shared/card.ts 的 route 查询串同源，
+       都经 encodeURIComponent）。
+       主题不在这里：首帧那一步移到了 <head> 里的同名片段（所有静态样式表之后、模块脚本之前），
+       此后由 packages/ui/src/host-theme.ts 订阅跟随。
+       失败（URL 畸形）一律不阻断页面：留着占位文案继续走。 */
     (function () {
       "use strict";
       var root = document.documentElement;
       var q = null;
       try { q = new URLSearchParams(location.search); } catch (e) { /* 忽略 */ }
       var get = function (k) { try { return q ? String(q.get(k) || "").trim() : ""; } catch (e) { return ""; } };
-      try {
-        var theme = get("hana-theme"), appearance = get("hana-theme-appearance"), css = get("hana-css");
-        if (theme) root.setAttribute("data-theme", theme);
-        if (appearance === "light" || appearance === "dark") root.setAttribute("data-appearance", appearance);
-        if (css) {
-          var link = document.createElement("link");
-          link.rel = "stylesheet";
-          link.href = css;
-          (document.head || root).appendChild(link);
-        }
-      } catch (e) { /* 主题拿不到就用 fallback，不阻断 */ }
       /* 卡内第一行：动作对应的状态字样。文案住在这里（不是 route 上的 act），所以改文案对
          已经发出的卡也生效——卡页每次都从安装树现取。**只属于聊天流态**：取出的卡不显示
          这一行，那边的状态由卡状态行负责。 */
