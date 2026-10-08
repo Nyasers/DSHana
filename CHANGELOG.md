@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.3+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.2%2Bdsh-0.2.0-rc.2...v1.0.3%2Bdsh-0.2.0-rc.2) (2026-10-08)
+
+### Bug Fixes
+
+* **client-hmr:** /plugins/events 补周期心跳，避免空闲五分钟被截断 ([8f5c535](https://github.com/Nyasers/DSHana/commit/8f5c535315097b3f0899822e83f227c6803c6da7))
+
 ## [1.0.2+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.1%2Bdsh-0.2.0-rc.2...v1.0.2%2Bdsh-0.2.0-rc.2) (2026-10-07)
 
 ### Bug Fixes
@@ -721,6 +727,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
