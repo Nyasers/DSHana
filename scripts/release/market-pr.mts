@@ -24,6 +24,7 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 
 import { ROOT } from "../shared/root.mts";
+import { manifestPath } from "../shared/contract-assets.mts";
 
 /** fork 的本地工作副本：在 .cache/ 下，随出包清缓存一起清掉，不留痕。 */
 const WORK = join(ROOT, ".cache", "market-fork");
@@ -153,7 +154,7 @@ function findBy<T extends { kind: string; id: string }>(list: T[], id: string, k
 
 async function main(): Promise<void> {
   const enr = fs.readJsonSync(join(ROOT, "market", "enrollment.json")) as Enrollment;
-  const manifest = fs.readJsonSync(join(ROOT, "manifest.json")) as { version: string };
+  const manifest = fs.readJsonSync(manifestPath(ROOT)) as { version: string };
   const tag = arg("--tag") || `v${manifest.version}`;
   // 条目名按**所选 tag** 的版本取，不按本地 manifest：--tag 指旧版本时，拿当前 manifest 去搜那个 Release
   // 只会一直等不到。两者不一致时提示一声（正常发版流程里它们相等）。

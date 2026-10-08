@@ -54,7 +54,7 @@
         "cardForm": "flush",
         "titlebar": "solid",
         "face": {
-          "image": "cover.png"
+          "image": "face.png"
         }
       }
     ],

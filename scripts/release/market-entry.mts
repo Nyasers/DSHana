@@ -8,7 +8,7 @@
 //   身上；投稿条目是**对已出产物的派生**，放这里可以按需重跑，也不必让 pack 知道市场的事
 //   （单一职责：产物是产物，市场是市场）。
 //
-// 流程：读 manifest.json（仓库根）+ package.json → 对 releases/ 里目标那个 zip 现算事实（字节数 + sha256）→ 写
+// 流程：读 App 契约 manifest（packages/app/src/manifest.json，路径见 shared/contract-assets）+ package.json → 对 releases/ 里目标那个 zip 现算事实（字节数 + sha256）→ 写
 //   <kind>-<id>-<version>.entry.json，文件名就是官方市场的取件名。
 //   事实只能对包现算：条目与包在同一条线上（CI 里同属于出通用包的那个作业），zip 就在本地，
 //   不必经什么小票中转，也就没有「小票与包对不上」这条失败路径。
@@ -29,6 +29,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 
 import { ROOT } from "../shared/root.mts";
+import { contractAssetSource, manifestPath } from "../shared/contract-assets.mts";
 const RELEASES = join(ROOT, "releases");
 
 /** 市场条目里的扩展种类：本仓库只出 App。 */
@@ -64,17 +65,15 @@ function arg(name: string): string | null {
   return null;
 }
 
-/** 图标 data URI：清单里的 icon 相对包根，源在 src/ 下（也可能已在根）。 */
+/** 图标 data URI：manifest.icon 是包根相对路径，源在 App 域（packages/app/src/<icon>）——落位规则见
+ *  packages/app/src/build.ts 与 scripts/shared/contract-assets.mts（构建与投稿条目共用同一套映射）。 */
 function iconDataUri(iconRel: string): string | undefined {
   if (!iconRel) return undefined;
-  for (const candidate of [join(ROOT, "packages", "app", "src", iconRel), join(ROOT, iconRel)]) {
-    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-      const ext = candidate.toLowerCase();
-      const mime = ext.endsWith(".svg") ? "image/svg+xml" : ext.endsWith(".webp") ? "image/webp" : "image/png";
-      return `data:${mime};base64,${fs.readFileSync(candidate).toString("base64")}`;
-    }
-  }
-  return undefined;
+  const source = contractAssetSource(ROOT, iconRel);
+  if (!fs.existsSync(source) || !fs.statSync(source).isFile()) return undefined;
+  const ext = source.toLowerCase();
+  const mime = ext.endsWith(".svg") ? "image/svg+xml" : ext.endsWith(".webp") ? "image/webp" : "image/png";
+  return `data:${mime};base64,${fs.readFileSync(source).toString("base64")}`;
 }
 
 /**
@@ -87,7 +86,7 @@ function zipFacts(zipName: string): { size: number; sha256: string } {
 }
 
 function buildEntry(zipName: string): Entry {
-  const manifest = fs.readJsonSync(join(ROOT, "manifest.json"));
+  const manifest = fs.readJsonSync(manifestPath(ROOT));
   const pkg = fs.readJsonSync(join(ROOT, "package.json"));
   const { size, sha256 } = zipFacts(zipName);
   const entry: Entry = {
@@ -101,13 +100,22 @@ function buildEntry(zipName: string): Entry {
     archive: { url: `{{BASE_URL}}/${zipName}`, sha256, size, format: "zip" },
   };
   if (manifest.minAppVersion) entry.compatibility = { minAppVersion: manifest.minAppVersion };
+  // 图标解析不到就报错：条目少一个 icon 字段，市场那侧只是无声地没有图，客户端与同步器都不报。
+  // 静默缺件比报错贵得多，这里 fail-closed（与出包链上其他"缺件即拒"一致）。
   const icon = iconDataUri(manifest.icon);
-  if (icon) entry.icon = icon;
+  if (!icon)
+    throw new Error(
+      `图标解析不到（manifest.icon=${JSON.stringify(manifest.icon)}）：源按 ${contractAssetSource(
+        ROOT,
+        typeof manifest.icon === "string" ? manifest.icon : "<manifest.icon 缺失>",
+      )} 找`,
+    );
+  entry.icon = icon;
   return entry;
 }
 
 function main(): void {
-  const manifest = fs.readJsonSync(join(ROOT, "manifest.json"));
+  const manifest = fs.readJsonSync(manifestPath(ROOT));
   const version: string = manifest.version;
   const target = arg("--target") || "universal";
   if (target !== "universal") {

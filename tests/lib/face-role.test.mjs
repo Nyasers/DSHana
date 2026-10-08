@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { FACE_ROLE, FACE_VIEWS, isFaceView, roleForView } from "@dshana/ui/face-role.ts";
+import { manifestPath } from "../../scripts/shared/contract-assets.mts";
 
 test("壳页共用台面样式：三个面都引 face-stage.css，且不再各自拄一份", () => {
   const ui = (name) => readFileSync(join(here, "..", "..", "packages", "ui", "src", name), "utf8");
@@ -112,7 +113,7 @@ test("清单与页面：会话卡由 ui/stream.html 承担（聊天卡就是这�
   const html = readFileSync(join(here, "..", "..", "packages", "ui", "src", "stream.html"), "utf8");
   assert.match(html, /<meta name="hana-dshana-role" content="stream">/);
   assert.match(html, /data-dshana-view="stream"/);
-  const manifest = JSON.parse(readFileSync(join(here, "..", "..", "manifest.json"), "utf8"));
+  const manifest = JSON.parse(readFileSync(manifestPath(join(here, "..", "..")), "utf8"));
   const ids = manifest.contributes.cards.map((c) => c.id);
   assert.ok(!ids.includes("stream"), "会话卡走工具的聊天流卡（details.card 指这一页），不占卡片中心一格");
   assert.ok(!ids.includes("session"), "取出由宿主手势完成，不再声明一张黑板的会话卡");
