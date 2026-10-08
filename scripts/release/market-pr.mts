@@ -13,9 +13,13 @@
 //   manifest 的版本号，sha256 照抄 Release 里那份投稿条目的 archive.sha256（市场要求照抄，不自己算）。
 //   条目的 sha256 由出包作业对最终产物现算，所以这里等 Release 就绪再去取，而不拿本地包的哈希去登记。
 //
+//   开 PR 前跑一次市场仓库自己的同步器（--check，只读）：按 approvals 的记录取件、核对 sha256/身份/
+//   版本，并在版本倒退时直接拒——与那边 PR CI、维护者侧跑的是同一道闸，本地先预演一遍。
+//   审阅材料（PR 模板那几栏）不由脚本填，draft 留着人工补。
+//
 // 用法：
-//   node scripts/release/market-pr.mts                       # 等 Release 就绪 → 备 draft PR
-//   node scripts/release/market-pr.mts --dry-run             # 只打印将要做的改动，不推不改远端
+//   node scripts/release/market-pr.mts                       # 等 Release 就绪 → 本地自检 → 备 draft PR
+//   node scripts/release/market-pr.mts --dry-run             # 只打印将要做的改动，不推不改远端（跳过自检）
 //   node scripts/release/market-pr.mts --tag v1.0.2+dsh-0.2.0-rc.2
 //
 // 退出码 0 的三种情形：已备好 PR（打印 URL）、该版本已登记（无事可做）、--dry-run 走完。
@@ -25,6 +29,7 @@ import { join } from "node:path";
 
 import { ROOT } from "../shared/root.mts";
 import { manifestPath } from "../shared/contract-assets.mts";
+import { errText } from "../shared/err-text.mts";
 
 /** fork 的本地工作副本：在 .cache/ 下，随出包清缓存一起清掉，不留痕。 */
 const WORK = join(ROOT, ".cache", "market-fork");
@@ -71,7 +76,13 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 interface ReleaseInfo {
   isDraft: boolean;
   isPrerelease: boolean;
-  assets: { name: string }[];
+  assets: { name: string; size: number }[];
+}
+
+/** 条目里 archive.url 的形态是 `{{BASE_URL}}/<zip 名>`（协议要求），取出 ZIP 名好在本 Release 里核对它真在。 */
+function zipNameOf(url: string): string | null {
+  const m = /^\{\{BASE_URL\}\}\/([^/]+\.zip)$/.exec(String(url || ""));
+  return m ? m[1] : null;
 }
 
 /** 等投稿条目就位（CI 出包），并确认 Release 已可上架；返回条目对象。
@@ -79,6 +90,8 @@ interface ReleaseInfo {
  *  只去 draft 而保留 prerelease——标稳定版（--prerelease=false --latest）是「要不要上架」的人工决定，
  *  不属于发版流程，所以这里**不等**它：已经稳定就继续，否则直接报错并给出该跑的命令。
  *  条目本身要等（CI 出包要十几分钟），那是构建在跑、不是人在决策。
+ *  条目与它所指的 ZIP 必须同属这个 Release：市场侧按 approvals 的记录去那个 Release 取件，只传了
+ *  条目、漏传 ZIP 的话要等那边下载才炸；这里就地核对（存在 + 字节数与条目一致），fail-fast。
  *  `wait=false` 时连条目也只探一次（--dry-run 用）。 */
 async function waitForRelease(
   tag: string,
@@ -87,6 +100,8 @@ async function waitForRelease(
   wait: boolean,
 ): Promise<{ sha256: string; size: number }> {
   const deadline = Date.now() + (wait ? WAIT_MS : 0);
+  // 命中那次的资产清单：条目下载完要拿它核对条目所指的 ZIP（名称 + 字节数）。
+  let assets: { name: string; size: number }[] = [];
   for (;;) {
     let info: ReleaseInfo | null = null;
     try {
@@ -105,6 +120,7 @@ async function waitForRelease(
             `    gh release edit ${tag} --repo ${repo} --prerelease=false --latest`,
         );
       }
+      assets = info!.assets;
       break;
     }
     if (!wait) {
@@ -120,8 +136,17 @@ async function waitForRelease(
   fs.removeSync(dir);
   fs.ensureDirSync(dir);
   exec("gh", ["release", "download", tag, "--repo", repo, "--pattern", entryName, "--dir", dir, "--clobber"]);
-  const entry = fs.readJsonSync(join(dir, entryName)) as { archive: { sha256: string; size: number } };
+  const entry = fs.readJsonSync(join(dir, entryName)) as {
+    archive: { url: string; sha256: string; size: number };
+  };
   fs.removeSync(dir);
+  const zipName = zipNameOf(entry.archive.url);
+  if (!zipName) throw new Error(`条目里的 archive.url 不是 {{BASE_URL}}/<zip> 形态：${entry.archive.url}`);
+  const zip = assets.find((a) => a.name === zipName);
+  if (!zip) throw new Error(`${tag} 里没有条目所指的 ZIP ${zipName}（只传了条目？先补齐资产再上架）`);
+  if (zip.size !== entry.archive.size) {
+    throw new Error(`${zipName} 字节数与条目不符：Release 资产 ${zip.size} ≠ 条目 archive.size ${entry.archive.size}`);
+  }
   return { sha256: String(entry.archive.sha256).trim().toLowerCase(), size: entry.archive.size };
 }
 
@@ -150,6 +175,24 @@ function syncFork(enr: Enrollment): void {
 /** 在读写的两个登记文件里找本扩展那条。 */
 function findBy<T extends { kind: string; id: string }>(list: T[], id: string, kind: string): T | undefined {
   return list.find((e) => e.id === id && e.kind === kind);
+}
+
+/** 开 PR 前的本地自检：跑市场仓库自己的同步器（只读 --check）。它按 approvals 的记录去 Release 取件、
+ *  核对 sha256 / 身份 / 版本，并在版本倒退时直接拒——与市场 PR 的 CI、维护者侧跑的是同一道闸。
+ *  这一步会真去下载已批准的那个包，几十秒到几分钟。 */
+function runMarketCheck(): void {
+  const script = join(WORK, "scripts", "extension-market-sync.mjs");
+  if (!fs.existsSync(script)) throw new Error(`市场仓库里没有同步器：${script}（fork 没同步到上游 main？）`);
+  log("本地自检：node scripts/extension-market-sync.mjs --check（按 approvals 下载并核对，稍等）…");
+  const argv = ["--registry", "registry.json", "--approvals", "approvals.json", "--previous", "index.v2.json", "--out", "index.v2.json", "--check"];
+  try {
+    const out = exec(process.execPath, [script, ...argv], WORK);
+    log("本地自检通过：" + (out.split(/\r?\n/).filter(Boolean).slice(-1)[0] || "（无输出）"));
+  } catch (e) {
+    const failed = e as { stdout?: unknown; stderr?: unknown };
+    const detail = `${String(failed.stdout ?? "")}${String(failed.stderr ?? "")}`.trim() || errText(e);
+    throw new Error("本地自检未通过（市场同步器 --check）：\n" + detail + "\n  先修 Release 或 approvals 记录，再重跑本脚本");
+  }
 }
 
 async function main(): Promise<void> {
@@ -203,9 +246,11 @@ async function main(): Promise<void> {
   log(`改动：\n${diff}`);
 
   if (dryRun) {
-    log("--dry-run：到此为止，未推分支、未开 PR");
+    log("--dry-run：到此为止，未推分支、未开 PR（本地自检也略过）");
     return;
   }
+
+  runMarketCheck();
 
   const branch = `enroll/${tag.replace(/^v/, "").replace(/\+/g, "-")}`;
   exec("git", ["checkout", "-B", branch], WORK);
