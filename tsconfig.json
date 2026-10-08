@@ -20,7 +20,8 @@
     "strict": true,
     // 与域配置同口径：纯 JS 内容挂 .ts 的存量还没补完类型，严格隐式 any 会淹掉真问题。
     "noImplicitAny": false,
-    "noUnusedLocals": false,
+    // 未使用声明一律报出来（编辑器与域配置同口径；CI 侧由 ts-diagnostics 的 FAIL_CODES 拦）。
+    "noUnusedLocals": true,
     "noUnusedParameters": false,
     "skipLibCheck": true,
     "esModuleInterop": true,

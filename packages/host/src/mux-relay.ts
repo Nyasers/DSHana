@@ -26,7 +26,6 @@ import { ChunkWindow, MUX_CHUNK_BYTES, decodeMuxControlFrame, encodeChunk, slice
 import { OPCODE, framePayload, readFrameHeader, serializeFrame, type WsFrameHeader } from "./ws-frames.ts";
 
 const OP_CONTINUATION = OPCODE.CONTINUATION;
-const OP_TEXT = OPCODE.TEXT;
 const OP_BINARY = OPCODE.BINARY;
 const OP_CLOSE = OPCODE.CLOSE;
 
