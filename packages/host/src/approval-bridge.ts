@@ -360,7 +360,6 @@ export function startApprovalBridge({ ctx, hana, bindings, log }: { ctx: any; ha
     let settled = false;
     let doRespond: ((outcome: AppTaskApprovalOutcome) => Promise<unknown>) | null = null;
     let cancelWatch: (() => void) | null = null;
-    let abortedCleanup = false;
     const pending = new Promise<DshApprovalVerdict>((resolve) => {
       settleOutcome = (outcome) => {
         if (settled) return;
@@ -375,7 +374,6 @@ export function startApprovalBridge({ ctx, hana, bindings, log }: { ctx: any; ha
     const signal = req && req.signal;
     const onAbort = () => {
       if (settled) return;
-      abortedCleanup = true;
       if (doRespond) {
         try { doRespond("rejected").catch(() => {}); } catch { /* 忽略 */ }
       }

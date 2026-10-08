@@ -32,8 +32,6 @@
 //
 // 依赖注入（可测性）：deps = { appId, version, getSnapshot(), start(), stop(), log() }。
 // 默认实现经 packages/runtime/src/managed-runtime.ts 读取真实单例；测试注入 fake。
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { managedRuntimeDetails, ensureManagedRuntime, stopManagedRuntime, bridgeAccess } from "@dshana/runtime/managed-runtime.ts";
 import { buildBootSnapshot, APP_ID } from "@dshana/runtime/boot-state.ts";
 import { dataSources, sourceOf } from "@dshana/runtime/data-source.ts";
@@ -57,18 +55,6 @@ export const DASHANA_ROUTE_PREFIX = "/dshana";
 
 /** 取错误的可读文本。catch 到的值类型未知（unknown / {}），字段访问一律经这里。 */
 const errText = (e: unknown): string => ((e as any)?.message as string) || String(e);
-
-/** 读 dataDir/config.json（缺失/坏 JSON 一律当空对象：设置面不该把诊断面拖下水）。 */
-function readConfigJson(dataDir) {
-  try {
-    const f = join(dataDir, "config.json");
-    if (!existsSync(f)) return {};
-    const j = JSON.parse(readFileSync(f, "utf8"));
-    return j && typeof j === "object" ? j : {};
-  } catch {
-    return {};
-  }
-}
 
 /**
  * App 级设置的视图：两个超时与数据模式在同一份设置、同一个 revision（W2）。
@@ -181,7 +167,7 @@ export function defaultDshanaRouteDeps(ctx) {
         );
         throw Object.assign(err, { code: "SETTINGS_CONFLICT", revision: cur.revision });
       }
-      const next = await store.write({ ...cur.settings, ...patch });
+      await store.write({ ...cur.settings, ...patch });
       // 变更广播已退场：宿主 App 存储只有 get/set、没有订阅口，已开页在重新可见时自己重读；
       // 并发写仍由上面的 revision 把关。
       const st = await store.read();
