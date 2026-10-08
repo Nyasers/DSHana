@@ -13,13 +13,16 @@
 //   manifest 的版本号，sha256 照抄 Release 里那份投稿条目的 archive.sha256（市场要求照抄，不自己算）。
 //   条目的 sha256 由出包作业对最终产物现算，所以这里等 Release 就绪再去取，而不拿本地包的哈希去登记。
 //
-//   开 PR 前跑一次市场仓库自己的同步器（--check，只读）：按 approvals 的记录取件、核对 sha256/身份/
-//   版本，并在版本倒退时直接拒——与那边 PR CI、维护者侧跑的是同一道闸，本地先预演一遍。
+//   开 PR 前做一次**不下包**的核对：条目的 archive.sha256/size 与 Release 资产在 API 上的 digest/size
+//   逐字比（等价于"把通用包下下来再哈希"，但一个字节都不下），再拿已上架索引比一次主号不倒退。
+//   完整性真正的强校验（下载 + 哈希）留给市场 PR 的 CI 在远端做，本地不重复付那 153 MB；要在这边
+//   也跑同一道强校验就加 --deep-check（它会下载已批准的包）。
 //   审阅材料（PR 模板那几栏）不由脚本填，draft 留着人工补。
 //
 // 用法：
-//   node scripts/release/market-pr.mts                       # 等 Release 就绪 → 本地自检 → 备 draft PR
-//   node scripts/release/market-pr.mts --dry-run             # 只打印将要做的改动，不推不改远端（跳过自检）
+//   node scripts/release/market-pr.mts                       # 等 Release 就绪 → API 侧核对 → 备 draft PR
+//   node scripts/release/market-pr.mts --dry-run             # 只打印将要做的改动，不推不改远端
+//   node scripts/release/market-pr.mts --deep-check          # 额外跑市场同步器的强校验（会下载已批准的包）
 //   node scripts/release/market-pr.mts --tag v1.0.2+dsh-0.2.0-rc.2
 //
 // 退出码 0 的三种情形：已备好 PR（打印 URL）、该版本已登记（无事可做）、--dry-run 走完。
@@ -57,6 +60,7 @@ function arg(name: string): string | null {
 }
 
 const dryRun = process.argv.includes("--dry-run");
+const deepCheck = process.argv.includes("--deep-check");
 const log = (m: string): void => console.log(`[market-pr] ${m}`);
 
 /** 无代理环境下跑 gh / git，并给 git 固定 HTTP/1.1。
@@ -76,7 +80,7 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 interface ReleaseInfo {
   isDraft: boolean;
   isPrerelease: boolean;
-  assets: { name: string; size: number }[];
+  assets: { name: string; size: number; digest?: string }[];
 }
 
 /** 条目里 archive.url 的形态是 `{{BASE_URL}}/<zip 名>`（协议要求），取出 ZIP 名好在本 Release 里核对它真在。 */
@@ -98,7 +102,7 @@ async function waitForRelease(
   repo: string,
   entryName: string,
   wait: boolean,
-): Promise<{ sha256: string; size: number }> {
+): Promise<{ sha256: string; size: number; publisher: string }> {
   const deadline = Date.now() + (wait ? WAIT_MS : 0);
   // 命中那次的资产清单：条目下载完要拿它核对条目所指的 ZIP（名称 + 字节数）。
   let assets: { name: string; size: number }[] = [];
@@ -147,7 +151,15 @@ async function waitForRelease(
   if (zip.size !== entry.archive.size) {
     throw new Error(`${zipName} 字节数与条目不符：Release 资产 ${zip.size} ≠ 条目 archive.size ${entry.archive.size}`);
   }
-  return { sha256: String(entry.archive.sha256).trim().toLowerCase(), size: entry.archive.size };
+  // 完整性用 API 核对，不下包：Release 资产自带 sha256 digest（上传时由 GitHub 算），把它与条目
+  // archive.sha256 逐字比，等价于"下下来再哈希"。digest 缺失（旧资产）时退化成只核字节数并说明。
+  const declared = String(entry.archive.sha256).trim().toLowerCase();
+  const digest = String(zip.digest || "").replace(/^sha256:/i, "").toLowerCase();
+  if (digest && digest !== declared) {
+    throw new Error(`${zipName} 的 sha256 与条目不符：资产 digest ${digest} ≠ 条目 archive.sha256 ${declared}`);
+  }
+  if (!digest) log(`注意：${zipName} 在 API 上没有 digest，只核了字节数（完整性留给市场侧核）`);
+  return { sha256: declared, size: entry.archive.size, publisher: String(entry.publisher || "") };
 }
 
 /** 把 fork 的默认分支对齐到上游：main 恒等于上游，改动一律走一次性分支。 */
@@ -177,21 +189,70 @@ function findBy<T extends { kind: string; id: string }>(list: T[], id: string, k
   return list.find((e) => e.id === id && e.kind === kind);
 }
 
-/** 开 PR 前的本地自检：跑市场仓库自己的同步器（只读 --check）。它按 approvals 的记录去 Release 取件、
- *  核对 sha256 / 身份 / 版本，并在版本倒退时直接拒——与市场 PR 的 CI、维护者侧跑的是同一道闸。
- *  这一步会真去下载已批准的那个包，几十秒到几分钟。 */
-function runMarketCheck(): void {
+/** 开 PR 前**不下包**的核对：条目与 Release 资产的完整性那一半已在 waitForRelease 里做过（API digest），
+ *  这里补身份与版本：条目里的 publisher 要跟登记一致；版本主号不得往回打。带 pre 段的完整排序不在本地
+ *  重造——市场侧的 historyFor 会据已上架索引拒降级，而那道闸跑在 PR 检查里。 */
+function preflightPublished(enr: Enrollment, version: string, entryPublisher: string): void {
+  if (entryPublisher && entryPublisher !== enr.publisher) {
+    throw new Error(
+      `条目里的 publisher（${entryPublisher}）与登记（${enr.publisher}）不一致，市场会拒：` +
+        `先对齐 market/enrollment.json 与出包时的 --publisher`,
+    );
+  }
+  const indexPath = join(WORK, "index.v2.json");
+  if (!fs.existsSync(indexPath)) {
+    log("fork 里没有已上架索引（index.v2.json），跳过版本比对");
+    return;
+  }
+  const idx = fs.readJsonSync(indexPath) as {
+    items: { kind: string; id: string; version: string; publisher?: string }[];
+  };
+  const pub = idx.items.find((i) => i.kind === enr.kind && i.id === enr.id);
+  if (!pub) {
+    log(`索引里还没有 ${enr.kind}/${enr.id}（首次上架）`);
+    return;
+  }
+  if (coreDowngrade(version, pub.version)) {
+    throw new Error(`版本倒退：本次 ${version} < 已上架 ${pub.version}，市场侧的 historyFor 会拒`);
+  }
+  if (pub.publisher && pub.publisher !== enr.publisher) {
+    log(`注意：发布者与已上架不同（${pub.publisher} → ${enr.publisher}），PR 正文里要写明登记变更`);
+  }
+  log(`已上架 ${pub.version} → 本次 ${version}（主号不降级）`);
+}
+
+/** 版本主号（major.minor.patch）逐段比：只用来拦"明显往回打"，pre 段的细则交给市场侧。 */
+function coreDowngrade(next: string, prev: string): boolean {
+  const parts = (v: string): number[] =>
+    String(v)
+      .replace(/^v/, "")
+      .split("+")[0]
+      .split("-")[0]
+      .split(".")
+      .map((n) => Number(n) || 0);
+  const a = parts(next);
+  const b = parts(prev);
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    const d = (a[i] || 0) - (b[i] || 0);
+    if (d !== 0) return d < 0;
+  }
+  return false;
+}
+
+/** 强校验（可选，--deep-check）：跑市场仓库自己的同步器 --check。它与市场 PR 的 CI、维护者侧是同一道
+ *  闸，但会按 approvals 的登记去真下载已批准的包（本扩展那条就是 153 MB 的通用包），所以默认不跑。 */
+function runDeepMarketCheck(): void {
   const script = join(WORK, "scripts", "extension-market-sync.mjs");
   if (!fs.existsSync(script)) throw new Error(`市场仓库里没有同步器：${script}（fork 没同步到上游 main？）`);
-  log("本地自检：node scripts/extension-market-sync.mjs --check（按 approvals 下载并核对，稍等）…");
+  log("强校验：node scripts/extension-market-sync.mjs --check（会下载已批准的包，稍等）…");
   const argv = ["--registry", "registry.json", "--approvals", "approvals.json", "--previous", "index.v2.json", "--out", "index.v2.json", "--check"];
   try {
     const out = exec(process.execPath, [script, ...argv], WORK);
-    log("本地自检通过：" + (out.split(/\r?\n/).filter(Boolean).slice(-1)[0] || "（无输出）"));
+    log("强校验通过：" + (out.split(/\r?\n/).filter(Boolean).slice(-1)[0] || "（无输出）"));
   } catch (e) {
     const failed = e as { stdout?: unknown; stderr?: unknown };
     const detail = `${String(failed.stdout ?? "")}${String(failed.stderr ?? "")}`.trim() || errText(e);
-    throw new Error("本地自检未通过（市场同步器 --check）：\n" + detail + "\n  先修 Release 或 approvals 记录，再重跑本脚本");
+    throw new Error("强校验未通过（市场同步器 --check）：\n" + detail + "\n  先修 Release 或 approvals 记录，再重跑本脚本");
   }
 }
 
@@ -208,7 +269,7 @@ async function main(): Promise<void> {
   const entryName = `${enr.kind}-${enr.id}-${version}.entry.json`;
 
   log(`登记 ${enr.kind}/${enr.id} · tag ${tag}`);
-  const { sha256, size } = await waitForRelease(tag, enr.repository, entryName, !dryRun);
+  const { sha256, size, publisher } = await waitForRelease(tag, enr.repository, entryName, !dryRun);
   log(`条目 sha256 ${sha256}（${size} 字节）`);
 
   syncFork(enr);
@@ -245,12 +306,14 @@ async function main(): Promise<void> {
   const diff = exec("git", ["diff", "--stat"], WORK);
   log(`改动：\n${diff}`);
 
+  preflightPublished(enr, version, publisher);
+
   if (dryRun) {
-    log("--dry-run：到此为止，未推分支、未开 PR（本地自检也略过）");
+    log("--dry-run：到此为止，未推分支、未开 PR");
     return;
   }
 
-  runMarketCheck();
+  if (deepCheck) runDeepMarketCheck();
 
   const branch = `enroll/${tag.replace(/^v/, "").replace(/\+/g, "-")}`;
   exec("git", ["checkout", "-B", branch], WORK);
