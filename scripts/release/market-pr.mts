@@ -22,10 +22,21 @@
 //   （`entry.version` 恒为 0.0.0、按内容哈希更新），标题那一位本来就是 tag，条目名也不带版本段。
 //   审阅材料（PR 模板那几栏）不由脚本填，draft 留着人工补。
 //
+//   提交信息可以自己给（与 `git commit` 同规则）：`-m "标题" -m "正文段落"`（多段空行相连）或
+//   `-F <文件>` 整份读；给了就用它（首行当标题）。只想补"这次改了什么"那一行就用 `--changes`，
+//   其余（Release / SHA-256 / Local check）都是脚本能自证的事实，不用手抄。
+//
+//   署名不自造：提交用跑脚本的人自己的 git 身份与签名 key（全局 user.* + commit.gpgsign）。身份
+//   一旦被 `-c user.name/email` 覆盖，签名 key 与身份就对不上，GitHub 会判 unknown_key / Unverified。
+//   agent 的落款在正文里（"由 pnpm run market:pr 生成"），不冒充提交身份。
+//
 // 用法：
-//   node scripts/release/market-pr.mts                       # 等 Release 就绪 → API 侧核对 → 备 draft PR
+//   node scripts/release/market-pr.mts                       # 等 Release 就绪 → API 侧核对 → 备 PR
 //   node scripts/release/market-pr.mts --dry-run             # 只打印将要提交的标题/正文，不推不改远端
 //   node scripts/release/market-pr.mts --deep-check          # 额外跑市场同步器的强校验（会下载已批准的包）
+//   node scripts/release/market-pr.mts --changes "…"         # 只补 Changes 那行，其余自动生成
+//   node scripts/release/market-pr.mts -m "chore: approve …" -m "正文段落"   # 自带提交信息（同 git commit）
+//   node scripts/release/market-pr.mts -F .tmp/pr-body.md                    # 从文件读提交信息
 //   node scripts/release/market-pr.mts --tag v1.0.2+dsh-0.2.0-rc.2
 //   node scripts/release/market-pr.mts --tag recipe-2026-10-08   # skill/recipe 无版本号，tag 必须显式给
 //
@@ -70,6 +81,46 @@ function arg(name: string): string | null {
 const dryRun = process.argv.includes("--dry-run");
 const deepCheck = process.argv.includes("--deep-check");
 const log = (m: string): void => console.log(`[market-pr] ${m}`);
+
+/** 收集一个可重复旗标的全部取值（`-m x -m y` / `--message x` / `--message=x` 三种写法都收）。
+ *  与 `arg()` 的区别：后者只取第一个、且拒收以 `--` 开头的值；提交信息是多段的，得全收。 */
+function values(name: string, short: string): string[] {
+  const argv = process.argv.slice(2);
+  const out: string[] = [];
+  for (let i = 0; i < argv.length; i += 1) {
+    const a = argv[i];
+    if (a === name || a === short) {
+      const next = argv[i + 1];
+      if (next === undefined || next.startsWith("--")) throw new Error(`${a} 缺值`);
+      out.push(next);
+      i += 1;
+      continue;
+    }
+    if (a.startsWith(`${name}=`)) out.push(a.slice(name.length + 1));
+  }
+  return out;
+}
+
+/** 提交信息（标题 + 正文）：规则与 `git commit` 一致——首行是标题，其余是正文；多个 `-m` 之间空行
+ *  相连；也可以 `-F <文件>` 整份读进来（按当前工作目录解析）。两种只能用一种（同 git 规则）。
+ *  什么都没给就返回 null，由调用方按市场形状生成。 */
+function submissionMessage(): { title: string; body: string } | null {
+  const messages = values("--message", "-m");
+  const file = arg("--file") || arg("-F");
+  if (messages.length && file) throw new Error("-m/--message 与 -F/--file 只能给一种（同 git commit）");
+  const raw = file ? fs.readFileSync(file, "utf8") : messages.join("\n\n");
+  if (!raw.trim()) return null;
+  const lines = raw.replace(/\r\n/g, "\n").replace(/\s+$/, "").split("\n");
+  const title = (lines.shift() || "").trim();
+  if (!title) throw new Error("提交信息的首行是标题，不能为空");
+  return { title, body: lines.join("\n").replace(/^\n+/, "") };
+}
+
+// 提交信息（命令行给的）：-m/-F 给整份，或 --changes 只补那一行，两者互斥。参数错要当场报，
+// 不拖到跑完网络步骤才说。
+const cliMessage = submissionMessage();
+const cliChanges = arg("--changes");
+if (cliMessage && cliChanges) throw new Error("已用 -m/-F 给整份提交信息，就不要再给 --changes");
 
 /** 无代理环境下跑 gh / git，并给 git 固定 HTTP/1.1。
  *  宿主环境里的 HTTP(S)_PROXY 可能指向已停的代理，会让 gh 连接失败；而 HTTP/2 过某些代理中转会
@@ -334,19 +385,27 @@ async function main(): Promise<void> {
   // PR 形状对齐维护者（liliMozi）的更新型 PR：标题 `chore: approve <kind>/<id> <tag>`；正文三段
   // （Release / SHA-256 / Changes）+ 一行本地核对说明。tag 原样用（带 `v` 前缀；skill/recipe 本来就是
   // tag），去 `v` 前缀只用于拼条目名。
-  const title = `chore: approve ${enr.kind}/${enr.id} ${tag}`;
+  // 提交信息：命令行给了 -m/-F 就用它（同 git commit）；只想补"这次改了什么"那一行就用 --changes；
+  // 都不给则按市场形状生成（Changes 留占位）。互斥关系在模块顶层已校验。
+  const custom = cliMessage;
+  const changes = cliChanges;
+  const title = custom ? custom.title : `chore: approve ${enr.kind}/${enr.id} ${tag}`;
   const releaseUrl = `https://github.com/${enr.repository}/releases/tag/${tag.replace(/\+/g, "%2B")}`;
-  const body = [
-    `Approve the new ${enr.id} ${enr.kind} release.`,
-    "",
-    `- Release: ${releaseUrl}`,
-    `- SHA-256: \`${sha256}\``,
-    "- Changes: （本次变更，人工补）",
-    "",
-    "Local check: 条目与 Release 资产按 API 核对一致（sha256 digest + 字节数），未下载安装包。",
-    "",
-    "由 `pnpm run market:pr` 生成。",
-  ].join("\n");
+  const body = custom
+    ? custom.body
+    : [
+        `Approve the new ${enr.id} ${enr.kind} release.`,
+        "",
+        `- Release: ${releaseUrl}`,
+        `- SHA-256: \`${sha256}\``,
+        `- Changes: ${changes || "（本次变更，人工补）"}`,
+        "",
+        "Local check: 条目与 Release 资产按 API 核对一致（sha256 digest + 字节数），未下载安装包。",
+        "",
+        "由 `pnpm run market:pr` 生成。",
+      ].join("\n");
+  if (custom) log("提交信息取自 -m/-F（不按市场形状生成）");
+  else if (changes) log("Changes 行取自 --changes");
 
   if (dryRun) {
     log(`--dry-run：将提交的 draft PR\n  标题：${title}\n  正文：\n${body}`);
@@ -359,20 +418,34 @@ async function main(): Promise<void> {
   const branch = `enroll/${tag.replace(/^v/, "").replace(/\+/g, "-")}`;
   exec("git", ["checkout", "-B", branch], WORK);
   exec("git", ["add", "registry.json", "approvals.json"], WORK);
-  exec("git", ["-c", "user.name=HanaAgent", "-c", "user.email=313794804+HanaAgent@users.noreply.github.com", "commit", "-m", `Enroll ${enr.kind}/${enr.id} ${tag}`], WORK);
+  // 提交身份不自造：用局部的 git 身份与签名 key（见文件头"署名不自造"），提交信息用同一份标题 + 正文。
+  exec("git", ["commit", "-m", title, ...(body ? ["-m", body] : [])], WORK);
   exec("git", ["push", "--force", "origin", branch], WORK);
   log(`已推 ${enr.fork}:${branch}`);
 
-  const prUrl = exec("gh", [
+  // 人工那一位给了（-m/-F 或 --changes）就不再开 draft：材料已齐，别让维护者对着半成品。
+  const draft = !(custom || changes);
+  const prArgs = [
     "pr", "create",
     "--repo", enr.upstream,
     "--base", enr.defaultBranch || "main",
     "--head", `${enr.fork.split("/")[0]}:${branch}`,
     "--title", title,
     "--body", body,
-    "--draft",
-  ]);
-  log(`draft PR：${prUrl}`);
+    ...(draft ? ["--draft"] : []),
+  ];
+  let prUrl: string;
+  try {
+    prUrl = exec("gh", prArgs);
+    log(`${draft ? "draft PR" : "PR"}：${prUrl}`);
+  } catch (e) {
+    // 同一版本重跑、或改完提交信息再推：分支上已经有开着的 PR，就地更新即可，别重复开。
+    const owner = enr.fork.split("/")[0];
+    const existing = exec("gh", ["pr", "list", "--repo", enr.upstream, "--head", `${owner}:${branch}`, "--state", "open", "--json", "url", "--jq", ".[0].url // \"\""]);
+    if (!existing) throw e;
+    prUrl = existing;
+    log(`分支 ${branch} 已有开着的 PR，未重复创建：${prUrl}`);
+  }
 }
 
 await main();
