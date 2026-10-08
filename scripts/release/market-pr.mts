@@ -26,9 +26,9 @@
 //   `-F <文件>` 整份读；给了就用它（首行当标题）。只想补"这次改了什么"那一行就用 `--changes`，
 //   其余（Release / SHA-256 / Local check）都是脚本能自证的事实，不用手抄。
 //
-//   署名不自造：提交用跑脚本的人自己的 git 身份与签名 key（全局 user.* + commit.gpgsign）。身份
-//   一旦被 `-c user.name/email` 覆盖，签名 key 与身份就对不上，GitHub 会判 unknown_key / Unverified。
-//   agent 的落款在正文里（"由 pnpm run market:pr 生成"），不冒充提交身份。
+//   署名与 GitHana 的 git_commit 同款：提交身份用跑脚本的人自己的 git 身份与签名 key（全局 user.* +
+//   commit.gpgsign）——身份一旦被 `-c user.name/email` 覆盖，签名 key 与身份就对不上，GitHub 会判
+//   unknown_key / Unverified；agent 的署名走 Co-authored-by 尾注（已有同款就不重复追加），不冒充提交身份。
 //
 // 用法：
 //   node scripts/release/market-pr.mts                       # 等 Release 就绪 → API 侧核对 → 备 PR
@@ -81,6 +81,9 @@ function arg(name: string): string | null {
 const dryRun = process.argv.includes("--dry-run");
 const deepCheck = process.argv.includes("--deep-check");
 const log = (m: string): void => console.log(`[market-pr] ${m}`);
+
+/** agent 的协作署名尾注：与 GitHana 的 git_commit 同款（提交身份是人，署名是 agent）。 */
+const AGENT_SIGNATURE = "Co-authored-by: HanaAgent <313794804+HanaAgent@users.noreply.github.com>";
 
 /** 收集一个可重复旗标的全部取值（`-m x -m y` / `--message x` / `--message=x` 三种写法都收）。
  *  与 `arg()` 的区别：后者只取第一个、且拒收以 `--` 开头的值；提交信息是多段的，得全收。 */
@@ -418,8 +421,10 @@ async function main(): Promise<void> {
   const branch = `enroll/${tag.replace(/^v/, "").replace(/\+/g, "-")}`;
   exec("git", ["checkout", "-B", branch], WORK);
   exec("git", ["add", "registry.json", "approvals.json"], WORK);
-  // 提交身份不自造：用局部的 git 身份与签名 key（见文件头"署名不自造"），提交信息用同一份标题 + 正文。
-  exec("git", ["commit", "-m", title, ...(body ? ["-m", body] : [])], WORK);
+  // 提交身份不自造（见文件头“署名与 GitHana 同款”）：用局部的 git 身份与签名 key，
+  // 署名走 Co-authored-by 尾注；提交信息用同一份标题 + 正文。
+  const trailer = `${title}\n${body}`.includes("Co-authored-by: HanaAgent") ? [] : ["-m", AGENT_SIGNATURE];
+  exec("git", ["commit", "-m", title, ...(body ? ["-m", body] : []), ...trailer], WORK);
   exec("git", ["push", "--force", "origin", branch], WORK);
   log(`已推 ${enr.fork}:${branch}`);
 
