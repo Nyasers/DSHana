@@ -29,15 +29,17 @@
 //   3. changelog 增量生成（conventional-changelog，标题带完整版）
 //   4. HEAD 版本门禁（完整版相对 HEAD 未变化 → 拒绝，防 --allow-same-version 空转/误跑）
 //   5. tag preflight（v<完整版> 已存在 → 拒绝重复发版）
-//   6. git add 版本文件全集 + CHANGELOG → 暂存就绪后退出。git 收口（commit/tag）移出钩子：
-//      由主上下文经 github-hanako 插件 git_commit / git_exec 完成（协作署名 + 隔离签名环境），
-//      本钩子只保证版本落地与门禁，不在钩子内部 commit/tag。
+//   6. git add 版本文件全集 + CHANGELOG → 暂存就绪后退出。git 收口（commit/tag/push）移出钩子：
+//      由主上下文经 git_commit 提交并推分支开 PR、合并后打 tag 推，本钩子只保证版本落地与门禁。
 //
-// 门禁：HEAD 版本门禁 + tag preflight（本地 ref
-//  + 远程 origin ls-remote，防克隆未 fetch 远程 tag 导致孤儿 bump commit）；push 手动
-// （--atomic 分支与 tag 同成败，tag 触发 CI 发布）。
-import fs from "node:fs";
-import path from "node:path";
+// 门禁：HEAD 版本门禁 + tag preflight（本地 ref + 远程 origin ls-remote，防克隆未 fetch 远程
+//  tag 导致孤儿 bump commit）。
+//
+// 收口路径（实测 master 只收 PR：直推被仓库规则拒 GH013；tag ref 不受该规则覆盖）：
+//   1) bump 提交推成分支、开 PR，合并方式选 merge commit——bump 提交原样进 master；
+//   2) **合并之后**才打一次 tag 并单独推：git push origin refs/tags/v<完整版>，由它触发 CI；
+//   3) 不在合并前预打 tag（tag 会指着 master 到不了的提交），也不对同一版本重打（preflight 会拒）。
+//   squash/rebase 合并时 bump 提交不以原 hash 落在 master 上，需把 tag 打到合并后的 master HEAD。
 import { execSync } from "node:child_process";
 
 import { errText } from "../shared/err-text.mts";
@@ -122,14 +124,15 @@ function main() {
     }
   }
   // 6) add 版本文件全集（package.json + manifest + cordis 包）+ CHANGELOG → 暂存就绪退出
-  //    收口移出钩子：主上下文经 github-hanako git_commit 提交 bump（协作署名 + 隔离签名），
-  //    git tag 与 push --atomic 同链完成——本钩子只保证版本落地与门禁，不内部裸 commit/tag
+  //    收口移出钩子：主上下文经 git_commit 提交 bump 并推分支开 PR（master 只收 PR），
+  //    合并之后才打 tag 单独推——本钩子只保证版本落地与门禁，不内部裸 commit/tag/push
   const files = [...versionCommitFiles(), "CHANGELOG.md"];
   run("git add " + files.join(" "), "git add 版本文件 + CHANGELOG");
   console.log("\n[version-hook] ✅ v" + full + " 版本落地完成：package.json + manifest.json + cordis 包 + CHANGELOG 已同步并暂存（HEAD 门禁 + tag preflight 已过）。git 收口在钩子外，由主上下文执行：");
-  console.log("  1. git_commit 提交 bump：chore: bump v" + full + "（github-hanako 插件 git_commit，自动协作署名）");
-  console.log("  2. git tag -a v" + full + " -m v" + full);
-  console.log("  3. git push --atomic origin master --tags（tag 触发 CI 发布，分支与 tag 同成败）");
+  console.log("  1. git_commit 提交 bump：chore: bump v" + full + "（自动协作署名）");
+  console.log("  2. 推成分支并开 PR（master 只收 PR；合并选 merge commit，bump 提交原样进 master）");
+  console.log("  3. 合并之后再打 tag 并单独推：git tag -a v" + full + " -m v" + full + " && git push origin refs/tags/v" + full);
+  console.log("     （别在合并前预打；squash/rebase 合并则把 tag 打到合并后的 master HEAD）");
 }
 
 main();

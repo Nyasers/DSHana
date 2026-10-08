@@ -26,7 +26,7 @@
 //      hana.close()。顺序纪律：拿到流式 Response 后不能立刻 close()——hana.close() 只在退出前
 //      调用；接活动流后需先结束/取消流再关闭。
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve, dirname } from "node:path";
+import { join, resolve } from "node:path";
 
 import { PROFILE_BUNDLES, migrateProfileBundles } from "./profile-bundles.ts";
 import { fileURLToPath } from "node:url";

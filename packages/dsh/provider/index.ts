@@ -25,11 +25,11 @@
 // 容错纪律：apply 全程 try/catch 不抛——依赖缺失/目录空/错误只记日志，插件
 // 降级为空操作（DSH 无 provider 可用），不阻断 dsh 启动。
 import { readFileSync, existsSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
 import { readNdjsonEvents } from "./lib/ndjson.ts";
-import { providerRoutes, listModelsForProvider, resolveModelInfo, supportedEfforts, modelPublishedMaxTokens, sameCatalog, HOST_MAX_OUTPUT_TOKENS } from "./lib/catalog.ts";
+import { providerRoutes, listModelsForProvider, resolveModelInfo, modelPublishedMaxTokens, sameCatalog, HOST_MAX_OUTPUT_TOKENS } from "./lib/catalog.ts";
 import { toHanaMessages } from "./lib/messages.ts";
 import { buildDoneChunks, createHanaStreamState } from "./lib/stream.ts";
 import { imageRequestTarget } from "./lib/image-target.ts";

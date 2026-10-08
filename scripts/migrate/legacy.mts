@@ -18,12 +18,9 @@ import { dirname, join, basename } from "node:path";
 import {
   planLegacyMigration,
   legacyRootOf,
-  readMigrationMarker,
   writeMigrationMarker,
   verifyMigration,
-  countSessions,
   legacySettingsSuggestions,
-  DSH_HOME_COPY_ENTRIES,
   targetDshHomeOf,
 } from "@dshana/runtime/legacy-migrate.ts";
 import fs from "node:fs";
