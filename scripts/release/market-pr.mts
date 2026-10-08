@@ -17,17 +17,36 @@
 //   逐字比（等价于"把通用包下下来再哈希"，但一个字节都不下），再拿已上架索引比一次主号不倒退。
 //   完整性真正的强校验（下载 + 哈希）留给市场 PR 的 CI 在远端做，本地不重复付那 153 MB；要在这边
 //   也跑同一道强校验就加 --deep-check（它会下载已批准的包）。
+//   开出来的 draft PR 形状对齐维护者（liliMozi）的更新型 PR：标题 `chore: approve <kind>/<id> <tag>`，
+//   正文是 Release / SHA-256 / Changes 三段 + 一行本地核对说明。skill / recipe 没有版本号
+//   （`entry.version` 恒为 0.0.0、按内容哈希更新），标题那一位本来就是 tag，条目名也不带版本段。
+//   Changes 那一行按三档取：`--changes`（作者写的，非 draft）> CHANGELOG 本版本段（机器派生的，仍
+//   draft）> 省掉这一行（仍 draft）——缺省不留我们内部口吻的 TODO，不把它带进别人的仓库。
 //   审阅材料（PR 模板那几栏）不由脚本填，draft 留着人工补。
 //
+//   提交信息可以自己给（与 `git commit` 同规则）：`-m "标题" -m "正文段落"`（多段空行相连）或
+//   `-F <文件>` 整份读；给了就用它（首行当标题）。只想补"这次改了什么"那一行就用 `--changes`，
+//   其余（Release / SHA-256 / Local check）都是脚本能自证的事实，不用手抄。
+//
+//   署名与 GitHana 的 git_commit 同款：提交签名复用 GitHana 的隔离环（`GIT_CONFIG_GLOBAL` 指向它的
+//   隔离 gitconfig、`GNUPGHOME` 指向它的 gnupg），身份与密钥都取自那份——密钥不出那个 App 的边界，
+//   也不碰用户个人的 `~/.gitconfig` 与个人 GPG 环。签名 key 与提交身份对不上时 GitHub 会判
+//   unknown_key / Unverified（PR #29 的 81fc18e 就是这样）；agent 的署名走 Co-authored-by 尾注。
+//
 // 用法：
-//   node scripts/release/market-pr.mts                       # 等 Release 就绪 → API 侧核对 → 备 draft PR
-//   node scripts/release/market-pr.mts --dry-run             # 只打印将要做的改动，不推不改远端
+//   node scripts/release/market-pr.mts                       # 等 Release 就绪 → API 侧核对 → 备 PR
+//   node scripts/release/market-pr.mts --dry-run             # 只打印将要提交的标题/正文，不推不改远端
 //   node scripts/release/market-pr.mts --deep-check          # 额外跑市场同步器的强校验（会下载已批准的包）
+//   node scripts/release/market-pr.mts --changes "…"         # 只补 Changes 那行，其余自动生成
+//   node scripts/release/market-pr.mts -m "chore: approve …" -m "正文段落"   # 自带提交信息（同 git commit）
+//   node scripts/release/market-pr.mts -F .tmp/pr-body.md                    # 从文件读提交信息
 //   node scripts/release/market-pr.mts --tag v1.0.2+dsh-0.2.0-rc.2
+//   node scripts/release/market-pr.mts --tag recipe-2026-10-08   # skill/recipe 无版本号，tag 必须显式给
 //
 // 退出码 0 的三种情形：已备好 PR（打印 URL）、该版本已登记（无事可做）、--dry-run 走完。
 import fs from "fs-extra";
 import { execFileSync } from "node:child_process";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { ROOT } from "../shared/root.mts";
@@ -36,6 +55,10 @@ import { errText } from "../shared/err-text.mts";
 
 /** fork 的本地工作副本：在 .cache/ 下，随出包清缓存一起清掉，不留痕。 */
 const WORK = join(ROOT, ".cache", "market-fork");
+/** skill / recipe 没有版本号：按内容哈希更新，`entry.version` 恒为 `0.0.0`，条目名也不带版本
+ *  （`<kind>-<id>.entry.json`），Release tag 由作者自己定（形如 `recipe-2026-10-08`）。
+ *  app / connector / role / bundle 走 `<kind>-<id>-<version>.entry.json` 与 `v<version>`。 */
+const VERSIONLESS_KINDS = new Set(["skill", "recipe"]);
 /** 等 Release 就绪的上限：CI 出六个平台包加通用包，实测十几分钟。 */
 const WAIT_MS = 40 * 60 * 1000;
 const POLL_MS = 15 * 1000;
@@ -63,11 +86,94 @@ const dryRun = process.argv.includes("--dry-run");
 const deepCheck = process.argv.includes("--deep-check");
 const log = (m: string): void => console.log(`[market-pr] ${m}`);
 
+/** agent 的协作署名尾注：与 GitHana 的 git_commit 同款（提交身份是人，署名是 agent）。 */
+const AGENT_SIGNATURE = "Co-authored-by: HanaAgent <313794804+HanaAgent@users.noreply.github.com>";
+
+/** 收集一个可重复旗标的全部取值（`-m x -m y` / `--message x` / `--message=x` 三种写法都收）。
+ *  与 `arg()` 的区别：后者只取第一个、且拒收以 `--` 开头的值；提交信息是多段的，得全收。 */
+function values(name: string, short: string): string[] {
+  const argv = process.argv.slice(2);
+  const out: string[] = [];
+  for (let i = 0; i < argv.length; i += 1) {
+    const a = argv[i];
+    if (a === name || a === short) {
+      const next = argv[i + 1];
+      if (next === undefined || next.startsWith("--")) throw new Error(`${a} 缺值`);
+      out.push(next);
+      i += 1;
+      continue;
+    }
+    if (a.startsWith(`${name}=`)) out.push(a.slice(name.length + 1));
+  }
+  return out;
+}
+
+/** 提交信息（标题 + 正文）：规则与 `git commit` 一致——首行是标题，其余是正文；多个 `-m` 之间空行
+ *  相连；也可以 `-F <文件>` 整份读进来（按当前工作目录解析）。两种只能用一种（同 git 规则）。
+ *  什么都没给就返回 null，由调用方按市场形状生成。 */
+function submissionMessage(): { title: string; body: string } | null {
+  const messages = values("--message", "-m");
+  const file = arg("--file") || arg("-F");
+  if (messages.length && file) throw new Error("-m/--message 与 -F/--file 只能给一种（同 git commit）");
+  const raw = file ? fs.readFileSync(file, "utf8") : messages.join("\n\n");
+  if (!raw.trim()) return null;
+  const lines = raw.replace(/\r\n/g, "\n").replace(/\s+$/, "").split("\n");
+  const title = (lines.shift() || "").trim();
+  if (!title) throw new Error("提交信息的首行是标题，不能为空");
+  return { title, body: lines.join("\n").replace(/^\n+/, "") };
+}
+
+// 提交信息（命令行给的）：-m/-F 给整份，或 --changes 只补那一行，两者互斥。参数错要当场报，
+// 不拖到跑完网络步骤才说。
+const cliMessage = submissionMessage();
+const cliChanges = arg("--changes");
+if (cliMessage && cliChanges) throw new Error("已用 -m/-F 给整份提交信息，就不要再给 --changes");
+
+/** 缺省 Changes：从仓库自己的 CHANGELOG 取本版本那一段（bump 时由 conventional-changelog 生成，
+ *  正是"本版本改了什么"的既有记录）。去掉项目符号与尾部的提交链接，用 `;` 串成一行——与市场那句
+ *  Changes 同形。取不到就返回 null：调用方**省掉这一行**，而不是塞一句我们内部口吻的 TODO。 */
+function changesFromChangelog(version: string): string | null {
+  const file = join(ROOT, "CHANGELOG.md");
+  if (!fs.existsSync(file)) return null;
+  const lines = String(fs.readFileSync(file, "utf8")).split(/\r?\n/);
+  const start = lines.findIndex((line) => line.startsWith("## [") && line.includes(`[${version}]`));
+  if (start < 0) return null;
+  const items: string[] = [];
+  for (let i = start + 1; i < lines.length && !lines[i].startsWith("## "); i += 1) {
+    const bullet = /^\* (.*)$/.exec(lines[i]);
+    if (!bullet) continue;
+    items.push(
+      bullet[1]
+        .replace(/,\s*references\s+(\[[^\]]*\]\([^)]*\)\s*)+/g, "")
+        .replace(/\s*\(\[[0-9a-f]{7,40}\]\([^)]*\)\)/g, "")
+        .trim(),
+    );
+  }
+  return items.length ? items.join("; ") : null;
+}
+
+/** 宿主根（GitHana 的隔离签名环在它的 app-data 下）。 */
+const HANA_HOME = process.env.HANA_HOME || join(homedir(), ".hanako");
+
+/** 提交签名复用 GitHana 的隔离环：`GIT_CONFIG_GLOBAL` 指向它的隔离 gitconfig（user.* / commit.gpgsign /
+ *  gpg.program 都在那份里），`GNUPGHOME` 指向它的 gnupg。key 不出那个 App 的边界，也不碰用户个人的
+ *  `~/.gitconfig` 与个人 GPG 环——签出来的是与 GitHana 的 git_commit 同一把钥匙（我们仓库里那些
+ *  Verified 提交就是它签的）。缺了 fail-closed：没有隔离环就宁可停，不拿个人环偷偷签。 */
+function signingEnv(): Record<string, string> {
+  const dataDir = join(HANA_HOME, "app-data", "githana");
+  const gitconfig = join(dataDir, "gitconfig");
+  const gnupg = join(dataDir, "gnupg");
+  if (!fs.existsSync(gitconfig) || !fs.existsSync(gnupg)) {
+    throw new Error(`找不到 GitHana 的隔离签名环（${dataDir}）：先在 GitHana 里生成 GPG 密钥，再跑本脚本`);
+  }
+  return { GIT_CONFIG_GLOBAL: gitconfig, GNUPGHOME: gnupg, GIT_TERMINAL_PROMPT: "0" };
+}
+
 /** 无代理环境下跑 gh / git，并给 git 固定 HTTP/1.1。
  *  宿主环境里的 HTTP(S)_PROXY 可能指向已停的代理，会让 gh 连接失败；而 HTTP/2 过某些代理中转会
  *  Recv failure: Connection was reset。两者都在这里绕开，不依赖跑脚本的人先改好环境。 */
-function exec(bin: string, args: string[], cwd = ROOT): string {
-  const env = { ...process.env };
+function exec(bin: string, args: string[], cwd = ROOT, extraEnv: Record<string, string> = {}): string {
+  const env = { ...process.env, ...extraEnv };
   for (const k of ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy"]) delete env[k];
   const finalArgs = bin === "git" ? ["-c", "http.version=HTTP/1.1", ...args] : args;
   return execFileSync(bin, finalArgs, { cwd, encoding: "utf8", env }).trim();
@@ -212,11 +318,16 @@ function preflightPublished(enr: Enrollment, version: string, entryPublisher: st
     log(`索引里还没有 ${enr.kind}/${enr.id}（首次上架）`);
     return;
   }
-  if (coreDowngrade(version, pub.version)) {
-    throw new Error(`版本倒退：本次 ${version} < 已上架 ${pub.version}，市场侧的 historyFor 会拒`);
-  }
   if (pub.publisher && pub.publisher !== enr.publisher) {
     log(`注意：发布者与已上架不同（${pub.publisher} → ${enr.publisher}），PR 正文里要写明登记变更`);
+  }
+  // skill / recipe 按内容哈希更新，`0.0.0` 不是版本语义，比版本没意义（市场侧 historyFor 同样跳过）。
+  if (VERSIONLESS_KINDS.has(enr.kind)) {
+    log(`${enr.kind} 没有版本号（按内容哈希），跳过版本比对`);
+    return;
+  }
+  if (coreDowngrade(version, pub.version)) {
+    throw new Error(`版本倒退：本次 ${version} < 已上架 ${pub.version}，市场侧的 historyFor 会拒`);
   }
   log(`已上架 ${pub.version} → 本次 ${version}（主号不降级）`);
 }
@@ -259,16 +370,26 @@ function runDeepMarketCheck(): void {
 async function main(): Promise<void> {
   const enr = fs.readJsonSync(join(ROOT, "market", "enrollment.json")) as Enrollment;
   const manifest = fs.readJsonSync(manifestPath(ROOT)) as { version: string };
-  const tag = arg("--tag") || `v${manifest.version}`;
+  const versioned = !VERSIONLESS_KINDS.has(enr.kind);
+  // 默认 tag 只有带版本的扩展推得出来（`v<manifest 版本>`）；skill / recipe 没有版本号，必须显式给 --tag。
+  const tag = arg("--tag") || (versioned ? `v${manifest.version}` : null);
+  if (!tag) {
+    throw new Error(
+      `${enr.kind} 没有版本号（按内容哈希更新），默认 tag 推不出来——用 --tag 指定 Release tag（形如 recipe-2026-10-08）`,
+    );
+  }
   // 条目名按**所选 tag** 的版本取，不按本地 manifest：--tag 指旧版本时，拿当前 manifest 去搜那个 Release
   // 只会一直等不到。两者不一致时提示一声（正常发版流程里它们相等）。
   const version = tag.replace(/^v/, "");
-  if (version !== manifest.version) {
+  if (versioned && version !== manifest.version) {
     log(`注意：--tag ${tag} 与本地 manifest 的 ${manifest.version} 不同，按 tag 的版本找条目`);
   }
-  const entryName = `${enr.kind}-${enr.id}-${version}.entry.json`;
+  // 条目名分两形：带版本的扩展带版本段，skill / recipe 不带（它们的 entry.version 恒为 0.0.0）。
+  const entryName = versioned
+    ? `${enr.kind}-${enr.id}-${version}.entry.json`
+    : `${enr.kind}-${enr.id}.entry.json`;
 
-  log(`登记 ${enr.kind}/${enr.id} · tag ${tag}`);
+  log(`登记 ${enr.kind}/${enr.id} · tag ${tag}${versioned ? "" : "（无版本号，按内容哈希）"}`);
   const { sha256, size, publisher } = await waitForRelease(tag, enr.repository, entryName, !dryRun);
   log(`条目 sha256 ${sha256}（${size} 字节）`);
 
@@ -308,7 +429,36 @@ async function main(): Promise<void> {
 
   preflightPublished(enr, version, publisher);
 
+  // PR 形状对齐维护者（liliMozi）的更新型 PR：标题 `chore: approve <kind>/<id> <tag>`；正文三段
+  // （Release / SHA-256 / Changes）+ 一行本地核对说明。tag 原样用（带 `v` 前缀；skill/recipe 本来就是
+  // tag），去 `v` 前缀只用于拼条目名。
+  // 提交信息：命令行给了 -m/-F 就用它（同 git commit）；Changes 那一行按三档取（--changes >
+  // CHANGELOG 本版本段 > 省掉）；都不给则按市场形状生成。互斥关系在模块顶层已校验。
+  const custom = cliMessage;
+  const changes = cliChanges;
+  const changesLine = changes || changesFromChangelog(version);
+  const title = custom ? custom.title : `chore: approve ${enr.kind}/${enr.id} ${tag}`;
+  const releaseUrl = `https://github.com/${enr.repository}/releases/tag/${tag.replace(/\+/g, "%2B")}`;
+  const body = custom
+    ? custom.body
+    : [
+        `Approve the new ${enr.id} ${enr.kind} release.`,
+        "",
+        `- Release: ${releaseUrl}`,
+        `- SHA-256: \`${sha256}\``,
+        ...(changesLine ? [`- Changes: ${changesLine}`] : []),
+        "",
+        "Local check: 条目与 Release 资产按 API 核对一致（sha256 digest + 字节数），未下载安装包。",
+        "",
+        "由 `pnpm run market:pr` 生成。",
+      ].join("\n");
+  if (custom) log("提交信息取自 -m/-F（不按市场形状生成）");
+  else if (changes) log("Changes 行取自 --changes");
+  else if (changesLine) log("Changes 行取自 CHANGELOG 的本版本段（仍开 draft，等人过目）");
+  else log("CHANGELOG 里没有本版本段：正文省掉 Changes 行（仍开 draft，不把内部 TODO 带上去）");
+
   if (dryRun) {
+    log(`--dry-run：将提交的 draft PR\n  标题：${title}\n  正文：\n${body}`);
     log("--dry-run：到此为止，未推分支、未开 PR");
     return;
   }
@@ -318,30 +468,36 @@ async function main(): Promise<void> {
   const branch = `enroll/${tag.replace(/^v/, "").replace(/\+/g, "-")}`;
   exec("git", ["checkout", "-B", branch], WORK);
   exec("git", ["add", "registry.json", "approvals.json"], WORK);
-  exec("git", ["-c", "user.name=HanaAgent", "-c", "user.email=313794804+HanaAgent@users.noreply.github.com", "commit", "-m", `Enroll ${enr.kind}/${enr.id} ${tag}`], WORK);
+  // 提交签名复用 GitHana 的隔离环（见文件头“署名与 GitHana 同款”），提交信息用同一份标题 + 正文。
+  // 推送不注这个 env：隔离 gitconfig 里没有凭据助手，推还是走环境自己的凭据。
+  const trailer = `${title}\n${body}`.includes("Co-authored-by: HanaAgent") ? [] : ["-m", AGENT_SIGNATURE];
+  exec("git", ["commit", "-m", title, ...(body ? ["-m", body] : []), ...trailer], WORK, signingEnv());
   exec("git", ["push", "--force", "origin", branch], WORK);
   log(`已推 ${enr.fork}:${branch}`);
 
-  const title = `${enr.id} ${tag}`;
-  const body = [
-    `Enroll/update \`${enr.kind}/${enr.id}\` at \`${tag}\`.`,
-    "",
-    `- repository: ${enr.repository}`,
-    `- publisher: ${enr.publisher}`,
-    `- sha256: \`${sha256}\` (copied from the entry JSON's \`archive.sha256\`)`,
-    "",
-    "Draft opened automatically by `pnpm run market:pr`; review materials still need filling in.",
-  ].join("\n");
-  const prUrl = exec("gh", [
+  // 人工那一位给了（-m/-F 或 --changes）就不再开 draft：材料已齐，别让维护者对着半成品。
+  const draft = !(custom || changes);
+  const prArgs = [
     "pr", "create",
     "--repo", enr.upstream,
     "--base", enr.defaultBranch || "main",
     "--head", `${enr.fork.split("/")[0]}:${branch}`,
     "--title", title,
     "--body", body,
-    "--draft",
-  ]);
-  log(`draft PR：${prUrl}`);
+    ...(draft ? ["--draft"] : []),
+  ];
+  let prUrl: string;
+  try {
+    prUrl = exec("gh", prArgs);
+    log(`${draft ? "draft PR" : "PR"}：${prUrl}`);
+  } catch (e) {
+    // 同一版本重跑、或改完提交信息再推：分支上已经有开着的 PR，就地更新即可，别重复开。
+    const owner = enr.fork.split("/")[0];
+    const existing = exec("gh", ["pr", "list", "--repo", enr.upstream, "--head", `${owner}:${branch}`, "--state", "open", "--json", "url", "--jq", ".[0].url // \"\""]);
+    if (!existing) throw e;
+    prUrl = existing;
+    log(`分支 ${branch} 已有开着的 PR，未重复创建：${prUrl}`);
+  }
 }
 
 await main();
