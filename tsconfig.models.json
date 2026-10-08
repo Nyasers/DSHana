@@ -15,7 +15,7 @@
     "typeRoots": ["./node_modules/@types", "./node_modules/.pnpm/node_modules/@types"],
     "strict": true,
     "noImplicitAny": false,
-    "noUnusedLocals": false,
+    "noUnusedLocals": true,
     "noUnusedParameters": false,
     "skipLibCheck": true,
     "esModuleInterop": true,
