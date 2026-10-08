@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.4+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.3%2Bdsh-0.2.0-rc.2...v1.0.4%2Bdsh-0.2.0-rc.2) (2026-10-08)
+
+### Bug Fixes
+
+* **market:** 图标与卡面各归其域，assets/ 退役，manifest 进 App 域 ([1f10fd4](https://github.com/Nyasers/DSHana/commit/1f10fd43e875f5252e4704be9cb6bf8cee81ef48))
+* **ui:** 首帧底色垫片的面改由页面静态声明先定，不再写死 default ([23bd981](https://github.com/Nyasers/DSHana/commit/23bd9810bb6dc239685a6829a7cc0a5d2100d0f1))
+* **ui:** 首帧主题回退必须带 theme 参数，主题未知时不贴 ([10faa8e](https://github.com/Nyasers/DSHana/commit/10faa8e0b0fdf67deb9268a43811149ff2235738)), references [#F4F0EA](https://github.com/Nyasers/DSHana/issues/F4F0EA) [#34424B](https://github.com/Nyasers/DSHana/issues/34424B)
+* **ui:** 五个页面的首帧主题改由 <head> 内联片段贴样式表 ([58a5ffa](https://github.com/Nyasers/DSHana/commit/58a5ffa7825ff38387f7fe450f7643cd32f1ac45))
+
 ## [1.0.3+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.2%2Bdsh-0.2.0-rc.2...v1.0.3%2Bdsh-0.2.0-rc.2) (2026-10-08)
 
 ### Bug Fixes
@@ -727,6 +736,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
