@@ -470,7 +470,13 @@ import {
   // 值按面取（侧栏面垫侧栏色），宿主变量取不到就跳过——不发明用户没选过的颜色。
   // 同时在 <html> 上声明这一面的底座 token：桥落地后按它把 base 也压成同色（桥的映射表是
   // 一张、没有面的概念，这行声明就是那个面的维度）；两边写法不同、值同源。
-  var seedView = "default";
+  // 面的初值必须在**顶层那次首屏垫片之前**就定下来（下面 followHostTheme 的第一次 onApplied
+  // 就会调 seedDshTokens）：垫片按面取宿主变量，取错面的后果是首帧整页底色错一档。页面自己的
+  // 静态声明（meta[name=hana-dshana-role] / 壳属性 data-dshana-view）在模块执行时已可读——模块
+  // 脚本是 deferred，DOM 早解析完了——所以先用它定一个。宿主 slot 那条兜底要等 SDK 交面，留给
+  // begin() 里的完整判据校正。**不能**在这里写死 "default"：未就绪的面走不到 startInjection，
+  // 那一行就是它唯一的面来源，FP 会因此整页垫成中列色 --bg（这一面该是侧栏色 --sidebar-bg）。
+  var seedView = declaredView(null) || "default";
   // 撤垫片：按 token 名单抹自定义属性，另加 body 自身的 background-color（为压住 DSH 首帧样式里
   // 那句 `body{background-color:#151517}` 而写的实色）。与主题桥退出跟随时抹的是同一份名单。
   function clearSeedTokens() {
@@ -649,6 +655,9 @@ import {
       began = true;
       var view = resolveView(root);
       isSidebar = view === "sidebar";
+      // 完整判据（含宿主 slot 兜底）此刻才拿得到。与上一步那个静态声明不一致时（页面没声明
+      // 面、靠 slot 才认出来的情形）按它重垫一次，免得整页底色停在那个猜测上。
+      if (view !== seedView) { seedView = view; seedDshTokens(); }
       // FP 只听不问：主卡取到快照就播，这里到即渲染。首取自兜（下面那句 poll）排在订阅之后，
       // 所以 FP 先于主卡挂载也不会空着。
       if (isSidebar) {
