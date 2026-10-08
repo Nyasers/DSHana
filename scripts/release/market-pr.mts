@@ -340,7 +340,7 @@ async function main(): Promise<void> {
     `Approve the new ${enr.id} ${enr.kind} release.`,
     "",
     `- Release: ${releaseUrl}`,
-    `- SHA-256: \`${sha256}\`（照抄自条目 JSON 的 \`archive.sha256\`）`,
+    `- SHA-256: \`${sha256}\``,
     "- Changes: （本次变更，人工补）",
     "",
     "Local check: 条目与 Release 资产按 API 核对一致（sha256 digest + 字节数），未下载安装包。",
