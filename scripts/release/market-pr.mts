@@ -18,8 +18,10 @@
 //   完整性真正的强校验（下载 + 哈希）留给市场 PR 的 CI 在远端做，本地不重复付那 153 MB；要在这边
 //   也跑同一道强校验就加 --deep-check（它会下载已批准的包）。
 //   开出来的 draft PR 形状对齐维护者（liliMozi）的更新型 PR：标题 `chore: approve <kind>/<id> <tag>`，
-//   正文是 Release / SHA-256 / Changes（待人工补）三段 + 一行本地核对说明。skill / recipe 没有版本号
+//   正文是 Release / SHA-256 / Changes 三段 + 一行本地核对说明。skill / recipe 没有版本号
 //   （`entry.version` 恒为 0.0.0、按内容哈希更新），标题那一位本来就是 tag，条目名也不带版本段。
+//   Changes 那一行按三档取：`--changes`（作者写的，非 draft）> CHANGELOG 本版本段（机器派生的，仍
+//   draft）> 省掉这一行（仍 draft）——缺省不留我们内部口吻的 TODO，不把它带进别人的仓库。
 //   审阅材料（PR 模板那几栏）不由脚本填，draft 留着人工补。
 //
 //   提交信息可以自己给（与 `git commit` 同规则）：`-m "标题" -m "正文段落"`（多段空行相连）或
@@ -126,6 +128,29 @@ function submissionMessage(): { title: string; body: string } | null {
 const cliMessage = submissionMessage();
 const cliChanges = arg("--changes");
 if (cliMessage && cliChanges) throw new Error("已用 -m/-F 给整份提交信息，就不要再给 --changes");
+
+/** 缺省 Changes：从仓库自己的 CHANGELOG 取本版本那一段（bump 时由 conventional-changelog 生成，
+ *  正是"本版本改了什么"的既有记录）。去掉项目符号与尾部的提交链接，用 `;` 串成一行——与市场那句
+ *  Changes 同形。取不到就返回 null：调用方**省掉这一行**，而不是塞一句我们内部口吻的 TODO。 */
+function changesFromChangelog(version: string): string | null {
+  const file = join(ROOT, "CHANGELOG.md");
+  if (!fs.existsSync(file)) return null;
+  const lines = String(fs.readFileSync(file, "utf8")).split(/\r?\n/);
+  const start = lines.findIndex((line) => line.startsWith("## [") && line.includes(`[${version}]`));
+  if (start < 0) return null;
+  const items: string[] = [];
+  for (let i = start + 1; i < lines.length && !lines[i].startsWith("## "); i += 1) {
+    const bullet = /^\* (.*)$/.exec(lines[i]);
+    if (!bullet) continue;
+    items.push(
+      bullet[1]
+        .replace(/,\s*references\s+(\[[^\]]*\]\([^)]*\)\s*)+/g, "")
+        .replace(/\s*\(\[[0-9a-f]{7,40}\]\([^)]*\)\)/g, "")
+        .trim(),
+    );
+  }
+  return items.length ? items.join("; ") : null;
+}
 
 /** 宿主根（GitHana 的隔离签名环在它的 app-data 下）。 */
 const HANA_HOME = process.env.HANA_HOME || join(homedir(), ".hanako");
@@ -407,10 +432,11 @@ async function main(): Promise<void> {
   // PR 形状对齐维护者（liliMozi）的更新型 PR：标题 `chore: approve <kind>/<id> <tag>`；正文三段
   // （Release / SHA-256 / Changes）+ 一行本地核对说明。tag 原样用（带 `v` 前缀；skill/recipe 本来就是
   // tag），去 `v` 前缀只用于拼条目名。
-  // 提交信息：命令行给了 -m/-F 就用它（同 git commit）；只想补"这次改了什么"那一行就用 --changes；
-  // 都不给则按市场形状生成（Changes 留占位）。互斥关系在模块顶层已校验。
+  // 提交信息：命令行给了 -m/-F 就用它（同 git commit）；Changes 那一行按三档取（--changes >
+  // CHANGELOG 本版本段 > 省掉）；都不给则按市场形状生成。互斥关系在模块顶层已校验。
   const custom = cliMessage;
   const changes = cliChanges;
+  const changesLine = changes || changesFromChangelog(version);
   const title = custom ? custom.title : `chore: approve ${enr.kind}/${enr.id} ${tag}`;
   const releaseUrl = `https://github.com/${enr.repository}/releases/tag/${tag.replace(/\+/g, "%2B")}`;
   const body = custom
@@ -420,7 +446,7 @@ async function main(): Promise<void> {
         "",
         `- Release: ${releaseUrl}`,
         `- SHA-256: \`${sha256}\``,
-        `- Changes: ${changes || "（本次变更，人工补）"}`,
+        ...(changesLine ? [`- Changes: ${changesLine}`] : []),
         "",
         "Local check: 条目与 Release 资产按 API 核对一致（sha256 digest + 字节数），未下载安装包。",
         "",
@@ -428,6 +454,8 @@ async function main(): Promise<void> {
       ].join("\n");
   if (custom) log("提交信息取自 -m/-F（不按市场形状生成）");
   else if (changes) log("Changes 行取自 --changes");
+  else if (changesLine) log("Changes 行取自 CHANGELOG 的本版本段（仍开 draft，等人过目）");
+  else log("CHANGELOG 里没有本版本段：正文省掉 Changes 行（仍开 draft，不把内部 TODO 带上去）");
 
   if (dryRun) {
     log(`--dry-run：将提交的 draft PR\n  标题：${title}\n  正文：\n${body}`);
