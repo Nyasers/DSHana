@@ -34,8 +34,11 @@ import type { SelectOption } from "@hana/plugin-components/settings";
 import "@hana/plugin-components/settings.css";
 import { followHostTheme } from "./host-theme.ts";
 
-// ---- 主题跟随（与壳页同一姿势，实现在 packages/ui/src/host-theme.ts）----
-// 本页要跟着宿主明暗改 color-scheme（原生控件与滚动条跟宿主，不跟系统），故传 syncColorScheme。
+// ---- 主题跟随 ----
+// 首帧那一张样式表由 settings.html <head> 里的内联片段贴（所有静态样式表之后）；这里接的是此后
+// 那一段（实现在 packages/ui/src/host-theme.ts）：首屏快照 + 订阅，内联片段已贴过的 URL 会跳过
+// 重复 fetch。本页要跟着宿主明暗改 color-scheme（原生控件与滚动条跟宿主，不跟系统），故传
+// syncColorScheme。
 
 // ---- 小工具 ----
 const MODEL_KEY_SEP = "\u0000"; // provider 与 model id 之间（见 modelOptions）

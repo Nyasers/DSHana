@@ -151,7 +151,8 @@ function boot(): void {
   // 宿主握手（对齐官方样例 hana-dsh 的 bootstrap：页面挂载即 hana.ready()）。它也是 envelope
   // 首帧的触发条件——不 ready，宿主不会推信号，这一页就只能走聊天流兜底。
   try { if (hana && typeof (hana as any).ready === "function") (hana as any).ready(); } catch { /* 宿主未提供则忽略 */ }
-  // 首帧主题由页面内联脚本贴（早于第一次绘制）；这里接上订阅，此后事件驱动。
+  // 首帧主题由页面 <head> 的内联片段贴（早于第一次绘制，与壳页同一片段）；这里接的是此后
+  // 那一段：首屏快照 + 订阅，内联片段已贴过的 URL 会跳过重复 fetch。
   followHostTheme(hana);
   // 认到 sid 就记进卡实例态（两个挂载态都记）：同一张卡换挂载时 route 之外还有落点。
   rememberCardSession(routeSessionId());

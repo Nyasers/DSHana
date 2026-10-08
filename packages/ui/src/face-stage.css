@@ -10,7 +10,8 @@
      · stream ：多一条卡状态行（#dshana-card-strip）。
    sidebar 面不是这一套（它画的是 .panel 侧栏 chrome），不引本文件。
    页面用 <link rel="stylesheet" href="./face-stage.css"> 相对引入：宿主按 ui/ 静态树取页，
-   相对路径与 ./app-shell.js 同一套纪律，页面内不出现根路径绝对 URL。 */
+    相对路径与 ./app-shell.js 同一套纪律，页面内不出现根路径绝对 URL（唯一例外是页面 <head>
+    里首帧主题片段那条宿主主题路由 /api/apps/theme.css——宿主路由、公开，不是本 App 的资源）。 */
 
 html, body { height: 100%; margin: 0; }
 html { color-scheme: light dark; }

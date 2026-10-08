@@ -129,7 +129,11 @@ DSH 的 workspace 选择对话框来自 `directory-picker` seam（宿主半列�
 
 `@dshana/dsh-theme` 经 `tapIndex` 注入 index 响应：静态 fallback + 动态桥脚本，向壳页索取宿主主题 vars → 写 body 层 `!important` 覆盖 `--dsw-alias-*` / `--dsw-specific-*`。
 
-**App 页面这一侧要自己贴样式表**：宿主把主题参数附在 App surface iframe 的 URL 上（`hana-theme` / `hana-css` / `hana-theme-appearance`），变化时再推 `hana.theme.changed`；但把样式表贴进页面这件事宿主不代劳，而 SDK 只在收到 `hana.theme.changed` 时才应用 `cssUrl`——页面不自己贴首帧，就会一路吃 HTML 里写死的纸张 fallback，直到第一次主题变化才跟上。壳页 / 设置页 / 会话卡共用 `packages/ui/src/host-theme.ts` 做这一步（首屏读快照 + URL 兜底 + 订阅）。
+**App 页面这一侧要自己贴样式表，而且分两段**：宿主把主题参数附在 App surface iframe 的 URL 上（`hana-theme` / `hana-css` / `hana-theme-appearance`），变化时再推 `hana.theme.changed`；但把样式表贴进页面这件事宿主不代劳，而 SDK 只在收到 `hana.theme.changed` 时才应用 `cssUrl`——页面不自己贴首帧，就会一路吃 HTML 里写死的纸张 fallback，直到第一次主题变化才跟上。
+
+- **首帧（第一次绘制之前）**：五个页面（`main` / `default` / `sidebar` / `settings` / `stream.html`）在 `<head>` 内各带一段**逐字相同**的内联片段（标记注释 `dshana:first-frame-theme`），位置固定在所有静态 `<link rel="stylesheet">` 之后、模块脚本之前。它同步读 URL 参数、把 `data-theme` / `data-appearance` 写到 `<html>`、append 一张 `<link>`（`<link>` 阻塞首次绘制，所以第一帧就是宿主配色）。**贴哪张样式表分三档**（规则与 `host-theme.ts` 的 `themeCssUrlFor` 同源，两侧各半）：① 宿主给了 `hana-css` 就直接用；② 没给 `hana-css` 但有 `hana-theme` 就拼 `/api/apps/theme.css?theme=<encodeURIComponent(id)>`——**FP（`slot=function-panel`）的 surface URL 只带 `hana-theme` / `hana-theme-appearance`、不带 `hana-css`，所以这是 FP 的主路径，不是罕见回退**；③ 两者都没有就**不贴**——裸 `/api/apps/theme.css`（不带 `theme`）返回的是**默认主题暖纸**，贴它等于贴一张概率上错的主题表，猜出来的颜色比不画更糟（官方口径：a failed swap keeps the current theme rather than falling back to a built-in palette），宁可留白让页面回落到自己 CSS 里的兜底色。`/api/apps/theme.css` 是宿主自己的公开路由，不是本 App 的资源。回归闸 `tests/ui/first-frame-theme.test.mjs` 锁住「五个页面都带、逐字相同、位置正确、三档 URL 规则（真跑一遍片段取它贴的 href）与模块侧逐条同源」——以后新增页面忘了贴、或谁把裸回退加回来，都会被挡住。
+- **快照与订阅（此后）**：`packages/ui/src/host-theme.ts` 首屏读一次 SDK 快照（兜住内联片段因故没跑的页面），此后按 `hana.theme.changed` 事件驱动地贴样式表（壳页 / 设置页 / 会话卡共用一份）；贴哪张同样走 `themeCssUrlFor`（主题未知时它给空串，本模块也不贴）。内联片段把已贴的 URL 记在 `<html>` 的 `data-hana-theme-css` 上，本模块据此跳过同一 URL 的重复 fetch（主题 CSS 可达 47KB）；**片段没贴时那条属性不写**，本模块读回空串、与任何非空 URL 都比不上，因此不会误判「已贴过」。两侧契约各半，同样被上面那条测试锁住。
+- **注入前的首帧底色垫片按面取，面必须在垫片之前就定下来**：壳页在注入 DSH 之前先往 `body` 写一层 DSW 底色 token（`packages/ui/src/seed-tokens.ts`，写内联 style、不加 `!important`：赢过 DSH 自己的静态样式表，输给主题桥），值按**这一面可见底**那格取宿主变量——中列面是 `--bg`，**侧栏面（FP）是 `--sidebar-bg`**，两者不同源。垫片的第一次执行挂在顶层 `followHostTheme` 的 `onApplied` 上，而完整的面判据（含宿主 slot 兜底）要到 `begin()` 才拿得到：因此面的初值必须取**页面自己的静态声明**（`meta[name=hana-dshana-role]`，模块脚本是 deferred、此刻 DOM 已解析完），`begin()` 拿到完整判据后不一致再重垫一次。若在这里写死 `default`，未就绪的 FP（停在「未启动」/「已停止」，走不到注入）就会整页垫成中列色——真机实测过那一帧 `bodyInlineBg=rgb(59,74,84)`（青夜 `--bg`）而该是 `#34424B`（`--sidebar-bg`）。回归闸在 `tests/cordis/theme-bridge-backdrop.test.mjs`。
 
 **跟随语义（有意自持）**：仅当 DSH 主题偏好为 `system` 时跟随宿主配色；显式 `light`/`dark` 时完全用 DSH 自己的主题，宿主配色不介入。偏好变更经事件驱动重读（不再周期轮询）。此语义与官方样例的「无条件双 palette 替换」不同，是保留项。
 
@@ -328,6 +332,9 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」，由 v1 �
   （Z8t 防目录逃逸；scoped surface 路径 `/api/apps/<appId>/ui/_surface/<sessionToken>/...`
   由 iframe-ticket 端点下发 uiBasePath——页面相对资源在此 base 下继承授权）。App 自身 ui/
   页面资源一律相对路径（指南 `10` 禁根绝对 URL）；face 映射 `/api/apps/<appId>/ui/<image>`。
+  唯一例外是首帧主题片段里的宿主主题路由 `/api/apps/theme.css`（见「主题跟随」）：那是**宿主
+  路由**（公开、无需凭据，`packages/ui/src/dsh-inject.ts` 的 `HOST_PATH_PREFIXES` 也把
+  `/api/apps/` 划为宿主前缀），不是本 App 自己的资源。
 - **contributes.cards v2 字段白名单**（宿主 readManifest 实证）：
   `id/title/description/route/embedUrl/cardForm/titlebar/realization/pageOf/siteNavEntry/
   fpFullPanel/functionPanel/face/formFactors`——realization:"page" + siteNavEntry、pageOf 均

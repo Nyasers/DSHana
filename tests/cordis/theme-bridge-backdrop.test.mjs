@@ -273,3 +273,58 @@ test("壳页确实把这一面的底座 token 与宿主明暗写上了（桥的�
   assert.ok(BRIDGE_SRC.includes("data-dshana-backdrop"), "桥没读 data-dshana-backdrop");
   assert.ok(BRIDGE_SRC.includes("data-appearance"), "桥没读宿主明暗");
 });
+
+// ---- 垫片的「面」必须在首帧之前就定下来 ----
+// 回归闸：未就绪的面（FP 停在「未启动」/「已停止」时）走不到 startInjection，而顶层那次
+// followHostTheme 的 onApplied 已经会调 seedDshTokens。若 seedView 在那里还是个写死的
+// "default"，整页就按中列面垫成 --bg：真机实测 FP 未启动帧 bodyInlineBg=rgb(59,74,84)
+// （青夜 --bg），该是 #34424B（--sidebar-bg）。
+test("壳页：垫片的面由页面静态声明先定下来，不写死 default", () => {
+  // 面的初值必须读页面自己的声明（meta / 壳属性），而不是钉成一个常量。
+  const init = /var seedView = ([^;]+);/.exec(SHELL_SRC);
+  assert.ok(init, "壳页找不到 seedView 的初始化");
+  assert.match(init[1], /declaredView\(/, "seedView 初值应取页面静态声明的面（未就绪的面只有这一个来源）");
+  assert.ok(
+    !/^\s*["']default["']\s*$/.test(init[1]),
+    "seedView 初值不能写死 default：未就绪的 FP 会整页垫成中列色 --bg",
+  );
+  // 时机：必须在顶层 followHostTheme（首屏那次 onApplied）之前，否则第一次垫片已经用错面跑过了。
+  const atSeed = SHELL_SRC.indexOf("var seedView =");
+  const atFollow = SHELL_SRC.indexOf("followHostTheme(hana,");
+  assert.ok(atFollow > atSeed, "seedView 必须在顶层 followHostTheme 之前定下来（那一次就会垫色）");
+  // 认面用的是页面自己的声明，与 begin() 里那条完整判据同一份实现。
+  assert.match(SHELL_SRC, /function declaredView\(/, "壳页应有 declaredView（页面静态声明的读法）");
+});
+
+test("壳页：begin() 拿到完整判据后与初值不一致就重垫一次", () => {
+  // 页面没声明面、只靠宿主 slot 才认出来的情形：begin() 里那次校正必须重垫，
+  // 否则整页底色停在那一个猜测上。
+  assert.match(
+    SHELL_SRC,
+    /if \(view !== seedView\) \{ seedView = view; seedDshTokens\(\); \}/,
+    "begin() 应在完整判据与初值不一致时重垫一次",
+  );
+});
+
+test("各页面的静态声明覆盖到垫片要的每一个面（FP 是 sidebar）", () => {
+  // 垫片按面取宿主变量，所以每个页面的声明都得能落到词表里；认不出就退回 default（中列色）。
+  const pages = [
+    ["main.html", "main"],
+    ["default.html", "default"],
+    ["sidebar.html", "sidebar"],
+    ["settings.html", "settings"],
+    ["stream.html", "stream"],
+  ];
+  for (const [name, view] of pages) {
+    const html = readFileSync(new URL("../../packages/ui/src/" + name, import.meta.url), "utf8");
+    assert.match(
+      html,
+      new RegExp('<meta name="hana-dshana-role" content="' + view + '">'),
+      name + " 缺静态面声明（未就绪时垫片只能猜，会垫错色）",
+    );
+  }
+  // FP 那一面垫的是侧栏色，与中列面不同源——这正是这条闸要防的那一档。
+  assert.notEqual(FACE_BACKDROP.sidebar, FACE_BACKDROP.main, "侧栏面与主卡面的底座 token 应不同源");
+  assert.equal(new Map(seedTokensForView("sidebar")).get("--dsw-alias-bg-base"), "--sidebar-bg");
+  assert.equal(new Map(seedTokensForView("main")).get("--dsw-alias-bg-base"), "--bg");
+});

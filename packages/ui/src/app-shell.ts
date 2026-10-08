@@ -459,16 +459,24 @@ import {
     pushThemeToSelf();
   }
   // 宿主主题：宿主经 App surface iframe 的 URL 参数给 hana-theme / hana-css /
-  // hana-theme-appearance，变更再经 hana.theme.changed 推同一组值。「贴样式表」那一步的
-  // 契约与实现见 packages/ui/src/host-theme.ts（壳页 / 设置页 / 会话卡共用一份）；壳页只额外做面
-  // 相关的事：应用后垫 DSH 首帧底色 token，样式表落地后把主题推给内层桥。
+  // hana-theme-appearance，变更再经 hana.theme.changed 推同一组值。**首帧那一张样式表由页面
+  // <head> 里的内联片段贴**（main / default / sidebar 三个壳页都有，所有静态样式表之后）；
+  // 本模块（packages/ui/src/host-theme.ts）接的是此后那一段：首屏读一次快照 + 订阅，遇到内联
+  // 片段已贴过的 URL 会跳过重复 fetch。壳页只额外做面相关的事：应用后垫 DSH 首帧底色 token，
+  // 样式表落地后把主题推给内层桥。
 
   // ---- 注入前先垫上 DSW 自己的底色 token（见 packages/ui/src/seed-tokens.ts）----
   // 写 body 的内联 style、不加 !important：赢过 DSH 的静态样式表，输给主题桥的 !important。
   // 值按面取（侧栏面垫侧栏色），宿主变量取不到就跳过——不发明用户没选过的颜色。
   // 同时在 <html> 上声明这一面的底座 token：桥落地后按它把 base 也压成同色（桥的映射表是
   // 一张、没有面的概念，这行声明就是那个面的维度）；两边写法不同、值同源。
-  var seedView = "default";
+  // 面的初值必须在**顶层那次首屏垫片之前**就定下来（下面 followHostTheme 的第一次 onApplied
+  // 就会调 seedDshTokens）：垫片按面取宿主变量，取错面的后果是首帧整页底色错一档。页面自己的
+  // 静态声明（meta[name=hana-dshana-role] / 壳属性 data-dshana-view）在模块执行时已可读——模块
+  // 脚本是 deferred，DOM 早解析完了——所以先用它定一个。宿主 slot 那条兜底要等 SDK 交面，留给
+  // begin() 里的完整判据校正。**不能**在这里写死 "default"：未就绪的面走不到 startInjection，
+  // 那一行就是它唯一的面来源，FP 会因此整页垫成中列色 --bg（这一面该是侧栏色 --sidebar-bg）。
+  var seedView = declaredView(null) || "default";
   // 撤垫片：按 token 名单抹自定义属性，另加 body 自身的 background-color（为压住 DSH 首帧样式里
   // 那句 `body{background-color:#151517}` 而写的实色）。与主题桥退出跟随时抹的是同一份名单。
   function clearSeedTokens() {
@@ -506,7 +514,8 @@ import {
       if (backdropValue) document.body.style.backgroundColor = backdropValue;
     }
   }
-  // 首屏跟随 + 订阅（共用 packages/ui/src/host-theme.ts）。分面差异只在两个钩子：应用后垫 DSH 首帧
+  // 首屏快照 + 订阅（共用 packages/ui/src/host-theme.ts）。首帧那张样式表由页面 <head> 里的内联
+  // 片段贴（早于本模块，且已贴过的 URL 会被跳过）；分面差异只在两个钩子：应用后垫 DSH 首帧
   // 底色 token；样式表落地后推一次主题给内层桥。
   followHostTheme(hana, {
     onApplied: function () { seedDshTokens(); pushThemeNow(); },
@@ -646,6 +655,9 @@ import {
       began = true;
       var view = resolveView(root);
       isSidebar = view === "sidebar";
+      // 完整判据（含宿主 slot 兜底）此刻才拿得到。与上一步那个静态声明不一致时（页面没声明
+      // 面、靠 slot 才认出来的情形）按它重垫一次，免得整页底色停在那个猜测上。
+      if (view !== seedView) { seedView = view; seedDshTokens(); }
       // FP 只听不问：主卡取到快照就播，这里到即渲染。首取自兜（下面那句 poll）排在订阅之后，
       // 所以 FP 先于主卡挂载也不会空着。
       if (isSidebar) {
