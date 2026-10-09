@@ -58,6 +58,19 @@ test("宿主前缀（/api/apps/）与中继自身一律放行，防二次重写"
   assert.deepEqual(HOST_PATH_PREFIXES, ["/api/apps/"]);
 });
 
+test("非 http(s)/ws(s) 的 scheme 一律原样放行", () => {
+  // blob: 的内层地址不是路径：`blob:https://<本页>/<uuid>` 解析出的 origin 就是本页，
+  // 内层 URL 整段落在 pathname 里。若只看 origin 就会被误判成同页路径，改写成一个坏地址。
+  assert.equal(relayed("blob:https://hana.local/9f8b-uuid"), null);
+  assert.equal(relayed("blob:null/9f8b-uuid"), null);
+  assert.equal(relayed("filesystem:https://hana.local/temporary/x"), null);
+  assert.equal(relayed("data:image/png;base64,AAA"), null);
+  assert.equal(relayed("about:blank"), null);
+  // 相对引用与绝对 http(s)/ws(s) 仍照常接管（scheme 闸不能把正常路径一起拦了）。
+  assert.equal(relayed(PAGE + "/api/present.host").toString(), BASE.toString() + "api/present.host");
+  assert.equal(relayed("wss://hana.local/api/remote.mux").toString(), BASE.toString() + "api/remote.mux");
+});
+
 test("外部 origin 不重写也不抛（原生语义照旧）", () => {
   assert.equal(relayed("https://example.com/api/present.host"), null);
   assert.equal(relayed("http://127.0.0.1:5173/api/x.y"), null);
@@ -77,9 +90,42 @@ test("WebSocket 映射：跟随中继前缀的 http(s) → ws(s)", () => {
   assert.equal(resolveRelaySocketUrl("https://example.com/api/remote.mux", BASE, conf), null);
 });
 
-/** 一套最小的宿主替身：五个原语 + 调用记录。 */
+/** 假元素基类工厂：每次调用产出独立类（与其余替身同规格：测试间零共享）。 */
+function fakeElementClass() {
+  return class FakeElement {
+    constructor(tag = "DIV") { this.tagName = tag; this.attrs = {}; }
+    setAttribute(name, value) { this.attrs[String(name).toLowerCase()] = String(value); }
+  };
+}
+/**
+ * 假资源类：URL 访问器定义在指定原型上（与浏览器同形）。
+ * `src` 在真实浏览器里定义在 HTMLMediaElement.prototype 上、video/audio 自己不带——
+ * 所以要能把访问器挂到父类，才测得出「video.src 赋值有没有真的被覆盖」。
+ */
+function fakeResourceClass(BaseElement, owner, tag, prop) {
+  if (owner) {
+    Object.defineProperty(owner.prototype, prop, {
+      get() { return this["_" + prop]; },
+      set(value) { this["_" + prop] = value; },
+      configurable: true,
+    });
+  }
+  class FakeResource extends (owner || BaseElement) {
+    constructor() { super(tag); }
+  }
+  if (!owner) {
+    Object.defineProperty(FakeResource.prototype, prop, {
+      get() { return this["_" + prop]; },
+      set(value) { this["_" + prop] = value; },
+      configurable: true,
+    });
+  }
+  return FakeResource;
+}
+/** 一套最小的宿主替身：五个原语 + 元素资源 + 调用记录。 */
 function fakeTarget() {
   const calls = [];
+  const FakeElement = fakeElementClass();
   class FakeXHR {
     open(method, url) { this.method = method; this.url = url; }
   }
@@ -92,6 +138,10 @@ function fakeTarget() {
     constructor(url) { this.url = url; }
   }
   FakeWebSocket.OPEN = 1;
+  // media 子类先建，再让它们的共同父类带上 src 访问器（浏览器就是这么分的）。
+  class FakeMediaElement extends FakeElement {}
+  const FakeVideo = fakeResourceClass(FakeElement, FakeMediaElement, "VIDEO", "src");
+  const FakeAudio = fakeResourceClass(FakeElement, FakeMediaElement, "AUDIO", "src");
   const target = {
     location: { origin: PAGE },
     fetch: (input) => {
@@ -102,6 +152,17 @@ function fakeTarget() {
     XMLHttpRequest: FakeXHR,
     EventSource: FakeEventSource,
     WebSocket: FakeWebSocket,
+    Element: FakeElement,
+    HTMLMediaElement: FakeMediaElement,
+    HTMLImageElement: fakeResourceClass(FakeElement, null, "IMG", "src"),
+    HTMLScriptElement: fakeResourceClass(FakeElement, null, "SCRIPT", "src"),
+    HTMLIFrameElement: fakeResourceClass(FakeElement, null, "IFRAME", "src"),
+    HTMLVideoElement: FakeVideo,
+    HTMLAudioElement: FakeAudio,
+    HTMLSourceElement: fakeResourceClass(FakeElement, null, "SOURCE", "src"),
+    HTMLTrackElement: fakeResourceClass(FakeElement, null, "TRACK", "src"),
+    HTMLEmbedElement: fakeResourceClass(FakeElement, null, "EMBED", "src"),
+    HTMLLinkElement: fakeResourceClass(FakeElement, null, "LINK", "href"),
     navigator: {
       sendBeacon: (url) => { calls.push({ kind: "beacon", url: String(url) }); return true; },
     },
@@ -158,4 +219,95 @@ test("Request 对象输入：方法/请求体保住，URL 换成中继前缀", a
   installRequestTakeover(BASE, { target, navigator: target.navigator, ...conf });
   await target.fetch(new Request(PAGE + "/api/present.host", { method: "POST", body: "payload" }));
   assert.equal(calls.find((c) => c.kind === "fetch").url, BASE.toString() + "api/present.host");
+});
+
+test("元素资源：src / href 赋值改写到中继前缀", () => {
+  const { target } = fakeTarget();
+  installRequestTakeover(BASE, { target, navigator: target.navigator, ...conf });
+
+  const img = new target.HTMLImageElement();
+  img.src = "/wallpaper-engine/preview/x.gif";
+  assert.equal(img.src, BASE.toString() + "wallpaper-engine/preview/x.gif");
+
+  const frame = new target.HTMLIFrameElement();
+  frame.src = "/wallpaper-engine/scene-live/index.html?type=scene&src=a%2Fb";
+  assert.equal(frame.src, BASE.toString() + "wallpaper-engine/scene-live/index.html?type=scene&src=a%2Fb");
+
+  const script = new target.HTMLScriptElement();
+  script.src = "assets/chunk.js";
+  assert.equal(script.src, BASE.toString() + "assets/chunk.js");
+
+  const link = new target.HTMLLinkElement();
+  link.href = "/theme.css";
+  assert.equal(link.href, BASE.toString() + "theme.css");
+
+  const video = new target.HTMLVideoElement();
+  video.src = "/wallpaper-engine/media/tok";
+  assert.equal(video.src, BASE.toString() + "wallpaper-engine/media/tok");
+
+  const audio = new target.HTMLAudioElement();
+  audio.src = "/wallpaper-engine/media/tok.mp3";
+  assert.equal(audio.src, BASE.toString() + "wallpaper-engine/media/tok.mp3");
+
+  const track = new target.HTMLTrackElement();
+  track.src = "/wallpaper-engine/subtitles/zh.vtt";
+  assert.equal(track.src, BASE.toString() + "wallpaper-engine/subtitles/zh.vtt");
+});
+
+test("元素资源守卫：空值 / blob: / 外部 origin / 已在中继前缀一律原样", () => {
+  const { target } = fakeTarget();
+  installRequestTakeover(BASE, { target, navigator: target.navigator, ...conf });
+
+  const img = new target.HTMLImageElement();
+  img.src = "";
+  assert.equal(img.src, "");
+  img.src = "data:image/png;base64,AAA";
+  assert.equal(img.src, "data:image/png;base64,AAA");
+  img.src = "blob:https://hana.local/9f8b-uuid";
+  assert.equal(img.src, "blob:https://hana.local/9f8b-uuid");
+  img.src = "https://example.com/a.png";
+  assert.equal(img.src, "https://example.com/a.png");
+  img.src = BASE.toString() + "wallpaper-engine/preview/x.gif";
+  assert.equal(img.src, BASE.toString() + "wallpaper-engine/preview/x.gif");
+  img.src = "/api/apps/dshana/routes/keep-me.png";
+  assert.equal(img.src, "/api/apps/dshana/routes/keep-me.png");
+});
+
+test("元素资源：setAttribute 仅资源标签生效，a.href 与普通元素的 src 不动", () => {
+  const { target } = fakeTarget();
+  installRequestTakeover(BASE, { target, navigator: target.navigator, ...conf });
+
+  const im = new target.HTMLImageElement();
+  im.setAttribute("src", "/wallpaper-engine/preview/y.gif");
+  assert.equal(im.attrs.src, BASE.toString() + "wallpaper-engine/preview/y.gif");
+
+  const anchor = new target.Element("A");
+  anchor.setAttribute("href", "/somewhere");
+  assert.equal(anchor.attrs.href, "/somewhere");
+
+  const div = new target.Element("DIV");
+  div.setAttribute("src", "/not-a-resource");
+  assert.equal(div.attrs.src, "/not-a-resource");
+
+  const link = new target.HTMLLinkElement();
+  link.setAttribute("href", "/fonts/x.woff2");
+  assert.equal(link.attrs.href, BASE.toString() + "fonts/x.woff2");
+});
+
+test("元素资源 disposer：还原访问器与 setAttribute", () => {
+  const { target } = fakeTarget();
+  const restore = installRequestTakeover(BASE, { target, navigator: target.navigator, ...conf });
+  restore();
+
+  const img = new target.HTMLImageElement();
+  img.src = "/wallpaper-engine/preview/z.gif";
+  assert.equal(img.src, "/wallpaper-engine/preview/z.gif");
+
+  const video = new target.HTMLVideoElement();
+  video.src = "/wallpaper-engine/media/z.mp4";
+  assert.equal(video.src, "/wallpaper-engine/media/z.mp4");
+
+  const im = new target.HTMLImageElement();
+  im.setAttribute("src", "/wallpaper-engine/preview/z.gif");
+  assert.equal(im.attrs.src, "/wallpaper-engine/preview/z.gif");
 });
