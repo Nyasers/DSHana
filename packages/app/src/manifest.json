@@ -6,7 +6,7 @@
   "description": "把 DeepSeek Harness 变成 HanaAgent 的子代理",
   "entry": "bin/index.mjs",
   "icon": "icon.png",
-  "minAppVersion": "1.0.6-beta",
+  "minAppVersion": "1.0.11-beta",
   "capabilities": [
     "app/tools.expose-to-model",
     "app/tasks.manage",
