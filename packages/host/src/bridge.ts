@@ -15,6 +15,10 @@
 //     DSH——它的唯一职责是不让回环端口变成「第二个无鉴权面」（DSH 端口本身仍只认自己的 cookie）。
 //   · cookie 注入：转发时统一补 `cookie: <DSH cookie>`，剥离客户端自带的 cookie/authorization。
 //   · 上游重定向重写：只放行同源 Location，其余 502（防 DSH 被当成开放代理）。
+//   · HTML 引用相对化：卡里出去的 text/html 响应，把根相对引用（`/foo/bar`，按 origin 解析）
+//     改成相对文档自身的引用。这类引用是浏览器解析器直接落的，客户端原型补丁与
+//     `<base>` 都拦不住（见 shared/html-relay.ts 的说明），而文档 URL 就在中继前缀下 ——
+//     相对化后同一前缀自然约掉，于是引用仍落在卡这条河道里，不再打到宿主源。
 //   · WS 升级：`/api/remote.mux` 等事件流按原始 socket 双向透传（不解析帧，握手响应原样回写）。
 //   · 数据源切换冻结：控制面 `prepare-switch` 置冻结（有在途调用则拒绝），冻结期间普通请求
 //     503、已升级 WS 收到 1013 关闭帧、新 WS 升级直接断开；`resume` 或守门失败时解除。
@@ -27,6 +31,7 @@ import { createServer, type IncomingHttpHeaders } from "node:http";
 import { connect as netConnect } from "node:net";
 import { timingSafeEqual } from "node:crypto";
 import { errText } from "@dshana/shared/err-text.ts";
+import { rewriteRootRelativeRefs } from "@dshana/shared/html-relay.ts";
 import { MUX_CHUNK_QUERY, MUX_CHUNK_QUERY_VALUE } from "@dshana/shared/mux-chunks.ts";
 import { startFrameRelay } from "./mux-relay.ts";
 
@@ -106,6 +111,28 @@ export function upgradeRequestHeaders(headers: IncomingHttpHeaders, upstream, co
   result.origin = upstream.origin;
   if (cookie) result.cookie = cookie;
   return result;
+}
+
+/** 可改写 HTML 的响应体上限：HTML 不该到这量级，超了就退回流式透传（不缓冲）。 */
+export const HTML_REWRITE_MAX_BYTES = 4 * 1024 * 1024;
+
+/**
+ * 这个响应值不值得进 HTML 改写。
+ *
+ * 只认 200 的 `text/html`，且 `path` 必须是可作文档基准的前导斜杠路径（相对化靠它算层数）。
+ *
+ * **不要求 content-length**：真实的上游文档服务多是流式/分块响应（无此头），按「必须长度
+ * 已知」判会把要改的那一类全放行——真机上就是这么静的。长度上界改由缓冲时把关
+ * （见 HTML_REWRITE_MAX_BYTES）：读超上限就停，改回流式透传。
+ *
+ * @param headers 已剥掉 hop-by-hop / 编码头的响应头
+ * @param path 上游相对路径（用于算引用层数）
+ */
+export function isRewritableHtml(headers: Headers, path: string): boolean {
+  const contentType = headers.get("content-type") || "";
+  if (!/^text\/html\b/i.test(contentType)) return false;
+  if (typeof path !== "string" || !path.startsWith("/")) return false;
+  return true;
 }
 
 /** 同源 Location 归一（上游 302 指向自身则改写成代理前缀可见的相对路径；跨源返回 null）。 */
@@ -301,6 +328,10 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
       const headers = new Headers(response.headers);
       headers.delete("set-cookie");
       headers.delete("connection");
+      // transfer-encoding 是逐跳头，且与我们要设的 content-length 互斥（两者并存时
+      // 客户端按 content-length 读、实体却是分块的 → ResponseContentLengthMismatch）。
+      // 转发时一律去掉，由 node 自行按实际发送形态决定分块与否。
+      headers.delete("transfer-encoding");
       headers.delete("content-encoding");
       headers.delete("content-length");
       const location = headers.get("location");
@@ -312,6 +343,43 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
           return;
         }
         headers.set("location", safe);
+      }
+      // HTML 响应：把根相对引用相对化后再发（见文件头与 shared/html-relay.ts）。
+      // 这里是唯一拦得住「解析期标签」的位置——它不过客户端原型补丁，也不受 <base> 约束。
+      // 按上限缓冲（不依赖 content-length：真实文档服务多为分块响应）；超限则不改写，
+      // 把已读字节写回后继续流式透传。
+      if (response.status === 200 && response.body && isRewritableHtml(headers, authorized.path)) {
+        const reader = response.body.getReader();
+        const chunks: Buffer[] = [];
+        let total = 0;
+        let finished = false;
+        while (total <= HTML_REWRITE_MAX_BYTES) {
+          const part = await reader.read();
+          if (part.done) { finished = true; break; }
+          const buf = Buffer.from(part.value);
+          chunks.push(buf);
+          total += buf.length;
+        }
+        if (finished) {
+          const raw = Buffer.concat(chunks).toString("utf8");
+          const html = rewriteRootRelativeRefs(raw, authorized.path);
+          headers.set("content-length", String(Buffer.byteLength(html, "utf8")));
+          res.writeHead(response.status, Object.fromEntries(headers.entries()));
+          res.end(html);
+          return;
+        }
+        // 超限：不改写。已读的字节先落，其余按原样续流（此时不发 content-length，走分块）。
+        res.writeHead(response.status, Object.fromEntries(headers.entries()));
+        for (const buf of chunks) {
+          if (!res.write(buf)) await waitForDrain(res, controller.signal);
+        }
+        for (;;) {
+          const part = await reader.read();
+          if (part.done) break;
+          if (!res.write(part.value)) await waitForDrain(res, controller.signal);
+        }
+        if (!controller.signal.aborted) res.end();
+        return;
       }
       res.writeHead(response.status, Object.fromEntries(headers.entries()));
       if (!response.body) return res.end();
