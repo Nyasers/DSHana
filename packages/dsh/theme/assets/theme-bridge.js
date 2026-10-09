@@ -77,20 +77,46 @@
       }
     }
     var c = "";
+    var baseOut = "";
     for (var i = 0; i < m.length; i++) {
       var css = m[i][1], need = m[i][2], ok = true;
       for (var n = 0; n < need.length; n++) { if (!v[need[n]]) { ok = false; break; } }
       if (!ok) continue; // 空值不出手：空自定义属性会让 var() “无效于计算值”（bg 系变 transparent）
       if (baseCss && m[i][0] === baseKey) css = baseCss;
-      c += m[i][0] + ":" + css + "!important;";
+      if (m[i][0] === baseKey) baseOut = css;
+      c += m[i][0] + ":" + css + ";";
     }
-    return c;
+    // body 自身的底色也跟着底座那一格：DSH 的 body{background-color:var(--dsw-alias-bg-base)}
+    // 与它的 boot 样式同特异性、靠先后取胜，而本桥把壳页垫的内联背景清掉（见 clearSeed）之后
+    // 那一格就只剩这条规则压着 boot 样式。写成 var() 而不是 baseOut 本身：后手改那一格
+    // （例如置 transparent）时 body 底色要跟着变，写死值就把它钉死了。
+    if (baseOut) c += "background-color:var(" + baseKey + ");";
+    // baseOut 非空 = 这条覆盖确实给了底座一格。清垫片要看它：底座那一格若没被本覆盖接管，
+    // 抹掉壳页的内联值就把首帧交回 DSH 的 boot 样式（宿主变量这一格暂时读不到的情形）。
+    return { css: c, base: baseOut };
   }
+  // 覆盖用的选择器：html body 与 html body[data-ds-dark-theme] 共用一张声明表（选择器列表 =
+  // 两条同声明的规则）。为什么是这个形状（都是机制层的事实，与任何具体插件无关）：
+  //   · 不用 !important——作者样式表里的 !important 压过一切普通声明，我们写了就等于把
+  //     「后手按元素/属性请求改写同一格」的路全堵死（例如让整屏层露出来的透明请求）。
+  //   · 也不用裸 body：DSH 的调色板在 body 与 body[data-ds-dark-theme] 上同格声明，且**排在
+  //     本桥之后**（插件树激活晚于注入），同特异性后手赢，我们会被压回它自己的近白/近黑。
+  //   · html body 靠多一个元素把特异性抬到 body 之上，又低于任何带一个属性选择器的请求
+  //     （body[attr] 的属性数就压过元素数）——正好是「宿主色生效，属性请求透明时让位」。
+  //   · 明暗两档共用一张表：两档的宿主取值相同，而暗色下 DSH 那条 body[data-ds-dark-theme]
+  //     特异性更高，必须同样抬一档才压得住。
   function applyOrRemove() {
     var st = document.getElementById("@dshana/dsh-theme-dyn");
     if (followHost() && cur) {
+      var rules = cssOf(cur);
       if (!st) { st = document.createElement("style"); st.id = "@dshana/dsh-theme-dyn"; document.head.appendChild(st); }
-      st.textContent = "body{" + cssOf(cur) + "}";
+      st.textContent = "html body,html body[data-ds-dark-theme]{" + rules.css + "}";
+      // 桥的规则一落地，壳页垫片（防注入前闪白的那几格内联底色）就只剩副作用：内联样式
+      // 只有 !important 压得住，而本桥正是靠不用 !important 才让出后手——留着垫片等于把
+      // 后手又挡回去（元素级/属性级覆盖一律输给内联）。它的目的只是桥落地前那一帧。
+      // 只在底座那一格确实被接管时才抹（见 cssOf 的 base）：没接管就抹，等于把首帧交回
+      // DSH 的 boot 样式。
+      if (rules.base) clearSeed();
     } else if (st) {
       st.remove();
     }
@@ -103,12 +129,19 @@
     } catch (e) { return null; }
   }
   // 壳页垫片在 body 内联样式上写过的 token（packages/ui/src/seed-tokens.ts 的 VIEW_SEEDS）：它垫的是
-  // 宿主底色，为的是注入前不闪白。一旦 dsh 自己选了 light/dark（不跟随宿主），必须一并抹掉，
-  // 否则 dsh 自己的主题切不干净（body 内联钉着宿主色，桥的 <style> 撤了也没用）。
-  // 名单与 seed-tokens 同源，由单测盯着（"桥退出时抹的名单 = 壳页垫过的 token"）。
+  // 宿主底色，为的是注入前不闪白。两处都要抹掉它：
+  //   · 桥落地后（见 applyOrRemove）：垫片的目的只是桥落地前那一帧，留着就把后手挡死——
+  //     内联样式只有 !important 压得住，而本桥正是靠不用 !important 才让出后手；
+  //   · dsh 自己选了 light/dark（不跟随宿主）：body 内联钉着宿主色，桥的 <style> 撤了也没用，
+  //     dsh 自己的主题切不干净。
+  // 名单与 seed-tokens 同源，由单测盯着（"桥抹的名单 = 壳页垫过的 token"）。
+  // --dsh-boot-bg 一并抹：它不在桥的规则表里，但它唯一的消费者是 DSH 启动屏的
+  // `var(--dsw-alias-bg-base, var(--dsh-boot-bg, Canvas))` 兜底，而桥落地时 --dsw-alias-bg-base
+  // 已有值，兜底不会被取到（见 seed-tokens.ts 同一处说明）。
   var seedKeys = ["--dsw-alias-bg-base", "--dsw-specific-sidebar-fill", "--dsh-boot-bg"];
-  // 退出跟随时抹掉垫片。自定义属性按名单抹，另加 body 自身的 background-color
-  // （壳页为了压住首帧样式里那句 `body{background-color:#151517}` 而垫的实色）。
+  // 抹掉垫片：自定义属性按名单抹，另加 body 自身的 background-color（壳页为了压住首帧样式里
+  // 那句 `body{background-color:#151517}` 而垫的实色；桥落地后这一格由覆盖里的
+  // background-color 接管）。
   function clearSeed() {
     var bodyEl = null;
     try { bodyEl = document.body; } catch (e) { return; }
@@ -129,12 +162,15 @@
   // presenter，它自己会写），只把壳页垫片撤掉。偏好未知时（presenter 的属性与壳页推送都还没
   // 到）一律不动手：此刻抹垫片等于把首帧交回 dsh 的 boot 样式，而它认的是**浏览器系统**——
   // 宿主浅 + 系统深就是那一帧黑屏。
+  // 例外是**恒跟随的面**（侧栏）：它的门本来就恒开，等偏好已知只是把明暗对齐白白推迟到插件
+  // 就位（那一段里 presenter 会按浏览器系统先挂一次 data-ds-dark-theme）。
   function syncHostScheme() {
     var root = null;
     try { root = document.documentElement; } catch (e) { return; }
     if (!root) return;
-    if (!prefKnown) return;
-    if (!followHost()) {
+    var follow = followHost();
+    if (!prefKnown && !follow) return;
+    if (!follow) {
       // 明暗交还 presenter：dsh 显式选了 light/dark 时，presenter 会往**同一格**写它自己的
       // html color-scheme，而它随每次偏好变化重建快照、必然重写一遍。所以这里不碰那一格：
       // 早先我们写的值会被它覆掉，删掉反而可能落在它写入之后、把它的值抹掉（它的 UA 明暗
@@ -180,9 +216,19 @@
     }
     return hits ? v : null;
   }
+  // 壳页写在 <html> 上的面（值 = 该面自己声明的面名，见 packages/ui/src/face-role.ts 的
+  // FACE_VIEWS 与 packages/ui/src/app-shell.ts 的 seedDshTokens）。桥只关心一件事：这一面是不是
+  // 恒跟随宿主。事实源仍只有壳页那一处声明，这里不另立一份面词表。
+  function faceName() {
+    try {
+      return document.documentElement.getAttribute("data-dshana-face") || null;
+    } catch (e) { return null; }
+  }
   function followHost() {
-    // 仅在**已知且明确**偏好为 system 时跟随宿主；已知为 light/dark 时完全原生；
+    // 侧栏面恒跟随：它整幅嵌在宿主框架里，用 dsh 自己的明暗会与四周不同调。
+    // 其余面：仅在**已知且明确**偏好为 system 时跟随；已知为 light/dark 时完全原生；
     // 尚未得知偏好时不动手（等壳页首次推送）。
+    if (faceName() === "sidebar") return true;
     return prefKnown && pref === "system";
   }
   // 从文档根读取并应用；读到有效变量返 true。
@@ -242,7 +288,11 @@
     var mo = new MutationObserver(function () { pull(); });
     mo.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ["data-theme", "data-appearance", "data-dsh-theme-preference", "style"],
+      // data-dshana-face / -backdrop 也听：壳页认面修正时会改写它们，而跟随门与底座取值都读这两格。
+      attributeFilter: [
+        "data-theme", "data-appearance", "data-dsh-theme-preference", "style",
+        "data-dshana-face", "data-dshana-backdrop",
+      ],
     });
     var watchBody = function () {
       try {

@@ -2,15 +2,22 @@
 // Copyright (c) 2026 Nyasers
 //
 // 底座色按面取值 + 明暗跟随：壳页在 <html> 上声明 data-dshana-backdrop（这一面可见底那格
-// DSW token）与 data-appearance（宿主明暗），桥拿它们去规则表里取宿主变量、并校准 dsh 自己的
-// 明暗标记。这里把 assets/theme-bridge.js 真实跑一遍（vm + 最小 DOM 桩），断言：
+// DSW token）、data-dshana-face（这一面的面名）与 data-appearance（宿主明暗），桥拿它们去规则
+// 表里取宿主变量、并校准 dsh 自己的明暗标记。这里把 assets/theme-bridge.js 真实跑一遍
+// （vm + 最小 DOM 桩），断言：
 //   · 没声明底座时 base 就是表里的 --bg（老行为不变）；
 //   · 声明了就换成那格对应的宿主变量（侧栏面 = --sidebar-bg）；
 //   · 声明的 token 不在表里时原样退回 --bg（不凭空造值）；
 //   · 每个面：桥给出的 base 与壳页垫片（seed-tokens）给的值同源；
 //   · 跟随宿主时 body[data-ds-dark-theme] 与 html 的 color-scheme 都按宿主摘戴（dsh 自己的
 //     判定取自浏览器系统的 prefers-color-scheme，宿主与系统不一致时会错档）；
-//   · dsh 自己选了 light/dark 时，桥不动明暗（交还它的 presenter）。
+//   · dsh 自己选了 light/dark 时，桥不动明暗（交还它的 presenter）；
+//   · 覆盖的层叠形状：不用 !important，靠 html body / html body[data-ds-dark-theme] 赢过 dsh
+//     自己那张调色板（body 与 body[data-ds-dark-theme]，后于本桥注入），同时让位给任何按属性
+//     收窄的请求（body[attr]，以及暗色下 body[data-ds-dark-theme][attr]）——即“宿主色生效，
+//     属性请求改写同一格时属性请求赢”，全程不特判任何具体属性名；
+//   · 桥一落地就把壳页垫的内联底色抹掉（内联只有 !important 压得住，留着就把上面那条让位堵死）；
+//   · 侧栏面恒跟随宿主（无视 dsh 自己的 light/dark 偏好），其余面仍遵偏好。
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -37,7 +44,8 @@ const HOST_VARS = { "--bg": BG, "--sidebar-bg": SIDEBAR_BG };
  * 跑一次桥脚本，返回它写进 @dshana/dsh-theme-dyn 的 CSS 正文与它校准过的明暗状态。
  * @param backdrop 壳页写在 <html> 的 data-dshana-backdrop（null → 不写该属性）
  * @param options  appearance（宿主明暗）/ preference（dsh 侧偏好，默认 system；显式传 null =
- *                 属性尚未被 presenter 投影，即偏好未知）
+ *                 属性尚未被 presenter 投影，即偏好未知）/ face（壳页写在 <html> 的
+ *                 data-dshana-face，null → 不写该属性）
  */
 function runBridge(backdrop, options) {
   const opts = options || {};
@@ -46,6 +54,7 @@ function runBridge(backdrop, options) {
   const attrs = {};
   if (opts.preference !== null) attrs["data-dsh-theme-preference"] = opts.preference || "system";
   if (backdrop) attrs["data-dshana-backdrop"] = backdrop;
+  if (opts.face) attrs["data-dshana-face"] = opts.face;
   if (opts.appearance) attrs["data-appearance"] = opts.appearance;
   const rootStyle = new Map();
   const documentElement = {
@@ -84,12 +93,16 @@ function runBridge(backdrop, options) {
     body,
     readyState: "complete",
     head: { appendChild: (el) => { styleTags.push(el); } },
-    createElement: () => ({
-      id: "",
-      textContent: "",
-      // 退出跟随时桥会 remove() 掉它自己建的 <style>；harness 里只需不报错。
-      remove: () => {},
-    }),
+    createElement: () => {
+      const el = { id: "", textContent: "", remove: () => {} };
+      // 退出跟随时桥会 remove() 掉它自己建的 <style>：真从表里摘掉，否则再建一个时
+      // getElementById 会命回旧的那个（读到上一轮的门）。
+      el.remove = () => {
+        const at = styleTags.indexOf(el);
+        if (at >= 0) styleTags.splice(at, 1);
+      };
+      return el;
+    },
     getElementById: (id) => styleTags.find((el) => el.id === id) || null,
     addEventListener: () => {},
   };
@@ -110,17 +123,21 @@ function runBridge(backdrop, options) {
       fire() { this.cb([]); }
     },
     getComputedStyle: () => ({
-      getPropertyValue: (name) => (name in HOST_VARS ? HOST_VARS[name] : ""),
+      getPropertyValue: (name) => {
+        const vars = opts.hostVars || HOST_VARS;
+        return name in vars ? vars[name] : "";
+      },
     }),
   };
   // 注：占位符在文件头注释里也出现过，所以这里与生产侧的 replace 不同，一次全换（生产侧靠
   // pack 的 terser 去注释，见 index.ts 与 pack.mjs）。
   const code = BRIDGE_SRC.replaceAll("__DSH_THEME_TOKENS__", JSON.stringify(compileRules(TOKEN_MAP)));
   vm.runInNewContext(code, sandbox);
-  const tag = styleTags.find((el) => el.id === "@dshana/dsh-theme-dyn");
   // 这几格用 getter：观察者回调会再写一次，快照式取值会把断言变成空转（读到的是跑桥那一刻的值）。
+  // css 每读一次现查：桥可能在这之后才建出 <style>（例如面改成侧栏后才开始跟随）。
+  const dynTag = () => styleTags.find((el) => el.id === "@dshana/dsh-theme-dyn");
   return {
-    get css() { return tag ? tag.textContent : ""; },
+    get css() { const tag = dynTag(); return tag ? tag.textContent : ""; },
     get dark() { return bodyAttrs.has("data-ds-dark-theme"); },
     get colorScheme() { return rootStyle.get("color-scheme"); },
     get seededKeys() { return [...bodyStyle.keys()]; },
@@ -132,9 +149,32 @@ function runBridge(backdrop, options) {
 }
 
 function declaredValue(css, token) {
-  // 前边界取 ; 或 {：桥写的是 body{token:值!important;…} 一条长串，只有第一格紧跟 {
-  const hit = new RegExp("(?:[;{]|^)" + token + ":([^!;]+)!important;").exec(css);
+  // 前边界取 ; 或 {：桥写的是 {token:值;…} 一条长串，只有第一格紧跟 {
+  const hit = new RegExp("(?:[;{]|^)" + token + ":([^;]+);").exec(css);
   return hit ? hit[1] : null;
+}
+
+/** 取覆盖规则的正文（选择器列表与声明块分开，层叠题要看的就是这两半）。 */
+function dynRule(css) {
+  const hit = /^([^{]*)\{([^}]*)\}$/.exec(css.trim());
+  return hit ? { selectors: hit[1].split(",").map((s) => s.trim()), body: hit[2] } : null;
+}
+
+/** 选择器特异性 [id, 类/属性/伪类, 元素]。 */
+function specificity(selector) {
+  const ids = (selector.match(/#[\w-]+/g) || []).length;
+  const classes = (selector.match(/\.[\w-]+|\[[^\]]+\]|::?[\w-]+/g) || []).length;
+  const stripped = selector.replace(/\[[^\]]+\]/g, "").replace(/::?[\w-]+/g, "");
+  const elements = (stripped.match(/(?:^|[\s>+~])[a-z][\w-]*/gi) || []).length;
+  return [ids, classes, elements];
+}
+
+/** a 的特异性是否严格高于 b。 */
+function outranks(a, b) {
+  for (let i = 0; i < 3; i++) {
+    if (a[i] !== b[i]) return a[i] > b[i];
+  }
+  return false;
 }
 
 test("桥：没声明底座 token 时，base 仍是表里的 --bg", () => {
@@ -223,15 +263,38 @@ test("桥：退出跟随时抹掉壳页垫的底色（主题切得干净）", ()
   // dsh 自己选了 light → 不跟随 → 垫片该被抹掉（否则 body 内联钉着宿主色，切不干净）
   const off = runBridge(null, { appearance: "dark", preference: "light" });
   assert.deepEqual(off.seededKeys, [], "退出跟随时不该留着壳页垫的宿主底色");
+});
+
+test("桥：桥一落地也抹掉壳页垫的底色（内联只有 !important 压得住，留着就把后手堵死）", () => {
+  // 壳页垫片（seed-tokens 的 VIEW_SEEDS）写在 body 内联样式上，目的只是桥落地前那一帧。
+  // 桥落地后它只剩副作用：内联声明只有 !important 压得住，而本桥正是靠不用 !important 才把
+  // 「按属性请求改写同一格」的路让出来——垫片留着，那个请求就永远输给内联。
+  for (const preference of ["system", "light", "dark"]) {
+    const on = runBridge(null, { appearance: "light", preference });
+    assert.deepEqual(
+      on.seededKeys,
+      [],
+      "桥落地后不该留着壳页垫的内联底色（preference=" + preference + "）",
+    );
+  }
+});
+
+test("桥：底座那一格没被接管时不抹垫片（抹了就把首帧交回 DSH 的 boot 样式）", () => {
+  // 宿主变量这一格暂时读不到（主题样式表还没落地）时，覆盖里根本没有底座那一格；
+  // 此刻抹掉壳页垫的内联值 = 把首帧交回 DSH 的 boot 样式，而它认的是浏览器系统偏好。
+  const bridge = runBridge(null, { appearance: "light", hostVars: { "--sidebar-bg": SIDEBAR_BG } });
   assert.equal(
-    off.seededKeys.includes("background-color"),
-    false,
-    "退出跟随时 body 自身的背景也要还回去（首帧那句背景色）",
+    declaredValue(bridge.css, "--dsw-alias-bg-base"),
+    null,
+    "读不到 --bg 时覆盖里不该有底座那一格",
   );
-  // 仍在跟随时垫片保留（它还要垫底防闪白）
-  const on = runBridge(null, { appearance: "light" });
-  assert.ok(on.seededKeys.includes("--dsw-alias-bg-base"), "跟随时垫片该保留");
-  assert.ok(on.seededKeys.includes("background-color"), "跟随时 body 背景垫片该保留");
+  assert.equal(
+    declaredValue(bridge.css, "background-color"),
+    null,
+    "底座那一格没被接管时不该写 body 背景（写了就是拿空值顶替）",
+  );
+  assert.ok(bridge.seededKeys.includes("--dsw-alias-bg-base"), "底座没接管时垫片该留着");
+  assert.ok(bridge.seededKeys.includes("background-color"), "底座没接管时 body 背景垫片该留着");
 });
 
 test("桥：退出时抹的名单与壳页垫过的 token 同源", () => {
@@ -255,6 +318,112 @@ test("桥：偏好未知时不动手（首帧垫片留着，不交回 dsh 的系
   assert.ok(unknown.seededKeys.includes("--dsw-alias-bg-base"), "偏好未知时不该抹掉 token 垫片");
   assert.equal(unknown.colorScheme, undefined, "偏好未知时不该替 dsh 决定 color-scheme");
   assert.equal(unknown.dark, false, "偏好未知时不该动 dsh 的明暗标记");
+  assert.equal(unknown.css, "", "偏好未知时不该写覆盖（门还关着）");
+});
+
+test("桥：覆盖不用 !important，靠特异性赢 dsh 调色板、并把属性请求让出去", () => {
+  // 层叠事实（机制层，与任何具体插件无关）：
+  //   · dsh 的调色板在 body 与 body[data-ds-dark-theme] 上声明同一批 token，且**后于**本桥
+  //     注入（插件树激活晚于注入）——同特异性后手赢，所以裸 body 会被压回它的近白/近黑；
+  //   · 作者样式表里的 !important 压过一切普通声明（不看特异性），本桥一旦用 !important，
+  //     任何后手按元素/属性改写同一格的请求就永远赢不了；
+  //   · 属性选择器进特异性第二列，所以 body[attr] 压过 html body（元素数），
+  //     但压不过 html body[data-ds-dark-theme][attr]（属性数 2 > 1）。
+  // 由此覆盖的形状必须是「html body + html body[data-ds-dark-theme] 共用一张声明表、不带
+  // !important」：light 档靠元素数赢裸 body，dark 档靠同样抬一档赢 body[data-ds-dark-theme]；
+  // 而任何按属性收窄的请求都压得住它（暗色下多带一个属性就够）。
+  // 跑两种入口：跟随时（偏好 system）与恒跟随的面（侧栏，偏好未投影）——两者产出的形状要一样。
+  const runs = [
+    runBridge(null, { appearance: "dark", preference: "system" }),
+    runBridge(null, { appearance: "dark", face: "sidebar" }),
+  ];
+  for (const { css } of runs) {
+    assert.notEqual(css, "", "跟随时该有覆盖");
+    assert.equal(css.includes("!important"), false, "覆盖里不该出现 !important（它会堵死后手的改写）");
+    const rule = dynRule(css);
+    assert.ok(rule, "覆盖该是一条规则：" + css);
+    // 明暗两档共用一张声明表：两档的宿主取值相同，暗色下 dsh 那条特异性更高，必须同样抬一档。
+    assert.deepEqual(
+      rule.selectors,
+      ["html body", "html body[data-ds-dark-theme]"],
+      "覆盖该是 html body 与 html body[data-ds-dark-theme] 两条同声明的规则",
+    );
+    // 宿主变量照旧复用（不是搬值）：底座与侧栏填色都还指向宿主变量。
+    assert.equal(declaredValue(css, "--dsw-alias-bg-base"), "var(--bg)");
+    assert.equal(declaredValue(css, "--dsw-specific-sidebar-fill"), "var(--sidebar-bg)");
+    // body 自身底色跟着底座那一格走（壳页垫的内联背景已被桥抹掉，这一格得有人接管）。
+    assert.equal(declaredValue(css, "background-color"), "var(--dsw-alias-bg-base)");
+    // 四条层叠事实，逐条钉住（特异性 = [id, 属性/类, 元素]）：
+    // ① 浅档：html body (0,0,2) > vendor 的 body (0,0,1)，宿主色赢（裸 body 会被 vendor 后手压掉）。
+    assert.ok(outranks(specificity("html body"), specificity("body")), "html body 该压过 body");
+    // ② 暗档：html body[data-ds-dark-theme] (0,1,2) > vendor 的 body[data-ds-dark-theme] (0,1,1)。
+    assert.ok(
+      outranks(specificity("html body[data-ds-dark-theme]"), specificity("body[data-ds-dark-theme]")),
+      "暗档那条该压过 vendor 的同名属性规则",
+    );
+    // ③ 让位：请求方在浅档带一个属性就赢（(0,1,1) > (0,0,2)）；
+    assert.ok(
+      outranks(specificity("body[data-any-request]"), specificity("html body")),
+      "浅档：按属性收窄的请求该压过覆盖",
+    );
+    // ④ 暗档要带上当时的明暗属性才赢（(0,2,1) > (0,1,2)）——覆盖暗档那条为了压过 vendor 的
+    //    暗色调色板必须到 (0,1,2)，请求方要比它更具体就只能再收窄一层。这是层叠的算术，
+    //    不是本桥的偏心；也正因如此，请求方在暗档若只带自己的属性（(0,1,1)）会输给覆盖。
+    assert.ok(
+      outranks(specificity("body[data-ds-dark-theme][data-any-request]"), specificity("html body[data-ds-dark-theme]")),
+      "暗档：按当前明暗收窄的请求该压过覆盖",
+    );
+    assert.ok(
+      outranks(specificity("html body[data-ds-dark-theme]"), specificity("body[data-any-request]")),
+      "暗档：未按明暗收窄的请求输给覆盖（它同时也输给 vendor 的暗色调色板）",
+    );
+  }
+});
+
+test("桥：覆盖对两个明暗档给同一张声明表（明暗由 body 属性与宿主取值决定，不由选择器决定）", () => {
+  const light = runBridge(null, { appearance: "light" });
+  const dark = runBridge(null, { appearance: "dark" });
+  assert.equal(light.css, dark.css, "两档的覆盖正文该逐字相同（宿主取值一样，明暗靠 body 属性选档）");
+  assert.notEqual(light.css, "", "跟随时该有覆盖");
+});
+
+test("桥：侧栏面恒跟随宿主（无视 dsh 自己的 light/dark 偏好）", () => {
+  // 侧栏整幅嵌在宿主框架里，用 dsh 自己的明暗会与四周不同调——这一面恒跟随。
+  const explicitLight = runBridge(null, { appearance: "dark", preference: "light", face: "sidebar" });
+  assert.notEqual(explicitLight.css, "", "侧栏面在 dsh 显式 light 下也该有覆盖");
+  assert.equal(explicitLight.colorScheme, "dark", "侧栏面该继续对齐宿主明暗");
+  assert.equal(explicitLight.dark, true, "宿主深色时侧栏面该挂着深色标记");
+  assert.deepEqual(explicitLight.seededKeys, [], "桥落地后垫片该被抹掉（恒跟随的面同样）");
+  const explicitDark = runBridge(null, { appearance: "light", preference: "dark", face: "sidebar" });
+  assert.notEqual(explicitDark.css, "", "侧栏面在 dsh 显式 dark 下也该有覆盖");
+  assert.equal(explicitDark.colorScheme, "light", "侧栏面该继续对齐宿主明暗");
+  assert.equal(explicitDark.dark, false, "宿主浅色时侧栏面不该挂着深色标记");
+});
+
+test("桥：壳页认面修正后（<html> 的 face 变了）桥跟着重算门", () => {
+  // 壳页的面初值取自页面静态声明；宿主 slot 才认出来的面要到 begin() 才写出来（seedDshTokens →
+  // publishFace）。桥要能看见那一笔，否则未声明面的 FP 会一直按 default 的门走。
+  const bridge = runBridge(null, { appearance: "light", preference: "light" });
+  assert.equal(bridge.css, "", "起点（default 面 + dsh 显式 light）不该有覆盖");
+  bridge.setRootAttr("data-dshana-face", "sidebar");
+  bridge.fireObservers();
+  assert.notEqual(bridge.css, "", "面改成侧栏后该恒跟随、重新写出覆盖");
+  assert.equal(bridge.colorScheme, "light", "重算后该继续对齐宿主明暗");
+});
+
+test("桥：其余面仍遵 dsh 偏好（侧栏面的恒跟随不外溢）", () => {
+  for (const view of FACE_VIEWS) {
+    if (view === "sidebar") continue;
+    for (const preference of ["light", "dark"]) {
+      const bridge = runBridge(null, { appearance: "dark", preference, face: view });
+      assert.equal(bridge.css, "", view + " 面在 dsh 显式 " + preference + " 下不该有覆盖");
+      assert.equal(
+        bridge.colorScheme,
+        undefined,
+        view + " 面在 dsh 显式 " + preference + " 下不该留我们的 inline color-scheme",
+      );
+    }
+  }
 });
 
 test("壳页：dsh 自选明暗时不垫首帧底色（那一段归它自己的 boot 样式）", () => {
@@ -272,6 +441,26 @@ test("壳页确实把这一面的底座 token 与宿主明暗写上了（桥的�
   assert.ok(HOST_THEME_SRC.includes("data-appearance"), "共享件没把宿主明暗写出来");
   assert.ok(BRIDGE_SRC.includes("data-dshana-backdrop"), "桥没读 data-dshana-backdrop");
   assert.ok(BRIDGE_SRC.includes("data-appearance"), "桥没读宿主明暗");
+  // 面的单一事实源：壳页把 seedView 写成 <html> 的 data-dshana-face，桥读同一处判「恒跟随的面」。
+  assert.ok(SHELL_SRC.includes("data-dshana-face"), "壳页没写 data-dshana-face");
+  assert.ok(BRIDGE_SRC.includes("data-dshana-face"), "桥没读 data-dshana-face");
+  // 桥不另立一份面词表：面词表只有 face-role.ts 那一处（壳页经 isFaceView 校验后写属性），
+  // 桥只比对「恒跟随的那个面」这一个字面量，不枚举词表、也不按底色 token 反推面。
+  for (const view of FACE_VIEWS) {
+    if (view === "sidebar") continue;
+    assert.equal(
+      BRIDGE_SRC.includes('"' + view + '"'),
+      false,
+      "桥里出现了面名 " + view + "：面词表该只有 face-role.ts 那一处事实源",
+    );
+  }
+  // 单一事实源：壳页写的面就是它认出来的那一面（seedView），不另立词表；
+  // 且这次写入发生在顶层（注入可能早于首次主题载荷那次 seedDshTokens）。
+  assert.match(SHELL_SRC, /setAttribute\("data-dshana-face", seedView\)/, "壳页该写这一面的面名");
+  assert.ok(SHELL_SRC.includes("publishFace();"), "壳页该在顶层先把面写出来（注入可能早于首次垫片）");
+  const atPublish = SHELL_SRC.indexOf("publishFace();");
+  const atFollow = SHELL_SRC.indexOf("followHostTheme(hana,");
+  assert.ok(atPublish < atFollow, "面的声明该在顶层 followHostTheme 之前写出");
 });
 
 // ---- 垫片的「面」必须在首帧之前就定下来 ----

@@ -194,7 +194,7 @@ export const TOKEN_MAP: ReadonlyArray<AdapterRule> = [
   // ChangedFiles / Deliverables / PlanPreview 三组把填充色存在组件私有变量里（--changes-fill
   // 等），值取调色板 static-neutral-50 / 100（浅色）与 850 / 800（深色），再由
   // body[data-ds-dark-theme] 自己翻明暗——调色板在这里承担的是**随主题走的层次位**语义。
-  // 私有变量写在组件规则上，桥的 body 层 !important 压不住（元素自身声明优先于继承），
+  // 私有变量写在组件规则上，桥的 body 层覆盖压不住（元素自身声明优先于继承），
   // 所以只能从值的源头接：静止档（浅色 50 / 深色 850）与悬停档（浅色 100 / 深色 800，更深一档）
   // 各接一个偏移档。浅深两档同名规则是刻意的：偏移方向随主题自动反向，与 dsh 那对调换一致。
   // 全局消费者只有这三组卡片（另两处调色板引用是 ui-theme 里的 alias 定义，已被本表直接覆盖）。
