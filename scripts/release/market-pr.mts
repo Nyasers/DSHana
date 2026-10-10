@@ -284,7 +284,12 @@ function parseChangelog(text: string): VersionSection[] {
   }));
 }
 
-/** 段内的分节（`### 标题` 与其后的 `* ` 条目），条目行原样保留（带各自的提交链接）。 */
+/** 段内的分节（`### 标题` 与其后的 `* ` 条目），条目行原样保留（带各自的提交链接）。
+ *
+ * 多行条目要连缩进续行一起收：生成器的 list() 会把条目正文里除首行外的每一行前缀两空格
+ *（`BREAKING CHANGE` 这类 note 会走这条，见 @conventional-changelog/template 的 list()），
+ * 只认 `* ` 开头会把迁移/破坏性变更的细节丢掉。续行按生成器的契约取「至少两空格起头」，
+ * 分节标题（`### ` 顶格）与段内其它顶格文本不在此列。 */
 function parseSubsections(lines: string[]): { title: string; items: string[] }[] {
   const out: { title: string; items: string[] }[] = [];
   let cur: { title: string; items: string[] } | null = null;
@@ -295,7 +300,15 @@ function parseSubsections(lines: string[]): { title: string; items: string[] }[]
       out.push(cur);
       continue;
     }
-    if (cur && /^\* /.test(line)) cur.items.push(line.trim());
+    if (cur && /^\* /.test(line)) {
+      cur.items.push(line.trim());
+      continue;
+    }
+    // 缩进续行：接到上一条目（保留原缩进，markdown 的嵌套靠它）
+    if (cur && cur.items.length > 0 && /^ {2,}\S/.test(line)) {
+      const last = cur.items.length - 1;
+      cur.items[last] += `\n${line.replace(/\s+$/, "")}`;
+    }
   }
   return out.filter((s) => s.items.length > 0);
 }
@@ -342,8 +355,11 @@ export function buildChangelogSection(
   const titles = [...buckets.keys()].sort((a, b) => rank(a) - rank(b));
   const body = titles.map((t) => `### ${t}\n\n${buckets.get(t)!.join("\n")}`).join("\n\n");
   const enc = (t: string): string => t.replace(/\+/g, "%2B");
+  // 只在起点确实比终点旧时拼区间链接：sinceAt < curAt（市场已上架版本比仓库 Latest 新，
+  // 同主号不同 build 段时 coreDowngrade 拦不住）下拼出来的是反向链接，与只含终点段的正文不符，
+  // 那时退回终点段自己的链接。
   const url =
-    sinceAt >= 0 && sinceAt !== curAt
+    sinceAt > curAt
       ? `https://github.com/${repo}/compare/${enc(`v${sinceVersion}`)}...${enc(`v${currentVersion}`)}`
       : sections[curAt].url;
   if (range.length > 1) {

@@ -86,6 +86,36 @@ test("首次上架（市场无已上架版本）只取 Latest 那一段", () => 
   assert.equal(got.url, cmp("1.0.4+dsh-0.2.0-rc.2", "1.0.5+dsh-0.2.0-rc.2"));
 });
 
+test("多行条目：缩进续行跟着条目一起保留，不被丢掉", () => {
+  // 生成器的 list() 会把多行条目的非首行前缀两空格（BREAKING CHANGE 这类 note 走这条），
+  // 只认 `* ` 会把迁移/破坏性变更的细节丢掉。
+  const text = [
+    "# Changelog",
+    "",
+    "## [1.0.5+dsh-0.2.0-rc.2](https://x/cmp/v1.0.4...v1.0.5) (2026-10-10)",
+    "",
+    "### Bug Fixes",
+    "",
+    "* **api:** 重命名入口 ([fffffff](https://x/fffffff))",
+    "  BREAKING CHANGE: 旧入口不再导出",
+    "  迁移：改调 createApp()",
+    "",
+  ].join("\n");
+  const got = buildChangelogSection(text, "1.0.5+dsh-0.2.0-rc.2", null, REPO);
+  assert.ok(got.body.includes("fffffff"), "条目本身要在");
+  assert.ok(got.body.includes("BREAKING CHANGE: 旧入口不再导出"), "缩进续行要被保留");
+  assert.ok(got.body.includes("迁移：改调 createApp()"), "后续续行也要保留");
+});
+
+test("区间起点比终点新时退回终点段自己的链接，不拼反向 compare", () => {
+  // 市场已上架版本比仓库 Latest 新（同主号不同 build 段时 coreDowngrade 拦不住）：
+  // 正文只含终点段，链接就不该指向 since→current 那个反向区间。
+  const got = buildChangelogSection(CHANGELOG, "1.0.2+dsh-0.2.0-rc.2", "1.0.5+dsh-0.2.0-rc.2", REPO);
+  assert.ok(got.body.includes("eee5555") && !got.body.includes("aaa1111"), "正文只含终点那段");
+  assert.equal(got.url, "https://github.com/Nyasers/DSHana/compare/v1.0.1%2Bdsh-0.2.0-rc.2...v1.0.2%2Bdsh-0.2.0-rc.2");
+  assert.ok(!got.url.includes("v1.0.5"), "不该拼出反向链接");
+});
+
 test("Latest 段不在 CHANGELOG 里时返回 null（调用方省掉该段）", () => {
   assert.equal(buildChangelogSection(CHANGELOG, "9.9.9+dsh-0.2.0-rc.2", "1.0.2+dsh-0.2.0-rc.2", REPO), null);
 });
