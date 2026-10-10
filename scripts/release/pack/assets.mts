@@ -212,59 +212,83 @@ export function platformAssetsFor(lockText: string, spec: TargetSpec): string[] 
  *
  * 分开报而不是合成一类：两者成因不同（前者是我们的窄化没生效，后者是 pnpm 的能力边界），
  * 处理方式也不同（拒包 vs 补删）。
+ *
+ * **整棵树都扫**：hoisted 布局下版本冲突会把包压在依赖者自己的 `node_modules` 下（顶层一份都没有），
+ * 只看顶层会漏掉它们——漏掉的 foreign 是静默放过一个别的平台的原生件，漏掉的 staleLibc 是一份白带
+ * 的载荷。返回的每一项是相对 `modulesDir` 的路径（`@scope/name`，或嵌套时的
+ * `@scope/name/node_modules/@scope/name`），调用方据此定位。
  */
 export function scanPlatformTree(modulesDir: string, spec: TargetSpec): { foreign: string[]; staleLibc: string[] } {
   const foreign: string[] = [];
   const staleLibc: string[] = [];
-  const inspect = (dir: string, name: string): void => {
-    const manifest = join(dir, "package.json");
-    if (!fs.pathExistsSync(manifest)) return;
-    let pkg: { os?: string[]; cpu?: string[]; libc?: string[] };
+  /** 某个 `node_modules` 目录下的包目录：scoped 包下钻一层，点号条目（pnpm 的账本）不是包。 */
+  const childPackages = (dir: string): { dir: string; name: string }[] => {
+    const out: { dir: string; name: string }[] = [];
+    let dirents: fs.Dirent[];
     try {
-      pkg = fs.readJsonSync(manifest);
+      dirents = fs.readdirSync(dir, { withFileTypes: true });
     } catch {
-      return;
+      return out;
     }
-    if (!pkg.os && !pkg.cpu && !pkg.libc) return;
-    const entry: PlatformEntry = { name, os: pkg.os, cpu: pkg.cpu, libc: pkg.libc };
-    if (!admits(entry.os, spec.os) || !admits(entry.cpu, spec.cpu)) {
-      foreign.push(name);
-      return;
-    }
-    if (!admits(entry.libc, spec.libc)) staleLibc.push(name);
-  };
-  for (const dirent of fs.readdirSync(modulesDir, { withFileTypes: true })) {
-    if (!dirent.isDirectory() || dirent.name.startsWith(".")) continue;
-    if (dirent.name.startsWith("@")) {
-      const scope = join(modulesDir, dirent.name);
-      for (const sub of fs.readdirSync(scope, { withFileTypes: true })) {
-        if (sub.isDirectory()) inspect(join(scope, sub.name), `${dirent.name}/${sub.name}`);
+    for (const dirent of dirents) {
+      if (!dirent.isDirectory() || dirent.name.startsWith(".")) continue;
+      if (dirent.name.startsWith("@")) {
+        const scope = join(dir, dirent.name);
+        let subs: fs.Dirent[];
+        try {
+          subs = fs.readdirSync(scope, { withFileTypes: true });
+        } catch {
+          continue;
+        }
+        for (const sub of subs) {
+          if (!sub.isDirectory() || sub.name.startsWith(".")) continue;
+          out.push({ dir: join(scope, sub.name), name: `${dirent.name}/${sub.name}` });
+        }
+        continue;
       }
-      continue;
+      out.push({ dir: join(dir, dirent.name), name: dirent.name });
     }
-    inspect(join(modulesDir, dirent.name), dirent.name);
-  }
+    return out;
+  };
+  const visit = (dir: string, prefix: string): void => {
+    for (const child of childPackages(dir)) {
+      const label = prefix ? `${prefix}/node_modules/${child.name}` : child.name;
+      const manifest = join(child.dir, "package.json");
+      if (fs.pathExistsSync(manifest)) {
+        let pkg: { os?: string[]; cpu?: string[]; libc?: string[] } | null = null;
+        try {
+          pkg = fs.readJsonSync(manifest);
+        } catch {
+          pkg = null;
+        }
+        if (pkg && (pkg.os || pkg.cpu || pkg.libc)) {
+          const entry: PlatformEntry = { name: label, os: pkg.os, cpu: pkg.cpu, libc: pkg.libc };
+          if (!admits(entry.os, spec.os) || !admits(entry.cpu, spec.cpu)) foreign.push(label);
+          else if (!admits(entry.libc, spec.libc)) staleLibc.push(label);
+        }
+      }
+      visit(join(child.dir, "node_modules"), label);
+    }
+  };
+  visit(modulesDir, "");
   return { foreign, staleLibc };
 }
 
 /**
- * 删掉 libc 不相容的平台变体（glibc 目标下的 musl 件）。
- * 返回删除计数与释放的未压缩字节，供日志。删不掉就留着（不阻断打包）。
+ * 删掉 libc 不相容的平台变体（glibc 目标下的 musl 件）。`paths` 是 scanPlatformTree 报出的相对路径
+ * （可含嵌套层），据此定位真实目录。返回删除计数与释放的未压缩字节，供日志。
+ *
+ * 删除失败不吞：删不掉意味着产物里躺着一个不该在的件，此时出一份「看起来成功」的包比不出包更坏。
+ * 工位在起手处已清空重建（见 index.mts 的打包台纪律），这里面对的是本次刚装出来的树，失败属真异常。
  */
-export function dropStaleLibc(modulesDir: string, names: string[]): { files: number; bytes: number } {
+export function dropStaleLibc(modulesDir: string, paths: string[]): { files: number; bytes: number } {
   const out = { files: 0, bytes: 0 };
-  for (const name of names) {
-    const dir = join(modulesDir, name);
+  for (const rel of paths) {
+    const dir = join(modulesDir, ...rel.split("/"));
     if (!fs.pathExistsSync(dir)) continue;
-    let size = 0;
-    try {
-      size = dirSize(dir);
-      fs.removeSync(dir);
-      out.files += 1;
-      out.bytes += size;
-    } catch {
-      /* 删不掉就留着 */
-    }
+    out.bytes += dirSize(dir);
+    fs.removeSync(dir);
+    out.files += 1;
   }
   return out;
 }

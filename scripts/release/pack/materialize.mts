@@ -59,6 +59,7 @@ export function materializeProdDeps(spec, version: string) {
   // 反向闸二：libc 不相容的变体（glibc 目标下的 musl 件）当删不当拒——pnpm 的
   // supportedArchitectures.libc 在 hoisted 布局下不作用于 optional 传递树（sharp 把 musl 变体
   // 列在 optionalDependencies 里），它们对目标无用且体量不小（libvips 一对约 36 MB）。
+  // 扫描覆盖整棵依赖树（含嵌套 node_modules）；删除失败即中止打包：删不掉说明产物里躺着不该在的件。
   const scan = scanPlatformTree(modules, spec);
   if (scan.foreign.length) {
     throw new Error(`${spec.name} 物化树里混进了别的 os/cpu 的包（supportedArchitectures 窄化没生效）：\n  - ${scan.foreign.join("\n  - ")}`);

@@ -12,11 +12,12 @@
 // 所以它只当「任意一份形态真实的输入」用——真正随包的资产由 pack 那一刻的物化锁决定。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { entryMatchesTarget, lockPlatformEntries, packageManagerClosure, platformAssetsFor } from "../../scripts/release/pack/assets.mts";
+import { dropStaleLibc, entryMatchesTarget, lockPlatformEntries, packageManagerClosure, platformAssetsFor, scanPlatformTree } from "../../scripts/release/pack/assets.mts";
 import { platformTargetNames, supportedTargetNames, targetSpec } from "../../scripts/release/pack/targets.mts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -161,6 +162,83 @@ test("平台树扫描：musl 变体归入 staleLibc（libc 不相容），不进
   assert.ok(entryMatchesTarget(muslVariant, glibc) === false, "musl 变体不该与 glibc 目标相容");
   assert.ok(entryMatchesTarget(glibcVariant, glibc) === true, "glibc 变体应与 glibc 目标相容");
   assert.equal(entryMatchesTarget(foreignOs, glibc), false, "别的 os 不该与 linux 目标相容");
+});
+
+/** 在临时目录里铺一棵依赖树：顶层 + 嵌套（版本冲突时包被压在依赖者下面）。 */
+function makeTree(pkgs) {
+  const root = mkdtempSync(join(tmpdir(), "pack-assets-"));
+  for (const [rel, manifest] of Object.entries(pkgs)) {
+    const dir = join(root, "node_modules", ...rel.split("/"));
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "package.json"), JSON.stringify(manifest));
+  }
+  return root;
+}
+
+/**
+ * 扫描必须覆盖嵌套 node_modules：hoisted 布局下版本冲突会把包压在依赖者自己的 node_modules 下
+ * （顶层一份都没有），只看顶层就会漏掉——漏掉的 foreign 是静默放过别的平台的原生件，漏掉的
+ * staleLibc 是白带的载荷。这里两类各钉一个嵌套样本，并验删完真的从盘上消失。
+ */
+test("平台树扫描下探嵌套 node_modules，dropStaleLibc 按真实路径删除", () => {
+  const glibc = targetSpec("linux-x64");
+  const root = makeTree({
+    // 顶层：该删的 musl 与该留的 glibc
+    "@img/sharp-libvips-linuxmusl-x64": { os: ["linux"], cpu: ["x64"], libc: ["musl"] },
+    "@img/sharp-libvips-linux-x64": { os: ["linux"], cpu: ["x64"], libc: ["glibc"] },
+    // 嵌套：dsh-app-boot 自己的 node_modules（顶层没有同名包，正是扫描失明的形态）
+    "@deepseek-ai/dsh-app-boot/node_modules/node-addon-require-builtin-linux-x64-musl": {
+      os: ["linux"],
+      cpu: ["x64"],
+      libc: ["musl"],
+    },
+    "@deepseek-ai/dsh-app-boot/node_modules/node-addon-require-builtin-linux-x64-gnu": {
+      os: ["linux"],
+      cpu: ["x64"],
+      libc: ["glibc"],
+    },
+    "@deepseek-ai/dsh-app-boot/node_modules/node-addon-require-builtin-darwin-arm64": {
+      os: ["darwin"],
+      cpu: ["arm64"],
+    },
+    // 无平台字段的普通包：两列都不该出现
+    "@deepseek-ai/dsh-app-boot/node_modules/plain-js": { name: "plain-js" },
+  });
+  try {
+    const modulesDir = join(root, "node_modules");
+    const scan = scanPlatformTree(modulesDir, glibc);
+    const nestedMusl = "@deepseek-ai/dsh-app-boot/node_modules/node-addon-require-builtin-linux-x64-musl";
+    assert.deepEqual(
+      [...scan.staleLibc].sort(),
+      ["@img/sharp-libvips-linuxmusl-x64", nestedMusl].sort(),
+      "顶层与嵌套的 musl 变体都该归入 staleLibc",
+    );
+    assert.deepEqual(
+      scan.foreign,
+      ["@deepseek-ai/dsh-app-boot/node_modules/node-addon-require-builtin-darwin-arm64"],
+      "嵌套里别的 os 的包该归入 foreign（顶层无同名包，只有下探才看得见）",
+    );
+    assert.ok(
+      !scan.staleLibc.some((n) => n.endsWith("-gnu")),
+      "glibc 变体不该被当成 staleLibc",
+    );
+
+    const dropped = dropStaleLibc(modulesDir, scan.staleLibc);
+    assert.equal(dropped.files, 2, "顶层与嵌套各删一个");
+    for (const rel of scan.staleLibc) {
+      assert.ok(
+        !existsSync(join(modulesDir, ...rel.split("/"), "package.json")),
+        `${rel} 删除后不该还在盘上`,
+      );
+    }
+    // 该留的还在
+    assert.ok(
+      existsSync(join(modulesDir, "@img/sharp-libvips-linux-x64", "package.json")),
+      "glibc 变体不该被误删",
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("平台资产不包含构建面工具：rspack / rolldown / typescript 的平台件只该出现在仓库锁里", () => {
