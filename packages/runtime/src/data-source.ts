@@ -24,6 +24,10 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { isAbsolute, join, normalize } from "node:path";
 import { appDataDir, getAppRuntime } from "./app-runtime.ts";
 import { APP_SETTING_DEFAULTS, resolveApprovalTimeoutSec, resolveDefaultTimeoutSec } from "./config.ts";
+import {
+  FORCE_FOLLOW_FACES,
+  normalizeForceFollowFaces as normalizeFacesStrict,
+} from "@dshana/shared/face-theme.ts";
 
 export const SETTINGS_VERSION = 1;
 export const SOURCE_MODES = Object.freeze(["private", "shared"]);
@@ -43,6 +47,7 @@ export const SETTINGS_KEYS = Object.freeze([
   "sessionModelProvider",
   "sessionModelModel",
   "sessionModelReasoningEffort",
+  "forceFollowFaces",
 ]);
 export const DEFAULT_SETTINGS = Object.freeze({
   mode: "private",
@@ -54,6 +59,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
   sessionModelProvider: APP_SETTING_DEFAULTS.sessionModelProvider,
   sessionModelModel: APP_SETTING_DEFAULTS.sessionModelModel,
   sessionModelReasoningEffort: APP_SETTING_DEFAULTS.sessionModelReasoningEffort,
+  // 强制跟随宿主主题的面：声明与缺省都住在 shared（见该模块头注），这里只引不复制。
+  // 之所以不落进 config.ts 的 APP_SETTING_DEFAULTS：那份缺省是给**不经过本存储**的消费者用的
+  // （cancel-chain 直读 config.json 的 global.*），这张表没有那样的消费者——设置页与壳页都走
+  // GET /dshana/settings。本表的完整缺省单点就是这里。
+  forceFollowFaces: [...FORCE_FOLLOW_FACES],
 });
 /** 会话模型模式：caller = 按调用方角色卡（缺省），custom = 用固定的一条。 */
 export const SESSION_MODEL_MODES = Object.freeze(["caller", "custom"]);
@@ -132,8 +142,21 @@ function normalizeSessionModel(input) {
 }
 
 /**
+ * 强制跟随宿主主题的面（存储侧的口）：严格口径与词表都在 shared 的 normalizeForceFollowFaces
+ * 里（声明单点），这里只包一层、把缺键当缺省，**不复制规则**。
+ *
+ * 与 normalizeTimeouts / normalizeSessionModel 同一形制：返回一个只含本组键的对象，供
+ * validateSettings 铺进结果。空数组是合法值（显式「一个都不强制」），不得被当成缺省。
+ */
+function normalizeForceFollowFaces(input) {
+  const raw = input.forceFollowFaces;
+  return { forceFollowFaces: normalizeFacesStrict(raw === undefined || raw === null ? [...FORCE_FOLLOW_FACES] : raw) };
+}
+
+/**
  * 设置校验（纯函数）：未知键拒绝、mode 限定、shared 必须是绝对路径、profile 简单名、
- * 两个超时必须是非负整数秒、会话模型模式与自定义选择。
+ * 两个超时必须是非负整数秒、会话模型模式与自定义选择、强制跟随宿主主题的面必须是候选面
+ * （词表外的值/重复项一律拒，见 shared/face-theme.ts）。
  * private 的 profile 被强制为 PRIVATE_PROFILE（内置目录只跑这一个 profile）。
  */
 export function validateSettings(input) {
@@ -154,9 +177,23 @@ export function validateSettings(input) {
       throw new Error("shared 模式必须给出 DSH 数据目录（非空字符串，不含 NUL）");
     }
     if (!isAbsolute(input.path)) throw new Error("shared 目录必须是绝对路径（收到 " + input.path + "）");
-    return { mode: "shared", path: normalize(input.path), profile, ...normalizeTimeouts(input), ...normalizeSessionModel(input) };
+    return {
+      mode: "shared",
+      path: normalize(input.path),
+      profile,
+      ...normalizeTimeouts(input),
+      ...normalizeSessionModel(input),
+      ...normalizeForceFollowFaces(input),
+    };
   }
-  return { mode: "private", path: null, profile, ...normalizeTimeouts(input), ...normalizeSessionModel(input) };
+  return {
+    mode: "private",
+    path: null,
+    profile,
+    ...normalizeTimeouts(input),
+    ...normalizeSessionModel(input),
+    ...normalizeForceFollowFaces(input),
+  };
 }
 
 /**
@@ -186,7 +223,10 @@ function withReadCompat(raw, dataDir) {
   if (!("approvalTimeoutSec" in out)) out.approvalTimeoutSec = resolveApprovalTimeoutSec({ dataDir });
   if (!("defaultTimeoutSec" in out)) out.defaultTimeoutSec = resolveDefaultTimeoutSec({ dataDir });
   delete out.sessionCardDisplay;
-  // 其余键（mode/path/profile）缺省落位；顺序要紧：先补完那两个旧位置的超时，缺哪个补哪个，
+  // forceFollowFaces 是后加的键：存量 settings.json 里没有它，读回来必须补缺省（不抛错）。
+  // 它不需要在这里先占位——最后铺默认时自然落位，而先占位会让 DEFAULT_SETTINGS 的缺省永远读不到。
+  // 显式写了空数组的存档要原样留着（"in" 判定为真，缺省不覆盖它）。
+  // 其余键（mode/path/profile）同样缺省落位；顺序要紧：先补完那两个旧位置的超时，缺哪个补哪个，
   // 然后才铺默认，否则默认会先把键占住、那份兼容值就永远读不到了。
   return { ...DEFAULT_SETTINGS, ...out };
 }

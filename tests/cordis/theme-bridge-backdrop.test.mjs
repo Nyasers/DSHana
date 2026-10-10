@@ -19,7 +19,10 @@
 //     强制面（侧栏）反过来，声明一律带 !important，元素级/属性级请求都不得改写它；
 //     全程不特判任何具体属性名；
 //   · 桥一落地就把壳页垫的内联底色抹掉（内联只有 !important 压得住，留着就把上面那条让位堵死）；
-//   · 侧栏面恒跟随宿主（无视 dsh 自己的 light/dark 偏好），其余面仍遵偏好。
+//   · 哪些面恒跟随宿主（无视 dsh 自己的 light/dark 偏好）由 <html> 的 data-dshana-force-follow
+//     决定（逗号分隔的面名）：属性缺席 = 缺省名单（只有侧栏面），空串 = 一个都不强制——两者
+//     是两回事；名单里的面同时决定覆盖带不带 !important，两处判定共用同一函数；
+//   · 其余面仍遵偏好。
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -30,6 +33,7 @@ import { TOKEN_MAP } from "../../packages/dsh/theme/token-map.ts";
 import { compileRules } from "../../packages/dsh/theme/adapter.ts";
 import { FACE_BACKDROP, VIEW_SEEDS, SEED_TOKEN_KEYS, seedTokensForView, seedsForDshPreference } from "@dshana/ui/seed-tokens.ts";
 import { FACE_VIEWS } from "@dshana/ui/face-role.ts";
+import { FORCE_FOLLOW_ATTR, FORCE_FOLLOW_FACES } from "@dshana/shared/face-theme.ts";
 
 const BRIDGE_SRC = readFileSync(
   new URL("../../packages/dsh/theme/assets/theme-bridge.js", import.meta.url),
@@ -47,7 +51,9 @@ const HOST_VARS = { "--bg": BG, "--sidebar-bg": SIDEBAR_BG };
  * @param backdrop 壳页写在 <html> 的 data-dshana-backdrop（null → 不写该属性）
  * @param options  appearance（宿主明暗）/ preference（dsh 侧偏好，默认 system；显式传 null =
  *                 属性尚未被 presenter 投影，即偏好未知）/ face（壳页写在 <html> 的
- *                 data-dshana-face，null → 不写该属性）
+ *                 data-dshana-face，null → 不写该属性）/ forceFollow（壳页写在 <html> 的
+ *                 data-dshana-force-follow，即强制面名单；不传 → 属性缺席，走缺省兜底；
+ *                 传 "" → 属性存在且为空串，一个面都不强制）
  */
 function runBridge(backdrop, options) {
   const opts = options || {};
@@ -58,6 +64,8 @@ function runBridge(backdrop, options) {
   if (backdrop) attrs["data-dshana-backdrop"] = backdrop;
   if (opts.face) attrs["data-dshana-face"] = opts.face;
   if (opts.appearance) attrs["data-appearance"] = opts.appearance;
+  // 只认字符串：undefined = 属性缺席（桥按缺省兜底），"" = 显式一个都不强制。
+  if (typeof opts.forceFollow === "string") attrs["data-dshana-force-follow"] = opts.forceFollow;
   const rootStyle = new Map();
   const documentElement = {
     getAttribute: (name) => (name in attrs ? attrs[name] : null),
@@ -445,6 +453,103 @@ test("桥：侧栏面恒跟随宿主（无视 dsh 自己的 light/dark 偏好）
   assert.equal(explicitDark.dark, false, "宿主浅色时侧栏面不该挂着深色标记");
 });
 
+// ---- 强制面名单：由 <html> 的 FORCE_FOLLOW_ATTR 决定（缺省 = FORCE_FOLLOW_FACES）----
+// 名单是唯一的那件事：在名单里 ⇒ 恒跟随宿主（无视 dsh 的 light/dark 偏好）+ 覆盖带 !important；
+// 不在 ⇒ 仅 preference=system 时跟随、覆盖不带 !important。缺省名单里只有侧栏面，所以本组
+// 用例的第一条就是「现在的行为一字不变」。
+
+/** 这一面的覆盖是否带 !important（空覆盖 = 门关着，不带）。 */
+function isForcedCover(css) {
+  return css.includes("!important");
+}
+
+test("桥：强制面名单缺席时按缺省兜底——只有侧栏面恒跟随且带 !important，其余面遵偏好、不带", () => {
+  // 缺省 = FORCE_FOLLOW_FACES（缺席是「老页面 / 壳页还没拉到设置」，不是「一个都不强制」）。
+  assert.deepEqual([...FORCE_FOLLOW_FACES], ["sidebar"], "缺省名单该只有侧栏面");
+  const sidebar = runBridge(null, { appearance: "dark", preference: "light", face: "sidebar" });
+  assert.notEqual(sidebar.css, "", "缺省下侧栏面该恒跟随（dsh 显式 light 也照样有覆盖）");
+  assert.equal(isForcedCover(sidebar.css), true, "缺省下侧栏面的覆盖该带 !important");
+  assert.equal(sidebar.colorScheme, "dark", "缺省下侧栏面该对齐宿主明暗");
+  for (const view of FACE_VIEWS) {
+    if (view === "sidebar") continue;
+    const other = runBridge(null, { appearance: "dark", preference: "light", face: view });
+    assert.equal(other.css, "", "缺省下 " + view + " 面在 dsh 显式 light 时该遵偏好、不跟随");
+    assert.equal(other.colorScheme, undefined, "缺省下 " + view + " 面不该留我们的 inline color-scheme");
+    const following = runBridge(null, { appearance: "dark", preference: "system", face: view });
+    assert.notEqual(following.css, "", "缺省下 " + view + " 面在 system 偏好下该跟随");
+    assert.equal(
+      isForcedCover(following.css),
+      false,
+      "缺省下 " + view + " 面不是强制面，覆盖不该带 !important",
+    );
+  }
+});
+
+test("桥：属性显式写成缺省名单（\"sidebar\"）时与缺席同结果", () => {
+  const absent = runBridge(null, { appearance: "dark", preference: "light", face: "sidebar" });
+  const explicit = runBridge(null, {
+    appearance: "dark", preference: "light", face: "sidebar", forceFollow: "sidebar",
+  });
+  assert.equal(explicit.css, absent.css, "显式写缺省名单该与缺席逐字同结果");
+  assert.equal(isForcedCover(explicit.css), true, "显式写缺省名单时侧栏面仍是强制面");
+  assert.equal(explicit.colorScheme, absent.colorScheme, "明暗对齐也该一致");
+});
+
+test("桥：属性写成空串时一个面都不强制（缺席与空串是两回事）", () => {
+  // 空串 = 用户显式清空了名单：连侧栏面也退回「遵 dsh 偏好」那一档，覆盖不带 !important。
+  const empty = runBridge(null, { appearance: "dark", preference: "light", face: "sidebar", forceFollow: "" });
+  assert.equal(empty.css, "", "空串下侧栏面在 dsh 显式 light 时该遵偏好、不跟随");
+  assert.equal(empty.colorScheme, undefined, "空串下侧栏面不该留我们的 inline color-scheme");
+  // 缺省与空串的差别正在这里：同一个面、同一个偏好，缺席时跟随、空串时不跟随。
+  const absent = runBridge(null, { appearance: "dark", preference: "light", face: "sidebar" });
+  assert.notEqual(absent.css, "", "对照组：缺席时侧栏面该跟随（两者不能合并）");
+  // 偏好为 system 时仍跟随，但力度降到非强制档（不带 !important）。
+  const following = runBridge(null, { appearance: "dark", preference: "system", face: "sidebar", forceFollow: "" });
+  assert.notEqual(following.css, "", "空串只是不强制，system 偏好下该面仍跟随");
+  assert.equal(isForcedCover(following.css), false, "空串下侧栏面不该再带 !important");
+});
+
+test("桥：名单改成 main 时 main 面恒跟随且带 !important，侧栏面退回遵偏好、不带", () => {
+  const mainForced = runBridge(null, { appearance: "dark", preference: "light", face: "main", forceFollow: "main" });
+  assert.notEqual(mainForced.css, "", "main 面进名单后该恒跟随（dsh 显式 light 也照样有覆盖）");
+  assert.equal(isForcedCover(mainForced.css), true, "main 面进名单后覆盖该带 !important");
+  assert.equal(mainForced.colorScheme, "dark", "main 面进名单后该对齐宿主明暗");
+  const sidebarOff = runBridge(null, { appearance: "dark", preference: "light", face: "sidebar", forceFollow: "main" });
+  assert.equal(sidebarOff.css, "", "名单换成 main 后侧栏面该退回遵偏好、不跟随");
+  assert.equal(sidebarOff.colorScheme, undefined, "侧栏面退回后不该留我们的 inline color-scheme");
+});
+
+test("桥：名单写成 sidebar,stream 时两面都强制", () => {
+  for (const face of ["sidebar", "stream"]) {
+    const forced = runBridge(null, {
+      appearance: "dark", preference: "light", face, forceFollow: "sidebar,stream",
+    });
+    assert.notEqual(forced.css, "", face + " 面在名单里该恒跟随");
+    assert.equal(isForcedCover(forced.css), true, face + " 面在名单里该带 !important");
+    assert.equal(forced.colorScheme, "dark", face + " 面该对齐宿主明暗");
+  }
+  // 名单外的面照旧：不在名单里就不强制。
+  const outside = runBridge(null, { appearance: "dark", preference: "light", face: "main", forceFollow: "sidebar,stream" });
+  assert.equal(outside.css, "", "名单外的 main 面该遵偏好、不跟随");
+});
+
+test("桥：壳页中途写属性（模拟拉到设置）后经 observer 重算，门跟着翻", () => {
+  // 起点：属性还没到（壳页拉设置与 DSH boot 并行），侧栏面按缺省恒跟随。
+  const bridge = runBridge(null, { appearance: "dark", preference: "light", face: "sidebar" });
+  assert.notEqual(bridge.css, "", "起点该按缺省跟随");
+  assert.equal(isForcedCover(bridge.css), true, "起点该是强制档");
+  // 壳页拉到设置：显式清空名单 → observer 该重算，门翻过去（连覆盖一起撤）。
+  bridge.setRootAttr(FORCE_FOLLOW_ATTR, "");
+  bridge.fireObservers();
+  assert.equal(bridge.css, "", "名单清空后该重算并退出跟随");
+  // 再写回一份把 main 放进去的名单 → main 面该接管（属性一变就重算，无轮询）。
+  bridge.setRootAttr("data-dshana-face", "main");
+  bridge.setRootAttr(FORCE_FOLLOW_ATTR, "main");
+  bridge.fireObservers();
+  assert.notEqual(bridge.css, "", "名单改成 main 后该重算并跟随");
+  assert.equal(isForcedCover(bridge.css), true, "重算后的 main 面该是强制档");
+});
+
 test("桥：壳页认面修正后（<html> 的 face 变了）桥跟着重算门", () => {
   // 壳页的面初值取自页面静态声明；宿主 slot 才认出来的面要到 begin() 才写出来（seedDshTokens →
   // publishFace）。桥要能看见那一笔，否则未声明面的 FP 会一直按 default 的门走。
@@ -490,15 +595,22 @@ test("壳页确实把这一面的底座 token 与宿主明暗写上了（桥的�
   assert.ok(SHELL_SRC.includes("data-dshana-face"), "壳页没写 data-dshana-face");
   assert.ok(BRIDGE_SRC.includes("data-dshana-face"), "桥没读 data-dshana-face");
   // 桥不另立一份面词表：面词表只有 face-role.ts 那一处（壳页经 isFaceView 校验后写属性），
-  // 桥只比对「恒跟随的那个面」这一个字面量，不枚举词表、也不按底色 token 反推面。
+  // 桥只按 <html> 上的名单比对面名，不枚举词表、也不按底色 token 反推面。唯一允许出现的
+  // 面名字面量是缺省名单本身（= FORCE_FOLLOW_FACES，属性缺席时的兜底）；别的面名一律不许
+  // 写死在桥里，否则「哪些面强制跟随」就有了第二个事实源。
   for (const view of FACE_VIEWS) {
-    if (view === "sidebar") continue;
+    if (FORCE_FOLLOW_FACES.includes(view)) continue;
     assert.equal(
       BRIDGE_SRC.includes('"' + view + '"'),
       false,
       "桥里出现了面名 " + view + "：面词表该只有 face-role.ts 那一处事实源",
     );
   }
+  // 名单从属性读：桥得认 FORCE_FOLLOW_ATTR 这个属性名（壳页写它、桥跟着重算）。
+  assert.ok(
+    BRIDGE_SRC.includes(FORCE_FOLLOW_ATTR),
+    "桥没读 " + FORCE_FOLLOW_ATTR + "（强制面名单该从 <html> 的属性读）",
+  );
   // 单一事实源：壳页写的面就是它认出来的那一面（seedView），不另立词表；
   // 且这次写入发生在顶层（注入可能早于首次主题载荷那次 seedDshTokens）。
   assert.match(SHELL_SRC, /setAttribute\("data-dshana-face", seedView\)/, "壳页该写这一面的面名");

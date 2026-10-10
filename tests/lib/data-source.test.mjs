@@ -43,6 +43,8 @@ const SESSION_DEFAULTS = {
   sessionModelModel: "",
   sessionModelReasoningEffort: "",
 };
+// 强制跟随宿主主题的面缺省：只有侧栏面（与 shared/face-theme.ts 的 FORCE_FOLLOW_FACES 同源）
+const FACE_FOLLOW_DEFAULTS = { forceFollowFaces: ["sidebar"] };
 test("validateSettings: private 默认落位，profile 被强制为内置名", () => {
   assert.deepEqual(validateSettings({ mode: "private", path: null, profile: "whatever" }), {
     mode: "private",
@@ -50,6 +52,7 @@ test("validateSettings: private 默认落位，profile 被强制为内置名", (
     profile: PRIVATE_PROFILE,
     ...TIMEOUT_DEFAULTS,
     ...SESSION_DEFAULTS,
+    ...FACE_FOLLOW_DEFAULTS,
   });
   assert.deepEqual(validateSettings({ mode: "private" }), {
     mode: "private",
@@ -57,6 +60,7 @@ test("validateSettings: private 默认落位，profile 被强制为内置名", (
     profile: PRIVATE_PROFILE,
     ...TIMEOUT_DEFAULTS,
     ...SESSION_DEFAULTS,
+    ...FACE_FOLLOW_DEFAULTS,
   });
   assert.deepEqual(DEFAULT_SETTINGS, {
     mode: "private",
@@ -64,6 +68,7 @@ test("validateSettings: private 默认落位，profile 被强制为内置名", (
     profile: PRIVATE_PROFILE,
     ...TIMEOUT_DEFAULTS,
     ...SESSION_DEFAULTS,
+    ...FACE_FOLLOW_DEFAULTS,
   });
 });
 
@@ -199,6 +204,7 @@ test("store.write: 原子落盘 + revision 递增 + lastShared 记录（不留 .
       profile: PRIVATE_PROFILE,
       ...TIMEOUT_DEFAULTS,
       ...SESSION_DEFAULTS,
+      ...FACE_FOLLOW_DEFAULTS,
     });
   });
 });

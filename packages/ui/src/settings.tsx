@@ -28,9 +28,11 @@ import {
   SettingsPage,
   SettingsSection,
   TextInput,
+  Toggle,
 } from "@hana/plugin-components/settings";
 import type { SelectOption } from "@hana/plugin-components/settings";
 import "@hana/plugin-components/settings.css";
+import { FORCE_FOLLOW_CANDIDATES, FORCE_FOLLOW_FACES } from "@dshana/shared/face-theme.ts";
 import { followHostTheme } from "./host-theme.ts";
 
 // ---- 主题跟随 ----
@@ -124,6 +126,40 @@ const SESSION_MODES: SelectOption[] = [
 ];
 
 /** 会话模型设置读回：模式 + 自定义那条（合成 provider\0model，与 modelOptions 同一写法）。 */
+// ---- 主题：强制跟随宿主主题的面 ----
+// 候选面与缺省都来自 shared/face-theme.ts（声明单点），这里只补人话标签——面名是内部词
+// （default/main/sidebar/stream），直接摆给用户看没有意义。
+const FACE_LABELS: Record<string, string> = {
+  default: "整幅 / 拆窗",
+  main: "主卡",
+  sidebar: "功能面板（侧栏）",
+  stream: "会话卡",
+};
+
+/** 面的人话名；词表外（后端脏值）原样回退成面名，不吞掉线索。 */
+function faceLabel(face: string): string {
+  return FACE_LABELS[face] || face;
+}
+
+/**
+ * 读回这张表：形状不对（缺键 / 非数组 / 含词表外的值 / 重复项）时返回缺省。
+ * 与后端 normalizeForceFollowFaces 的严格口径不同：读侧不报错、也不把脏值当值用——
+ * 设置页要能渲染出来，脏值只该让它显示缺省（用户再一保存就会被后端拒，从而看见原因）。
+ * 空数组是合法值，必须原样保留（显式「一个都不强制」，不能被当成缺省）。
+ */
+function forceFollowOf(settings: any): string[] {
+  const raw = settings && settings.forceFollowFaces;
+  if (!Array.isArray(raw)) return [...FORCE_FOLLOW_FACES];
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string" || !(FORCE_FOLLOW_CANDIDATES as readonly string[]).includes(item) || out.includes(item)) {
+      return [...FORCE_FOLLOW_FACES];
+    }
+    out.push(item);
+  }
+  return out;
+}
+
 function sessionOf(settings: any): { mode: string; picked: string; effort: string } {
   const provider = typeof settings?.sessionModelProvider === "string" ? settings.sessionModelProvider : "";
   const model = typeof settings?.sessionModelModel === "string" ? settings.sessionModelModel : "";
@@ -149,6 +185,11 @@ function App() {
   const [sessionSaved, setSessionSaved] = useState(false);
   const [sessionHint, setSessionHint] = useState("");
   const [sessionWarn, setSessionWarn] = useState(false);
+  const [faces, setFaces] = useState<string[]>(() => [...FORCE_FOLLOW_FACES]);
+  const [facesSaving, setFacesSaving] = useState(false);
+  const [facesSaved, setFacesSaved] = useState(false);
+  const [facesHint, setFacesHint] = useState("");
+  const [facesWarn, setFacesWarn] = useState(false);
   const [model, setModel] = useState<any>(null); // 最近一次读回的模型候选（{catalog:{groups}} 或 {error}）
   const alive = useRef(true);
 
@@ -168,6 +209,7 @@ function App() {
       setSessionMode(sess.mode);
       setCustomPicked(sess.picked);
       setSessionEffort(sess.effort);
+      setFaces(forceFollowOf(data && data.settings));
       setCfgRevision(data && typeof data.revision === "number" ? data.revision : null);
       setCfgHint("");
       setCfgWarn(false);
@@ -293,6 +335,37 @@ function App() {
     }
   };
 
+  // 保存这一区块：只回写这一个键。后端写面是 store.write({ ...cur.settings, ...patch }) 的合并写
+  // （packages/tools/src/routes/dshana-routes.ts 的 writeSettings），所以不必把整份设置背回来——
+  // 共用 revision 的风险在「键缺失被当缺省」，而 patch 只含本键，别的键一律不经过这次请求。
+  const saveFaces = async () => {
+    setFacesSaving(true);
+    setFacesHint("");
+    setFacesWarn(false);
+    try {
+      const { res, data } = await readJson("dshana/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ settings: { forceFollowFaces: faces }, expectedRevision: cfgRevision ?? undefined }),
+      });
+      if (res.status === 409) {
+        setFacesWarn(true);
+        setFacesHint("设置已被别处改过，已刷新。");
+        await loadConfig();
+        return;
+      }
+      if (!res.ok || !data || data.ok !== true) throw new Error((data && data.error) || "HTTP " + res.status);
+      setFaces(forceFollowOf(data.settings)); // 以后端返回的生效值为准
+      if (typeof data.revision === "number") setCfgRevision(data.revision);
+      setFacesSaved(true);
+    } catch (e) {
+      setFacesHint("保存失败：" + errText(e));
+      setFacesWarn(true);
+    } finally {
+      setFacesSaving(false);
+    }
+  };
+
   const modelOpts = modelOptions(model);
   const sessionSel = splitPicked(customPicked);
   const sessionEffortOptions: SelectOption[] = effortsOf(model, sessionSel.provider, sessionSel.model).map((e) => ({
@@ -399,6 +472,45 @@ function App() {
               labels={{ idle: "保存", saving: "保存中", saved: "已保存" }}
               onSavedFeedbackEnd={() => setSessionSaved(false)}
               onClick={() => void saveSession()}
+            />
+          }
+        />
+      </SettingsSection>
+
+      <SettingsSection
+        title="主题"
+        description="勾上的面恒跟随宿主主题：无视 DSH 自己的明暗偏好，且覆盖带 !important（插件改写不了）。没勾的面只在 DSH 偏好为 system 时跟随，并把覆盖让给插件请求——壁纸这类整屏层因此能透出来。缺省只勾「功能面板（侧栏）」：它整幅嵌在宿主框架里，四周都是宿主色，用 DSH 自己的明暗会与四周不同调。"
+      >
+        {FORCE_FOLLOW_CANDIDATES.map((face) => (
+          <SettingRow
+            key={face}
+            label={faceLabel(face)}
+            hint={face === "sidebar" ? "缺省勾选：这一面整幅嵌在宿主框架里，必须与四周同调。" : undefined}
+            control={
+              <Toggle
+                ariaLabel={"强制跟随宿主主题：" + faceLabel(face)}
+                checked={faces.includes(face)}
+                onChange={(on) => {
+                  const next = new Set(faces);
+                  if (on) next.add(face);
+                  else next.delete(face);
+                  // 一律按候选表顺序回写：勾选顺序不进存储，读回来也不会因先后而变。
+                  setFaces(FORCE_FOLLOW_CANDIDATES.filter((f) => next.has(f)));
+                }}
+              />
+            }
+          />
+        ))}
+        <SettingRow
+          label=""
+          hint={facesHint || undefined}
+          hintVariant={facesWarn ? "warn" : "default"}
+          control={
+            <SaveButton
+              status={facesSaving ? "saving" : facesSaved ? "saved" : "idle"}
+              labels={{ idle: "保存", saving: "保存中", saved: "已保存" }}
+              onSavedFeedbackEnd={() => setFacesSaved(false)}
+              onClick={() => void saveFaces()}
             />
           }
         />

@@ -20,6 +20,7 @@ import { injectDshIndex, installTransport, type DshTransport } from "./dsh-injec
 import { isFaceView, roleForView } from "./face-role.ts";
 import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPreference } from "./seed-tokens.ts";
 import { followHostTheme } from "./host-theme.ts";
+import { publishForceFollow, publishForceFollowOnVisible } from "./force-follow.ts";
 import {
   SURFACE_API,
   SURFACE_MISSING,
@@ -491,6 +492,14 @@ import {
     } catch (e) { /* 忽略 */ }
   }
   publishFace();
+  // 「哪些面强制跟随宿主主题」这张表也从设置搬到 <html> 上（packages/ui/src/force-follow.ts）：
+  // 桥读同一处属性判强制面。**不能**在这里等它落地——拉取是异步的，而 DSH 注入可能更早；
+  // 拉不到就不写属性，桥按缺省（只有侧栏面）兜底，也就是这一功能之前的行为。
+  // 顶层的这次调用与 DSH boot 并行，晚到只让桥重算一轮（属性在桥的观察名单里）。
+  void publishForceFollow();
+  // 改完设置切回卡片即生效：宿主 App 存储没有订阅口（见 settings.tsx 同一处说明），
+  // 已开的页面在重新可见时自己重读。
+  publishForceFollowOnVisible();
   // 撤垫片：按 token 名单抹自定义属性，另加 body 自身的 background-color（为压住 DSH 首帧样式里
   // 那句 `body{background-color:#151517}` 而写的实色）。与主题桥抹的是同一份名单。
   function clearSeedTokens() {

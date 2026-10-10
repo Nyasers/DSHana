@@ -102,7 +102,8 @@
   // 覆盖用的选择器：html body 与 html body[data-ds-dark-theme] 共用一张声明表（选择器列表 =
   // 两条同声明的规则）。为什么是这个形状（都是机制层的事实，与任何具体插件无关）：
   //   · 力度分两档，选择器形状只此一种（!important 本来就压过一切普通声明，不需要另一套选择器）：
-  //     强制面（侧栏）带 !important——那一面的跟随是强制的，任何元素级/属性级请求都不得改写它；
+  //     强制面（名单由壳页写在 <html> 上，缺省只有侧栏）带 !important——那一面的跟随是强制的，
+  //     任何元素级/属性级请求都不得改写它；
   //     其余面不带——靠特异性赢 dsh 调色板，并把「后手按元素/属性请求改写同一格」的路让出去
   //     （例如让整屏层露出来的透明请求）。
   //   · 也不用裸 body：DSH 的调色板在 body 与 body[data-ds-dark-theme] 上同格声明，且**排在
@@ -114,8 +115,8 @@
   function applyOrRemove() {
     var st = document.getElementById("@dshana/dsh-theme-dyn");
     if (followHost() && cur) {
-      // 强制面（侧栏）：跟随是强制的，那一面的声明带 !important，任何元素级/属性级请求都改写不了它。
-      var forced = faceName() === "sidebar";
+      // 强制面：跟随是强制的，那一面的声明带 !important，任何元素级/属性级请求都改写不了它。
+      var forced = isForcedFace();
       var rules = cssOf(cur, forced);
       if (!st) { st = document.createElement("style"); st.id = "@dshana/dsh-theme-dyn"; document.head.appendChild(st); }
       st.textContent = "html body,html body[data-ds-dark-theme]{" + rules.css + "}";
@@ -170,8 +171,8 @@
   // presenter，它自己会写），只把壳页垫片撤掉。偏好未知时（presenter 的属性与壳页推送都还没
   // 到）一律不动手：此刻抹垫片等于把首帧交回 dsh 的 boot 样式，而它认的是**浏览器系统**——
   // 宿主浅 + 系统深就是那一帧黑屏。
-  // 例外是**恒跟随的面**（侧栏）：它的门本来就恒开，等偏好已知只是把明暗对齐白白推迟到插件
-  // 就位（那一段里 presenter 会按浏览器系统先挂一次 data-ds-dark-theme）。
+  // 例外是**恒跟随的面**（强制面名单里的面，缺省只有侧栏）：它的门本来就恒开，等偏好已知只是把
+  // 明暗对齐白白推迟到插件就位（那一段里 presenter 会按浏览器系统先挂一次 data-ds-dark-theme）。
   function syncHostScheme() {
     var root = null;
     try { root = document.documentElement; } catch (e) { return; }
@@ -232,11 +233,43 @@
       return document.documentElement.getAttribute("data-dshana-face") || null;
     } catch (e) { return null; }
   }
+  // 缺省强制面：只有侧栏面（它整幅嵌在宿主框架里，用 dsh 自己的明暗会与四周不同调）。
+  // 这是本文件唯一一处面名字面量：面词表的事实源在壳页（packages/ui/src/face-role.ts），
+  // 桥不枚举词表，只比对属性给出的名单。
+  var DEFAULT_FORCE_FOLLOW = ["sidebar"];
+  // 读壳页写在 <html> 上的强制面名单（逗号分隔；属性名见 packages/shared/src/face-theme.ts
+  // 的 FORCE_FOLLOW_ATTR）。
+  // 属性**缺席**（getAttribute 返回 null）→ 缺省表；属性**存在**→ 按逗号切分，空串 = 一个都不强制。
+  // 缺席与空串是两回事：缺席是「老页面 / 壳页还没拉到设置」，空串是用户显式清空了名单。
+  function forceFollowFaces() {
+    var raw;
+    try { raw = document.documentElement.getAttribute("data-dshana-force-follow"); }
+    catch (e) { return DEFAULT_FORCE_FOLLOW; }
+    if (raw === null) return DEFAULT_FORCE_FOLLOW;
+    var out = [];
+    var parts = String(raw).split(",");
+    for (var i = 0; i < parts.length; i++) {
+      var name = parts[i].replace(/^\s+|\s+$/g, "");
+      if (name) out.push(name);
+    }
+    return out;
+  }
+  // 这一面是不是强制面：在名单里 ⇒ 恒跟随宿主 + 覆盖带 !important；不在 ⇒ 遵 dsh 偏好、不带。
+  // followHost 的门与 applyOrRemove 的力度共用本函数，免得两处各写一遍走岔。
+  function isForcedFace() {
+    var name = faceName();
+    if (!name) return false;
+    var faces = forceFollowFaces();
+    for (var i = 0; i < faces.length; i++) {
+      if (faces[i] === name) return true;
+    }
+    return false;
+  }
   function followHost() {
-    // 侧栏面恒跟随：它整幅嵌在宿主框架里，用 dsh 自己的明暗会与四周不同调。
+    // 强制面恒跟随：它整幅嵌在宿主框架里，用 dsh 自己的明暗会与四周不同调。
     // 其余面：仅在**已知且明确**偏好为 system 时跟随；已知为 light/dark 时完全原生；
     // 尚未得知偏好时不动手（等壳页首次推送）。
-    if (faceName() === "sidebar") return true;
+    if (isForcedFace()) return true;
     return prefKnown && pref === "system";
   }
   // 从文档根读取并应用；读到有效变量返 true。
@@ -296,10 +329,11 @@
     var mo = new MutationObserver(function () { pull(); });
     mo.observe(document.documentElement, {
       attributes: true,
-      // data-dshana-face / -backdrop 也听：壳页认面修正时会改写它们，而跟随门与底座取值都读这两格。
+      // data-dshana-face / -backdrop / -force-follow 也听：壳页认面修正、拉到设置时都会改写它们，
+      // 而跟随门（面的名单）与底座取值都读这三格。
       attributeFilter: [
         "data-theme", "data-appearance", "data-dsh-theme-preference", "style",
-        "data-dshana-face", "data-dshana-backdrop",
+        "data-dshana-face", "data-dshana-backdrop", "data-dshana-force-follow",
       ],
     });
     var watchBody = function () {

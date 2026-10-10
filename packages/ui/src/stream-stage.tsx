@@ -19,6 +19,7 @@ import { injectDshIndex, installTransport, type DshTransport } from "./dsh-injec
 import { roleForView } from "./face-role.ts";
 import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPreference } from "./seed-tokens.ts";
 import { followHostTheme } from "./host-theme.ts";
+import { publishForceFollow, publishForceFollowOnVisible } from "./force-follow.ts";
 import {
   SURFACE_API,
   dropShared,
@@ -346,5 +347,10 @@ export function mountStreamStage(stageEl: HTMLElement): void {
     onApplied: () => seedDshTokens(),
     onStylesApplied: () => pushThemeNow(),
   });
+  // 「哪些面强制跟随宿主主题」这张表也搬上 <html>（packages/ui/src/force-follow.ts）：会话卡的
+  // 重型半（取出到黑板 / 拆窗）要注入 DSH，因此与壳页同一套——拉不到就不写属性，桥按缺省兜底。
+  // 重新可见时重读：改完设置切回卡片即生效（宿主 App 存储没有订阅口）。
+  void publishForceFollow();
+  publishForceFollowOnVisible();
   createRoot(stageEl).render(<App />);
 }
