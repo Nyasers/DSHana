@@ -3,7 +3,8 @@
 //
 // tests/build/market-pr-changelog.test.mjs — 投稿 PR 正文的 Changelog 段拼装（scripts/release/market-pr.mts）
 //
-// 守一件事：Changelog 段取的是 **上次已上架版本 → 本次版本** 这个区间，不是单版本段。
+// 守两件事：Changelog 段取的是 **市场当前版本 → 仓库 Latest** 这个区间（不是单版本段），
+// 且区间两端都取自外部事实。
 // 市场只按 approvals 的记录读 Release，上次登记之后直接跳过的那几版从没进过任何 PR 正文，
 // 只列本次会把它们丢掉（上游 #30 就是把 v1.0.3 并进 v1.0.4 那段）。
 // 这条只有「跳版本」时才看得出差别，所以夹具必须跨版本；不依赖仓库当前版本恰好没跳。
@@ -49,14 +50,14 @@ const CHANGELOG = [
   "",
 ].join("\n");
 
-test("跳版本时并入中间各版本：本次到上次已上架之间的段合成一条", () => {
-  // 已上架 1.0.2，本次 1.0.5 → 中间跳了 1.0.3、1.0.4，三段都要进
+test("跳版本时并入中间各版本：市场当前到仓库 Latest 之间的段合成一条", () => {
+  // 市场已上架 1.0.2，仓库 Latest 是 1.0.5 → 中间跳了 1.0.3、1.0.4，三段都要进
   const got = buildChangelogSection(CHANGELOG, "1.0.5+dsh-0.2.0-rc.2", "1.0.2+dsh-0.2.0-rc.2", REPO);
   assert.ok(got, "应产出 Changelog 段");
   for (const commit of ["aaa1111", "bbb2222", "ccc3333", "ddd4444"]) {
     assert.ok(got.body.includes(commit), `跳过的版本段条目应并入：${commit} 不在正文里`);
   }
-  assert.ok(!got.body.includes("eee5555"), "已上架版本的段不该再进（它是区间起点，不是区间内容）");
+  assert.ok(!got.body.includes("eee5555"), "市场当前版本的段不该再进（它是区间起点，不是区间内容）");
 });
 
 test("跳版本时 compare 链接按区间拼，不照抄相邻版本", () => {
@@ -72,19 +73,19 @@ test("同一分节跨版本归并成一个标题，条目从新到旧", () => {
   assert.ok(got.body.indexOf("### Features") < got.body.indexOf("### Bug Fixes"), "Features 在 Bug Fixes 之前");
 });
 
-test("未跳版本时只取本次段，链接用 CHANGELOG 自己的那对相邻版本", () => {
+test("未跳版本时只取 Latest 那一段，链接用 CHANGELOG 自己的那对相邻版本", () => {
   const got = buildChangelogSection(CHANGELOG, "1.0.5+dsh-0.2.0-rc.2", "1.0.4+dsh-0.2.0-rc.2", REPO);
   assert.ok(got.body.includes("aaa1111") && got.body.includes("bbb2222"));
   assert.ok(!got.body.includes("ccc3333"), "1.0.4 段是区间起点，不该并入");
   assert.equal(got.url, cmp("1.0.4+dsh-0.2.0-rc.2", "1.0.5+dsh-0.2.0-rc.2"));
 });
 
-test("首次上架（无已上架版本）只取本次段", () => {
+test("首次上架（市场无已上架版本）只取 Latest 那一段", () => {
   const got = buildChangelogSection(CHANGELOG, "1.0.5+dsh-0.2.0-rc.2", null, REPO);
   assert.ok(got.body.includes("aaa1111") && !got.body.includes("ccc3333"));
   assert.equal(got.url, cmp("1.0.4+dsh-0.2.0-rc.2", "1.0.5+dsh-0.2.0-rc.2"));
 });
 
-test("本次版本段不在 CHANGELOG 里时返回 null（调用方省掉该段）", () => {
+test("Latest 段不在 CHANGELOG 里时返回 null（调用方省掉该段）", () => {
   assert.equal(buildChangelogSection(CHANGELOG, "9.9.9+dsh-0.2.0-rc.2", "1.0.2+dsh-0.2.0-rc.2", REPO), null);
 });

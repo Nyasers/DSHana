@@ -20,7 +20,8 @@
 //   标题 `chore: approve <kind>/<id> <tag>`；
 //   正文 = Release / SHA-256（+ 有则 Changes）几行 + 一行本地核对说明 + Changelog 段。
 //   · Changes 只用于声明**权限变更等重要变更**，由 --changes 现给；其余「改了什么」下沉到 Changelog
-//     段——取自本仓 CHANGELOG.md 的本版本段（含各提交链接），不在这里另写一份，也就不会与它漂移。
+//     段——取自本仓 CHANGELOG.md 的**区间**（含各提交链接），不在这里另写一份，也就不会与它漂移。
+//     区间两端都取自外部事实：起点是市场当前版本（已上架索引），终点是仓库 Latest。
 //   · 图标预览、截图、自测报告几栏是作者按维护者要求补的审阅材料（见上游 CONTRIBUTING 第 3 节），
 //     不由脚本生成：脚本出的是可提交的骨，这几栏按 PR 当期情况手补。
 //
@@ -213,11 +214,22 @@ function publishedIndex(
   }
 }
 
+/** 仓库 Latest 的 tag（`gh release view` 不带 tag 即 GitHub 标 Latest 的那个）；读不到返回 null。
+ *  Changelog 段的**终点**取它，而不是本地 manifest 的版本：端点应当是仓库真实发布出来的事实。 */
+function repoLatestTag(repo: string): string | null {
+  try {
+    const tag = exec("gh", ["release", "view", "--repo", repo, "--json", "tagName", "--jq", ".tagName"]);
+    return tag || null;
+  } catch {
+    return null;
+  }
+}
+
 /** 出正文前补身份与版本：条目里的 publisher 要跟登记一致；版本主号不得往回打。带 pre 段的完整排序不在
  *  本地重造——市场侧的 historyFor 会据已上架索引拒降级，而那道闸跑在 PR 检查里。
  *
  *  返回**已上架的那个版本**（读不到索引、首次上架、或该 kind 无版本号时为 null）：它同时是 Changelog 段
- *  的区间起点——上次登记到现在跳过的那几版要并进同一条 PR 的正文，见 changelogSection。 */
+ *  的区间**起点**——上次登记到现在跳过的那几版要并进同一条 PR 的正文，见 changelogSection。 */
 function preflightPublished(enr: Enrollment, version: string, entryPublisher: string): string | null {
   if (entryPublisher && entryPublisher !== enr.publisher) {
     throw new Error(
@@ -292,14 +304,15 @@ function parseSubsections(lines: string[]): { title: string; items: string[] }[]
 const SECTION_ORDER = ["Features", "Bug Fixes", "Performance Improvements"];
 
 /**
- * Changelog 段：取 **上次已上架版本 → 本次版本** 这个区间的改动，中间跳过的版本一并并入。
+ * Changelog 段：取 **市场当前版本 → 仓库 Latest** 这个区间的改动，中间跳过的版本一并并入。
  *
  * 区间而不是单版本，是因为市场只按 approvals 的记录读 Release：上次登记之后直接跳过的那几版
  * 从没出现在任何 PR 正文里，只列本次会把它们丢掉（#30 就是这样把 v1.0.3 并进 v1.0.4 那段的）。
+ * 端点取外部事实：终点 `currentVersion` 是仓库 Latest，起点 `sinceVersion` 是市场已上架版本。
  * 段落按分节归并（同一标题只出一个），条目按版本从新到旧、版本内保持 CHANGELOG 的原序；
- * compare 链接也按区间拼（上次已上架 → 本次），而不是照抄 CHANGELOG 标题里那对相邻版本。
+ * compare 链接也按区间拼（市场当前 → Latest），而不是照抄 CHANGELOG 标题里那对相邻版本。
  *
- * 取不到本次版本段就返回 null，调用方省掉 Changelog 段而不是塞一句内部口吻的占位。
+ * 取不到终点版本段就返回 null，调用方省掉 Changelog 段而不是塞一句内部口吻的占位。
  * 纯函数（文本进、段落出），好让跳版本的合并逻辑能被测试直接钉住。
  */
 export function buildChangelogSection(
@@ -311,7 +324,7 @@ export function buildChangelogSection(
   const sections = parseChangelog(text);
   const curAt = sections.findIndex((s) => s.version === currentVersion);
   if (curAt < 0) return null;
-  // 上次已上架版本比本次旧（在文件里更靠后）→ 区间含它到本次之间的所有版本；否则只取本次
+  // 起点（sinceVersion）比终点旧（在文件里更靠后）→ 区间含它到终点之间的所有版本；否则只取终点
   // （首次上架、读不到索引、或重跑同一版本都是后者）。
   const sinceAt = sinceVersion ? sections.findIndex((s) => s.version === sinceVersion) : -1;
   const end = sinceAt > curAt ? sinceAt : curAt + 1;
@@ -379,7 +392,14 @@ async function main(): Promise<void> {
 
   const title = `chore: approve ${enr.kind}/${enr.id} ${tag}`;
   const releaseUrl = `https://github.com/${enr.repository}/releases/tag/${tag.replace(/\+/g, "%2B")}`;
-  const changelog = changelogSection(version, publishedVersion, enr.repository);
+  // Changelog 段的终点取**仓库 Latest**（外部事实），而不是所选 tag：两者不同时（--tag 指旧版本）
+  // 以 Latest 为准，因为那才是仓库当前发布到的地方。读不到 Latest 时退回所选 tag。
+  const latest = repoLatestTag(enr.repository);
+  const endVersion = latest ? latest.replace(/^v/, "") : version;
+  if (latest && versioned && endVersion !== version) {
+    log(`注意：仓库 Latest 是 ${latest}，与所选 tag ${tag} 不同；Changelog 段按 Latest 取`);
+  }
+  const changelog = changelogSection(endVersion, publishedVersion, enr.repository);
   // Release / SHA-256 是脚本能自证的事实；Changes 只放重要变更（--changes 现给）；其余改了什么归 Changelog 段。
   const body = [
     `Approve the new ${enr.id} ${enr.kind} release.`,
@@ -394,7 +414,7 @@ async function main(): Promise<void> {
 
   if (cliChanges) log("Changes 行取自 --changes");
   else log("未给 --changes：正文不带 Changes 行（它只用于权限变更等重要变更，其余见 Changelog 段）");
-  if (!changelog) log(`注意：CHANGELOG 里没有 ${version} 那一段，正文不带 Changelog 段`);
+  if (!changelog) log(`注意：CHANGELOG 里没有 ${endVersion} 那一段，正文不带 Changelog 段`);
   log("本脚本只出文本：registry/approvals 的改动、推分支与开 PR 在 DSHana 侧完成");
 
   if (outDir) {
