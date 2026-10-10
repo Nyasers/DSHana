@@ -32,6 +32,13 @@ import {
 } from "@dshana/shared/face-theme.ts";
 import { apiFetch } from "./surface-bridge.ts";
 
+/**
+ * 并发拉取的序号闸：焦点 / 可见性 / 广播三条来源各自能起一次拉取，若**先发起**的那次
+ * 晚于后发起的落地，属性会被写回旧名单（写的是不同值，比现值那道闸拦不住），桥据此
+ * 重算一轮、直到下一次触发才纠正。每次发起取一个号，落地时不是最新号就放弃写。
+ */
+let publishSeq = 0;
+
 /** 读设置里的这张表；形状不对（缺键 / 脏值 / 非数组）返回 null，调用方据此不写属性。 */
 function facesOf(settings: any): ForceFollowFace[] | null {
   const raw = settings && settings.forceFollowFaces;
@@ -49,6 +56,7 @@ function facesOf(settings: any): ForceFollowFace[] | null {
  * 返回值 = 是否写成功（false = 取数失败或形状不对，属性保持原样）。
  */
 export async function publishForceFollow(): Promise<boolean> {
+  const seq = ++publishSeq;
   let settings: any = null;
   try {
     const res = await apiFetch("dshana/settings", {
@@ -60,6 +68,8 @@ export async function publishForceFollow(): Promise<boolean> {
   } catch {
     return false; // 凭据缺失 / 网络抖动：不写属性，桥走缺省兜底
   }
+  // 取数期间有更新的一次发起：让位给它，不把旧名单盖回去。
+  if (seq !== publishSeq) return false;
   const faces = facesOf(settings);
   if (!faces) return false;
   const value = encodeForceFollowFaces(faces);
