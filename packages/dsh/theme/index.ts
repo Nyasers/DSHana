@@ -22,9 +22,13 @@
 //   读不到就永远停在 system 把 UI 钉住）。
 //
 // 机制：经 dsh-host-webserver 的 tapIndex 扩展点，向每个 index 响应注入动态桥脚本：
-//   桥向壳页索取主题变量（preference 为 system 时），写 body 层 !important 覆盖
-//   （压 dsh presenter 的 body inline）。**不注入静态兜底样式**：拿不到宿主主题时
-//   就保持 dsh 内置 token（官方明暗），不从宿主搬一套固定值来充数。
+//   桥向壳页索取主题变量（preference 为 system 时），写 body 层覆盖。力度分两档、选择器形状
+//   只有一种（html body / html body[data-ds-dark-theme] 两条同声明规则）：
+//   **强制面（侧栏）带 !important**——那一面的跟随是强制的，任何元素级/属性级请求都不得改写它；
+//   **其余面不带**——靠特异性赢过 dsh 自己那张调色板（它在 body 与 body[data-ds-dark-theme]
+//   上同格声明、且晚于本桥注入），同时让位给按属性收窄的请求。
+//   **不注入静态兜底样式**：拿不到宿主主题时就保持 dsh 内置 token（官方明暗），
+//   不从宿主搬一套固定值来充数。
 //   底座一格按面取：壳页在 <html> 上声明 data-dshana-backdrop = 该面可见底那格 token
 //   （源在 packages/ui/src/seed-tokens.ts 的 FACE_BACKDROP；侧栏面是 --dsw-specific-sidebar-fill，
 //   其余面是 --dsw-alias-bg-base），桥用它把 base 换成同一张表里那格的宿主变量。

@@ -11,7 +11,7 @@
 import { hana } from "@hana/plugin-sdk";
 import { type IntentKind, type IntentPayload, faceTakesIntent } from "@dshana/shared/shared-state.ts";
 import { CHANNEL_SCOPE_FALLBACK, normalizeScope, type FaceAddress } from "@dshana/shared/face-addresses.ts";
-import { isFaceView, roleForView } from "./face-role.ts";
+import { isFaceView, roleForView, type FaceView } from "./face-role.ts";
 import { createIntentLandings, type IntentLandingMeta } from "./intent-landing.ts";
 
 // ---- 到 App 后端路由的取数面 ----
@@ -124,16 +124,22 @@ export function dropShared(): Promise<unknown> {
 // （纯逻辑，单测直接打）。本层只做运输：同卡的面 join 同一个 BroadcastChannel（频道名按卡片实例
 // 分），谁发谁收都到。指名的直投通道与共享存储都已退场，这里不再有第二台通道。
 
-/** 本页的面（静态声明为准：<meta name="hana-dshana-role"> 或 body[data-dshana-view]）。 */
-function declaredRole(): FaceAddress {
+/** 本页静态声明的面（<meta name="hana-dshana-role"> 或 body[data-dshana-view]）；认不出返回 null。 */
+export function declaredFaceView(): FaceView | null {
   try {
     const meta = document.querySelector('meta[name="hana-dshana-role"]');
     const declared = meta && meta.getAttribute("content");
-    if (isFaceView(declared)) return roleForView(declared) as FaceAddress;
+    if (isFaceView(declared)) return declared;
     const attr = document.body && document.body.getAttribute("data-dshana-view");
-    if (isFaceView(attr)) return roleForView(attr) as FaceAddress;
-  } catch { /* 无 DOM：按整幅面（不擅自少一列） */ }
-  return "standalone";
+    if (isFaceView(attr)) return attr;
+  } catch { /* 无 DOM：当没声明 */ }
+  return null;
+}
+
+/** 本页的面（静态声明为准）；认不出按整幅面（不擅自少一列）。 */
+function declaredRole(): FaceAddress {
+  const view = declaredFaceView();
+  return view ? (roleForView(view) as FaceAddress) : "standalone";
 }
 
 /** 宿主给的卡片实例 id；读不到（绑定握手未完成 / 本页无 context）返回 null。 */

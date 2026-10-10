@@ -5,7 +5,7 @@
 // （packages/dsh/theme/adapter.ts）的形状单测。
 //
 // 这张表是主题跟随的唯一数据面：服务端把规则编译成 [token, cssValue, hostVars] 三元组，
-// 随桥脚本下发，浏览器侧逐条写成 body{--dsw-*: <cssValue>!important}。改错一个 token 名、
+// 随桥脚本下发，浏览器侧逐条写成 html body{--dsw-*: <cssValue>}。改错一个 token 名、
 // 写错宿主变量名、或把偏移量写到越界，在真机上只会表现为“某处颜色不跟主题走”，很难定位——
 // 所以在这里把形状钉死：
 //   · LHS 必须是 --dsw-*（DSH 自己的 token 名）且不重复；

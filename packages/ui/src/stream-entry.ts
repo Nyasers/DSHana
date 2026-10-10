@@ -19,8 +19,10 @@
 // 认不出态就等 envelope 首帧，等到封顶仍没有信号时按聊天流收尾——宁可少画（一行坐标），
 // 也不能把整幅 DSH 现场灌进聊天转录。
 import { hana } from "@hana/plugin-sdk";
-import { apiFetch, cardTicket, readCardState, rememberCardSession, routeSessionId } from "./surface-bridge.ts";
+import { apiFetch, cardTicket, declaredFaceView, readCardState, rememberCardSession, routeSessionId } from "./surface-bridge.ts";
 import { followHostTheme } from "./host-theme.ts";
+import { FACE_ATTR } from "@dshana/shared/face-theme.ts";
+import { publishForceFollow, watchForceFollowChanges } from "./force-follow.ts";
 
 // 等 envelope 首帧的封顶时间。宿主在 iframe ready 之后立刻推第一帧，通常远快于此；这一条只为
 // 从不发信号的旧宿主兜底。
@@ -144,6 +146,16 @@ function mountStage(): void {
   }).catch(showLoadFailure);
 }
 
+/** 把本页的面写在 <html> 上（面的单一事实源仍是页面的静态声明；写前比现值，同值不重写）。 */
+function publishFace(): void {
+  const view = declaredFaceView();
+  if (!view) return; // 认不出面就不写：桥读回 null 会按非强制面走，与静态声明缺失时的行为一致
+  try {
+    const root = document.documentElement;
+    if (root.getAttribute(FACE_ATTR) !== view) root.setAttribute(FACE_ATTR, view);
+  } catch { /* 忽略 */ }
+}
+
 /** 认到挂载态后分派：聊天流 = 保持入口行；黑板 / 拆窗 = 装载重型半。 */
 function boot(): void {
   // 脚本已经接管本页：stream.html 的兜底计时器看这个标记（它找不到就不代我们露出入口行）。
@@ -154,6 +166,14 @@ function boot(): void {
   // 首帧主题由页面 <head> 的内联片段贴（早于第一次绘制，与壳页同一片段）；这里接的是此后
   // 那一段：首屏快照 + 订阅，内联片段已贴过的 URL 会跳过重复 fetch。
   followHostTheme(hana);
+  // 本页的面写在 <html> 上（面的单一事实源是页面静态声明，这里只是把它投影出去）：主题桥在
+  // DSH 文档里读它判「这一面是不是强制面」，它读不到外层的 <meta>。**两个挂载态都写**——
+  // 「本页是 stream 面」与「装不装 DSH」是两件事，聊天流态的卡也是这一面。
+  publishFace();
+  // 「哪些面强制跟随宿主主题」那张表也搬上 <html>（拉不到就不写，桥按缺省兜底）：
+  // 聊天流态的卡不装 DSH、桥不在，但取出到黑板时会装；设置变化也得听得见。
+  void publishForceFollow();
+  watchForceFollowChanges();
   // 认到 sid 就记进卡实例态（两个挂载态都记）：同一张卡换挂载时 route 之外还有落点。
   rememberCardSession(routeSessionId());
 

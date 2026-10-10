@@ -20,6 +20,8 @@ import { injectDshIndex, installTransport, type DshTransport } from "./dsh-injec
 import { isFaceView, roleForView } from "./face-role.ts";
 import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPreference } from "./seed-tokens.ts";
 import { followHostTheme } from "./host-theme.ts";
+import { FACE_ATTR } from "@dshana/shared/face-theme.ts";
+import { publishForceFollow, watchForceFollowChanges } from "./force-follow.ts";
 import {
   SURFACE_API,
   SURFACE_MISSING,
@@ -465,7 +467,9 @@ import {
   // 样式表落地后把主题推给内层桥。
 
   // ---- 注入前先垫上 DSW 自己的底色 token（见 packages/ui/src/seed-tokens.ts）----
-  // 写 body 的内联 style、不加 !important：赢过 DSH 的静态样式表，输给主题桥的 !important。
+  // 写 body 的内联 style、不加 !important：赢过 DSH 的静态样式表；主题桥落地时把它一并抹掉
+  // （内联只有 !important 压得住，留着就会挡住桥在非强制面让给后手的那些改写；强制面无此顾虑，
+  // 但垫片一律在桥落地时抹掉）。
   // 值按面取（侧栏面垫侧栏色），宿主变量取不到就跳过——不发明用户没选过的颜色。
   // 同时在 <html> 上声明这一面的底座 token：桥落地后按它把 base 也压成同色（桥的映射表是
   // 一张、没有面的概念，这行声明就是那个面的维度）；两边写法不同、值同源。
@@ -476,8 +480,29 @@ import {
   // begin() 里的完整判据校正。**不能**在这里写死 "default"：未就绪的面走不到 startInjection，
   // 那一行就是它唯一的面来源，FP 会因此整页垫成中列色 --bg（这一面该是侧栏色 --sidebar-bg）。
   var seedView = declaredView(null) || "default";
+  // 把这一面写在 <html> 上（与底座 token 同源，都取 seedView）：主题桥据此判「这一面恒跟随宿主」
+  // （侧栏面），不靠底色 token 反推——那太脆。这里先写一次：seedDshTokens 要等首次主题载荷才跑，
+  // 而 DSH 注入可能早于那一次。
+  // 写前比现值：桥在观察 <html> 的属性，同值重写会白触发它一轮（它读的就是这两个属性）。
+  function publishFace() {
+    try {
+      var root = document.documentElement;
+      if (root.getAttribute(FACE_ATTR) !== seedView) {
+        root.setAttribute(FACE_ATTR, seedView);
+      }
+    } catch (e) { /* 忽略 */ }
+  }
+  publishFace();
+  // 「哪些面强制跟随宿主主题」这张表也从设置搬到 <html> 上（packages/ui/src/force-follow.ts）：
+  // 桥读同一处属性判强制面。**不能**在这里等它落地——拉取是异步的，而 DSH 注入可能更早；
+  // 拉不到就不写属性，桥按缺省（只有侧栏面）兜底，也就是这一功能之前的行为。
+  // 顶层的这次调用与 DSH boot 并行，晚到只让桥重算一轮（属性在桥的观察名单里）。
+  void publishForceFollow();
+  // 设置页在另一个文档里（宿主设置区那个 iframe）：改完不会通知我们，靠它保存后广播的一条
+  // 重读（另有可见性/焦点兜底）。
+  watchForceFollowChanges();
   // 撤垫片：按 token 名单抹自定义属性，另加 body 自身的 background-color（为压住 DSH 首帧样式里
-  // 那句 `body{background-color:#151517}` 而写的实色）。与主题桥退出跟随时抹的是同一份名单。
+  // 那句 `body{background-color:#151517}` 而写的实色）。与主题桥抹的是同一份名单。
   function clearSeedTokens() {
     if (!document.body || !document.body.style) return;
     for (var i = 0; i < SEED_TOKEN_KEYS.length; i++) {
@@ -488,8 +513,13 @@ import {
   function seedDshTokens() {
     if (!document.body) return;
     try {
-      document.documentElement.setAttribute("data-dshana-backdrop", backdropTokenForView(seedView));
+      var backdrop = backdropTokenForView(seedView);
+      var rootEl = document.documentElement;
+      if (rootEl.getAttribute("data-dshana-backdrop") !== backdrop) {
+        rootEl.setAttribute("data-dshana-backdrop", backdrop);
+      }
     } catch (e) { /* 忽略 */ }
+    publishFace();
     // DSH 自己选了明暗时首帧归它（见 seedsForDshPreference）：不但不垫，还要把上一轮垫的抹掉——
     // 那层是按宿主色写的，留着就会在模块装载那段把 DSH 自己的深浅色盖成宿主色。
     if (!seedsForDshPreference(dshPreference)) { clearSeedTokens(); return; }
