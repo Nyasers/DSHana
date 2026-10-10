@@ -58,7 +58,9 @@
     } catch (e) { /* 忽略 */ }
     return null;
   }
-  function cssOf(v) {
+  // force（强制面）为真时每条声明都带 !important——那一面的跟随不得被元素级/属性级请求改写；
+  // 非强制面不带，靠特异性赢、并把属性请求让出去（两档力度共用一种选择器形状，见下面一节）。
+  function cssOf(v, force) {
     // 底座那一格按面取：DSH 的 .frame 与它的启动屏都画 var(--dsw-alias-bg-base, …)，而规则表是
     // 一张、没有面的概念——一律把 base 压成 --bg，侧栏面（可见底是 --dsw-specific-sidebar-fill）
     // 的启动屏就会先亮一次中列色。这里取那一格规则**依赖的第一个宿主变量**（垫片用的是同一处
@@ -78,27 +80,31 @@
     }
     var c = "";
     var baseOut = "";
+    // 力度只在这一处落地：强制面每条声明以 !important 收尾，非强制面为空串。
+    var bang = force ? "!important" : "";
     for (var i = 0; i < m.length; i++) {
       var css = m[i][1], need = m[i][2], ok = true;
       for (var n = 0; n < need.length; n++) { if (!v[need[n]]) { ok = false; break; } }
       if (!ok) continue; // 空值不出手：空自定义属性会让 var() “无效于计算值”（bg 系变 transparent）
       if (baseCss && m[i][0] === baseKey) css = baseCss;
       if (m[i][0] === baseKey) baseOut = css;
-      c += m[i][0] + ":" + css + ";";
+      c += m[i][0] + ":" + css + bang + ";";
     }
     // body 自身的底色也跟着底座那一格：DSH 的 body{background-color:var(--dsw-alias-bg-base)}
     // 与它的 boot 样式同特异性、靠先后取胜，而本桥把壳页垫的内联背景清掉（见 clearSeed）之后
     // 那一格就只剩这条规则压着 boot 样式。写成 var() 而不是 baseOut 本身：后手改那一格
     // （例如置 transparent）时 body 底色要跟着变，写死值就把它钉死了。
-    if (baseOut) c += "background-color:var(" + baseKey + ");";
+    if (baseOut) c += "background-color:var(" + baseKey + ")" + bang + ";";
     // baseOut 非空 = 这条覆盖确实给了底座一格。清垫片要看它：底座那一格若没被本覆盖接管，
     // 抹掉壳页的内联值就把首帧交回 DSH 的 boot 样式（宿主变量这一格暂时读不到的情形）。
     return { css: c, base: baseOut };
   }
   // 覆盖用的选择器：html body 与 html body[data-ds-dark-theme] 共用一张声明表（选择器列表 =
   // 两条同声明的规则）。为什么是这个形状（都是机制层的事实，与任何具体插件无关）：
-  //   · 不用 !important——作者样式表里的 !important 压过一切普通声明，我们写了就等于把
-  //     「后手按元素/属性请求改写同一格」的路全堵死（例如让整屏层露出来的透明请求）。
+  //   · 力度分两档，选择器形状只此一种（!important 本来就压过一切普通声明，不需要另一套选择器）：
+  //     强制面（侧栏）带 !important——那一面的跟随是强制的，任何元素级/属性级请求都不得改写它；
+  //     其余面不带——靠特异性赢 dsh 调色板，并把「后手按元素/属性请求改写同一格」的路让出去
+  //     （例如让整屏层露出来的透明请求）。
   //   · 也不用裸 body：DSH 的调色板在 body 与 body[data-ds-dark-theme] 上同格声明，且**排在
   //     本桥之后**（插件树激活晚于注入），同特异性后手赢，我们会被压回它自己的近白/近黑。
   //   · html body 靠多一个元素把特异性抬到 body 之上，又低于任何带一个属性选择器的请求
@@ -108,11 +114,13 @@
   function applyOrRemove() {
     var st = document.getElementById("@dshana/dsh-theme-dyn");
     if (followHost() && cur) {
-      var rules = cssOf(cur);
+      // 强制面（侧栏）：跟随是强制的，那一面的声明带 !important，任何元素级/属性级请求都改写不了它。
+      var forced = faceName() === "sidebar";
+      var rules = cssOf(cur, forced);
       if (!st) { st = document.createElement("style"); st.id = "@dshana/dsh-theme-dyn"; document.head.appendChild(st); }
       st.textContent = "html body,html body[data-ds-dark-theme]{" + rules.css + "}";
       // 桥的规则一落地，壳页垫片（防注入前闪白的那几格内联底色）就只剩副作用：内联样式
-      // 只有 !important 压得住，而本桥正是靠不用 !important 才让出后手——留着垫片等于把
+      // 只有 !important 压得住，而非强制面正是靠不带 !important 才让出后手——留着垫片等于把
       // 后手又挡回去（元素级/属性级覆盖一律输给内联）。它的目的只是桥落地前那一帧。
       // 只在底座那一格确实被接管时才抹（见 cssOf 的 base）：没接管就抹，等于把首帧交回
       // DSH 的 boot 样式。
@@ -131,7 +139,7 @@
   // 壳页垫片在 body 内联样式上写过的 token（packages/ui/src/seed-tokens.ts 的 VIEW_SEEDS）：它垫的是
   // 宿主底色，为的是注入前不闪白。两处都要抹掉它：
   //   · 桥落地后（见 applyOrRemove）：垫片的目的只是桥落地前那一帧，留着就把后手挡死——
-  //     内联样式只有 !important 压得住，而本桥正是靠不用 !important 才让出后手；
+  //     内联样式只有 !important 压得住，而非强制面正是靠不带 !important 才让出后手；
   //   · dsh 自己选了 light/dark（不跟随宿主）：body 内联钉着宿主色，桥的 <style> 撤了也没用，
   //     dsh 自己的主题切不干净。
   // 名单与 seed-tokens 同源，由单测盯着（"桥抹的名单 = 壳页垫过的 token"）。

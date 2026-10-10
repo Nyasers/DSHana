@@ -12,10 +12,12 @@
 //   · 跟随宿主时 body[data-ds-dark-theme] 与 html 的 color-scheme 都按宿主摘戴（dsh 自己的
 //     判定取自浏览器系统的 prefers-color-scheme，宿主与系统不一致时会错档）；
 //   · dsh 自己选了 light/dark 时，桥不动明暗（交还它的 presenter）；
-//   · 覆盖的层叠形状：不用 !important，靠 html body / html body[data-ds-dark-theme] 赢过 dsh
-//     自己那张调色板（body 与 body[data-ds-dark-theme]，后于本桥注入），同时让位给任何按属性
-//     收窄的请求（body[attr]，以及暗色下 body[data-ds-dark-theme][attr]）——即“宿主色生效，
-//     属性请求改写同一格时属性请求赢”，全程不特判任何具体属性名；
+//   · 覆盖的层叠形状分两档力度、一种选择器形状：非强制面不带 !important，靠 html body /
+//     html body[data-ds-dark-theme] 赢过 dsh 自己那张调色板（body 与 body[data-ds-dark-theme]，
+//     后于本桥注入），同时让位给任何按属性收窄的请求（body[attr]，以及暗色下
+//     body[data-ds-dark-theme][attr]）——即“宿主色生效，属性请求改写同一格时属性请求赢”；
+//     强制面（侧栏）反过来，声明一律带 !important，元素级/属性级请求都不得改写它；
+//     全程不特判任何具体属性名；
 //   · 桥一落地就把壳页垫的内联底色抹掉（内联只有 !important 压得住，留着就把上面那条让位堵死）；
 //   · 侧栏面恒跟随宿主（无视 dsh 自己的 light/dark 偏好），其余面仍遵偏好。
 
@@ -267,7 +269,7 @@ test("桥：退出跟随时抹掉壳页垫的底色（主题切得干净）", ()
 
 test("桥：桥一落地也抹掉壳页垫的底色（内联只有 !important 压得住，留着就把后手堵死）", () => {
   // 壳页垫片（seed-tokens 的 VIEW_SEEDS）写在 body 内联样式上，目的只是桥落地前那一帧。
-  // 桥落地后它只剩副作用：内联声明只有 !important 压得住，而本桥正是靠不用 !important 才把
+  // 桥落地后它只剩副作用：内联声明只有 !important 压得住，而非强制面正是靠不带 !important 才把
   // 「按属性请求改写同一格」的路让出来——垫片留着，那个请求就永远输给内联。
   for (const preference of ["system", "light", "dark"]) {
     const on = runBridge(null, { appearance: "light", preference });
@@ -321,63 +323,90 @@ test("桥：偏好未知时不动手（首帧垫片留着，不交回 dsh 的系
   assert.equal(unknown.css, "", "偏好未知时不该写覆盖（门还关着）");
 });
 
-test("桥：覆盖不用 !important，靠特异性赢 dsh 调色板、并把属性请求让出去", () => {
+/** 声明块 → [属性, 值] 列表（取值里不含 ;）。 */
+function declarations(body) {
+  return body.split(";").filter(Boolean).map((d) => {
+    const at = d.indexOf(":");
+    return [d.slice(0, at), d.slice(at + 1)];
+  });
+}
+
+test("桥：非强制面的覆盖不带 !important，靠特异性赢 dsh 调色板、并把属性请求让出去", () => {
   // 层叠事实（机制层，与任何具体插件无关）：
   //   · dsh 的调色板在 body 与 body[data-ds-dark-theme] 上声明同一批 token，且**后于**本桥
   //     注入（插件树激活晚于注入）——同特异性后手赢，所以裸 body 会被压回它的近白/近黑；
-  //   · 作者样式表里的 !important 压过一切普通声明（不看特异性），本桥一旦用 !important，
-  //     任何后手按元素/属性改写同一格的请求就永远赢不了；
   //   · 属性选择器进特异性第二列，所以 body[attr] 压过 html body（元素数），
   //     但压不过 html body[data-ds-dark-theme][attr]（属性数 2 > 1）。
-  // 由此覆盖的形状必须是「html body + html body[data-ds-dark-theme] 共用一张声明表、不带
-  // !important」：light 档靠元素数赢裸 body，dark 档靠同样抬一档赢 body[data-ds-dark-theme]；
-  // 而任何按属性收窄的请求都压得住它（暗色下多带一个属性就够）。
-  // 跑两种入口：跟随时（偏好 system）与恒跟随的面（侧栏，偏好未投影）——两者产出的形状要一样。
-  const runs = [
-    runBridge(null, { appearance: "dark", preference: "system" }),
-    runBridge(null, { appearance: "dark", face: "sidebar" }),
-  ];
-  for (const { css } of runs) {
-    assert.notEqual(css, "", "跟随时该有覆盖");
-    assert.equal(css.includes("!important"), false, "覆盖里不该出现 !important（它会堵死后手的改写）");
-    const rule = dynRule(css);
-    assert.ok(rule, "覆盖该是一条规则：" + css);
-    // 明暗两档共用一张声明表：两档的宿主取值相同，暗色下 dsh 那条特异性更高，必须同样抬一档。
-    assert.deepEqual(
-      rule.selectors,
-      ["html body", "html body[data-ds-dark-theme]"],
-      "覆盖该是 html body 与 html body[data-ds-dark-theme] 两条同声明的规则",
-    );
-    // 宿主变量照旧复用（不是搬值）：底座与侧栏填色都还指向宿主变量。
-    assert.equal(declaredValue(css, "--dsw-alias-bg-base"), "var(--bg)");
-    assert.equal(declaredValue(css, "--dsw-specific-sidebar-fill"), "var(--sidebar-bg)");
-    // body 自身底色跟着底座那一格走（壳页垫的内联背景已被桥抹掉，这一格得有人接管）。
-    assert.equal(declaredValue(css, "background-color"), "var(--dsw-alias-bg-base)");
-    // 四条层叠事实，逐条钉住（特异性 = [id, 属性/类, 元素]）：
-    // ① 浅档：html body (0,0,2) > vendor 的 body (0,0,1)，宿主色赢（裸 body 会被 vendor 后手压掉）。
-    assert.ok(outranks(specificity("html body"), specificity("body")), "html body 该压过 body");
-    // ② 暗档：html body[data-ds-dark-theme] (0,1,2) > vendor 的 body[data-ds-dark-theme] (0,1,1)。
+  // 覆盖因此是「html body + html body[data-ds-dark-theme] 共用一张声明表」的一种选择器形状、
+  // 两档力度：非强制面（本用例）靠 specificity 赢 vendor、同时把属性请求让出去；强制面（侧栏，
+  // 另一个用例）带 !important——它本来就不看特异性，元素级/属性级请求都改写不了它。
+  const open = runBridge(null, { appearance: "dark", preference: "system" });
+  assert.notEqual(open.css, "", "跟随时该有覆盖");
+  assert.equal(open.css.includes("!important"), false, "非强制面的覆盖里不该出现 !important（它会堵死后手的改写）");
+  const openRule = dynRule(open.css);
+  assert.ok(openRule, "覆盖该是一条规则：" + open.css);
+  // 明暗两档共用一张声明表：两档的宿主取值相同，暗色下 dsh 那条特异性更高，必须同样抬一档。
+  assert.deepEqual(
+    openRule.selectors,
+    ["html body", "html body[data-ds-dark-theme]"],
+    "覆盖该是 html body 与 html body[data-ds-dark-theme] 两条同声明的规则",
+  );
+  // 宿主变量照旧复用（不是搬值）：底座与侧栏填色都还指向宿主变量。
+  assert.equal(declaredValue(open.css, "--dsw-alias-bg-base"), "var(--bg)");
+  assert.equal(declaredValue(open.css, "--dsw-specific-sidebar-fill"), "var(--sidebar-bg)");
+  // body 自身底色跟着底座那一格走（壳页垫的内联背景已被桥抹掉，这一格得有人接管）。
+  assert.equal(declaredValue(open.css, "background-color"), "var(--dsw-alias-bg-base)");
+  // 非强制面的四条层叠事实，逐条钉住（特异性 = [id, 属性/类, 元素]）：
+  // ① 浅档：html body (0,0,2) > vendor 的 body (0,0,1)，宿主色赢（裸 body 会被 vendor 后手压掉）。
+  assert.ok(outranks(specificity("html body"), specificity("body")), "html body 该压过 body");
+  // ② 暗档：html body[data-ds-dark-theme] (0,1,2) > vendor 的 body[data-ds-dark-theme] (0,1,1)。
+  assert.ok(
+    outranks(specificity("html body[data-ds-dark-theme]"), specificity("body[data-ds-dark-theme]")),
+    "暗档那条该压过 vendor 的同名属性规则",
+  );
+  // ③ 让位：请求方在浅档带一个属性就赢（(0,1,1) > (0,0,2)）；
+  assert.ok(
+    outranks(specificity("body[data-any-request]"), specificity("html body")),
+    "浅档：按属性收窄的请求该压过覆盖",
+  );
+  // ④ 暗档要带上当时的明暗属性才赢（(0,2,1) > (0,1,2)）——覆盖暗档那条为了压过 vendor 的
+  //    暗色调色板必须到 (0,1,2)，请求方要比它更具体就只能再收窄一层。这是层叠的算术，
+  //    不是本桥的偏心；也正因如此，请求方在暗档若只带自己的属性（(0,1,1)）会输给覆盖。
+  assert.ok(
+    outranks(specificity("body[data-ds-dark-theme][data-any-request]"), specificity("html body[data-ds-dark-theme]")),
+    "暗档：按当前明暗收窄的请求该压过覆盖",
+  );
+  assert.ok(
+    outranks(specificity("html body[data-ds-dark-theme]"), specificity("body[data-any-request]")),
+    "暗档：未按明暗收窄的请求输给覆盖（它同时也输给 vendor 的暗色调色板）",
+  );
+});
+
+test("桥：强制面（侧栏）的覆盖一律带 !important（选择器形状不变）", () => {
+  // 强制面（侧栏，偏好未投影也恒跟随）：同样的选择器形状，但每条声明都带 !important——
+  // 那一面的跟随是强制的，元素级/属性级请求都不得改写它。
+  const forced = runBridge(null, { appearance: "dark", face: "sidebar" });
+  assert.notEqual(forced.css, "", "强制面跟随时该有覆盖");
+  const forcedRule = dynRule(forced.css);
+  assert.ok(forcedRule, "覆盖该是一条规则：" + forced.css);
+  assert.deepEqual(
+    forcedRule.selectors,
+    ["html body", "html body[data-ds-dark-theme]"],
+    "强制面与其余面共用同一种选择器形状（!important 不需要另一套选择器）",
+  );
+  const forcedDecls = declarations(forcedRule.body);
+  assert.ok(forcedDecls.length > 0, "强制面的声明表不该为空");
+  for (const [prop, value] of forcedDecls) {
     assert.ok(
-      outranks(specificity("html body[data-ds-dark-theme]"), specificity("body[data-ds-dark-theme]")),
-      "暗档那条该压过 vendor 的同名属性规则",
-    );
-    // ③ 让位：请求方在浅档带一个属性就赢（(0,1,1) > (0,0,2)）；
-    assert.ok(
-      outranks(specificity("body[data-any-request]"), specificity("html body")),
-      "浅档：按属性收窄的请求该压过覆盖",
-    );
-    // ④ 暗档要带上当时的明暗属性才赢（(0,2,1) > (0,1,2)）——覆盖暗档那条为了压过 vendor 的
-    //    暗色调色板必须到 (0,1,2)，请求方要比它更具体就只能再收窄一层。这是层叠的算术，
-    //    不是本桥的偏心；也正因如此，请求方在暗档若只带自己的属性（(0,1,1)）会输给覆盖。
-    assert.ok(
-      outranks(specificity("body[data-ds-dark-theme][data-any-request]"), specificity("html body[data-ds-dark-theme]")),
-      "暗档：按当前明暗收窄的请求该压过覆盖",
-    );
-    assert.ok(
-      outranks(specificity("html body[data-ds-dark-theme]"), specificity("body[data-any-request]")),
-      "暗档：未按明暗收窄的请求输给覆盖（它同时也输给 vendor 的暗色调色板）",
+      value.endsWith("!important"),
+      "强制面每条声明都该以 !important 收尾：" + prop + ":" + value,
     );
   }
+  // 底座与 background-color 同样带——这两格不在规则表里或以 var() 写成，单独钉一遍。
+  assert.equal(declaredValue(forced.css, "--dsw-alias-bg-base"), "var(--bg)!important");
+  assert.equal(declaredValue(forced.css, "background-color"), "var(--dsw-alias-bg-base)!important");
+  // 取值本身不变：只是同一批声明被抬到 !important，宿主变量照旧复用。
+  assert.equal(declaredValue(forced.css, "--dsw-specific-sidebar-fill"), "var(--sidebar-bg)!important");
 });
 
 test("桥：覆盖对两个明暗档给同一张声明表（明暗由 body 属性与宿主取值决定，不由选择器决定）", () => {
@@ -385,6 +414,11 @@ test("桥：覆盖对两个明暗档给同一张声明表（明暗由 body 属�
   const dark = runBridge(null, { appearance: "dark" });
   assert.equal(light.css, dark.css, "两档的覆盖正文该逐字相同（宿主取值一样，明暗靠 body 属性选档）");
   assert.notEqual(light.css, "", "跟随时该有覆盖");
+  // 强制面同样按这一条走：明暗只由 body 属性与宿主取值决定，!important 不参与选档。
+  const forcedLight = runBridge(null, { appearance: "light", face: "sidebar" });
+  const forcedDark = runBridge(null, { appearance: "dark", face: "sidebar" });
+  assert.equal(forcedLight.css, forcedDark.css, "强制面两档的覆盖正文也该逐字相同");
+  assert.equal(forcedLight.css.includes("!important"), true, "强制面的覆盖该带 !important");
 });
 
 test("桥：侧栏面恒跟随宿主（无视 dsh 自己的 light/dark 偏好）", () => {
@@ -394,6 +428,17 @@ test("桥：侧栏面恒跟随宿主（无视 dsh 自己的 light/dark 偏好）
   assert.equal(explicitLight.colorScheme, "dark", "侧栏面该继续对齐宿主明暗");
   assert.equal(explicitLight.dark, true, "宿主深色时侧栏面该挂着深色标记");
   assert.deepEqual(explicitLight.seededKeys, [], "桥落地后垫片该被抹掉（恒跟随的面同样）");
+  // 跟随是强制的：这一面的覆盖带 !important，元素级/属性级请求改写不了它。
+  assert.equal(
+    explicitLight.css.includes("!important"),
+    true,
+    "侧栏面（强制面）的覆盖该带 !important",
+  );
+  const forcedRule = dynRule(explicitLight.css);
+  assert.ok(forcedRule, "侧栏面的覆盖该是一条规则");
+  for (const [prop, value] of declarations(forcedRule.body)) {
+    assert.ok(value.endsWith("!important"), "侧栏面每条声明都该以 !important 收尾：" + prop + ":" + value);
+  }
   const explicitDark = runBridge(null, { appearance: "light", preference: "dark", face: "sidebar" });
   assert.notEqual(explicitDark.css, "", "侧栏面在 dsh 显式 dark 下也该有覆盖");
   assert.equal(explicitDark.colorScheme, "light", "侧栏面该继续对齐宿主明暗");

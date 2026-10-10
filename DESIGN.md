@@ -126,7 +126,7 @@ DSH 的 workspace 选择对话框来自 `directory-picker` seam（宿主半列�
 
 ## 主题跟随
 
-`@dshana/dsh-theme` 经 `tapIndex` 注入 index 响应：静态 fallback + 动态桥脚本，向壳页索取宿主主题 vars → 写 body 层覆盖 `--dsw-alias-*` / `--dsw-specific-*`。覆盖**不用 `!important`**：那会压过一切普通声明、堵死后手按元素/属性改写同一格的路。它靠 `html body` / `html body[data-ds-dark-theme]` 的特异性赢过 DSH 自己那张调色板（DSH 在 `body` 与 `body[data-ds-dark-theme]` 上同格声明、且晚于本桥注入），同时让位给按属性收窄的请求。桥落地时把壳页垫的内联底色一并抹掉（内联只有 `!important` 压得住，留着就把上面那条让位堵死）。
+`@dshana/dsh-theme` 经 `tapIndex` 注入 index 响应：静态 fallback + 动态桥脚本，向壳页索取宿主主题 vars → 写 body 层覆盖 `--dsw-alias-*` / `--dsw-specific-*`。覆盖**按面分两档力度、选择器形状只有一种**（`html body` / `html body[data-ds-dark-theme]` 两条同声明规则）：**强制面（侧栏）带 `!important`**——那一面的跟随是强制的，任何元素级/属性级请求都不得改写它；**其余面不带**——靠 `html body` / `html body[data-ds-dark-theme]` 的特异性赢过 DSH 自己那张调色板（DSH 在 `body` 与 `body[data-ds-dark-theme]` 上同格声明、且晚于本桥注入），同时让位给按属性收窄的请求。桥落地时把壳页垫的内联底色一并抹掉（内联只有 `!important` 压得住，留着就把非强制面那条让位堵死；强制面那侧反正压得住，但垫片一律在桥落地时抹掉）。
 
 **App 页面这一侧要自己贴样式表，而且分两段**：宿主把主题参数附在 App surface iframe 的 URL 上（`hana-theme` / `hana-css` / `hana-theme-appearance`），变化时再推 `hana.theme.changed`；但把样式表贴进页面这件事宿主不代劳，而 SDK 只在收到 `hana.theme.changed` 时才应用 `cssUrl`——页面不自己贴首帧，就会一路吃 HTML 里写死的纸张 fallback，直到第一次主题变化才跟上。
 
@@ -134,7 +134,7 @@ DSH 的 workspace 选择对话框来自 `directory-picker` seam（宿主半列�
 - **快照与订阅（此后）**：`packages/ui/src/host-theme.ts` 首屏读一次 SDK 快照（兜住内联片段因故没跑的页面），此后按 `hana.theme.changed` 事件驱动地贴样式表（壳页 / 设置页 / 会话卡共用一份）；贴哪张同样走 `themeCssUrlFor`（主题未知时它给空串，本模块也不贴）。内联片段把已贴的 URL 记在 `<html>` 的 `data-hana-theme-css` 上，本模块据此跳过同一 URL 的重复 fetch（主题 CSS 可达 47KB）；**片段没贴时那条属性不写**，本模块读回空串、与任何非空 URL 都比不上，因此不会误判「已贴过」。两侧契约各半，同样被上面那条测试锁住。
 - **注入前的首帧底色垫片按面取，面必须在垫片之前就定下来**：壳页在注入 DSH 之前先往 `body` 写一层 DSW 底色 token（`packages/ui/src/seed-tokens.ts`，写内联 style、不加 `!important`：赢过 DSH 自己的静态样式表，桥落地时被桥抹掉），值按**这一面可见底**那格取宿主变量——中列面是 `--bg`，**侧栏面（FP）是 `--sidebar-bg`**，两者不同源。垫片的第一次执行挂在顶层 `followHostTheme` 的 `onApplied` 上，而完整的面判据（含宿主 slot 兜底）要到 `begin()` 才拿得到：因此面的初值必须取**页面自己的静态声明**（`meta[name=hana-dshana-role]`，模块脚本是 deferred、此刻 DOM 已解析完），`begin()` 拿到完整判据后不一致再重垫一次。若在这里写死 `default`，未就绪的 FP（停在「未启动」/「已停止」，走不到注入）就会整页垫成中列色——真机实测过那一帧 `bodyInlineBg=rgb(59,74,84)`（青夜 `--bg`）而该是 `#34424B`（`--sidebar-bg`）。回归闸在 `tests/cordis/theme-bridge-backdrop.test.mjs`。
 
-**跟随语义（有意自持）**：仅当 DSH 主题偏好为 `system` 时跟随宿主配色；显式 `light`/`dark` 时完全用 DSH 自己的主题，宿主配色不介入。**例外是侧栏面（FP）：它恒跟随宿主**——整幅嵌在宿主框架里，用 DSH 自己的明暗会与四周不同调。壳页把认出来的面写在 `<html>` 的 `data-dshana-face` 上（与 `data-dshana-backdrop` 同源、都取 `seedView`），桥读它判这一面是不是恒跟随；面词表仍只有 `packages/ui/src/face-role.ts` 那一处。偏好变更经事件驱动重读（不再周期轮询）。此语义与官方样例的「无条件双 palette 替换」不同，是保留项。
+**跟随语义（有意自持）**：仅当 DSH 主题偏好为 `system` 时跟随宿主配色；显式 `light`/`dark` 时完全用 DSH 自己的主题，宿主配色不介入。**例外是侧栏面（FP）：它恒跟随宿主**——整幅嵌在宿主框架里，用 DSH 自己的明暗会与四周不同调；这一面同时是**强制面**：它的覆盖一律带 `!important`，元素级/属性级请求改写不了它。壳页把认出来的面写在 `<html>` 的 `data-dshana-face` 上（与 `data-dshana-backdrop` 同源、都取 `seedView`），桥读它判这一面是不是恒跟随；面词表仍只有 `packages/ui/src/face-role.ts` 那一处。偏好变更经事件驱动重读（不再周期轮询）。此语义与官方样例的「无条件双 palette 替换」不同，是保留项。
 
 ## 启动与状态
 
