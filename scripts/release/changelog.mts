@@ -17,8 +17,11 @@
 import { ConventionalChangelog } from "conventional-changelog";
 import fs from "node:fs";
 import path from "node:path";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { ROOT } from "../shared/root.mts";
+
 const args = process.argv.slice(2);
 const fullMode = args.includes("--full");
 
@@ -51,9 +54,15 @@ function dropEmptySections(text) {
   return kept.join("");
 }
 
-// 幂等合并：文件顶部已存在同版本段 → 整段替换（重跑同版本增量不重复插入）；否则头部插入。
-function mergeIntoFile(file, newSection) {
-  const titleRe = new RegExp("^## \\[" + escapeRegExp(version) + "\\]");
+/**
+ * 幂等合并：文件顶部已存在同版本段 → 整段替换（重跑同版本增量不重复插入）；否则头部插入。
+ *
+ * 旧内容用 trim() 两端都去：只去头不去尾的话，旧文件尾已有的空行会被原样带过来、再加上结尾的
+ * "\n"，于是每次发版在文件尾净增一行（实测 36→37→…→44 正是这么叠起来的）。
+ * 纯函数（文本进、文本出），好让合并的尾部行为能被测试直接钉住。
+ */
+export function mergeIntoFile(file, newSection, ver) {
+  const titleRe = new RegExp("^## \\[" + escapeRegExp(ver) + "\\]");
   let oldBody = "";
   if (fs.existsSync(file)) {
     oldBody = fs.readFileSync(file, "utf8").replace(new RegExp("^" + escapeRegExp(HEADER) + "\\s*\\n?"), "");
@@ -61,10 +70,11 @@ function mergeIntoFile(file, newSection) {
   // 头部（首段）同版本 → 替换整段（到下一个 ^## 前）
   if (titleRe.test(oldBody)) {
     const idx = oldBody.indexOf("\n## ", oldBody.indexOf("## "));
-    const rest = idx === -1 ? "" : oldBody.slice(idx + 1);
-    return HEADER + "\n\n" + newSection.trimEnd() + "\n\n" + rest.trimStart();
+    const rest = idx === -1 ? "" : oldBody.slice(idx + 1).trim();
+    return HEADER + "\n\n" + newSection.trimEnd() + (rest ? "\n\n" + rest : "") + "\n";
   }
-  return HEADER + "\n\n" + newSection.trimEnd() + (oldBody.trim() ? "\n\n" + oldBody.trimStart() : "") + "\n";
+  const rest = oldBody.trim();
+  return HEADER + "\n\n" + newSection.trimEnd() + (rest ? "\n\n" + rest : "") + "\n";
 }
 
 function escapeRegExp(s) {
@@ -87,13 +97,16 @@ async function main() {
     fs.writeFileSync(file, HEADER + "\n\n" + text.trimEnd() + "\n", "utf8");
     console.log("[changelog] 全量重生成完成（releaseCount 0）→ CHANGELOG.md");
   } else {
-    const merged = mergeIntoFile(file, text);
+    const merged = mergeIntoFile(file, text, version);
     fs.writeFileSync(file, merged, "utf8");
     console.log("[changelog] 增量生成完成 v" + version + " → CHANGELOG.md");
   }
 }
 
-main().catch((e) => {
-  console.error("[changelog] 失败: " + e.message);
-  process.exit(1);
-});
+// 直跑才执行主流程：纯函数（mergeIntoFile）被测试导入时，不应触发生成与写盘。
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  main().catch((e) => {
+    console.error("[changelog] 失败: " + e.message);
+    process.exit(1);
+  });
+}
