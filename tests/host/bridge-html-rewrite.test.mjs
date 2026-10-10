@@ -3,7 +3,7 @@
 //
 // tests/host/bridge-html-rewrite.test.mjs — 中继的 HTML 引用相对化（真起 http 服务）
 // 覆盖：text/html 的根相对引用被相对化且反向解析回原目标、非 HTML 与错误页原样透传、
-// 无 content-length 的流式响应不改、超限不改、改写后 content-length 正确。
+// 无 content-length 的流式响应不改、超限不改、改写后 content-length 正确、非 UTF-8 字节透明。
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -52,6 +52,18 @@ async function startUpstream() {
       const pad = "x".repeat(HTML_REWRITE_MAX_BYTES + 10);
       const body = '<script src="/big.js"></script>' + pad;
       res.writeHead(200, { "content-type": "text/html", "content-length": String(Buffer.byteLength(body)) });
+      res.end(body);
+      return;
+    }
+    if (url.pathname === "/gbk.html") {
+      // 非 UTF-8 文档（charset=gbk）：中文文件名“中”的 GBK 字节是 D6 D0，整段不是合法 UTF-8。
+      // 改写必须字节透明地过手，否则这两个字节会被换成 U+FFFD 再编码成 EF BF BD。
+      const body = Buffer.concat([
+        Buffer.from('<meta charset="gbk"><img src="/wallpaper-engine/', "latin1"),
+        Buffer.from([0xd6, 0xd0]),
+        Buffer.from('.png">', "latin1"),
+      ]);
+      res.writeHead(200, { "content-type": "text/html; charset=gbk", "content-length": String(body.length) });
       res.end(body);
       return;
     }
@@ -169,6 +181,28 @@ test("bridge: 超限 HTML 不改写（避免把大响应整段缓冲）", async 
     const r = await get(bridge.port, "/big.html");
     assert.equal(r.status, 200);
     assert.ok(r.text.includes('src="/big.js"'), "超限不该改");
+  } finally {
+    await bridge.close();
+    await upstream.close();
+  }
+});
+
+test("bridge: 非 UTF-8（charset=gbk）的 HTML 改写后字节保真", async () => {
+  const upstream = await startUpstream();
+  const bridge = await startBridge(upstream);
+  try {
+    // 取原始字节而非 text（text 会按 UTF-8 解码，看不到字节层的事实）
+    const res = await fetch("http://127.0.0.1:" + bridge.port + "/gbk.html", {
+      headers: { "x-hana-dsh-bridge": KEY },
+    });
+    const buf = Buffer.from(await res.arrayBuffer());
+    assert.equal(res.status, 200);
+    assert.equal(Number(res.headers.get("content-length")), buf.length, "content-length 该按改写后字节数");
+    // 中文那两字节必须原样，不能被换成 U+FFFD 的编码（EF BF BD）
+    assert.ok(buf.includes(Buffer.from([0xd6, 0xd0])), "GBK 字节应原样保留：" + buf.toString("hex"));
+    assert.ok(!buf.includes(Buffer.from([0xef, 0xbf, 0xbd])), "不该出现替换字符：" + buf.toString("hex"));
+    // 引用照常被相对化
+    assert.ok(buf.toString("latin1").includes('src="./wallpaper-engine/'), "引用该被相对化：" + buf.toString("latin1"));
   } finally {
     await bridge.close();
     await upstream.close();

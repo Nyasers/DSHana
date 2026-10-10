@@ -361,11 +361,16 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
           total += buf.length;
         }
         if (finished) {
-          const raw = Buffer.concat(chunks).toString("utf8");
+          // 按 latin1 往返：latin1 把每个字节映射成一个码位，编解码是**字节透明**的，非 UTF-8 的
+          // 文档（charset=gbk / shift_jis 等）因此原样过手。改写只碰 ASCII 结构字符（标签尖括号、
+          // 引号、属性名与 URL），而这几类编码的多字节序列里后继字节不落在这些码位上，扫描安全。
+          // 用 utf8 往返会毁掉非 UTF-8 文档：非法序列被换成 U+FFFD、再编码成 EF BF BD，而 charset
+          // 声明原样留着，浏览器按原 charset 解这批字节便是乱码。
+          const raw = Buffer.concat(chunks).toString("latin1");
           const html = rewriteRootRelativeRefs(raw, authorized.path);
-          headers.set("content-length", String(Buffer.byteLength(html, "utf8")));
+          headers.set("content-length", String(Buffer.byteLength(html, "latin1")));
           res.writeHead(response.status, Object.fromEntries(headers.entries()));
-          res.end(html);
+          res.end(Buffer.from(html, "latin1"));
           return;
         }
         // 超限：不改写。已读的字节先落，其余按原样续流（此时不发 content-length，走分块）。
