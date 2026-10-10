@@ -36,7 +36,8 @@
 // 退出码 0：文本已产出（打印，或按 --out 落盘）。
 import fs from "fs-extra";
 import { execFileSync } from "node:child_process";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { ROOT } from "../shared/root.mts";
 import { manifestPath } from "../shared/contract-assets.mts";
@@ -213,8 +214,11 @@ function publishedIndex(
 }
 
 /** 出正文前补身份与版本：条目里的 publisher 要跟登记一致；版本主号不得往回打。带 pre 段的完整排序不在
- *  本地重造——市场侧的 historyFor 会据已上架索引拒降级，而那道闸跑在 PR 检查里。 */
-function preflightPublished(enr: Enrollment, version: string, entryPublisher: string): void {
+ *  本地重造——市场侧的 historyFor 会据已上架索引拒降级，而那道闸跑在 PR 检查里。
+ *
+ *  返回**已上架的那个版本**（读不到索引、首次上架、或该 kind 无版本号时为 null）：它同时是 Changelog 段
+ *  的区间起点——上次登记到现在跳过的那几版要并进同一条 PR 的正文，见 changelogSection。 */
+function preflightPublished(enr: Enrollment, version: string, entryPublisher: string): string | null {
   if (entryPublisher && entryPublisher !== enr.publisher) {
     throw new Error(
       `条目里的 publisher（${entryPublisher}）与登记（${enr.publisher}）不一致，市场会拒：` +
@@ -224,12 +228,12 @@ function preflightPublished(enr: Enrollment, version: string, entryPublisher: st
   const idx = publishedIndex(enr.upstream);
   if (!idx) {
     log("读不到上游 index.v2.json，跳过版本比对");
-    return;
+    return null;
   }
   const pub = idx.items.find((i) => i.kind === enr.kind && i.id === enr.id);
   if (!pub) {
     log(`索引里还没有 ${enr.kind}/${enr.id}（首次上架）`);
-    return;
+    return null;
   }
   if (pub.publisher && pub.publisher !== enr.publisher) {
     log(`注意：发布者与已上架不同（${pub.publisher} → ${enr.publisher}），PR 正文里要写明登记变更`);
@@ -237,33 +241,113 @@ function preflightPublished(enr: Enrollment, version: string, entryPublisher: st
   // skill / recipe 按内容哈希更新，`0.0.0` 不是版本语义，比版本没意义（市场侧 historyFor 同样跳过）。
   if (VERSIONLESS_KINDS.has(enr.kind)) {
     log(`${enr.kind} 没有版本号（按内容哈希），跳过版本比对`);
-    return;
+    return null;
   }
   if (coreDowngrade(version, pub.version)) {
     throw new Error(`版本倒退：本次 ${version} < 已上架 ${pub.version}，市场侧的 historyFor 会拒`);
   }
   log(`已上架 ${pub.version} → 本次 ${version}（主号不降级）`);
+  return pub.version;
 }
 
-/** CHANGELOG 里本版本那一段：标题带的 compare 链接 + 段的正文（含各提交链接，原样保留）。
- *  取不到就返回 null，调用方省掉 Changelog 段而不是塞一句内部口吻的占位。 */
-function changelogSection(version: string): { url: string; body: string } | null {
-  const file = join(ROOT, "CHANGELOG.md");
-  if (!fs.existsSync(file)) return null;
-  const lines = String(fs.readFileSync(file, "utf8")).split(/\r?\n/);
-  const start = lines.findIndex((line) => line.startsWith("## [") && line.includes(`[${version}]`));
-  if (start < 0) return null;
-  const head = /^## \[[^\]]+\]\(([^)]+)\)/.exec(lines[start]);
-  if (!head) return null;
-  let end = lines.length;
-  for (let i = start + 1; i < lines.length; i += 1) {
-    if (lines[i].startsWith("## ")) {
-      end = i;
-      break;
+/** CHANGELOG.md 里的一个版本段：版本号、标题带的 compare 链接，以及标题行之后的原文。 */
+interface VersionSection {
+  version: string;
+  url: string;
+  lines: string[];
+}
+
+/** 按 `## [版本](链接)` 把 CHANGELOG.md 切成版本段（文件里新版本在前）。 */
+function parseChangelog(text: string): VersionSection[] {
+  const lines = text.split(/\r?\n/);
+  const heads: { index: number; version: string; url: string }[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const m = /^## \[([^\]]+)\]\(([^)]+)\)/.exec(lines[i]);
+    if (m) heads.push({ index: i, version: m[1], url: m[2] });
+  }
+  return heads.map((h, i) => ({
+    version: h.version,
+    url: h.url,
+    lines: lines.slice(h.index + 1, i + 1 < heads.length ? heads[i + 1].index : lines.length),
+  }));
+}
+
+/** 段内的分节（`### 标题` 与其后的 `* ` 条目），条目行原样保留（带各自的提交链接）。 */
+function parseSubsections(lines: string[]): { title: string; items: string[] }[] {
+  const out: { title: string; items: string[] }[] = [];
+  let cur: { title: string; items: string[] } | null = null;
+  for (const line of lines) {
+    const head = /^### (.+)$/.exec(line);
+    if (head) {
+      cur = { title: head[1].trim(), items: [] };
+      out.push(cur);
+      continue;
+    }
+    if (cur && /^\* /.test(line)) cur.items.push(line.trim());
+  }
+  return out.filter((s) => s.items.length > 0);
+}
+
+/** 分节的 house 顺序（与 CHANGELOG.md 的生成顺序一致）；表外的标题排在其后，按首次出现。 */
+const SECTION_ORDER = ["Features", "Bug Fixes", "Performance Improvements"];
+
+/**
+ * Changelog 段：取 **上次已上架版本 → 本次版本** 这个区间的改动，中间跳过的版本一并并入。
+ *
+ * 区间而不是单版本，是因为市场只按 approvals 的记录读 Release：上次登记之后直接跳过的那几版
+ * 从没出现在任何 PR 正文里，只列本次会把它们丢掉（#30 就是这样把 v1.0.3 并进 v1.0.4 那段的）。
+ * 段落按分节归并（同一标题只出一个），条目按版本从新到旧、版本内保持 CHANGELOG 的原序；
+ * compare 链接也按区间拼（上次已上架 → 本次），而不是照抄 CHANGELOG 标题里那对相邻版本。
+ *
+ * 取不到本次版本段就返回 null，调用方省掉 Changelog 段而不是塞一句内部口吻的占位。
+ * 纯函数（文本进、段落出），好让跳版本的合并逻辑能被测试直接钉住。
+ */
+export function buildChangelogSection(
+  text: string,
+  currentVersion: string,
+  sinceVersion: string | null,
+  repo: string,
+): { url: string; body: string } | null {
+  const sections = parseChangelog(text);
+  const curAt = sections.findIndex((s) => s.version === currentVersion);
+  if (curAt < 0) return null;
+  // 上次已上架版本比本次旧（在文件里更靠后）→ 区间含它到本次之间的所有版本；否则只取本次
+  // （首次上架、读不到索引、或重跑同一版本都是后者）。
+  const sinceAt = sinceVersion ? sections.findIndex((s) => s.version === sinceVersion) : -1;
+  const end = sinceAt > curAt ? sinceAt : curAt + 1;
+  const range = sections.slice(curAt, end);
+  const buckets = new Map<string, string[]>();
+  for (const sec of range) {
+    for (const sub of parseSubsections(sec.lines)) {
+      buckets.set(sub.title, [...(buckets.get(sub.title) ?? []), ...sub.items]);
     }
   }
-  const body = lines.slice(start + 1, end).join("\n").replace(/^\n+/, "").replace(/\s+$/, "");
-  return { url: head[1], body };
+  const rank = (t: string): number => {
+    const at = SECTION_ORDER.indexOf(t);
+    return at >= 0 ? at : SECTION_ORDER.length;
+  };
+  const titles = [...buckets.keys()].sort((a, b) => rank(a) - rank(b));
+  const body = titles.map((t) => `### ${t}\n\n${buckets.get(t)!.join("\n")}`).join("\n\n");
+  const enc = (t: string): string => t.replace(/\+/g, "%2B");
+  const url =
+    sinceAt >= 0 && sinceAt !== curAt
+      ? `https://github.com/${repo}/compare/${enc(`v${sinceVersion}`)}...${enc(`v${currentVersion}`)}`
+      : sections[curAt].url;
+  if (range.length > 1) {
+    log(`Changelog 段并入 ${range.length} 个版本段（${sinceVersion} 之后到 ${currentVersion}）`);
+  }
+  return { url, body };
+}
+
+/** 读本仓 CHANGELOG.md 拼 Changelog 段（拼装逻辑见 buildChangelogSection）。 */
+function changelogSection(
+  currentVersion: string,
+  sinceVersion: string | null,
+  repo: string,
+): { url: string; body: string } | null {
+  const file = join(ROOT, "CHANGELOG.md");
+  if (!fs.existsSync(file)) return null;
+  return buildChangelogSection(String(fs.readFileSync(file, "utf8")), currentVersion, sinceVersion, repo);
 }
 
 async function main(): Promise<void> {
@@ -291,11 +375,11 @@ async function main(): Promise<void> {
   log(`登记 ${enr.kind}/${enr.id} · tag ${tag}${versioned ? "" : "（无版本号，按内容哈希）"}`);
   const { sha256, publisher } = await waitForRelease(tag, enr.repository, entryName, !noWait);
   log(`条目 sha256 ${sha256}`);
-  preflightPublished(enr, version, publisher);
+  const publishedVersion = preflightPublished(enr, version, publisher);
 
   const title = `chore: approve ${enr.kind}/${enr.id} ${tag}`;
   const releaseUrl = `https://github.com/${enr.repository}/releases/tag/${tag.replace(/\+/g, "%2B")}`;
-  const changelog = changelogSection(version);
+  const changelog = changelogSection(version, publishedVersion, enr.repository);
   // Release / SHA-256 是脚本能自证的事实；Changes 只放重要变更（--changes 现给）；其余改了什么归 Changelog 段。
   const body = [
     `Approve the new ${enr.id} ${enr.kind} release.`,
@@ -322,4 +406,7 @@ async function main(): Promise<void> {
   process.stdout.write(`${title}\n\n${body}\n`);
 }
 
-await main();
+// 直跑才执行主流程：纯函数（Changelog 段拼装）被测试导入时，不应触发整条网络流程。
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  await main();
+}
