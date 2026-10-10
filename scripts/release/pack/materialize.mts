@@ -20,6 +20,7 @@ import { join } from "node:path";
 import { ROOT } from "../../shared/root.mts";
 import { STAGING_ROOT } from "../../shared/paths.mts";
 import { dshPin } from "../../shared/version.mts";
+import { dropStaleLibc, platformAssetsFor, scanPlatformTree } from "./assets.mts";
 import { assertIntegrationTargets } from "./assert.mts";
 import { stagingManifest } from "./ship-manifest.mts";
 import { stagingWorkspaceYaml } from "./targets.mts";
@@ -46,11 +47,28 @@ export function materializeProdDeps(spec, version: string) {
   runPnpm(dir, ["install", "--lockfile-only"], spec.name);
   runPnpm(dir, ["install", "--prod", "--frozen-lockfile"], spec.name);
   if (!fs.pathExistsSync(modules)) throw new Error(`生产依赖物化失败（${spec.name}）：node_modules 未生成`);
-  const missing = spec.assets.filter((a) => !fs.pathExistsSync(join(modules, a, "package.json")));
+  // 平台资产**从物化后的锁派生**，不手写名单：工位锁是这次干净安装的解析记录（只含生产闭包），
+  // 带 os/cpu/libc 的条目就是按平台切分的包。判据而非名单——上游换包名、加新平台件自动跟上，
+  // 也不会因为漏写一行而静默放过一个跑不起来的包。
+  const assets = platformAssetsFor(fs.readFileSync(join(dir, "pnpm-lock.yaml"), "utf8"), spec);
+  const missing = assets.filter((a) => !fs.pathExistsSync(join(modules, a, "package.json")));
   if (missing.length) {
     throw new Error(`${spec.name} 缺少平台资产（该平台的包会跑不起来）：\n  - ${missing.join("\n  - ")}`);
   }
-  console.log(`[pack] ${spec.name} 物化完成（平台资产 ${spec.assets.length} 项齐备，内核 ${assertKernelAtPin(modules)}，集成目标 ${assertIntegrationTargets(modules, join(ROOT, "integrations"))} 项）`);
+  // 反向闸一：os/cpu 不相容的包不该被装出来。物化按目标窄化这两个维度，混进来即窄化失效，拒包。
+  // 反向闸二：libc 不相容的变体（glibc 目标下的 musl 件）当删不当拒——pnpm 的
+  // supportedArchitectures.libc 在 hoisted 布局下不作用于 optional 传递树（sharp 把 musl 变体
+  // 列在 optionalDependencies 里），它们对目标无用且体量不小（libvips 一对约 36 MB）。
+  // 扫描覆盖整棵依赖树（含嵌套 node_modules）；删除失败即中止打包：删不掉说明产物里躺着不该在的件。
+  const scan = scanPlatformTree(modules, spec);
+  if (scan.foreign.length) {
+    throw new Error(`${spec.name} 物化树里混进了别的 os/cpu 的包（supportedArchitectures 窄化没生效）：\n  - ${scan.foreign.join("\n  - ")}`);
+  }
+  const droppedLibc = dropStaleLibc(modules, scan.staleLibc);
+  if (droppedLibc.files > 0) {
+    console.log(`[pack] ${spec.name} 清掉 ${droppedLibc.files} 个 libc 不相容变体（释放未压缩 ${(droppedLibc.bytes / 1e6).toFixed(1)} MB）`);
+  }
+  console.log(`[pack] ${spec.name} 物化完成（平台资产 ${assets.length} 项齐备，内核 ${assertKernelAtPin(modules)}，集成目标 ${assertIntegrationTargets(modules, join(ROOT, "integrations"))} 项）`);
   const pruned = pruneNodeModules(modules, spec);
   if (pruned.files > 0) {
     console.log(
@@ -99,7 +117,7 @@ function assertKernelAtPin(modules: string): string {
  *
  * 返回 { files, bytes }；失败一律不阻断打包（删不掉就留着）。
  */
-function pruneNodeModules(modules, spec) {
+function pruneNodeModules(modules: string, spec: { os: string[]; cpu: string[] }): { files: number; bytes: number } {
   const plat = new Set();
   for (const os of spec.os) for (const cpu of spec.cpu) plat.add(`${os}-${cpu}`);
   const normalizePlat = (name) => name.replace(/^win10-/, "win32-");
