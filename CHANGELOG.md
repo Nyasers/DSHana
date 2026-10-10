@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.0.5+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.4%2Bdsh-0.2.0-rc.2...v1.0.5%2Bdsh-0.2.0-rc.2) (2026-10-10)
+
+### Features
+
+* **theme:** 「哪些面强制跟随宿主主题」改为可配置（设置页四个开关） ([308ca9d](https://github.com/Nyasers/DSHana/commit/308ca9d4ff1e302c0eee835089863283a95a6963))
+* **theme:** 「强制跟随宿主主题的面」这张声明落到 shared ([5c38f99](https://github.com/Nyasers/DSHana/commit/5c38f99532e602409d260293ebfd00befadea86b))
+
+### Bug Fixes
+
+* **host:** 中继改写卡内 HTML 的根相对引用（iframe 内的资源加载也回卡里） ([fec777d](https://github.com/Nyasers/DSHana/commit/fec777d6756e9e3891dcfa37294033a905898ff4)), references [#271](https://github.com/Nyasers/DSHana/issues/271)
+* **host:** HTML 改写按 latin1 往返（非 UTF-8 文档不再被改坏） ([dab285e](https://github.com/Nyasers/DSHana/commit/dab285e261bae481426f5ffca002785cafbb9551)), references [#273](https://github.com/Nyasers/DSHana/issues/273)
+* **pack:** 平台扫描下探嵌套 node_modules，删除失败不再静默（CodeRabbit on [#275](https://github.com/Nyasers/DSHana/issues/275)） ([51195b8](https://github.com/Nyasers/DSHana/commit/51195b89ccc37511a6f1564400715366ff5c8018))
+* **theme:** 背景让位给元素级改写，侧栏面恒定跟随宿主 ([f97134a](https://github.com/Nyasers/DSHana/commit/f97134a3512c5ce86efdfd58ee7f4dbf0791bac1))
+* **theme:** 会话卡的面名与设置变化的到达（两个「勾了不生效」的 bug） ([8388e54](https://github.com/Nyasers/DSHana/commit/8388e5499f52835da480b4b670bca4149a1f49d4))
+* **theme:** 强制面（侧栏）的覆盖带 !important ([6611af5](https://github.com/Nyasers/DSHana/commit/6611af5544a5598928be211f1c1f05f23450df89))
+* **theme:** 强制面拉取的并发写与两处陈旧文档（CodeRabbit on [#274](https://github.com/Nyasers/DSHana/issues/274)） ([41f90d8](https://github.com/Nyasers/DSHana/commit/41f90d8d48debcafff514e9bf772f680f9c39cd2))
+* **theme:** 退出跟随时把明暗还成 dsh 自己那一档（不再退回亮色） ([da1e992](https://github.com/Nyasers/DSHana/commit/da1e992c68bc3f3ed6edc926e5789c70552752f6))
+* **ui:** 元素发起的资源加载纳入同一处接管 ([e6ec4ad](https://github.com/Nyasers/DSHana/commit/e6ec4ada767a95969c7129cb2def558673eaa998)), references [#271](https://github.com/Nyasers/DSHana/issues/271) [#271](https://github.com/Nyasers/DSHana/issues/271) [#271](https://github.com/Nyasers/DSHana/issues/271)
+
 ## [1.0.4+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.3%2Bdsh-0.2.0-rc.2...v1.0.4%2Bdsh-0.2.0-rc.2) (2026-10-08)
 
 ### Bug Fixes
@@ -737,6 +756,7 @@
 ### Bug Fixes
 
 * CodeRabbit review 修复——install/update 互斥、spec 注入校验、SemVer prerelease 比较、version.mjs 严格化与毕业逻辑、文档同步 ([7eba3be](https://github.com/Nyasers/dsh-hanako/commit/7eba3bee448748c1959922092abcb49fee1e0d7b))
+
 
 
 
