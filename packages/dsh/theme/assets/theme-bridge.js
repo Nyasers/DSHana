@@ -173,6 +173,34 @@
   // 宿主浅 + 系统深就是那一帧黑屏。
   // 例外是**恒跟随的面**（强制面名单里的面，缺省只有侧栏）：它的门本来就恒开，等偏好已知只是把
   // 明暗对齐白白推迟到插件就位（那一段里 presenter 会按浏览器系统先挂一次 data-ds-dark-theme）。
+  // 跟随时本桥写过的两格（html 的 inline color-scheme 与 body 的深色标记）归我们管：
+  // 退出跟随要按 dsh 自己那一档还回去，而「还」只在确实写过时才做（没写过就不该碰）。
+  var schemeOwned = false;
+  // dsh 自己那一档明暗。只在退出跟随时用，而退出跟随的前提是偏好**已知且非 system**
+  // （system 在 followHost 里恒跟随），所以这里只需认 light / dark；其余返回 null——
+  // 不知道就不写，不替 dsh 猜。
+  function dshScheme() {
+    var p = readPreference();
+    return p === "dark" ? "dark" : p === "light" ? "light" : null;
+  }
+  // 把明暗两格写成 dsh 自己那一档（退出跟随时用）。**写而不是删**：删了会落在 presenter 写入之后，
+  // 把它的值抹掉，UA 明暗就退回系统档（我们区分不了那一格当前的值是谁写的）；写同一个值则是幂等的。
+  function restoreDshScheme() {
+    var scheme = dshScheme();
+    if (!scheme) return;
+    var rootEl = null, bodyEl = null;
+    try { rootEl = document.documentElement; } catch (e) { rootEl = null; }
+    try { bodyEl = document.body; } catch (e) { bodyEl = null; }
+    try {
+      if (rootEl && rootEl.style.colorScheme !== scheme) rootEl.style.setProperty("color-scheme", scheme);
+    } catch (e) { /* 忽略 */ }
+    try {
+      if (bodyEl) {
+        var wantDark = scheme === "dark";
+        if (bodyEl.hasAttribute("data-ds-dark-theme") !== wantDark) bodyEl.toggleAttribute("data-ds-dark-theme", wantDark);
+      }
+    } catch (e) { /* 忽略 */ }
+  }
   function syncHostScheme() {
     var root = null;
     try { root = document.documentElement; } catch (e) { return; }
@@ -180,10 +208,10 @@
     var follow = followHost();
     if (!prefKnown && !follow) return;
     if (!follow) {
-      // 明暗交还 presenter：dsh 显式选了 light/dark 时，presenter 会往**同一格**写它自己的
-      // html color-scheme，而它随每次偏好变化重建快照、必然重写一遍。所以这里不碰那一格：
-      // 早先我们写的值会被它覆掉，删掉反而可能落在它写入之后、把它的值抹掉（它的 UA 明暗
-      // 就退回系统档）。我们没能力区分那一格当前的值是谁写的。
+      // 明暗交还 dsh。**必须写成它自己那一档，不能只是不碰**：这两格在跟随时由本桥按宿主写过，
+      // 而 presenter **只在快照发布时**写它们——用户取消勾选强制面（或把面移出名单）不会发布
+      // 快照，那两格就会停在我们写过的宿主值上（宿主亮 + dsh 选暗 = 整片退回亮色）。
+      if (schemeOwned) { restoreDshScheme(); schemeOwned = false; }
       clearSeed();
       return;
     }
@@ -195,6 +223,8 @@
     // 写前比现值：html 的 style 属性也在观察名单里（presenter 会往同一个属性写 colorScheme），
     // 同值重写会自己触发自己，比一下就不写了。
     try { if (root.style.colorScheme !== a) root.style.setProperty("color-scheme", a); } catch (e) { /* 忽略 */ }
+    // 写过就算归我们管——哪怕 body 还没解析出来（那时下面会早返）：退出跟随时两格都要还。
+    schemeOwned = true;
     var bodyEl = null;
     try { bodyEl = document.body; } catch (e) { bodyEl = null; }
     if (!bodyEl) return; // 桥脚本在 <head> 里执行，body 往往还没解析出来；DOMContentLoaded 后再来

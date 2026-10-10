@@ -19,6 +19,10 @@
 //     强制面（侧栏）反过来，声明一律带 !important，元素级/属性级请求都不得改写它；
 //     全程不特判任何具体属性名；
 //   · 桥一落地就把壳页垫的内联底色抹掉（内联只有 !important 压得住，留着就把上面那条让位堵死）；
+//   · 跟随时桥把明暗两格（html 的 inline color-scheme 与 body[data-ds-dark-theme]）按**宿主**写；
+//     退出跟随时要按 **dsh 自己那一档**写回去（不是不碰）：presenter 只在快照发布时写那两格，
+//     而取消勾选不发布快照——只不碰的话它们就停在我们写过的宿主值上（宿主亮 + dsh 选暗
+//     = 整片退回亮色）。从未跟随过（没写过）则不碰，不凭空调。
 //   · 哪些面恒跟随宿主（无视 dsh 自己的 light/dark 偏好）由 <html> 的 data-dshana-force-follow
 //     决定（逗号分隔的面名）：属性缺席 = 缺省名单（只有侧栏面），空串 = 一个都不强制——两者
 //     是两回事；名单里的面同时决定覆盖带不带 !important，两处判定共用同一函数；
@@ -236,10 +240,45 @@ test("桥：跟随宿主时明暗跟着宿主走（dsh 认的系统偏好不算�
   assert.equal(dark.colorScheme, "dark");
 });
 
-test("桥：dsh 自己选了 light/dark 时，明暗交还它的 presenter", () => {
-  const css = runBridge(null, { appearance: "dark", preference: "light" });
-  assert.equal(css.dark, false, "dsh 显式 light 时不该被挂上 dark 标记");
-  assert.equal(css.colorScheme, undefined, "dsh 显式偏好时不该留我们的 inline color-scheme");
+test("桥：dsh 自己选了 light/dark 时，明暗写成它自己那一档（不是不管）", () => {
+  // 从未跟随过（偏好一开始就是显式的）→ 桥没写过那两格 → 退出时也不该碰。
+  const untouched = runBridge(null, { appearance: "dark", preference: "light" });
+  assert.equal(untouched.dark, false, "dsh 显式 light 时不该被挂上 dark 标记");
+  assert.equal(untouched.colorScheme, undefined, "没跟随过就不该留我们的 inline color-scheme");
+});
+
+test("桥：退出跟随时把明暗还给 dsh 自己那一档（宿主亮 + dsh 选暗 = 不该退回亮色）", () => {
+  // 真机踩到：宿主亮、dsh 自己选了暗，取消勾选强制面后整片退回亮色。
+  // 机制：跟随时桥把两格写成宿主值（light），而 presenter 只在快照发布时写它们，取消勾选不发布。
+  const bridge = runBridge(null, { appearance: "light", preference: "system", face: "main" });
+  assert.equal(bridge.colorScheme, "light", "起点：跟随时按宿主亮写");
+  assert.equal(bridge.dark, false, "起点：宿主亮时不该挂深色标记");
+  // 用户把 dsh 外观改成显式暗（偏好属性随之变）→ 退出跟随。
+  bridge.setRootAttr("data-dsh-theme-preference", "dark");
+  bridge.fireObservers();
+  assert.equal(bridge.colorScheme, "dark", "退出跟随该把 color-scheme 写成 dsh 自己那一档（dark）");
+  assert.equal(bridge.dark, true, "退出跟随该按 dsh 自己那一档挂回深色标记");
+  assert.equal(bridge.css, "", "退出跟随该撤掉覆盖");
+});
+
+test("桥：退出跟随时反向也对（宿主暗 + dsh 选亮 = 该摘掉深色标记）", () => {
+  const bridge = runBridge(null, { appearance: "dark", preference: "system", face: "main" });
+  assert.equal(bridge.colorScheme, "dark", "起点：跟随时按宿主暗写");
+  assert.equal(bridge.dark, true, "起点：宿主暗时该挂深色标记");
+  bridge.setRootAttr("data-dsh-theme-preference", "light");
+  bridge.fireObservers();
+  assert.equal(bridge.colorScheme, "light", "退出跟随该写回 dsh 自己那一档（light）");
+  assert.equal(bridge.dark, false, "退出跟随该摘掉深色标记");
+});
+
+test("桥：把面移出名单也算退出跟随，明暗同样还回去", () => {
+  // 非强制面（main）在 system 偏好下也跟随；把偏好改成显式暗即退出，与取消勾选同一条路。
+  const bridge = runBridge(null, { appearance: "light", preference: "system", face: "main" });
+  assert.equal(bridge.colorScheme, "light");
+  bridge.setRootAttr("data-dsh-theme-preference", "dark");
+  bridge.fireObservers();
+  assert.equal(bridge.colorScheme, "dark", "退出跟随该还回 dsh 自己那一档");
+  assert.equal(bridge.dark, true, "该挂回深色标记");
 });
 
 test("桥：presenter 在插件树激活时写的明暗标记会被纠回来", () => {
@@ -256,7 +295,7 @@ test("桥：presenter 在插件树激活时写的明暗标记会被纠回来", (
   assert.equal(bridge.colorScheme, "light", "html 的 inline color-scheme 该被纠回宿主明暗");
 });
 
-test("桥：切到 dsh 显式偏好后，presenter 写的那格 color-scheme 不被抹掉", () => {
+test("桥：切到 dsh 显式偏好后，那两格写成 dsh 自己那一档（不抹、也不留我们的宿主值）", () => {
   // 起点：跟随宿主（偏好 system + 宿主浅）→ 桥把 html 的 color-scheme 写成 light。
   const bridge = runBridge(null, { appearance: "light" });
   assert.equal(bridge.colorScheme, "light", "跟随时该自己写上宿主明暗");
@@ -264,9 +303,9 @@ test("桥：切到 dsh 显式偏好后，presenter 写的那格 color-scheme 不
   bridge.setRootAttr("data-dsh-theme-preference", "dark");
   bridge.rootStyle.set("color-scheme", "dark");
   bridge.fireObservers();
-  // 我们区分不了那一格的值是谁写的，所以退出跟随时不能抹：抹了就会落在 presenter 写入之后，
-  // 把它的 UA 明暗退回系统档。
-  assert.equal(bridge.colorScheme, "dark", "presenter 的值该留着");
+  // 我们区分不了那一格的值是谁写的，所以**写而不是删**：删了会落在 presenter 写入之后，把它的值
+  // 抹掉、UA 明暗退回系统档；写成 dsh 自己那一档则与 presenter 同值，幂等。
+  assert.equal(bridge.colorScheme, "dark", "该写成 dsh 自己那一档（与 presenter 同值）");
 });
 
 test("桥：退出跟随时抹掉壳页垫的底色（主题切得干净）", () => {
