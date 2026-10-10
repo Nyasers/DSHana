@@ -94,6 +94,13 @@ export function loadRuntimeBundle(privateBase, pageOrigin = window.location.orig
 export const HOST_PATH_PREFIXES = ["/api/apps/"];
 
 /**
+ * 只接管这几个 scheme。其余（blob: / filesystem: / data: / about: / 扩展协议）一律按原生放行：
+ * 它们的 origin 判定不可靠——`blob:https://<本页>/<uuid>` 解析出来的 origin 就是本页，
+ * 内层 URL 整个塞进 pathname，于是会被误判成同页路径、改写成一个并不存在的地址。
+ */
+const RELAY_SCHEMES = new Set(["http:", "https:", "ws:", "wss:"]);
+
+/**
  * 判定 + 重写：返回应发出的 URL；返回 null 表示按原生放行。
  * @param input 目标 URL（字符串或 URL 均可）
  * @param privateBase 中继前缀绝对 URL（尾带 /）
@@ -109,6 +116,7 @@ export function resolveRelayUrl(
   const hostPrefixes = opts.hostPrefixes || HOST_PATH_PREFIXES;
   let url;
   try { url = new URL(String(input), pageOrigin); } catch { return null; }
+  if (!RELAY_SCHEMES.has(url.protocol)) return null;
   // ws:/wss: 的 origin 与页面的 http:/https: 不等值，按协议族归一后再比（WebSocket 载体
   // 自己带 http(s) URL 的情况真实存在，不能因为 scheme 写法把人拒了）。
   const samePage = url.origin.replace(/^ws/, "http") === pageOrigin.replace(/^ws/, "http");
@@ -138,10 +146,12 @@ function inheritStatics(Wrapped, Native) {
 }
 
 /**
- * 接管本页的请求原语：fetch / XMLHttpRequest / EventSource / WebSocket / sendBeacon。
+ * 接管本页的请求原语与元素资源：fetch / XMLHttpRequest / EventSource / WebSocket / sendBeacon，
+ * 以及元素自己发起的资源加载（img / video / script / iframe 等的 src、link 的 href；
+ * 属性赋值与 setAttribute 两条路）。
  * 只做一件事——把「发给本页 origin、且不属于宿主前缀」的 URL 改指中继前缀。
- * 覆盖不到的载体（Blob Worker 内部的 fetch、CSS url()、动态 import 之外的 DOM 资源）由
- * `<base>` 与各自钩子负责：见下面 installTransport 的覆盖边界说明。
+ * 覆盖不到的载体（CSS url()、srcset、innerHTML 解析出的属性、iframe 内部 realm、
+ * Worker 内部的 fetch）见下面 installTransport 的覆盖边界说明。
  * @param privateBase 中继前缀绝对 URL（尾带 /）
  * @param [opts]
  * @returns disposer（逐个还原原生接口）
@@ -220,6 +230,70 @@ export function installRequestTakeover(
       };
       undo.push(() => { nav.sendBeacon = originalBeacon; });
     } catch { /* 宿主对象不可改则跳过 */ }
+  }
+
+  // ---- 元素资源：与请求原语同一处接管 ----
+  //
+  // 请求原语只兜住「脚本发起」的访问。元素资源（img / video 的 src、link 的 href）由浏览器自己
+  // 发起，既不经请求原语、也不受 <base> 约束（前导斜杠的绝对路径按 origin 解析，不继承 base 的
+  // 路径）——插件以绝对路径伺服资源时整类落到宿主源上被凭据闸挡。这里把同一判定挂到元素资源的
+  // 写入入口：属性访问器与 setAttribute 两条路都要接（`img.src = x` 不走 setAttribute）。
+  //
+  // 有意不覆盖，各自原因不同：
+  //   · CSS url()、srcset 列表：一个值里带多条 URL，要按各自语法切分，不是单值重写能做的；
+  //   · innerHTML 解析出的属性：解析器直接落属性，不经过这里的任何入口；
+  //   · iframe 内部 realm 的请求：原型补丁只作用于本窗口，子文档有自己的 Element 与 fetch；
+  //   · Worker 内部的 fetch：靠 __DSH_FILE_UPLOAD__ 钩子避免走那条路。
+  const RESOURCE_SRC_TAGS = new Set(["IMG", "VIDEO", "AUDIO", "SOURCE", "TRACK", "IFRAME", "SCRIPT", "EMBED"]);
+  /** 空值照原生传下去：`src = ""` 是清空语义，映射成中继前缀就变成真的去取一次。 */
+  const remapElementUrl = (value) => (value == null || value === "" ? null : relay(value));
+
+  // video / audio 的 src 访问器定义在 HTMLMediaElement.prototype 上（子类原型上取不到描述符），
+  // 所以挂父类而不是分别挂两个子类——后者会静默落空，只剩 setAttribute 那条路还活着。
+  const resourceProps: Array<[any, string]> = [
+    [target.HTMLImageElement, "src"],
+    [target.HTMLScriptElement, "src"],
+    [target.HTMLIFrameElement, "src"],
+    [target.HTMLMediaElement, "src"],
+    [target.HTMLSourceElement, "src"],
+    [target.HTMLTrackElement, "src"],
+    [target.HTMLEmbedElement, "src"],
+    [target.HTMLLinkElement, "href"],
+  ];
+  for (const [Ctor, prop] of resourceProps) {
+    const desc = Ctor && Ctor.prototype ? Object.getOwnPropertyDescriptor(Ctor.prototype, prop) : null;
+    if (!desc || typeof desc.set !== "function") continue;
+    const nativeSet = desc.set;
+    try {
+      Object.defineProperty(Ctor.prototype, prop, {
+        ...desc,
+        set(value: any) {
+          const mapped = remapElementUrl(value);
+          return nativeSet.call(this, mapped ? mapped.toString() : value);
+        },
+      });
+      undo.push(() => { try { Object.defineProperty(Ctor.prototype, prop, desc); } catch { /* 忽略 */ } });
+    } catch { /* 不可改的宿主对象则跳过 */ }
+  }
+
+  const NativeElement = target.Element;
+  if (NativeElement && NativeElement.prototype && typeof NativeElement.prototype.setAttribute === "function") {
+    const nativeSetAttribute = NativeElement.prototype.setAttribute;
+    try {
+      NativeElement.prototype.setAttribute = function setAttribute(name: any, value: any) {
+        const attr = String(name).toLowerCase();
+        const tag = this && this.tagName ? String(this.tagName).toUpperCase() : "";
+        // 只认资源标签的 src 与 <link> 的 href：a.href 是导航语义、base.href 是解析基准，
+        // 改它们换的是页面语义，不是把同源资源换个入口。
+        const isResource = (attr === "src" && RESOURCE_SRC_TAGS.has(tag)) || (attr === "href" && tag === "LINK");
+        if (isResource) {
+          const mapped = remapElementUrl(value);
+          if (mapped) value = mapped.toString();
+        }
+        return nativeSetAttribute.call(this, name, value);
+      };
+      undo.push(() => { try { NativeElement.prototype.setAttribute = nativeSetAttribute; } catch { /* 忽略 */ } });
+    } catch { /* 不可改的宿主对象则跳过 */ }
   }
 
   return () => {
@@ -606,7 +680,9 @@ export function installDirectoryPickerBridge(sdk) {
  *     __DSH_TRANSPORT__.fetch。我们同法（integrations/client-hmr、integrations/ui-open-in-app）。
  *
  * 一处接管：installRequestTakeover 直接包住本页的 fetch / XMLHttpRequest / EventSource /
- * WebSocket / sendBeacon，凡「发给本页 origin、且不在宿主前缀 /api/apps/ 下」的 URL 一律改指中继前缀。
+ * WebSocket / sendBeacon 五原语，以及元素自己发起的资源加载（img / video / script / iframe 等的
+ * src、link 的 href；属性赋值与 setAttribute 两条路），凡「发给本页 origin、且不在宿主前缀
+ * /api/apps/ 下」的 URL 一律改指中继前缀。
  * 上面两处逐包补丁保留（同一目标、互为兼容，不另增第三处）；__DSH_TRANSPORT__ 仍是内核 connection
  * 客户端的 opt-in 通道，语义不变（它对外部 origin 抛错，接管层则原样放行）。
  */
