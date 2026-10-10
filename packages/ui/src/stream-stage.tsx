@@ -19,7 +19,6 @@ import { injectDshIndex, installTransport, type DshTransport } from "./dsh-injec
 import { roleForView } from "./face-role.ts";
 import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPreference } from "./seed-tokens.ts";
 import { followHostTheme } from "./host-theme.ts";
-import { publishForceFollow, publishForceFollowOnVisible } from "./force-follow.ts";
 import {
   SURFACE_API,
   dropShared,
@@ -150,6 +149,9 @@ function clearSeedTokens(): void {
 }
 function seedDshTokens(): void {
   if (!document.body) return;
+  // 底座 token：这一面可见底那一格（会话卡是中列面，壳页同源实现见 seed-tokens.ts）。
+  // 面名不在这里写：那是页面身份，由 stream-entry.ts 在 boot() 里写在 <html> 上（两个挂载态
+  // 都写，因为「本页是 stream 面」与「装不装 DSH」是两件事）。
   try { document.documentElement.setAttribute("data-dshana-backdrop", backdropTokenForView("stream")); } catch { /* 忽略 */ }
   // DSH 自己选了明暗时首帧归它：不但不垫，还要把上一轮垫的抹掉。
   if (!seedsForDshPreference(dshPreference)) { clearSeedTokens(); return; }
@@ -347,10 +349,7 @@ export function mountStreamStage(stageEl: HTMLElement): void {
     onApplied: () => seedDshTokens(),
     onStylesApplied: () => pushThemeNow(),
   });
-  // 「哪些面强制跟随宿主主题」这张表也搬上 <html>（packages/ui/src/force-follow.ts）：会话卡的
-  // 重型半（取出到黑板 / 拆窗）要注入 DSH，因此与壳页同一套——拉不到就不写属性，桥按缺省兜底。
-  // 重新可见时重读：改完设置切回卡片即生效（宿主 App 存储没有订阅口）。
-  void publishForceFollow();
-  publishForceFollowOnVisible();
+  // 面名与强制面名单不在这里管：它们由**页面**在 stream-entry.ts 的 boot() 里写（两个挂载态
+  // 都写），本重型半只是被它动态 import() 进来的一段。
   createRoot(stageEl).render(<App />);
 }

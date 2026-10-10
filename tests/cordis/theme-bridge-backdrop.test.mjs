@@ -591,8 +591,9 @@ test("壳页确实把这一面的底座 token 与宿主明暗写上了（桥的�
   assert.ok(HOST_THEME_SRC.includes("data-appearance"), "共享件没把宿主明暗写出来");
   assert.ok(BRIDGE_SRC.includes("data-dshana-backdrop"), "桥没读 data-dshana-backdrop");
   assert.ok(BRIDGE_SRC.includes("data-appearance"), "桥没读宿主明暗");
-  // 面的单一事实源：壳页把 seedView 写成 <html> 的 data-dshana-face，桥读同一处判「恒跟随的面」。
-  assert.ok(SHELL_SRC.includes("data-dshana-face"), "壳页没写 data-dshana-face");
+  // 面的单一事实源：壳页把 seedView 写成 <html> 的面名属性，桥读同一处判「恒跟随的面」。
+  // 壳页侧走 shared 的 FACE_ATTR 常量（属性名不长出第二份字面量），桥是散装浏览器 JS、只能读字面量。
+  assert.ok(SHELL_SRC.includes("FACE_ATTR"), "壳页没写面名属性（该走 shared 的 FACE_ATTR）");
   assert.ok(BRIDGE_SRC.includes("data-dshana-face"), "桥没读 data-dshana-face");
   // 桥不另立一份面词表：面词表只有 face-role.ts 那一处（壳页经 isFaceView 校验后写属性），
   // 桥只按 <html> 上的名单比对面名，不枚举词表、也不按底色 token 反推面。唯一允许出现的
@@ -613,7 +614,8 @@ test("壳页确实把这一面的底座 token 与宿主明暗写上了（桥的�
   );
   // 单一事实源：壳页写的面就是它认出来的那一面（seedView），不另立词表；
   // 且这次写入发生在顶层（注入可能早于首次主题载荷那次 seedDshTokens）。
-  assert.match(SHELL_SRC, /setAttribute\("data-dshana-face", seedView\)/, "壳页该写这一面的面名");
+  // 属性名走 shared 的 FACE_ATTR（每一处写它的页面都用同一个常量，免得属性名长出第二份字面量）。
+  assert.match(SHELL_SRC, /setAttribute\(FACE_ATTR, seedView\)/, "壳页该写这一面的面名");
   assert.ok(SHELL_SRC.includes("publishFace();"), "壳页该在顶层先把面写出来（注入可能早于首次垫片）");
   const atPublish = SHELL_SRC.indexOf("publishFace();");
   const atFollow = SHELL_SRC.indexOf("followHostTheme(hana,");

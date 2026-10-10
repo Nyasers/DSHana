@@ -16,11 +16,16 @@
 // 启动屏里。**拉不到就不写**——属性缺席时桥按 FORCE_FOLLOW_FACES 的缺省兜底（= 只有侧栏面），
 // 也就是这一功能之前的行为，不因为一次取数失败把界面弄成别的样子。
 //
-// 与设置页的联动：改完设置不推事件（宿主 App 存储没有订阅口，见 packages/ui/src/settings.tsx
-// 同一处说明），已开的卡片在**重新可见时**重读一次——壳页因此接上 visibilitychange
-// （publishForceFollowOnVisible），用户从设置页切回卡片即生效。
+// 与设置页的联动：设置页保存在**另一个文档**（宿主设置区那个 iframe）里，卡片看不到它的
+// visibilityState 变化——所以不能只靠 visibilitychange。设置页保存后在同源广播频道上发一条
+// （FORCE_FOLLOW_CHANNEL），所有已开的卡片与壳页收到就重读一次；可见性与焦点事件只当兜底
+// （BroadcastChannel 不可用的旧宿主、以及同文档内切页的情形）。
+//
+// 两者都不轮询：与桥的偏好同步同一纪律（事件驱动）。
 import {
   FORCE_FOLLOW_ATTR,
+  FORCE_FOLLOW_CHANNEL,
+  FORCE_FOLLOW_CHANGED,
   encodeForceFollowFaces,
   isForceFollowFace,
   type ForceFollowFace,
@@ -69,13 +74,49 @@ export async function publishForceFollow(): Promise<boolean> {
 }
 
 /**
- * 页面重新可见时重读一次（改完设置切回卡片即生效）。
- * 返回解绑函数；调用方在页面卸载时不必特意调（文档级监听随文档走）。
+ * 设置页保存这张表后广播一条，让已开的页面重读。
+ * 设置页与卡片是两个文档，拿不到彼此的可见性变化——同源广播才是那条可靠的路。
+ * 广播不可用（旧宿主没有 BroadcastChannel）时静默：接收侧还有可见性 / 焦点兜底。
  */
-export function publishForceFollowOnVisible(): () => void {
-  const onVisible = () => {
+export function notifyForceFollowChanged(): void {
+  if (typeof BroadcastChannel !== "function") return;
+  try {
+    const bus = new BroadcastChannel(FORCE_FOLLOW_CHANNEL);
+    bus.postMessage({ kind: FORCE_FOLLOW_CHANGED, at: Date.now() });
+    // 发完就关：这里只借它递一条，不留常开连接（接收侧那份由监听方持有）。
+    bus.close();
+  } catch { /* 忽略：接收侧还有兜底 */ }
+}
+
+/**
+ * 开始盯着这张表的变化。三条来源，都是事件、不轮询：
+ *   · 同源广播（主力）：设置页保存后发一条，跨文档即时到达；
+ *   · 页面重新可见：卡片在自己的窗口里被切回来时生效（同文档切页不触发，那条靠广播）；
+ *   · 窗口重新获得焦点：文档被别的东西遮住又重新点回来的情形。
+ * 返回解绑函数；不调也不漏（监听随文档走），但显式清理更干净。
+ */
+export function watchForceFollowChanges(): () => void {
+  let bus: BroadcastChannel | null = null;
+  const onMessage = (event: MessageEvent): void => {
+    const data = event.data as { kind?: unknown } | null;
+    if (!data || typeof data !== "object" || data.kind !== FORCE_FOLLOW_CHANGED) return;
+    void publishForceFollow();
+  };
+  if (typeof BroadcastChannel === "function") {
+    try {
+      bus = new BroadcastChannel(FORCE_FOLLOW_CHANNEL);
+      bus.addEventListener("message", onMessage);
+    } catch { bus = null; }
+  }
+  const onVisible = (): void => {
     if (document.visibilityState === "visible") void publishForceFollow();
   };
+  const onFocus = (): void => { void publishForceFollow(); };
   document.addEventListener("visibilitychange", onVisible);
-  return () => document.removeEventListener("visibilitychange", onVisible);
+  window.addEventListener("focus", onFocus);
+  return () => {
+    document.removeEventListener("visibilitychange", onVisible);
+    window.removeEventListener("focus", onFocus);
+    try { if (bus) { bus.removeEventListener("message", onMessage); bus.close(); } } catch { /* 忽略 */ }
+  };
 }

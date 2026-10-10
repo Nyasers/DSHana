@@ -33,6 +33,7 @@ import {
 import type { SelectOption } from "@hana/plugin-components/settings";
 import "@hana/plugin-components/settings.css";
 import { FORCE_FOLLOW_CANDIDATES, FORCE_FOLLOW_FACES } from "@dshana/shared/face-theme.ts";
+import { publishForceFollow, watchForceFollowChanges, notifyForceFollowChanged } from "./force-follow.ts";
 import { followHostTheme } from "./host-theme.ts";
 
 // ---- 主题跟随 ----
@@ -358,6 +359,8 @@ function App() {
       setFaces(forceFollowOf(data.settings)); // 以后端返回的生效值为准
       if (typeof data.revision === "number") setCfgRevision(data.revision);
       setFacesSaved(true);
+      // 已开的卡片／壳页在另一个文档里，看不到本页的可见性变化：广播一条让它们重读。
+      notifyForceFollowChanged();
     } catch (e) {
       setFacesHint("保存失败：" + errText(e));
       setFacesWarn(true);
@@ -528,6 +531,10 @@ function App() {
     /* 宿主未提供则忽略 */
   }
   followHostTheme(hana, { syncColorScheme: true });
+  // 本页就是写设置的那一头，但它自己不注入 DSH，所以这两个只是保险：另一处设置页
+  // （同一 App 的多个设置标签页）改过之后，本页重读一次也好保持一致。
+  void publishForceFollow();
+  watchForceFollowChanges();
   const host = document.getElementById("root");
   if (host) createRoot(host).render(<App />);
 })();

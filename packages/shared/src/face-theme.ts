@@ -80,6 +80,16 @@ export function normalizeForceFollowFaces(input: unknown): ForceFollowFace[] {
  */
 export const FORCE_FOLLOW_ATTR = "data-dshana-force-follow";
 
+/**
+ * 页面在 `<html>` 上声明自己面名的属性（值 = 面词表里的一个面）。
+ *
+ * 面的单一事实源是页面自己的静态声明（`meta[name=hana-dshana-role]` 或 `body[data-dshana-view]`），
+ * 这个属性是它在 `<html>` 上的投影——桥读它比对面名，因为桥在 DSH 文档里、读不到外层页面的 DOM。
+ * 每个会注入 DSH 的页面都得自己写它：壳页在 app-shell.ts 的 publishFace()、会话卡在
+ * stream-entry.ts 的 boot()。
+ */
+export const FACE_ATTR = "data-dshana-face";
+
 /** 把这张表编成属性值（壳页写入用；空表编成空串，见上面的缺席/空串之分）。 */
 export function encodeForceFollowFaces(faces: readonly ForceFollowFace[]): string {
   return normalizeForceFollowFaces([...faces]).join(",");
@@ -95,3 +105,17 @@ export function decodeForceFollowFaces(value: unknown): ForceFollowFace[] {
   }
   return out;
 }
+
+/**
+ * 设置页保存这张表后广播的频道名与消息类型。
+ *
+ * 为什么需要它：设置页与卡片是两个文档（宿主设置区一个 iframe、卡片另一个），设置页看不到
+ * 卡片，卡片也看不到设置页。宿主 App 存储没有订阅口，而 `visibilitychange` 在「切到另一个
+ * 并排的 iframe」时**不触发**——只有同源广播才是那条可靠的路。
+ *
+ * 接收侧（壳页／会话卡）收到就重读一次；广播不可用时接收侧还有可见性与焦点兜底。
+ */
+export const FORCE_FOLLOW_CHANNEL = "dshana.force-follow";
+
+/** 广播消息类型（只这一种；带 kind 是为了以后加别的消息时不撞车）。 */
+export const FORCE_FOLLOW_CHANGED = "force-follow-changed";

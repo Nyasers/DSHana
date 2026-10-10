@@ -20,7 +20,8 @@ import { injectDshIndex, installTransport, type DshTransport } from "./dsh-injec
 import { isFaceView, roleForView } from "./face-role.ts";
 import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPreference } from "./seed-tokens.ts";
 import { followHostTheme } from "./host-theme.ts";
-import { publishForceFollow, publishForceFollowOnVisible } from "./force-follow.ts";
+import { FACE_ATTR } from "@dshana/shared/face-theme.ts";
+import { publishForceFollow, watchForceFollowChanges } from "./force-follow.ts";
 import {
   SURFACE_API,
   SURFACE_MISSING,
@@ -486,8 +487,8 @@ import {
   function publishFace() {
     try {
       var root = document.documentElement;
-      if (root.getAttribute("data-dshana-face") !== seedView) {
-        root.setAttribute("data-dshana-face", seedView);
+      if (root.getAttribute(FACE_ATTR) !== seedView) {
+        root.setAttribute(FACE_ATTR, seedView);
       }
     } catch (e) { /* 忽略 */ }
   }
@@ -497,9 +498,9 @@ import {
   // 拉不到就不写属性，桥按缺省（只有侧栏面）兜底，也就是这一功能之前的行为。
   // 顶层的这次调用与 DSH boot 并行，晚到只让桥重算一轮（属性在桥的观察名单里）。
   void publishForceFollow();
-  // 改完设置切回卡片即生效：宿主 App 存储没有订阅口（见 settings.tsx 同一处说明），
-  // 已开的页面在重新可见时自己重读。
-  publishForceFollowOnVisible();
+  // 设置页在另一个文档里（宿主设置区那个 iframe）：改完不会通知我们，靠它保存后广播的一条
+  // 重读（另有可见性/焦点兜底）。
+  watchForceFollowChanges();
   // 撤垫片：按 token 名单抹自定义属性，另加 body 自身的 background-color（为压住 DSH 首帧样式里
   // 那句 `body{background-color:#151517}` 而写的实色）。与主题桥抹的是同一份名单。
   function clearSeedTokens() {
