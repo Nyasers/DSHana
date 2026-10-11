@@ -1,6 +1,6 @@
 {
   "generatedBy": "npm run pack:plugin-sdk",
-  "packedVersion": "1.0.11-beta",
+  "packedVersion": "1.0.16-beta",
   "packages": {
     "@hana/plugin-protocol": {
       "dir": "packages/plugin-protocol",
@@ -106,7 +106,6 @@
         "bundle/desktop/src/themes/continuous-corners.css": "13f02e1bc445c7186fda002d30e35ae02873bc878c4a95f72b2cc4a96d411db3",
         "bundle/hana-peer-require-adapter:react": "missing",
         "bundle/packages/plugin-components/src/settings-entry.tsx": "b02e431088f3c276e2a43aec03c77ee8fd0efc4d1274ca7d46772050daf2998d",
-        "bundle/desktop/src/react/chalkboard/app-page-primary-close.ts": "5a27fdd0b033becce73742b6026637042dbafb9fb5bc8e4a79bd3974c08193ba",
         "bundle/desktop/src/react/chalkboard/app-titlebar-interactive-regions.ts": "db44f78ec5fa2a8484ea10ea092d5a35dc5be828c5751e390e9044384e96923c",
         "bundle/desktop/src/react/chalkboard/AppTitlebarInteractiveRegionLayer.tsx": "ace18d07c99f5a042d871d051ce6632f2a814086079a69c80e211cab71e87a04",
         "bundle/desktop/src/react/chalkboard/card-definitions.ts": "cf7c013cf1e14c42b35602c11657b7103fc2abca10cbc8cdbea780e9f498d35b",
@@ -120,7 +119,7 @@
         "bundle/desktop/src/react/chalkboard/chalkboard-card-types.ts": "e15c9d83f3c5d958bfe6b84f970aa341f2566977f431282741321593091c1fbc",
         "bundle/desktop/src/react/chalkboard/chalkboard-host-read-model.ts": "68183e3dd49e23c210f1d4adf4e4120ed81361fc37e329604998cb294084a2f2",
         "bundle/desktop/src/react/chalkboard/chalkboard-motion.ts": "12ca8843e46e19f4e58ce30b2cbdb4f0934728ed52992fba76cc1985625e1272",
-        "bundle/desktop/src/react/chalkboard/chalkboard.module.css": "28125c68758fcb19bcb490f8e054aee7da9b523f51124b88c9d4ecb0f81d9f59",
+        "bundle/desktop/src/react/chalkboard/chalkboard.module.css": "47e56dcde7fef242a0a3b4ac4b6e49ddf944700bf184ca3d05605a4d532eb101",
         "bundle/desktop/src/react/chalkboard/detached-preview-raise.ts": "aa980d7dedef5c02077e5946dd05249fb841d5847f1692c39ac6362d78715851",
         "bundle/desktop/src/react/chalkboard/detached/child-window.ts": "a8142f547cdb60972fa7abaf72998407c4b692178898a3910d13c166cecffc86",
         "bundle/desktop/src/react/chalkboard/detached/spawn-memory.ts": "ec6fd37942c3e0ea390d9b16eb6fe22c41c53de50d63ba03ab0c8e3a879df9b7",
@@ -139,11 +138,12 @@
         "bundle/desktop/src/react/chalkboard/layout-errors.ts": "54b1031e75e6d7727008bc0d8d1d08ed9e7df5c9f0086fdc55c7597e4eeb6e69",
         "bundle/desktop/src/react/chalkboard/layout-transition-flip.ts": "7c9cbc87a0da21e4e5feacfc0d54bdcbe0cce5604ad1a65fb6597f220c96b8a0",
         "bundle/desktop/src/react/chalkboard/mobile-card-profile.ts": "41bd9d5066273c98bb54512522bc6ce710ad7d0514e4263c8b7833f050993ef3",
+        "bundle/desktop/src/react/chalkboard/page-card-guards.ts": "13645a22b403508018b76704386c70c4f7130671133d54b2109238bf69755bc5",
+        "bundle/desktop/src/react/chalkboard/page-card-policy.ts": "31e27f8a1dd1b6c379d569370e36c4c7f2b9e2a609010fef65eef8da2118babd",
         "bundle/desktop/src/react/chalkboard/page-shape-icons.tsx": "3c2175d4985055c77b8d7cad7f27caeae7a726529919caf2404ed5479344e1fe",
         "bundle/desktop/src/react/chalkboard/page-switcher-math.ts": "2e97e92f1c4d419548dcf9c40df5edc97de8b7699520d2043c702cfcf1f42f0a",
         "bundle/desktop/src/react/chalkboard/PageNavigator.module.css": "dcd07fc8818a8b96c6c9d6b9c82b6bb7064004a2556ad411de5dafa8c4dd00c1",
         "bundle/desktop/src/react/chalkboard/PageNavigator.tsx": "1212754c7f292d90a8d77f7e366e496d4b855bc66f549f7a6f54a91ba3e1944f",
-        "bundle/desktop/src/react/chalkboard/plugin-card-activation.ts": "85acb044db4190fc2635caffbf9a47831fd5f9c6f06195adb113462a55e49e5c",
         "bundle/desktop/src/react/chalkboard/plugin-panel-sections.module.css": "5fb2e43ccc3e2b3c32d231507afc877df28fed4081fc5880d17dc5cac41f8896",
         "bundle/desktop/src/react/chalkboard/PluginPanelSections.tsx": "d41a0377d9473dc4c9c928163ebeb9f54a137c73f050dc513158f86e5d88524d",
         "bundle/desktop/src/react/chalkboard/separator-hit.ts": "a6a4afb1ab604254b4b80108c30cb8cd6b8e2e7b120aee2d637beb3c32ed353e",
@@ -188,7 +188,7 @@
         "bundle/desktop/src/react/plugin-ui/plugin-ui-host-controller.ts": "fe12ebfdaf03d90b05c1b89196268f342856ab80e0111ace376e1c2472d28d6e",
         "bundle/desktop/src/react/services/client-layout-profile-events.ts": "aa8680a7551fd98a3b78cb149191e2c2308462ea0fed7d5ed352006f46548318",
         "bundle/desktop/src/react/services/client-layout-profile-source.ts": "15f6b83b198b20882703b0ad40d42c0cbc3988743c89d909d469dec1a7fc3936",
-        "bundle/desktop/src/react/services/open-preview-resource.tsx": "3faa6e47cc59af5e76ae695f1c7f15ee5de0952ec692de2f601f68476594d9b6",
+        "bundle/desktop/src/react/services/open-preview-resource.tsx": "6c6acb0e1ed8c8f6bea57e0dcd143347835dcec5e6a08812a8fc860d50a66da5",
         "bundle/desktop/src/react/services/previewer-catalog.ts": "91d85c4143adbf56ae62da2ded64af3c92c832d5e5acf1755234d0a7691c48b7",
         "bundle/desktop/src/react/services/previewer-choice.module.css": "6e59acce1af81b0ce3c05e5e89138f751160c178e56e02daecefc7e0685c2001",
         "bundle/desktop/src/react/services/resource-access.ts": "e646af40a8e0d0c2e92eeabbb74380846cb5344dff3c9a0d1eff85f52fc3a00e",
@@ -207,7 +207,7 @@
         "bundle/desktop/src/react/stores/bridge-slice.ts": "cd70a60a054876c4c7d842cf743c015199af8d2a031dfc88b5dcfb2dc8b884ca",
         "bundle/desktop/src/react/stores/browser-slice.ts": "1c9996326ea88488d782940c75c774cfb1b1ec571f6e81640dd4132a51ab2e4e",
         "bundle/desktop/src/react/stores/card-host-consent-slice.ts": "4fdfffd80741dbb76d93d2d43cee57b8f443e914e22d40b05b2fb140b9874c13",
-        "bundle/desktop/src/react/stores/chalkboard-slice.ts": "1060d3211b24910096339a2c4c0d32d2af39a3d2fadf20e097a14b3e7a34aaef",
+        "bundle/desktop/src/react/stores/chalkboard-slice.ts": "5c04dc729161664db8310ac60f9dbce7b52dadd52f3a24a60a933660b8d3ca29",
         "bundle/desktop/src/react/stores/channel-slice.ts": "e248e3c58aab40fe7d24dbc10007f97e1d5cbf78e28cf1497ad13427df609aa9",
         "bundle/desktop/src/react/stores/chat-find-slice.ts": "7f0a8039466c9f973e24a570f6c9611cf3fc3bf8500ca7c01e833d88b2046ea7",
         "bundle/desktop/src/react/stores/chat-slice.ts": "744afb728692f6b77cfdb94344f1f303623bf805bcb5fb473d20afb4f0cee310",
@@ -294,7 +294,7 @@
         "bundle/desktop/src/react/ui/ExtensionDetailView.tsx": "5349c840a3b079ba2a7f63d1334516ad2cd5166c57dc21c381ac3cfb0d822d96",
         "bundle/desktop/src/react/ui/ExtensionPageFrame.module.css": "80b9ecbf75cec51788d78e3c13cf7cd1542e2766f254f1d7a6f9c79c00487e15",
         "bundle/desktop/src/react/ui/ExtensionPageFrame.tsx": "5afaf3e9e3f12fefc2a466d7d5425bd27a8ccbccdadfc18a62e4a593e70cb41c",
-        "bundle/desktop/src/react/ui/geometry-session.ts": "7471fb0496c0d201d193905115dd80906250f6947950455b15bd02e1215ba20a",
+        "bundle/desktop/src/react/ui/geometry-session.ts": "4caf81a303909ef97bd0a3914445b68a556deb9bbd6c93f585e38bf4a4294753",
         "bundle/desktop/src/react/ui/index.ts": "2ad8d48eee73310c8dc3f0dff8a119b4c6b0cdfeaf8379872c472f601236b24a",
         "bundle/desktop/src/react/ui/InstalledExtensionsView.module.css": "8c5d1d7f7591a6ffaac3607b9abacc10cae79f4d0270a01a703914475da93017",
         "bundle/desktop/src/react/ui/InstalledExtensionsView.tsx": "83a431efa275eef72267132a1d3a8c937d36cf1056ad87a329e57e3f87b1d54f",
@@ -373,7 +373,7 @@
         "bundle/packages/plugin-sdk/src/input-panel.ts": "7baae6a0aefa6c3b2edfa975ee8bc7a525845c6c3f4e4c256c837306dc0a8e62",
         "bundle/packages/plugin-sdk/src/ui-actions.ts": "de8877aa652f1f28b2fdb48eb9c6e1a83257c857df1a1d60aefe4ec2d493533b",
         "bundle/shared/app-contract/chrome.ts": "0f56ee7d68f8272ec64b02f0ba79a0b04ff6a9c14ee76ccafdbd564dedfb66f8",
-        "bundle/shared/app-contract/manifest.ts": "98fe98e804b031a7cd2b6edf9a6f6ab06a5255df3d18ab7c592404511c8564e9",
+        "bundle/shared/app-contract/manifest.ts": "c2bd016877bcb8ec2b4244361204f6190ba148193b168c2b281db16385dcc974",
         "bundle/shared/app-contract/runtime.ts": "74e295ccf59348b682e4f59458ed8a0716a5209eae3c2f5bef86c395e775b149",
         "bundle/shared/app-runtime-surface-path.ts": "68d6483c3659792c30bcf873d41a199783c1be2c6f5796798d75c1112629e03d",
         "bundle/shared/app-service-handle.ts": "e86ca0b6e0ccd2a61ede60820f99e7f145da24f39ecfea5985092a234311e386",
@@ -384,15 +384,16 @@
         "bundle/shared/card-kernel.ts": "6a17edf70a405bd9ce98708a71ce9a1f32d34b20a6c04ccd9550ee45034b4210",
         "bundle/shared/card-presentation.ts": "213d58a54e4a50e93ea52adf5d7bf2f746fac781658ea1c1195d9264e1b827fa",
         "bundle/shared/card-renderer-state-budget.ts": "b070e6bb381e6fe594bfbbc51032d08b7f541978dc033f23c2600157cfd00e1f",
-        "bundle/shared/chalkboard-layout.ts": "0feb51d275526d8dcd2b317ec91c0d7e4349d74d0c836976fd225944d6c871c3",
+        "bundle/shared/chalkboard-layout.ts": "1647f8033667883262e4fa01ad16fde81f5fac930eaa5598d9ffbd3c65f2da89",
         "bundle/shared/chalkboard-layout/card-restore-placement.ts": "1bcd70375d01c8e6128425918928882371447b81bff83bfd2a901ad430dc657f",
         "bundle/shared/chalkboard-layout/card-title-source.ts": "6b2bbfa75ada2000426a561dcf8a68662991cd7ef7ce1aa6dc14639a599776a9",
         "bundle/shared/chalkboard-layout/chalkboard-builtin-ids.ts": "8f8db0080ba4d03c775f316bc5517d61a980cdd97073271ee80660152ffb4662",
         "bundle/shared/chalkboard-layout/chalkboard-card-types.ts": "ba0d5af0703eeb586f4edecd13c027328b569f1f39daa2812791d8714b0ae21e",
         "bundle/shared/chalkboard-layout/layout-card-width-contracts.ts": "925b5f7ccfaae9daee49869d8569a46dba887e9eb907fbfc7798422e58af0d44",
         "bundle/shared/chalkboard-layout/layout-document-factory.ts": "bde4dfc7b6526b61ad29b72cc5cb7648569b07208bc7f461edd1afcd6812840f",
-        "bundle/shared/chalkboard-layout/layout-document-reducer.ts": "191e8b414417bec5795e08e534aad700a41e277aaef84eacaeddcea20b244174",
+        "bundle/shared/chalkboard-layout/layout-document-reducer.ts": "0bdd27f78d32f026a54cda541d9df595acbcbccb20818d9043db7772aee91d3a",
         "bundle/shared/chalkboard-layout/layout-errors.ts": "6f43673b0bf49bac9f9c3a42ff3fa74658cc8e761d7709c70d4c6b7be662499b",
+        "bundle/shared/chalkboard-layout/page-card-policy.ts": "633280a258619d229bd013bf8d2a82308c3b43054e84aa9abccd196136d1f597",
         "bundle/shared/chat-ui-state.ts": "deb2738cebce71a7d1b5a65187bdd73a22517193f3a9b7ab2d25734da7856368",
         "bundle/shared/client-layout-profile.ts": "f8df71afca876bc81465001cb02aaa7fc6d54cd5eb6c864383aaf4c6bab0dbff",
         "bundle/shared/contract-versions.json": "0ce12a4786f45caffa01741c49ab97f568bbeda37402a34890f9618595363015",
@@ -682,10 +683,6 @@
                 "bytes": 131654
               },
               {
-                "path": "desktop/src/react/chalkboard/app-page-primary-close.ts",
-                "bytes": 7251
-              },
-              {
                 "path": "desktop/src/react/chalkboard/app-titlebar-interactive-regions.ts",
                 "bytes": 12400
               },
@@ -739,7 +736,7 @@
               },
               {
                 "path": "desktop/src/react/chalkboard/chalkboard.module.css",
-                "bytes": 198528
+                "bytes": 201086
               },
               {
                 "path": "desktop/src/react/chalkboard/detached-preview-raise.ts",
@@ -814,6 +811,14 @@
                 "bytes": 51555
               },
               {
+                "path": "desktop/src/react/chalkboard/page-card-guards.ts",
+                "bytes": 4173
+              },
+              {
+                "path": "desktop/src/react/chalkboard/page-card-policy.ts",
+                "bytes": 74
+              },
+              {
                 "path": "desktop/src/react/chalkboard/page-shape-icons.tsx",
                 "bytes": 3159
               },
@@ -828,10 +833,6 @@
               {
                 "path": "desktop/src/react/chalkboard/PageNavigator.tsx",
                 "bytes": 22050
-              },
-              {
-                "path": "desktop/src/react/chalkboard/plugin-card-activation.ts",
-                "bytes": 3067
               },
               {
                 "path": "desktop/src/react/chalkboard/plugin-panel-sections.module.css",
@@ -1011,7 +1012,7 @@
               },
               {
                 "path": "desktop/src/react/services/open-preview-resource.tsx",
-                "bytes": 8404
+                "bytes": 9369
               },
               {
                 "path": "desktop/src/react/services/previewer-catalog.ts",
@@ -1087,7 +1088,7 @@
               },
               {
                 "path": "desktop/src/react/stores/chalkboard-slice.ts",
-                "bytes": 241387
+                "bytes": 236324
               },
               {
                 "path": "desktop/src/react/stores/channel-slice.ts",
@@ -1475,7 +1476,7 @@
               },
               {
                 "path": "desktop/src/react/ui/geometry-session.ts",
-                "bytes": 5820
+                "bytes": 7788
               },
               {
                 "path": "desktop/src/react/ui/index.ts",
@@ -1911,7 +1912,7 @@
               },
               {
                 "path": "shared/app-contract/manifest.ts",
-                "bytes": 10658
+                "bytes": 10812
               },
               {
                 "path": "shared/app-contract/runtime.ts",
@@ -1955,7 +1956,7 @@
               },
               {
                 "path": "shared/chalkboard-layout.ts",
-                "bytes": 2118
+                "bytes": 2167
               },
               {
                 "path": "shared/chalkboard-layout/card-restore-placement.ts",
@@ -1983,11 +1984,15 @@
               },
               {
                 "path": "shared/chalkboard-layout/layout-document-reducer.ts",
-                "bytes": 78356
+                "bytes": 82162
               },
               {
                 "path": "shared/chalkboard-layout/layout-errors.ts",
                 "bytes": 372
+              },
+              {
+                "path": "shared/chalkboard-layout/page-card-policy.ts",
+                "bytes": 7017
               },
               {
                 "path": "shared/chat-ui-state.ts",
@@ -2775,7 +2780,7 @@
         "input-panels.ts": "a749e56080d1b916f103136a46a1414cc62c81051f7cfc7ddace246de57251b6",
         "input-status.ts": "ce4a9772cd6c6431d98d3d8aa7c2c763d03d35145ca392ac5363459d9d338ee7",
         "instances.ts": "372f108df9b38c7005301f6feee6a1a752b1268afd83e2965ff34827f914d59e",
-        "manifest.ts": "98fe98e804b031a7cd2b6edf9a6f6ab06a5255df3d18ab7c592404511c8564e9",
+        "manifest.ts": "c2bd016877bcb8ec2b4244361204f6190ba148193b168c2b281db16385dcc974",
         "mcp.ts": "5c3a84dc66070d0a118b7ee8bd259738489b50062087292f27298b8fc017d48a",
         "media.ts": "8c38c5b8d609b1293b5211ff2dc94063d4c6652c122edfd47d65380f61f2d2a4",
         "model-stream.ts": "70f1b3b0dcc6507dec7e859c7075f82e6640ab2613792596414975da18258355",
@@ -2790,7 +2795,7 @@
         "runtime-client.ts": "4a65cdc5adf2e82276697fe048a1d3aa55a3d445feeb18651daa9e9a1a6d17b9",
         "runtime.ts": "74e295ccf59348b682e4f59458ed8a0716a5209eae3c2f5bef86c395e775b149",
         "sdk-error.ts": "bacadb62d5383d3e87053ceb742eb7862a7cfe5fe4a7e5db605106d42cf1222d",
-        "server-client.ts": "24b759b9c909a5b7de53771d10dba427531afa41b79088c1692389d67f3fad8c",
+        "server-client.ts": "67e84c260263f1995a9babc3d5a2308e1a9fa788df3eb0de29acf89178e98224",
         "session-search.ts": "82b595759fd84797ed0e4ee0ad5064a0db262278097869822cf2cadc8b7120b1",
         "sessions.ts": "e54b5142f34f0789c63a15726853c3d9a77f59a26620da072d51383ae2acd3c0",
         "settings.ts": "7734cfc20bf97034ed2628e1f62a50bddcc6a0268d93df0be8107cde51821147",
@@ -2798,7 +2803,7 @@
         "tasks.ts": "e40fbf317fe3e1f037e3c152bc2fbafacb7afa0eb78fd9cc9bf2d4c1c1156cda",
         "windows.ts": "3a832f4947637eccd4ff326aaaee6435f10ee2818baa144f50ed0c2e4f8233bc",
         "workspace.ts": "44c01bbde7bb6fda9221c95a2ea44a3369bc6ca1f49da25ae827c1f4f3fff289",
-        "package.json": "43f06d71e4b1d49ea4a705c133826645178c3929c0ec1e849530c023e81fd198",
+        "package.json": "d0039dc1ba099f5831fe9a3cef3f8d7cf49a0fa073e9822ed270153b15186c3c",
         "bundle/desktop/src/assets/textures/rice-paper.png": "a09b093b715fc9e8fd0f91ac02fcdc68636e825fa9555820ef8d6b8b7889d64b",
         "bundle/desktop/src/react/ui/ActionFeedbackIcons.tsx": "4bff0cd2c5de939dee7610b23986be040e9cb821a9eeea2db435fac5b408f19f",
         "bundle/desktop/src/react/ui/AntButton.module.css": "68b63e9aaee03a8beb0b71257ecd907e1744e540389b28f787e97f2672434191",
@@ -2840,7 +2845,6 @@
         "bundle/desktop/src/themes/continuous-corners.css": "13f02e1bc445c7186fda002d30e35ae02873bc878c4a95f72b2cc4a96d411db3",
         "bundle/hana-peer-require-adapter:react": "missing",
         "bundle/packages/plugin-components/src/settings-entry.tsx": "b02e431088f3c276e2a43aec03c77ee8fd0efc4d1274ca7d46772050daf2998d",
-        "bundle/desktop/src/react/chalkboard/app-page-primary-close.ts": "5a27fdd0b033becce73742b6026637042dbafb9fb5bc8e4a79bd3974c08193ba",
         "bundle/desktop/src/react/chalkboard/app-titlebar-interactive-regions.ts": "db44f78ec5fa2a8484ea10ea092d5a35dc5be828c5751e390e9044384e96923c",
         "bundle/desktop/src/react/chalkboard/AppTitlebarInteractiveRegionLayer.tsx": "ace18d07c99f5a042d871d051ce6632f2a814086079a69c80e211cab71e87a04",
         "bundle/desktop/src/react/chalkboard/card-definitions.ts": "cf7c013cf1e14c42b35602c11657b7103fc2abca10cbc8cdbea780e9f498d35b",
@@ -2854,7 +2858,7 @@
         "bundle/desktop/src/react/chalkboard/chalkboard-card-types.ts": "e15c9d83f3c5d958bfe6b84f970aa341f2566977f431282741321593091c1fbc",
         "bundle/desktop/src/react/chalkboard/chalkboard-host-read-model.ts": "68183e3dd49e23c210f1d4adf4e4120ed81361fc37e329604998cb294084a2f2",
         "bundle/desktop/src/react/chalkboard/chalkboard-motion.ts": "12ca8843e46e19f4e58ce30b2cbdb4f0934728ed52992fba76cc1985625e1272",
-        "bundle/desktop/src/react/chalkboard/chalkboard.module.css": "28125c68758fcb19bcb490f8e054aee7da9b523f51124b88c9d4ecb0f81d9f59",
+        "bundle/desktop/src/react/chalkboard/chalkboard.module.css": "47e56dcde7fef242a0a3b4ac4b6e49ddf944700bf184ca3d05605a4d532eb101",
         "bundle/desktop/src/react/chalkboard/detached-preview-raise.ts": "aa980d7dedef5c02077e5946dd05249fb841d5847f1692c39ac6362d78715851",
         "bundle/desktop/src/react/chalkboard/detached/child-window.ts": "a8142f547cdb60972fa7abaf72998407c4b692178898a3910d13c166cecffc86",
         "bundle/desktop/src/react/chalkboard/detached/spawn-memory.ts": "ec6fd37942c3e0ea390d9b16eb6fe22c41c53de50d63ba03ab0c8e3a879df9b7",
@@ -2873,11 +2877,12 @@
         "bundle/desktop/src/react/chalkboard/layout-errors.ts": "54b1031e75e6d7727008bc0d8d1d08ed9e7df5c9f0086fdc55c7597e4eeb6e69",
         "bundle/desktop/src/react/chalkboard/layout-transition-flip.ts": "7c9cbc87a0da21e4e5feacfc0d54bdcbe0cce5604ad1a65fb6597f220c96b8a0",
         "bundle/desktop/src/react/chalkboard/mobile-card-profile.ts": "41bd9d5066273c98bb54512522bc6ce710ad7d0514e4263c8b7833f050993ef3",
+        "bundle/desktop/src/react/chalkboard/page-card-guards.ts": "13645a22b403508018b76704386c70c4f7130671133d54b2109238bf69755bc5",
+        "bundle/desktop/src/react/chalkboard/page-card-policy.ts": "31e27f8a1dd1b6c379d569370e36c4c7f2b9e2a609010fef65eef8da2118babd",
         "bundle/desktop/src/react/chalkboard/page-shape-icons.tsx": "3c2175d4985055c77b8d7cad7f27caeae7a726529919caf2404ed5479344e1fe",
         "bundle/desktop/src/react/chalkboard/page-switcher-math.ts": "2e97e92f1c4d419548dcf9c40df5edc97de8b7699520d2043c702cfcf1f42f0a",
         "bundle/desktop/src/react/chalkboard/PageNavigator.module.css": "dcd07fc8818a8b96c6c9d6b9c82b6bb7064004a2556ad411de5dafa8c4dd00c1",
         "bundle/desktop/src/react/chalkboard/PageNavigator.tsx": "1212754c7f292d90a8d77f7e366e496d4b855bc66f549f7a6f54a91ba3e1944f",
-        "bundle/desktop/src/react/chalkboard/plugin-card-activation.ts": "85acb044db4190fc2635caffbf9a47831fd5f9c6f06195adb113462a55e49e5c",
         "bundle/desktop/src/react/chalkboard/plugin-panel-sections.module.css": "5fb2e43ccc3e2b3c32d231507afc877df28fed4081fc5880d17dc5cac41f8896",
         "bundle/desktop/src/react/chalkboard/PluginPanelSections.tsx": "d41a0377d9473dc4c9c928163ebeb9f54a137c73f050dc513158f86e5d88524d",
         "bundle/desktop/src/react/chalkboard/separator-hit.ts": "a6a4afb1ab604254b4b80108c30cb8cd6b8e2e7b120aee2d637beb3c32ed353e",
@@ -2922,7 +2927,7 @@
         "bundle/desktop/src/react/plugin-ui/plugin-ui-host-controller.ts": "fe12ebfdaf03d90b05c1b89196268f342856ab80e0111ace376e1c2472d28d6e",
         "bundle/desktop/src/react/services/client-layout-profile-events.ts": "aa8680a7551fd98a3b78cb149191e2c2308462ea0fed7d5ed352006f46548318",
         "bundle/desktop/src/react/services/client-layout-profile-source.ts": "15f6b83b198b20882703b0ad40d42c0cbc3988743c89d909d469dec1a7fc3936",
-        "bundle/desktop/src/react/services/open-preview-resource.tsx": "3faa6e47cc59af5e76ae695f1c7f15ee5de0952ec692de2f601f68476594d9b6",
+        "bundle/desktop/src/react/services/open-preview-resource.tsx": "6c6acb0e1ed8c8f6bea57e0dcd143347835dcec5e6a08812a8fc860d50a66da5",
         "bundle/desktop/src/react/services/previewer-catalog.ts": "91d85c4143adbf56ae62da2ded64af3c92c832d5e5acf1755234d0a7691c48b7",
         "bundle/desktop/src/react/services/previewer-choice.module.css": "6e59acce1af81b0ce3c05e5e89138f751160c178e56e02daecefc7e0685c2001",
         "bundle/desktop/src/react/services/resource-access.ts": "e646af40a8e0d0c2e92eeabbb74380846cb5344dff3c9a0d1eff85f52fc3a00e",
@@ -2941,7 +2946,7 @@
         "bundle/desktop/src/react/stores/bridge-slice.ts": "cd70a60a054876c4c7d842cf743c015199af8d2a031dfc88b5dcfb2dc8b884ca",
         "bundle/desktop/src/react/stores/browser-slice.ts": "1c9996326ea88488d782940c75c774cfb1b1ec571f6e81640dd4132a51ab2e4e",
         "bundle/desktop/src/react/stores/card-host-consent-slice.ts": "4fdfffd80741dbb76d93d2d43cee57b8f443e914e22d40b05b2fb140b9874c13",
-        "bundle/desktop/src/react/stores/chalkboard-slice.ts": "1060d3211b24910096339a2c4c0d32d2af39a3d2fadf20e097a14b3e7a34aaef",
+        "bundle/desktop/src/react/stores/chalkboard-slice.ts": "5c04dc729161664db8310ac60f9dbce7b52dadd52f3a24a60a933660b8d3ca29",
         "bundle/desktop/src/react/stores/channel-slice.ts": "e248e3c58aab40fe7d24dbc10007f97e1d5cbf78e28cf1497ad13427df609aa9",
         "bundle/desktop/src/react/stores/chat-find-slice.ts": "7f0a8039466c9f973e24a570f6c9611cf3fc3bf8500ca7c01e833d88b2046ea7",
         "bundle/desktop/src/react/stores/chat-slice.ts": "744afb728692f6b77cfdb94344f1f303623bf805bcb5fb473d20afb4f0cee310",
@@ -3028,7 +3033,7 @@
         "bundle/desktop/src/react/ui/ExtensionDetailView.tsx": "5349c840a3b079ba2a7f63d1334516ad2cd5166c57dc21c381ac3cfb0d822d96",
         "bundle/desktop/src/react/ui/ExtensionPageFrame.module.css": "80b9ecbf75cec51788d78e3c13cf7cd1542e2766f254f1d7a6f9c79c00487e15",
         "bundle/desktop/src/react/ui/ExtensionPageFrame.tsx": "5afaf3e9e3f12fefc2a466d7d5425bd27a8ccbccdadfc18a62e4a593e70cb41c",
-        "bundle/desktop/src/react/ui/geometry-session.ts": "7471fb0496c0d201d193905115dd80906250f6947950455b15bd02e1215ba20a",
+        "bundle/desktop/src/react/ui/geometry-session.ts": "4caf81a303909ef97bd0a3914445b68a556deb9bbd6c93f585e38bf4a4294753",
         "bundle/desktop/src/react/ui/index.ts": "2ad8d48eee73310c8dc3f0dff8a119b4c6b0cdfeaf8379872c472f601236b24a",
         "bundle/desktop/src/react/ui/InstalledExtensionsView.module.css": "8c5d1d7f7591a6ffaac3607b9abacc10cae79f4d0270a01a703914475da93017",
         "bundle/desktop/src/react/ui/InstalledExtensionsView.tsx": "83a431efa275eef72267132a1d3a8c937d36cf1056ad87a329e57e3f87b1d54f",
@@ -3107,7 +3112,7 @@
         "bundle/packages/plugin-sdk/src/input-panel.ts": "7baae6a0aefa6c3b2edfa975ee8bc7a525845c6c3f4e4c256c837306dc0a8e62",
         "bundle/packages/plugin-sdk/src/ui-actions.ts": "de8877aa652f1f28b2fdb48eb9c6e1a83257c857df1a1d60aefe4ec2d493533b",
         "bundle/shared/app-contract/chrome.ts": "0f56ee7d68f8272ec64b02f0ba79a0b04ff6a9c14ee76ccafdbd564dedfb66f8",
-        "bundle/shared/app-contract/manifest.ts": "98fe98e804b031a7cd2b6edf9a6f6ab06a5255df3d18ab7c592404511c8564e9",
+        "bundle/shared/app-contract/manifest.ts": "c2bd016877bcb8ec2b4244361204f6190ba148193b168c2b281db16385dcc974",
         "bundle/shared/app-contract/runtime.ts": "74e295ccf59348b682e4f59458ed8a0716a5209eae3c2f5bef86c395e775b149",
         "bundle/shared/app-runtime-surface-path.ts": "68d6483c3659792c30bcf873d41a199783c1be2c6f5796798d75c1112629e03d",
         "bundle/shared/app-service-handle.ts": "e86ca0b6e0ccd2a61ede60820f99e7f145da24f39ecfea5985092a234311e386",
@@ -3118,15 +3123,16 @@
         "bundle/shared/card-kernel.ts": "6a17edf70a405bd9ce98708a71ce9a1f32d34b20a6c04ccd9550ee45034b4210",
         "bundle/shared/card-presentation.ts": "213d58a54e4a50e93ea52adf5d7bf2f746fac781658ea1c1195d9264e1b827fa",
         "bundle/shared/card-renderer-state-budget.ts": "b070e6bb381e6fe594bfbbc51032d08b7f541978dc033f23c2600157cfd00e1f",
-        "bundle/shared/chalkboard-layout.ts": "0feb51d275526d8dcd2b317ec91c0d7e4349d74d0c836976fd225944d6c871c3",
+        "bundle/shared/chalkboard-layout.ts": "1647f8033667883262e4fa01ad16fde81f5fac930eaa5598d9ffbd3c65f2da89",
         "bundle/shared/chalkboard-layout/card-restore-placement.ts": "1bcd70375d01c8e6128425918928882371447b81bff83bfd2a901ad430dc657f",
         "bundle/shared/chalkboard-layout/card-title-source.ts": "6b2bbfa75ada2000426a561dcf8a68662991cd7ef7ce1aa6dc14639a599776a9",
         "bundle/shared/chalkboard-layout/chalkboard-builtin-ids.ts": "8f8db0080ba4d03c775f316bc5517d61a980cdd97073271ee80660152ffb4662",
         "bundle/shared/chalkboard-layout/chalkboard-card-types.ts": "ba0d5af0703eeb586f4edecd13c027328b569f1f39daa2812791d8714b0ae21e",
         "bundle/shared/chalkboard-layout/layout-card-width-contracts.ts": "925b5f7ccfaae9daee49869d8569a46dba887e9eb907fbfc7798422e58af0d44",
         "bundle/shared/chalkboard-layout/layout-document-factory.ts": "bde4dfc7b6526b61ad29b72cc5cb7648569b07208bc7f461edd1afcd6812840f",
-        "bundle/shared/chalkboard-layout/layout-document-reducer.ts": "191e8b414417bec5795e08e534aad700a41e277aaef84eacaeddcea20b244174",
+        "bundle/shared/chalkboard-layout/layout-document-reducer.ts": "0bdd27f78d32f026a54cda541d9df595acbcbccb20818d9043db7772aee91d3a",
         "bundle/shared/chalkboard-layout/layout-errors.ts": "6f43673b0bf49bac9f9c3a42ff3fa74658cc8e761d7709c70d4c6b7be662499b",
+        "bundle/shared/chalkboard-layout/page-card-policy.ts": "633280a258619d229bd013bf8d2a82308c3b43054e84aa9abccd196136d1f597",
         "bundle/shared/chat-ui-state.ts": "deb2738cebce71a7d1b5a65187bdd73a22517193f3a9b7ab2d25734da7856368",
         "bundle/shared/client-layout-profile.ts": "f8df71afca876bc81465001cb02aaa7fc6d54cd5eb6c864383aaf4c6bab0dbff",
         "bundle/shared/contract-versions.json": "0ce12a4786f45caffa01741c49ab97f568bbeda37402a34890f9618595363015",
@@ -3252,7 +3258,7 @@
         "shared/app-contract/input-panels.ts": "a749e56080d1b916f103136a46a1414cc62c81051f7cfc7ddace246de57251b6",
         "shared/app-contract/input-status.ts": "ce4a9772cd6c6431d98d3d8aa7c2c763d03d35145ca392ac5363459d9d338ee7",
         "shared/app-contract/instances.ts": "372f108df9b38c7005301f6feee6a1a752b1268afd83e2965ff34827f914d59e",
-        "shared/app-contract/manifest.ts": "98fe98e804b031a7cd2b6edf9a6f6ab06a5255df3d18ab7c592404511c8564e9",
+        "shared/app-contract/manifest.ts": "c2bd016877bcb8ec2b4244361204f6190ba148193b168c2b281db16385dcc974",
         "shared/app-contract/mcp.ts": "5c3a84dc66070d0a118b7ee8bd259738489b50062087292f27298b8fc017d48a",
         "shared/app-contract/media.ts": "8c38c5b8d609b1293b5211ff2dc94063d4c6652c122edfd47d65380f61f2d2a4",
         "shared/app-contract/model-stream.ts": "70f1b3b0dcc6507dec7e859c7075f82e6640ab2613792596414975da18258355",
@@ -3267,7 +3273,7 @@
         "shared/app-contract/runtime-client.ts": "4a65cdc5adf2e82276697fe048a1d3aa55a3d445feeb18651daa9e9a1a6d17b9",
         "shared/app-contract/runtime.ts": "74e295ccf59348b682e4f59458ed8a0716a5209eae3c2f5bef86c395e775b149",
         "shared/app-contract/sdk-error.ts": "bacadb62d5383d3e87053ceb742eb7862a7cfe5fe4a7e5db605106d42cf1222d",
-        "shared/app-contract/server-client.ts": "24b759b9c909a5b7de53771d10dba427531afa41b79088c1692389d67f3fad8c",
+        "shared/app-contract/server-client.ts": "67e84c260263f1995a9babc3d5a2308e1a9fa788df3eb0de29acf89178e98224",
         "shared/app-contract/session-search.ts": "82b595759fd84797ed0e4ee0ad5064a0db262278097869822cf2cadc8b7120b1",
         "shared/app-contract/sessions.ts": "e54b5142f34f0789c63a15726853c3d9a77f59a26620da072d51383ae2acd3c0",
         "shared/app-contract/settings.ts": "7734cfc20bf97034ed2628e1f62a50bddcc6a0268d93df0be8107cde51821147",
@@ -3295,15 +3301,16 @@
         "shared/audio-contract.ts": "916820bcc3a724b76d2115b357f76629aff090046e77d743a917016b4966657d",
         "shared/card-kernel.ts": "6a17edf70a405bd9ce98708a71ce9a1f32d34b20a6c04ccd9550ee45034b4210",
         "shared/card-renderer-state-budget.ts": "b070e6bb381e6fe594bfbbc51032d08b7f541978dc033f23c2600157cfd00e1f",
-        "shared/chalkboard-layout.ts": "0feb51d275526d8dcd2b317ec91c0d7e4349d74d0c836976fd225944d6c871c3",
+        "shared/chalkboard-layout.ts": "1647f8033667883262e4fa01ad16fde81f5fac930eaa5598d9ffbd3c65f2da89",
         "shared/chalkboard-layout/card-title-source.ts": "6b2bbfa75ada2000426a561dcf8a68662991cd7ef7ce1aa6dc14639a599776a9",
         "shared/chalkboard-layout/chalkboard-builtin-ids.ts": "8f8db0080ba4d03c775f316bc5517d61a980cdd97073271ee80660152ffb4662",
         "shared/chalkboard-layout/chalkboard-card-types.ts": "ba0d5af0703eeb586f4edecd13c027328b569f1f39daa2812791d8714b0ae21e",
         "shared/chalkboard-layout/layout-card-width-contracts.ts": "925b5f7ccfaae9daee49869d8569a46dba887e9eb907fbfc7798422e58af0d44",
         "shared/chalkboard-layout/layout-document-factory.ts": "bde4dfc7b6526b61ad29b72cc5cb7648569b07208bc7f461edd1afcd6812840f",
-        "shared/chalkboard-layout/layout-document-reducer.ts": "191e8b414417bec5795e08e534aad700a41e277aaef84eacaeddcea20b244174",
+        "shared/chalkboard-layout/layout-document-reducer.ts": "0bdd27f78d32f026a54cda541d9df595acbcbccb20818d9043db7772aee91d3a",
         "shared/chalkboard-layout/layout-document.ts": "d441d05866ddec567a6d0ef04abbd81a7fc80f15ce27c0a78b5c8127d4794112",
         "shared/chalkboard-layout/layout-errors.ts": "6f43673b0bf49bac9f9c3a42ff3fa74658cc8e761d7709c70d4c6b7be662499b",
+        "shared/chalkboard-layout/page-card-policy.ts": "633280a258619d229bd013bf8d2a82308c3b43054e84aa9abccd196136d1f597",
         "shared/extension-contract.ts": "884db5a4ebda29cca4c89899cc5ec717a81e08722b1aaa7c096d3e2c2231c036",
         "shared/extension-market-index.ts": "402da7a99a25f24e16f797c04822723d7ecc4389ae2ed6885cd0c580f93109c6",
         "shared/media-generation-kind.ts": "94a9090f50f71e9409e1e456f1d3fa5d1c24258e669a424304e7fdb2229bd98e",
