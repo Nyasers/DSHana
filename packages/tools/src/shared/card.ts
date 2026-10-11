@@ -3,7 +3,7 @@
 //
 // packages/tools/src/shared/card.ts — 会话卡字面量（工具返回值 details.card）
 //
-// 一张卡，两个挂载态（页 = ui/stream.html，见 packages/ui/src/stream.html 与 packages/ui/src/app-shell.ts）：
+// 一张卡，两个挂载态（页 = ui/stream.html，见 packages/ui/src/stream.html 与 packages/ui/src/app.ts）：
 //   · 聊天流里：只画一行入口（会话坐标）；不注入 DSH、不带票据，所以不叠也不冻结。
 //   · 取出到黑板 / 拆窗：宿主把同一 route 装到新的挂载上，页面自己认挂载态，注入完整 DSH 现场。
 // 「取出」是宿主手势（聊天卡右上角菜单 / 拖拽），不经过本 App 的代码；所以这里不注册
@@ -22,9 +22,12 @@ import { APP_ID } from "@dshana/runtime/boot-state.ts";
 export const SESSION_CARD_ROUTE = "/stream.html";
 
 /** 聊天流里的占位比例（"宽:高"；渲染端按冒号拆，数字会被当非法值丢掉）。
-    8:1 的高度对「1 行抬头 + 3 行坐标」刚好；宽度变窄时宿主会按同一比例把高度一起压扁，
-    所以入口行自己把真实高度报给宿主（见 stream-entry.ts 的 reportEntryHeight）。 */
-const CARD_ASPECT_RATIO = "8:1";
+    它不只管“内容到达前”那一帧：它是这张卡高度的**下界**，入口行的 `hana.ui.resize` 上报
+    压不过它（窄窗口下看不出，窗口一宽、比例算出的高度超过内容高度时就显出来，表现为
+    “会话列一宽，这张卡就变长”）。所以要把这一行压薄，只能抬比例。
+    取 32:1：入口内容（1 行抬头 + 3 行坐标）约 96px，该比例在约 3070px 宽的会话列里算出的
+    占位高度仍不超过内容高度，于是上报值说了算，高度不再跟着窗口宽度走。 */
+const CARD_ASPECT_RATIO = "32:1";
 
 /** 卡面抬头（宿主聊天卡上那一行标题）。动作不写在这里：状态字样是卡**内**第一行的事。 */
 const CARD_TITLE = "DSHana";

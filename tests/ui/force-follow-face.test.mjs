@@ -4,7 +4,7 @@
 // tests/ui/force-follow-face.test.mjs — 每一面自己把面名与强制面名单写到 <html> 上。
 //
 // 盯两个真机踩过的 bug（都是「勾了不生效」那一类）：
-//   ① 桥读 data-dshana-face 判面，但只有壳页（app-shell）写过它。会话卡走的是
+//   ① 桥读 data-dshana-face 判面，但只有壳页（app）写过它。会话卡走的是
 //      stream-entry / stream-stage，根本不经过壳页——桥读回 null，勾了会话卡永远不生效。
 //      所以每个会注入 DSH 的页面都得自己写面名，steam 面在**两个挂载态**都写
 //      （「本页是 stream 面」与「装不装 DSH」是两件事）。
@@ -33,7 +33,7 @@ test("属性名只有一份字面量：写它的页面都引 shared 的常量", 
   assert.ok(bridge.includes(FORCE_FOLLOW_ATTR), "桥没读 " + FORCE_FOLLOW_ATTR);
   assert.ok(bridge.includes('"data-dshana-face"') || bridge.includes("data-dshana-face"), "桥没读面名属性");
   // TS 侧：壳页与会话卡都用常量，不再各写一遍字面量。
-  for (const name of ["app-shell.ts", "stream-entry.ts"]) {
+  for (const name of ["app.ts", "stream-entry.ts"]) {
     const text = src(name);
     assert.ok(text.includes("FACE_ATTR"), name + " 该引 shared 的 FACE_ATTR（不自己写属性名字面量）");
     assert.ok(
@@ -78,7 +78,7 @@ test("设置页保存后广播一条，接收侧（壳页 / 会话卡）都挂�
   assert.ok(settings.includes("notifyForceFollowChanged()"), "设置页保存后该广播");
   assert.ok(settings.includes("watchForceFollowChanges()"), "设置页自己也该听（多标签页一致）");
 
-  for (const name of ["app-shell.ts", "stream-entry.ts"]) {
+  for (const name of ["app.ts", "stream-entry.ts"]) {
     assert.ok(src(name).includes("watchForceFollowChanges()"), name + " 该挂上变化监听");
   }
 });

@@ -23,7 +23,7 @@ These are inlined into the built App at build time. Their original packages and 
 
 - Version: 1.0.16-beta
 - Purpose: Browser-side App shell surface: `hana.api.fetch` and `hana.api.url` (App-surface session credential injection and runtime proxy path tickets), plus the surface / theme / clipboard / storage faces.
-- Form: devDependency (`file:vendor/hana-app-sdk/hana-plugin-sdk-0.0.0.tgz`), inlined at build time by rspack into `ui/app-shell.js` and `ui/settings.js`; no vendored copy is shipped separately.
+- Form: devDependency (`file:vendor/hana-app-sdk/hana-plugin-sdk-0.0.0.tgz`), inlined at build time by rspack into `ui/app.js` and `ui/settings.js`; no vendored copy is shipped separately.
 - Source: Hana App Creator SDK shipped with the host (snapshot under `vendor/hana-app-sdk`; see `source-manifest.json` in the same directory)
 - License: Apache License 2.0 (full text below)
 

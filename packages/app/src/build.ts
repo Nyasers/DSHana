@@ -6,13 +6,12 @@
 // 共享工具（collect/walk/terser/assert + minify/template loader）在 scripts/build/。
 // 产物（dist = App 安装目录形态；宿主读该根 manifest.json + entry）：根下只放宿主读的契约件与
 // 目录（manifest.json / icon.png / skills / ui / node_modules / 声明文本），代码全在 bin/。
-// 源码侧：App 契约件（manifest.json 与身份图标）在 packages/app/src/，随包 skills/ 在仓库根，壳源与
+// 源码侧：App 契约件（manifest.json 与身份图标）在 packages/app/src/，随包 skills/ 在仓库根，
 // 主体也在 packages/app/src/。manifest 里的路径是包根相对路径，源的落位按
 // scripts/shared/contract-assets.mts 的映射取——两边不逐字同形，由下面的静态件组装负责摆位。
-//   manifest.json       App v2 manifest（entry "bin/index.mjs" / icon "icon.png"；源在 packages/app/src/manifest.json）
-//   bin/index.mjs       壳：由壳源 packages/app/src/index.ts 写出，只 re-export 同目录的 ./app.mjs（宿主启 App 时会缓存它）
+//   manifest.json       App v2 manifest（entry "bin/app.mjs" / icon "icon.png"；源在 packages/app/src/manifest.json）
+//   bin/app.mjs          App 主体（entry 直接指它；含它自己切出的 chunk）
 //                       入口用 .mjs：Node 按扩展名就判 ESM，安装树不必再带一份 package.json 定 type
-//   bin/app.mjs         App 主体（含它自己切出的 chunk）
 //   bin/dsh.mjs          受管 Node runtime 入口（宿主以 node 执行；与主体同一次构建、共享 chunk）
 //   icon.png            App 身份图标（manifest.icon 指向的包内真实图片；源在 packages/app/src/icon.png）
 //   skills/             App skills（dshana，SKILL.md 随包分发）
@@ -90,18 +89,10 @@ const runtimeEntry = join(DIST_DIR, "bin", "dsh.mjs");
 if (!fs.pathExistsSync(runtimeEntry)) {
   throw new Error("受管 runtime 入口缺失（" + runtimeEntry + "）：拒绝出一份没有 runtime 的 App");
 }
-// bin/index.mjs = 壳：直接由壳源 packages/app/src/index.ts 写出（去行注释 + 把源内的 ./app.ts
-// 换成同目录的 ./app.mjs）。不由 rspack 产出——静态两行、跨构建字面不变，宿主缓存它才稳
-// （rspack 出的入口会带 ESM chunk 运行时与数字 id，每次都变）。壳与主体同在 bin/，包根只留
-// 宿主读的契约件与目录。
+// 入口就是 rspack 出的主体（manifest.entry = bin/app.mjs）：不另写一层 re-export 壳。
 if (!fs.pathExistsSync(join(DIST_DIR, "bin", "app.mjs"))) {
   throw new Error("App 主体缺失（bin/app.mjs）：拒绝出交付目录");
 }
-const shellJs = fs.readFileSync(join(SRC_ROOT, "index.ts"), "utf8")
-  .replace(/^[ \t]*\/\/.*$/gm, "")
-  .replace(/\.\/app\.ts/g, "./app.mjs")
-  .trim() + "\n";
-fs.writeFileSync(join(DIST_DIR, "bin", "index.mjs"), shellJs, "utf8");
 
 // 1) 静态化路径字面量回写（dist 主区）
 rewriter(DIST_DIR);

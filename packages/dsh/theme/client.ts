@@ -15,7 +15,7 @@
 // 以属性为契约最省：不需要额外协议，也不跨进程；属性变化即事件（MutationObserver），无轮询。
 //
 // 两段来源：插件树激活**之前**本属性还不存在，桥无从判断门开不开——那一段
-// 由壳页把 DSH index 的 boot-theme 行字面量随主题载荷下发（app-shell.js
+// 由壳页把 DSH index 的 boot-theme 行字面量随主题载荷下发（app.js
 // readIndexThemePreference），桥先据此开门。官方把这行定位成 "the browser's pre-plugin
 // interval"，插件树激活前浏览器手里只有它。本模块一旦加载即写下属性并接管权威（桥的
 // readPreference() 优先属性）。两段是同一个持久偏好，正常不会互相纠正。

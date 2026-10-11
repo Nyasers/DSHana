@@ -32,7 +32,7 @@ function put(root, rel, content = "x") {
 function sample(root) {
   // App 交付面（在 node_modules 之外）
   put(root, "manifest.json", "{}");
-  put(root, "bin/index.mjs");
+  put(root, "bin/app.mjs");
   put(root, "ui/app.js");
   // foo：有编译产物，所以源码与类型都是可裁的
   put(root, "node_modules/foo/package.json", "{}");
@@ -120,7 +120,7 @@ test("不碰依赖树之外的交付面与 @dshana 产物", () => {
   try {
     sample(dir);
     trimDeliveryTree(dir);
-    for (const rel of ["manifest.json", "bin/index.mjs", "ui/app.js", "node_modules/@dshana/dsh-app/src/patch.ts"]) {
+    for (const rel of ["manifest.json", "bin/app.mjs", "ui/app.js", "node_modules/@dshana/dsh-app/src/patch.ts"]) {
       assert.equal(existsSync(join(dir, ...rel.split("/"))), true, `${rel} 不应被动`);
     }
   } finally {

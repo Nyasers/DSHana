@@ -14,11 +14,11 @@
      （同文档注入，不是 iframe）。无 emoji、无渐变/阴影光效。
      自举台面的样式与 default / stream 两个面共用（./face-stage.css）：底色、#root、台面、
      日志块、台面按钮都在那份里，本页不自带 <style>。
-     到本 App 后端路由一律 hana.api.fetch（surface session 凭据，见 app-shell.js）。
-     body 上的 data-dshana-shell 是壳脚本的根锚（app-shell.js boot() 取它，缺失则不轮询）；
+     到本 App 后端路由一律 hana.api.fetch（surface session 凭据，见 app.js）。
+     body 上的 data-dshana-shell 是壳脚本的根锚（app.js boot() 取它，缺失则不轮询）；
      data-dshana-view="main" 决定 role（workspace）。侧栏归本卡的功能面板 /sidebar.html。
      主题：首帧由下面 <head> 里的内联片段贴样式表（所有静态样式表之后），此后由
-     packages/ui/src/host-theme.ts 订阅跟随（app-shell.js 侧接上）。 -->
+     packages/ui/src/host-theme.ts 订阅跟随（app.js 侧接上）。 -->
 <link rel="stylesheet" href="./face-stage.css">
 <!-- dshana:first-frame-theme —— 首帧主题片段（五个页面逐字相同，回归闸 tests/ui/first-frame-theme.test.mjs）：
      位置固定在 <head> 内、所有静态 <link rel="stylesheet"> 之后、模块脚本之前；内容同步
@@ -80,6 +80,6 @@
     </div>
     <div id="boot-panel"></div>
   </div>
-  <script type="module" src="./app-shell.js"></script>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>

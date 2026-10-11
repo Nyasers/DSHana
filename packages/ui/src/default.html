@@ -18,7 +18,7 @@
 
      自举台面的样式与 main / stream 两个面共用（./face-stage.css），本页不自带 <style>。
      主题：首帧由下面 <head> 里的内联片段贴样式表（所有静态样式表之后），此后由
-     packages/ui/src/host-theme.ts 订阅跟随（app-shell.js 侧接上）。 -->
+     packages/ui/src/host-theme.ts 订阅跟随（app.js 侧接上）。 -->
 <link rel="stylesheet" href="./face-stage.css">
 <!-- dshana:first-frame-theme —— 首帧主题片段（五个页面逐字相同，回归闸 tests/ui/first-frame-theme.test.mjs）：
      位置固定在 <head> 内、所有静态 <link rel="stylesheet"> 之后、模块脚本之前；内容同步
@@ -80,6 +80,6 @@
     </div>
     <div id="boot-panel"></div>
   </div>
-  <script type="module" src="./app-shell.js"></script>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>

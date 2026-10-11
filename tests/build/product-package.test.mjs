@@ -5,7 +5,7 @@
 // （scripts/release/pack/assert.mts 的 assertNoProductPackage + scripts/release/pack/ship-manifest.mts
 //  的 stagingManifest）
 //
-// 守两件事。其一：安装树里不得出现 package.json——App 入口是 index.mjs，Node 按扩展名就判 ESM，
+// 守两件事。其一：安装树里不得出现 package.json——App 入口是 bin/app.mjs，Node 按扩展名就判 ESM，
 // 包根没有需要它定 type 的地方；它出现只可能是构建面字段（scripts / devDependencies /
 // packageManager / imports / 内核声明）混进交付。其二：工位清单只活在 .tmp/pkg-root/ 那次干净
 // 安装里，字段是实体三项 + host 派生的运行时依赖（内核声明住 host，不抄第二份）。

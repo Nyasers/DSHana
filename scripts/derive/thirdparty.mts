@@ -40,7 +40,7 @@ interface InlinedComponent {
 
 /**
  * 只列**内联**的组件。判定依据是 src/ 里的实际 import 链：
- *   · plugin-sdk：app-shell.ts / settings.tsx 直接 import，经 rspack 内联进 ui/*
+ *   · plugin-sdk：app.ts / settings.tsx 直接 import，经 rspack 内联进 ui/*
  *   · plugin-components：settings.tsx 直接 import（连 settings.css）
  *   · app-sdk：runtime/main.ts import connectAppRuntime，内联进 bin/dsh.mjs
  *   · plugin-protocol：plugin-sdk 的 dependency，随它一起被打进产物
@@ -57,7 +57,7 @@ const COMPONENTS: InlinedComponent[] = [
     name: "@hana/plugin-sdk",
     purpose:
       "Browser-side App shell surface: `hana.api.fetch` and `hana.api.url` (App-surface session credential injection and runtime proxy path tickets), plus the surface / theme / clipboard / storage faces.",
-    form: `devDependency (\`file:${SDK_DIR}/hana-plugin-sdk-0.0.0.tgz\`), inlined at build time by rspack into \`ui/app-shell.js\` and \`ui/settings.js\`; no vendored copy is shipped separately.`,
+    form: `devDependency (\`file:${SDK_DIR}/hana-plugin-sdk-0.0.0.tgz\`), inlined at build time by rspack into \`ui/app.js\` and \`ui/settings.js\`; no vendored copy is shipped separately.`,
   },
   {
     name: "@hana/plugin-components",

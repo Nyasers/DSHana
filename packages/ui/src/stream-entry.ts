@@ -44,11 +44,12 @@ function classifyMount(): "chat" | "canvas" | null {
   return null; // 还没收到信号（宿主在 iframe ready 之后才推第一帧）
 }
 
-// 入口行的高度由内容定（四行单行文本，宽度变窄也不会换行）：量一次报给宿主，宿主就不会按
-// aspectRatio 把高度跟着宽度一起压扁。这是下限，内容更高时按内容走。
+// 入口行的高度由内容定（四行单行文本，宽度变窄也不会换行）：量一次报给宿主。
+// 但上报只是“报”：卡声明的 aspectRatio 是高度下界（见 card.ts 的 CARD_ASPECT_RATIO），
+// 上报值低于它时以比例为准，所以这一行能不能压薄取决于比例取多大。
 const ENTRY_MIN_HEIGHT_PX = 96;
 
-/** 把入口行的真实高度报给宿主（运行时高度报告；旧宿主没这道门就按 aspectRatio 走）。 */
+/** 把入口行的真实高度报给宿主（运行时高度报告；旧宿主没这道门就纯按 aspectRatio 走）。 */
 function reportEntryHeight(): void {
   const el = document.getElementById(ENTRY_ID);
   const ui = hana && (hana as any).ui;

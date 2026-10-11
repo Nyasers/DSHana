@@ -61,7 +61,7 @@ CI 直接失败的风险。`engines.node` 不参与 lockfile 解析，改这个�
 ## 架构总览（受管 runtime）
 
 ```text
-Hana 宿主进程（App 隔离进程内加载 dist/bin/index.mjs）
+Hana 宿主进程（App 隔离进程内加载 dist/bin/app.mjs）
   ├─ App 侧：apply(ctx)
   │    ├─ ctx.tools.register(dshana)                 工具（单工具 + subcommand，五动作）
   │    ├─ ctx.routes.register(/dshana/*)             壳页/诊断面（boot-state|health|settings|models|card-state|start|stop）
@@ -80,7 +80,7 @@ Hana 宿主进程（App 隔离进程内加载 dist/bin/index.mjs）
 
 - **受管 runtime**：DSH 跑在 `ctx.runtime.start` 拉起的独立 Node 子进程中。App 侧与子进程分责：App 管启动/停止/状态，子进程管 DSH 的 cordis 生命周期；崩溃可被父侧识别并重起。
 - **依赖形态（自包含打包）**：DSH 及其依赖树由 `scripts/release/pack/index.mts` 在构建时物化进**安装目录** `node_modules`，运行时**不安装、不 spawn pnpm**。运行时依赖的唯一真源是 `packages/host/package.json` 的内核声明（交付面的清单与锁都由 pack 现生成，树里不留第二份；根那份只留构建面，另留一条同名 devDependencies 供开发侧安装，两处版本由 integrations 闸守）。
-- **更新 = 装新 App 包**：无独立升级通道。受管 runtime 随装/卸起停，宿主进程不必重启；已建立的会话要刷新一次工具面（压缩上下文）才能换到新实例的工具。
+- **更新 = 装新 App 包**：装包那一次加载就把新实例接上（入口重新 import、工具与路由重登记、受管 runtime 随自动链重启）。**重载后已建立的会话照常可调**：工具面按宿主当前注册表解析，旧会话继续调 `dshana` 即可。
 - **连接与鉴权交回官方**：组合层里的官方 connection（BrowserAuth token/cookie）与 frontend-static 各自负责其位，App 侧只经 runtime 中继补 cookie。
 - **DSH Web UI**：DSH 前端以**同文档注入**方式挂进壳页（`dsh-inject.ts`：取 index → 搬 link/script → 装配 `__DSH_TRANSPORT__` + 流 mux）；到 runtime 的请求走宿主代理前缀 + 路径票据。流 mux 的失败按官方**跨 bundle 契约**打结构标记（页半与内核半类身份不通，DSH 只看标记不看 `instanceof`）：载体丢失 `kind:'carrier'`（DSH 侧按可重试的载体丢失处理，自动重连续流），宿主交付的逻辑失败 `kind:'remote'` + 域码（原样重建成带码的 RemoteError）。少了 carrier 标，一次断链会被折成 `gateway/internal` 终态，会话历史流不再自愈。
 
@@ -108,7 +108,7 @@ DSHana 以**单卡 + 自带功能面板**注册（manifest `contributes.cards[0]
 - **自举台**：DSHANA 字标 + 细圆环 + 一行状态小字；报错时下方直接一块 `<pre>`（时间线/折叠详情已撤）。boot-state 由**主卡单独轮询**，FP 只读跨面共享快照（订阅，不重复取）；owner 不在场（快照不存在/下线/过旧）时 FP 才自取。
 - **三态 + 设置页**：default（full / detached 共用一页 = 整幅 DSH UI，顶部 44px 让位宿主 chrome）/ main（主卡，无 DSH 侧栏——侧栏归 FP）/ sidebar（FP，只有侧栏）；settings 是 App 自己的设置页（`ui.route`，不注入 DSH）。面由**页面静态声明**（`<meta name="hana-dshana-role">` + `data-dshana-view`）；映射到 DSH 侧上游角色词：default→standalone / sidebar→navigation / main→workspace。
 - **注入鉴权**：壳页以 `appSurfaceSession` 作为 `_surface` 路径段取得运行时代理凭据（同源预请求种 `hana_app_runtime` cookie 兜住子请求）；未取得票据时不下挂内容，面板上说明原因。装配只做一次（本文档里 DSH 前端实例、它的载体与监听都绑在这唯一一次装配上），而中继前缀里含 runtimeId：宿主重启或运行体重建之后这份前缀就是死端点（宿主对它的 WS 升级当场断开，DSH 的流载体连试两次后折成 `gateway/internal`，界面停在「历史加载失败」）。重载是唯一干净的出路——旧实例在文档里还活着，就地重注入会留下两套。故壳页在**取到的新快照说 `runtimeId` 与装配时不同**时重载本页；判断放在取到快照之后，凭据本已失效的页面不会去重载（那只会撞上宿主的 403），照旧停在凭据缺失的提示上。
-- **会话卡（`ui/stream.html`）的一张卡两个挂载态**：工具回执的 `details.card` 指向这一页（App 不为它声明 manifest 卡），`open` 与 `reply` 都挂（`act=` 区分）。卡面抬头固定 `DSHana`；钉住的 DSH 会话 id 来自查询串（`?sid=`，工具出卡时写进 route）；没带 `sid` 时跟随跨面共用的当前选中。页自己认挂载态（宿主契约见 APPS_EN.md「Mount-mode table」）：**聊天流**里 `hana.envelope` 的 height 是 `flexible`，此时只画入口行（1 行抬头 + 3 行坐标，坐标由 `stream.html` 的内联脚本在求值时写就，不排在任何握手后面；高度按内容报给宿主 `hana.ui.resize`，宽度变窄也不把高度一起压扁），不装配中继、不注入；**取出到黑板 / 拆窗**后 height 是 `fixed`，此时才装配中继、注入完整 DSH 现场。两态各自的 DOM 按需实例化（`stream.html` 的 `<template>` + `stream-entry.ts` 的按需装载），认到哪个态才建哪块，不靠 `hidden` / `display` 藏一个留一个；重型半（React 三态 + dsh-inject + host-theme，`stream-stage.tsx`）是 `import()` 出来的独立 chunk，聊天流态的卡永不解析它。**跟踪态只在聊天流态**：`stream-entry.ts` 把 `GET /dshana/card-state` 的片段放进小标题行（只在 `tracked` / `cancelling` 期间慢轮询 4s，终态即停手），detail 不占版面、进悬停提示；取出的卡不带任何 App 状态行（那面就是那段会话本身），并保留输入卡：在那里打的字进的是这个 DSH 会话自己的一轮，不走 dshana 工具链。**终态之后不断流**：这段会话多半是用户主动打开来翻看的历史会话，断掉或拒绝重开就等于看不了。主卡与 FP 不带 `sid`，不挂跟踪态。
+- **会话卡（`ui/stream.html`）的一张卡两个挂载态**：工具回执的 `details.card` 指向这一页（App 不为它声明 manifest 卡），`open` 与 `reply` 都挂（`act=` 区分）。卡面抬头固定 `DSHana`；钉住的 DSH 会话 id 来自查询串（`?sid=`，工具出卡时写进 route）；没带 `sid` 时跟随跨面共用的当前选中。页自己认挂载态（宿主契约见 APPS_EN.md「Mount-mode table」）：**聊天流**里 `hana.envelope` 的 height 是 `flexible`，此时只画入口行（1 行抬头 + 3 行坐标，坐标由 `stream.html` 的内联脚本在求值时写就，不排在任何握手后面；卡声明的 `aspectRatio` 是这一面的**高度下界**（取宽扁一档 `32:1`），入口行按内容把真实高度报给宿主 `hana.ui.resize`，但上报值低于比例算出的高度时以比例为准——所以把这一行压薄的杠杆是比例，不是上报），不装配中继、不注入；**取出到黑板 / 拆窗**后 height 是 `fixed`，此时才装配中继、注入完整 DSH 现场。两态各自的 DOM 按需实例化（`stream.html` 的 `<template>` + `stream-entry.ts` 的按需装载），认到哪个态才建哪块，不靠 `hidden` / `display` 藏一个留一个；重型半（React 三态 + dsh-inject + host-theme，`stream-stage.tsx`）是 `import()` 出来的独立 chunk，聊天流态的卡永不解析它。**跟踪态只在聊天流态**：`stream-entry.ts` 把 `GET /dshana/card-state` 的片段放进小标题行（只在 `tracked` / `cancelling` 期间慢轮询 4s，终态即停手），detail 不占版面、进悬停提示；取出的卡不带任何 App 状态行（那面就是那段会话本身），并保留输入卡：在那里打的字进的是这个 DSH 会话自己的一轮，不走 dshana 工具链。**终态之后不断流**：这段会话多半是用户主动打开来翻看的历史会话，断掉或拒绝重开就等于看不了。主卡与 FP 不带 `sid`，不挂跟踪态。
 - **承载面分片（`api/remote.mux`）**：宿主对 App 受管服务的 WS 中继有 1 MiB **上游帧**上限（上游 ws 客户端 `maxPayload: 1024 * 1024`，超限即把下游连接 `close(1011, "Managed service stopped")`），而 DSH 的 mux 帧是原子 JSON——长会话打开时的首帧就是整段历史 snapshot，一帧就能超，DSH 又只立刻重试一次（两次都撞上限就折成 `gateway/internal` 终态），于是历史流永远打不开。分片点必须在宿主**之前**，而本 App 的运行时中继与页面载体正好夹在这条管子的两侧、都是本仓库代码（DSH 协议两端一行不改）：中继把超限消息按尺寸切成二进制分片（信封与上限见 `packages/shared/src/mux-chunks.ts`），载体在页面侧**先拼字节再解码**、重组回一条完整消息交给 DSH。每片回一次执，中继只在 768 KiB 窗口内在途——宿主另有一条「转发下一帧前下游缓冲超 1 MiB 就掐」的守卫（同样报 1011），而且它判的是**线上字节**（一片 128 KiB 载荷在线上是 131,088 字节），所以窗口取 768 KiB（6 片 = 线上 786,528），给 live 帧与 ping 留 256 KiB；只把帧切小不够，发得快一样致命，尤其远端访问时页面排空更慢。开关显式：载体在 mux URL 上带 `dshanaMuxChunks=1` 声明（宿主只滤掉凭据类查询参数，其余原样转发），中继只在看到它时才启用帧搬运（`packages/host/src/mux-relay.ts`），否则保持原来的原始 socket 双向透传——旧文档与新中继不会互相看不懂。帧搬运只认 WS 帧头：未改动的帧原样转发（控制帧立即转，DSH 的 mux ping 不会被大消息卡住，pong 由宿主的 ws 客户端负责），只有超限消息被重写成分片；窗口用尽只是等回执，不断链。
 
 ### 设置面
@@ -145,7 +145,7 @@ DSH 的 workspace 选择对话框来自 `directory-picker` seam（宿主半列�
 
 ## 已知限制
 
-- **升级 DSH = 装新 App 包**：DSH 随包物化在安装目录，换包即换内核；受管 runtime 每次启动都是新子进程，DSH 不在宿主进程内驻留，因此没有需要从插件侧豁免的宿主模块缓存。
+- **更新 = 装新 App 包**：DSH 随包物化在安装目录，换包即换内核；装包这一步就把新实例接上。受管 runtime 每次启动都是新子进程，DSH 在宿主进程内不驻留，宿主模块缓存无需从插件侧豁免。
 - **Windows 上的命令执行是 `pwsh`**：base 组合按平台互斥挂载 shell 行（`tool-bash` / `bash-sandbox` 在 win32 停，`tool-pwsh` / `pwsh-sandbox` 只在 win32 开），派给子代理的命令按 PowerShell 写；文件读写仍走文件系统工具。
 - **主题仅在 DSH 偏好为 system 时跟随宿主**（见上，有意为之）。
 - 越界权限请求默认走审批：deferred 通知 → `dshana(action="approve")` 应答；无人应答按 `approvalTimeoutSec` 自动拒绝。
@@ -163,8 +163,8 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」。本节按
 - 工具注册：`ctx.tools.register`，工具名 `dshana`（一个插件一个同名工具 + subcommand；v2 不自动加 `pluginId_` 前缀、重名被宿主当场拒）。动作五个：`open` / `reply` / `get` / `close` / `approve`，装配见 `packages/tools/src/index.ts`、手册见 `skills/dshana/SKILL.md`。
 - 设置：`contributes.settings` 的 UI 由 App 自绘设置页承担（`ui.route: /settings.html`，宿主设置区渲染）；键与缺省以 `packages/runtime/src/config.ts` 为准，读写落 `dataDir/settings.json`（旧 `config.json` 只在两键缺位时作读侧兼容）。
 - 数据读路径在 `ctx.dataDir`（宿主 `app-data/<id>/`）：list/get 读当前源的 `<DSH_HOME>/...`（projcache + jsonl zstd）；旧插件数据迁移见 `packages/runtime/src/legacy-migrate.ts` 与 `scripts/migrate/legacy.mts`。
-- 构建：`node packages/app/src/build.ts` 产物 `dist/` = App 安装目录形态（根只放宿主读的契约件与目录：`manifest.json` + `icon.png` + `skills/` + `ui/`；代码全在 `bin/`：入口 `index.mjs` + 主体 `app.mjs` + runtime `dsh.mjs`）。App 契约件 `manifest.json` 与身份图标都在 App 域（`packages/app/src/`），随包 `skills/` 在仓库根，壳源与主体也在 `packages/app/src/`；卡面图归 ui 域（`packages/ui/src/face.png` → 产物 `ui/face.png`，face.image 是 ui/ 相对路径，随 ui 整树产出）。源位映射收在 `scripts/shared/contract-assets.mts`（构建摆位、投稿条目与派生同步共用一份）。壳的文档侧另出 `.cache/ui/`（`node packages/ui/src/build.ts`），App 域构建整树拷进 `ui/`。cordis 子插件包另出 `.cache/cordis/`（`node packages/app/src/cordis.ts`）：它们不是安装态里的东西，出包时由 pack 落进包内 `node_modules/@dshana`。
-- 两个入口一次 rspack 构建（主体 `bin/app.mjs` / 受管 runtime `bin/dsh.mjs`），产物 `bin/index.mjs` 是它写出的静态两行壳（re-export 主体，与主体同在 `bin/`，跨构建字面不变）；先清 `dist` 再写入，壳的文档侧不在本域编译而是从 `.cache/ui/` 拷进交付目录 `ui/`（缺件即拒），随后统一做 URL 回写 / terser / 断言。
+- 构建：`node packages/app/src/build.ts` 产物 `dist/` = App 安装目录形态（根只放宿主读的契约件与目录：`manifest.json` + `icon.png` + `skills/` + `ui/`；代码全在 `bin/`：入口 `app.mjs`（manifest.entry 直接指它）+ runtime `dsh.mjs`）。App 契约件 `manifest.json` 与身份图标都在 App 域（`packages/app/src/`），随包 `skills/` 在仓库根，主体也在 `packages/app/src/`；卡面图归 ui 域（`packages/ui/src/face.png` → 产物 `ui/face.png`，face.image 是 ui/ 相对路径，随 ui 整树产出）。源位映射收在 `scripts/shared/contract-assets.mts`（构建摆位、投稿条目与派生同步共用一份）。壳的文档侧另出 `.cache/ui/`（`node packages/ui/src/build.ts`），App 域构建整树拷进 `ui/`。cordis 子插件包另出 `.cache/cordis/`（`node packages/app/src/cordis.ts`）：它们不是安装态里的东西，出包时由 pack 落进包内 `node_modules/@dshana`。
+- 两个入口一次 rspack 构建（主体 `bin/app.mjs`（= manifest.entry）/ 受管 runtime `bin/dsh.mjs`），入口即主 bundle；先清 `dist` 再写入，壳的文档侧不在本域编译而是从 `.cache/ui/` 拷进交付目录 `ui/`（缺件即拒），随后统一做 URL 回写 / terser / 断言。
 
 **受管 Node runtime（local-machine/external + readyMarker 就绪门）：**
 
@@ -232,7 +232,7 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」。本节按
 
 **ui/ 静态树与页面：**
 
-- `packages/ui/src/{main.html, sidebar.html, app-shell.ts}`（build:ui 出 `.cache/ui`，build:app 整树拷到 `dist/ui/`）：页面同层相对引用（`./app-shell.js`），无根路径绝对 URL；appId/路由前缀由页面 location.pathname 推导（`/api/apps/<appId>/...` 段），不硬编码整 URL。壳页轮询 boot-state、POST start/stop；主题桥（同文档）best-effort。剪贴板由 `packages/ui/src/clipboard-shadow.ts` 在壳页层 shadow `navigator.clipboard.writeText`（注入 DSH 之前装，是全局最早的一层）：**桥优先**（`__DSHANA__.clipboardWrite` → 宿主能力 `app/ui/clipboard-write`），原生只作桥缺席/桥拒绝时的回落——嵌入场景里原生必然先被 Permissions-Policy 关死，若先试原生则每次复制都先撞一次已关的门。`write(items)` 也盖（宿主能力只有 writeText 一个词，只能取 ClipboardItem 的 text/plain；只有图像/富文本的 item 明确失败，不假装成功），`readText`/`read` 不盖（宿主没有对应的读能力词）。
+- `packages/ui/src/{main.html, sidebar.html, app.ts}`（build:ui 出 `.cache/ui`，build:app 整树拷到 `dist/ui/`）：页面同层相对引用（`./app.js`），无根路径绝对 URL；appId/路由前缀由页面 location.pathname 推导（`/api/apps/<appId>/...` 段），不硬编码整 URL。壳页轮询 boot-state、POST start/stop；主题桥（同文档）best-effort。剪贴板由 `packages/ui/src/clipboard-shadow.ts` 在壳页层 shadow `navigator.clipboard.writeText`（注入 DSH 之前装，是全局最早的一层）：**桥优先**（`__DSHANA__.clipboardWrite` → 宿主能力 `app/ui/clipboard-write`），原生只作桥缺席/桥拒绝时的回落——嵌入场景里原生必然先被 Permissions-Policy 关死，若先试原生则每次复制都先撞一次已关的门。`write(items)` 也盖（宿主能力只有 writeText 一个词，只能取 ClipboardItem 的 text/plain；只有图像/富文本的 item 明确失败，不假装成功），`readText`/`read` 不盖（宿主没有对应的读能力词）。
 
 **旧插件数据迁移：**
 
@@ -241,7 +241,7 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」。本节按
 **打包与版本线：**
 
 - 版本线为单一 1.x 线（开发期停在最后已发布基线、发版经 `pnpm version` 推进、DSH 跟随策略）；cordis 子插件包与组合层包 `@dshana/dsh-app` **等值跟随**主版本（无独立版本线）；build metadata（`+dsh-<dsh 依赖>`）由 version 钩子发版时统一拼回再同步。版本线语义见 `scripts/shared/version.mts` 头注释。
-- pack（`scripts/release/pack/index.mts`）：静态项补 THIRD_PARTY_NOTICES.md；cordis 产物断言按清单校验（名单派生自包现场 `packages/dsh/*/cordis.config.mjs`，不另写一份：加一个子插件自动纳入，下线一个不留永久失败的断言）；ui/ 静态树断言（route 资源 fail-closed）；zip 根级 = `manifest.json` + `bin/`（`index.mjs` / `app.mjs` / `dsh.mjs`）+ `icon.png` + `skills/` + `ui/` + `NOTICE`/`THIRD_PARTY_NOTICES.md` + 物化的 `node_modules/`（不带 package.json：入口以 `.mjs` 定 ESM）。
+- pack（`scripts/release/pack/index.mts`）：静态项补 THIRD_PARTY_NOTICES.md；cordis 产物断言按清单校验（名单派生自包现场 `packages/dsh/*/cordis.config.mjs`，不另写一份：加一个子插件自动纳入，下线一个不留永久失败的断言）；ui/ 静态树断言（route 资源 fail-closed）；zip 根级 = `manifest.json` + `bin/`（`app.mjs` / `dsh.mjs`）+ `icon.png` + `skills/` + `ui/` + `NOTICE`/`THIRD_PARTY_NOTICES.md` + 物化的 `node_modules/`（不带 package.json：入口以 `.mjs` 定 ESM）。
 
 **子插件与组合层：**
 

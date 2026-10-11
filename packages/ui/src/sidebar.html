@@ -10,12 +10,12 @@
 <!-- packages/ui/src/sidebar.html — dshana App v2 功能面板页（contributes.cards dshana 的
      functionPanel.route，单主卡形态；宿主在切到 DSHana 页时把本页挂在主窗口 FP 里，
      与本卡同一 cardInstanceId）。本页不是“状态页”，它就是 **DSH Web UI 的 sidebar 本体**：
-     就绪后同文档注入 DSH 侧栏（data-dshana-view="sidebar" → app-shell.js 取它 → role=navigation），
+     就绪后同文档注入 DSH 侧栏（data-dshana-view="sidebar" → app.js 取它 → role=navigation），
      同时收起本页自带的标题/状态/按钮 chrome（[data-dsh-chrome]），整块让给侧栏（DSH sidebar
      自带 brand 行，叠一层会重复）；未就绪时才露 chrome 充当占位（启动按钮 + 日志尾）。
      页面无 iframe 壳（#frame-wrap / [data-dsh-frame]）：DSH 以同文档注入挂进本页。
      主题：首帧由下面 <head> 里的内联片段贴样式表（在本页 <style> 之后，宿主变量因此覆盖
-     默认值），此后由 packages/ui/src/host-theme.ts 订阅跟随（app-shell.js 侧接上）。 -->
+     默认值），此后由 packages/ui/src/host-theme.ts 订阅跟随（app.js 侧接上）。 -->
 <style>
   html, body { margin: 0; padding: 0; height: 100%; }
   html { color-scheme: light dark; }
@@ -124,6 +124,6 @@
   </div>
   <div class="log" data-dsh-log hidden></div>
 </div>
-<script type="module" src="./app-shell.js"></script>
+<script type="module" src="./app.js"></script>
 </body>
 </html>

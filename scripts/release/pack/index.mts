@@ -55,13 +55,13 @@ if (version !== manifestVersion)
   );
 
 // 1. 静态项补齐交付目录。构建阶段（build:app / build:cordis）已写出安装态骨架
-//    （bin/（入口 + app 主体 + runtime）+ manifest.json / icon.png / skills/ / ui/），
+//    （bin/（主体 + runtime）+ manifest.json / icon.png / skills/ / ui/），
 //    这里只补清单外的文本件；包根即 App 安装目录，不套 dist 这层目录。不在清单里的东西各有其宿主：
-//    · routes/ —— v2 走 ctx.routes.register，route 在 index.mjs 里注册，无目录产物；
-//    · app/（卡片脚本与样式）—— 构建时内联进 index.mjs bundle；
+//    · routes/ —— v2 走 ctx.routes.register，route 在入口（bin/app.mjs）里注册，无目录产物；
+//    · app/（卡片脚本与样式）—— 构建时内联进入口 bundle；
 //    · skills/ —— 从仓库根取（随包静态件）原样拷；manifest 与身份图标在 App 域
 //      （packages/app/src/），随 dist/ 一起进包根，本步不补；卡面图由 ui 域产出；
-//    · package.json —— 不生成也不随包：入口是 index.mjs，Node 按扩展名判 ESM，安装树不需要包清单；
+//    · package.json —— 不生成也不随包：入口是 bin/app.mjs，Node 按扩展名判 ESM，安装树不需要包清单；
 //      仓库那份带 scripts / devDependencies / packageManager / imports，是构建入口（上面的断言拒收）。
 //    · pnpm-workspace.yaml / pnpm-lock.yaml —— 不随包：装机侧不执行 pnpm install（依赖已物化进包）。
 const staticItems = ["NOTICE", "THIRD_PARTY_NOTICES.md"];

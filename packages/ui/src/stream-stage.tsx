@@ -88,7 +88,7 @@ function initialSnapshot(): Snapshot {
   return { view: "idle", state: null, status: "正在读取状态…", diag: "", credMissing: false };
 }
 
-// ---- 注入（与 app-shell.ts 的 startInjection 同源，但面固定为 stream）----
+// ---- 注入（与 app.ts 的 startInjection 同源，但面固定为 stream）----
 // 装配用的中继前缀里含 runtimeId，而宿主按 runtimeId 解析代理目标：运行时代换（宿主重启 /
 // 运行体重建）之后这份前缀就是死端点。本台面不自己发现代换——宿主在代换后会重载 App 页面，
 // 重载带走新发的 surface 凭据，重新装配一次就干净了。

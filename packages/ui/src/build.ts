@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Nyasers
 //
 // packages/ui/src/build.ts — ui 域构建入口（壳的文档侧）
-// 产物：.cache/ui/，即交付目录里 ui/ 那一棵树的完整内容——页面脚本 bundle（app-shell / stream /
+// 产物：.cache/ui/，即交付目录里 ui/ 那一棵树的完整内容——页面脚本 bundle（app / stream /
 // settings 与它们的 css、动态 chunk）加上静态面（*.html 与图片、样式等）。
 // App 域的构建（packages/app/src/build.ts）把它拷进交付目录的 ui/，缺件即拒。
 // 用法：node packages/ui/src/build.ts [RSPACK_ENV=<构建环境目录>]
@@ -77,7 +77,7 @@ console.log("ui/ 静态面 -> " + UI_DIR + "（" + staticCount + " 个文件，�
 // 页面脚本名与 rspack.config.mts 的 entry 同名，页面文件名与 manifest 的 route 同名。
 const REQUIRED = [
   "main.html", "default.html", "sidebar.html", "settings.html", "stream.html",
-  "app-shell.js", "stream.js", "settings.js",
+  "app.js", "stream.js", "settings.js",
 ];
 const missing = REQUIRED.filter((rel) => !fs.pathExistsSync(join(UI_DIR, rel)));
 if (missing.length) {

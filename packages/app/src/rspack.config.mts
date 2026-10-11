@@ -5,13 +5,13 @@
 // 「领域专用脚本随各自源码」；.mts 不被 collectSource 收集，不随 bundle 打包）
 // 与 hana-remote-dev 的 rspack.config.mts 对齐，按 dshana 实际适配：
 //   - 两入口一次构建：
-//       · 主体 packages/app/src/app.ts → bin/app.mjs
+//       · 主体 packages/app/src/app.ts → bin/app.mjs（manifest.entry 直接指它）
 //       · 受管 runtime 入口 packages/host/src/main.ts → bin/dsh.mjs（宿主以 node 执行）
 //     主体与 runtime 有公共代码，同一次构建让 rspack 把它切成共享 chunk（splitChunks），
 //     两边不各打一份；切出的 chunk 都归 bin/。
-//   - 产物 bin/index.mjs **不由本构建产出**：由壳源码 packages/app/src/index.ts 写出两行 re-export
-//     （见 packages/app/src/build.ts）。宿主按 manifest.entry=bin/index.mjs 加载它、且启 App 时
-//     会缓存它——静态写出才能跨构建不变（rspack 出的入口会带数字 id/chunk 名，每次都变）。
+//   - 入口不再套一层静态壳：宿主启 App 时按路径缓存 entry，而 rspack 出的入口带数字 id /
+//     chunk 名、跨构建会变，只有「字面不变」的壳才缓存得住；宿主修好缓存后这层撤销，
+//     manifest.entry 直接指 bin/app.mjs。
 //   - 输出 ESM module（纯 ESM 无原生模块，不需要 CJS+loadBundle 沙箱；宿主直接 import）
 //   - library.type=module：入口具名导出（apply）真 emit 成 ESM export，宿主直接 import
 //   - App 图标在 packages/app/src/icon.png（由 build.ts 原样 copy 到交付根，不进 bundle），
@@ -31,7 +31,7 @@ export default {
     "bin/app": path.join(ROOT, "packages", "app", "src", "app.ts"),
     // 受管 runtime 入口（宿主以 node 执行 bin/dsh.mjs）
     "bin/dsh": path.join(ROOT, "packages", "host", "src", "main.ts"),
-    // 产物 bin/index.mjs 不在这里：它是 build.ts 写出的静态壳（两行 re-export），不参与打包
+    // 产物 bin/app.mjs 就是入口本身：没有另写的壳（manifest.entry 指它）
   },
   output: {
     path: DIST_DIR,
