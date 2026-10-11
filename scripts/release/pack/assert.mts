@@ -59,6 +59,7 @@ export function assertCordisArtifacts(cordisDir, version) {
     count += 1;
   }
   console.log(`[pack] cordis 子插件版本一致（${count} 个 = ${version}）`);
+  return count;
 }
 
 /**

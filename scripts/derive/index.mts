@@ -111,7 +111,7 @@ const manifestTask: FileTask = {
   },
 };
 
-/** 任务：cordis —— 主版本 → cordis 子插件包（packages/ 下带自持构建描述的三个包，无独立版本线）。 */
+/** 任务：cordis —— 主版本 → cordis 子插件包（packages/dsh/ 下带自持构建描述的那些包，无独立版本线）。 */
 const cordisTask: FileTask = {
   kind: "file",
   name: "cordis",
