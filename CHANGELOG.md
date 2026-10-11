@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.6+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.5%2Bdsh-0.2.0-rc.2...v1.0.6%2Bdsh-0.2.0-rc.2) (2026-10-11)
+
+### Bug Fixes
+
+* **card:** 会话卡入口行不再随会话列变宽而变长；收正升级/重载口径 ([3075063](https://github.com/Nyasers/DSHana/commit/3075063deef3285d2e3470462172d11a19adcaf3))
+* **release:** 保留 Changelog 条目的缩进续行，反向区间不再拼 compare ([4faf116](https://github.com/Nyasers/DSHana/commit/4faf1166bbf55dc0a504874d1b863961b7f65107))
+* **release:** 投稿正文的 Changelog 段按区间合并，不再只取单版本 ([e157a7d](https://github.com/Nyasers/DSHana/commit/e157a7d8a7cbd2075eb1078ead561c42f76f6708)), references [#30](https://github.com/Nyasers/DSHana/issues/30)
+* **release:** Changelog 段的区间端点取仓库 Latest，不用本地 manifest 版本 ([aa6dde1](https://github.com/Nyasers/DSHana/commit/aa6dde1a43d85837cb8de8bd1d9819a4146c71d2))
+* **release:** CHANGELOG 增量合并不再每次发版多叠一行空行 ([82ecff1](https://github.com/Nyasers/DSHana/commit/82ecff17590e8a6db8f36c2d16ebeac8a8abe10c))
+
 ## [1.0.5+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.4%2Bdsh-0.2.0-rc.2...v1.0.5%2Bdsh-0.2.0-rc.2) (2026-10-10)
 
 ### Features
