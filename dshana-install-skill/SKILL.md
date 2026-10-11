@@ -106,6 +106,8 @@ The release matrix builds these six platform targets plus universal. Another tar
 
 7. **Verify.** `GET <host>/api/extensions` to see the extension's `record.version`; then poll the App's own boot-state route (for DSHana it is `/api/apps/dshana/routes/dshana/boot-state`). The first start after a fresh install takes a while, so do not demand immediate readiness: only `state.phase === "ready"` together with `state.ready === true` counts as success; treat `error` / `stopped` as failure and diagnose from `state.error` and the runtime log.
 
+Installing is one step, not two: the install loads the new instance (entry re-imported, tools and routes re-registered, managed runtime restarted), so there is **no reload step** to run afterwards and no host restart. (A reload is a separate action, only for restarting an App from the code already on disk.)
+
 ## How to reach the host endpoints
 
 - Port and token: read `<HANA_HOME>/server-info.json` (`HANA_HOME` defaults to `~/.hanako`).
@@ -116,7 +118,7 @@ The release matrix builds these six platform targets plus universal. Another tar
 
 | Symptom | Cause | Handling |
 |---|---|---|
-| After uninstall+reinstall, this session reports `RPC peer closed; cannot call callback.tools.execute` for that App's tools | The session engine captured the tool objects of the then-current App instance when it was created, and those objects go stale once the instance is replaced | **Compact that session's context**: the tool surface is re-resolved against the host's current registry, so the replacement instance's tools take over. Opening a new session does the same. No host restart is needed; the App itself is fine (routes and runtime are normal) |
+| After a reload (or an uninstall+reinstall), this session reports `RPC peer closed; cannot call callback.tools.execute` for that App's tools | The session engine captured the tool objects of the then-current App instance when it was created; those objects can go stale when the instance is replaced | Normally not needed — neither a reload nor a fresh install invalidates the handle an existing session holds. If the error does appear, **compact that session's context** (or open a new session): the tool surface is re-resolved against the host's current registry. No host restart is needed; the App itself is fine |
 | The digest you read does not match the downloaded package | The download was truncated or redirected to something else | Re-download and compare both the size and the digest; the listing's `size` catches truncation before the hash does |
 | `latest` resolves to a different version than you expected | `latest` skips prereleases, and a new release is normally marked prerelease | Look the release up itself (`gh release list`) and take its assets from that tag |
 | No asset matches the local target | The matrix built six platform targets plus universal; some other target has to be built by name in the repo | Fall back to `dshana-v<version>.zip` (universal), which is functionally identical, only larger |
