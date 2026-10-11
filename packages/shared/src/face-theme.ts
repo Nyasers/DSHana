@@ -85,7 +85,7 @@ export const FORCE_FOLLOW_ATTR = "data-dshana-force-follow";
  *
  * 面的单一事实源是页面自己的静态声明（`meta[name=hana-dshana-role]` 或 `body[data-dshana-view]`），
  * 这个属性是它在 `<html>` 上的投影——桥读它比对面名，因为桥在 DSH 文档里、读不到外层页面的 DOM。
- * 每个会注入 DSH 的页面都得自己写它：壳页在 app-shell.ts 的 publishFace()、会话卡在
+ * 每个会注入 DSH 的页面都得自己写它：壳页在 app.ts 的 publishFace()、会话卡在
  * stream-entry.ts 的 boot()。
  */
 export const FACE_ATTR = "data-dshana-face";

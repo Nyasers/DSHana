@@ -11,7 +11,7 @@ import { cordisPkgDirs, cordisPkgName } from "../../shared/version.mts";
 
 /**
  * 交付树不得出现 package.json（fail-closed）。
- * App 入口是 index.mjs，Node 按扩展名就判 ESM，安装树不需要「最近一份 package.json 的 type」，
+ * App 入口是 bin/app.mjs，Node 按扩展名就判 ESM，安装树不需要「最近一份 package.json 的 type」，
  * 也就没有留在包根的理由；出现它只可能是构建面字段（scripts / devDependencies / packageManager /
  * imports / 内核声明）被混进安装包。
  * @param outDir - 交付目录（dist 或组装树）
@@ -20,7 +20,7 @@ export function assertNoProductPackage(outDir) {
   const p = join(outDir, "package.json");
   if (fs.pathExistsSync(p)) {
     throw new Error(
-      "交付树出现了 package.json（" + p + "）：入口是 index.mjs，安装树不带包清单；出现即构建面字段混进包，拒绝出包",
+      "交付树出现了 package.json（" + p + "）：入口是 bin/app.mjs，安装树不带包清单；出现即构建面字段混进包，拒绝出包",
     );
   }
 }
@@ -106,12 +106,12 @@ export function assertUiTree(outDir) {
   if (!fs.pathExistsSync(uiDir)) {
     throw new Error("App ui/ 静态树缺失（dist/ui 不存在）：@dshana/ui 的产物未拷进交付目录——先跑 pnpm run build 再打包");
   }
-  for (const rel of ["main.html", "sidebar.html", "app-shell.js"]) {
+  for (const rel of ["main.html", "sidebar.html", "app.js"]) {
     if (!fs.pathExistsSync(join(uiDir, rel))) {
       throw new Error("App ui/ 缺 cards route 资源：" + rel + "（packages/ui/src/" + rel + " 缺失或构建未跑）");
     }
   }
-  console.log("[pack] ui/ 静态树完整（main/sidebar 壳页 + app-shell.js bundle）");
+  console.log("[pack] ui/ 静态树完整（main/sidebar 壳页 + app.js bundle）");
 }
 
 /** 集成覆盖的声明（每个 integration.json 的 package 字段与 overlay 数）。 */

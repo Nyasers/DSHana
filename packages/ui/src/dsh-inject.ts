@@ -641,7 +641,7 @@ export function pickedPathOf(result) {
  * 还先合成一次 Alt 把弹窗抢到前台——上游写明它只适合「操作者坐在宿主屏幕前」，而本形态里受管
  * runtime 是沙箱里的后台子进程，那条路开不出来（客户端就把异常当错误弹出来）。这里注入桥：弹窗改由
  * 宿主出（`hana.resources.pick`，`mode=directory`），用户面对的是自己的机器，不经沙箱。
- * @param sdk - 壳页的宿主 UI SDK。它在本包里是**模块作用域的导入**（app-shell 的
+ * @param sdk - 壳页的宿主 UI SDK。它在本包里是**模块作用域的导入**（app 脚本的
  *   `import { hana } from "@hana/plugin-sdk"`），不在 `globalThis` 上，所以调用方必须传进来；
  *   全局只当兼底，供别的宿主形态。
  * @returns disposer：删掉桥（并恢复先前的值）。
@@ -713,7 +713,7 @@ export function installTransport(
   window.__DSHANA__ = {
     role: role || "workspace",
     runtimeUrl: (path) => mapRuntimeUrl(String(path), privateBase, window.location.origin).toString(),
-    // 壳页传入的额外桥面（当前是设置视图读/写/订阅，见 packages/ui/src/app-shell.ts 的 VIEW_STATE_API）：
+    // 壳页传入的额外桥面（当前是设置视图读/写/订阅，见 packages/ui/src/app.ts 的 VIEW_STATE_API）：
     // integrations/ui-settings-general 靠它做「FP 点设置、主卡打开」。
     ...(bridge && typeof bridge === "object" ? bridge : {}),
   };

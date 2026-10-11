@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// packages/ui/src/app-shell.ts — dshana App v2 壳页逻辑（main / default / sidebar 共用；浏览器 ESM）
+// packages/ui/src/app.ts — dshana App v2 壳页逻辑（main / default / sidebar 共用；浏览器 ESM）
 //
-// 相对资源纪律：经 <script type="module" src="./app-shell.js"> 相对引入，
+// 相对资源纪律：经 <script type="module" src="./app.js"> 相对引入，
 // 页面内不出现根路径绝对 URL。浏览器 SDK = 官方 @hana/plugin-sdk（devDependencies，
 // file:vendor/hana-app-sdk/hana-plugin-sdk-0.0.0.tgz），构建期由 rspack 静态打进本文件（见
 // packages/ui/src/rspack.config.mts）——浏览器 ESM 不解析裸包名（宿主不注入 importmap），所以依赖

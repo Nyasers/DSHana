@@ -2,8 +2,8 @@
 // Copyright (c) 2026 Nyasers
 //
 // packages/ui/src/rspack.config.mts — 页面脚本 bundle 构建配置（ui 域）
-// 产物：.cache/ui/app-shell.js（main / default / sidebar 壳页，ESM，
-// `<script type="module" src="./app-shell.js">`）、.cache/ui/stream.js（会话卡轻半，
+// 产物：.cache/ui/app.js（main / default / sidebar 壳页，ESM，
+// `<script type="module" src="./app.js">`）、.cache/ui/stream.js（会话卡轻半，
 // stream.html 引它）、.cache/ui/settings.js（App 自己的设置页脚本），
 // 以及被 import 的样式 .cache/ui/<name>.css（页面用 <link> 引入）。
 // App 域的构建（packages/app/src/build.ts）把 .cache/ui 整树拷进交付目录的 ui/，缺件即拒。
@@ -33,7 +33,7 @@ export default {
   mode: "production",
   target: "web",
   entry: {
-    "app-shell": ui("app-shell.ts"),
+    "app": ui("app.ts"),
     // 会话卡轻半：stream.html 引 ./stream.js。重型半（stream-stage.tsx）不在入口里——它是
     // 这个模块动态 import() 出来的 chunk，只有 fixed 态（黑板 / 拆窗）才取。
     stream: ui("stream-entry.ts"),

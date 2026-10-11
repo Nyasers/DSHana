@@ -43,7 +43,7 @@ const BRIDGE_SRC = readFileSync(
   new URL("../../packages/dsh/theme/assets/theme-bridge.js", import.meta.url),
   "utf8",
 );
-const SHELL_SRC = readFileSync(new URL("../../packages/ui/src/app-shell.ts", import.meta.url), "utf8");
+const SHELL_SRC = readFileSync(new URL("../../packages/ui/src/app.ts", import.meta.url), "utf8");
 const HOST_THEME_SRC = readFileSync(new URL("../../packages/ui/src/host-theme.ts", import.meta.url), "utf8");
 
 const BG = "#101010";

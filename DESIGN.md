@@ -61,7 +61,7 @@ CI 直接失败的风险。`engines.node` 不参与 lockfile 解析，改这个�
 ## 架构总览（受管 runtime）
 
 ```text
-Hana 宿主进程（App 隔离进程内加载 dist/bin/index.mjs）
+Hana 宿主进程（App 隔离进程内加载 dist/bin/app.mjs）
   ├─ App 侧：apply(ctx)
   │    ├─ ctx.tools.register(dshana)                 工具（单工具 + subcommand，五动作）
   │    ├─ ctx.routes.register(/dshana/*)             壳页/诊断面（boot-state|health|settings|models|card-state|start|stop）
@@ -163,8 +163,8 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」。本节按
 - 工具注册：`ctx.tools.register`，工具名 `dshana`（一个插件一个同名工具 + subcommand；v2 不自动加 `pluginId_` 前缀、重名被宿主当场拒）。动作五个：`open` / `reply` / `get` / `close` / `approve`，装配见 `packages/tools/src/index.ts`、手册见 `skills/dshana/SKILL.md`。
 - 设置：`contributes.settings` 的 UI 由 App 自绘设置页承担（`ui.route: /settings.html`，宿主设置区渲染）；键与缺省以 `packages/runtime/src/config.ts` 为准，读写落 `dataDir/settings.json`（旧 `config.json` 只在两键缺位时作读侧兼容）。
 - 数据读路径在 `ctx.dataDir`（宿主 `app-data/<id>/`）：list/get 读当前源的 `<DSH_HOME>/...`（projcache + jsonl zstd）；旧插件数据迁移见 `packages/runtime/src/legacy-migrate.ts` 与 `scripts/migrate/legacy.mts`。
-- 构建：`node packages/app/src/build.ts` 产物 `dist/` = App 安装目录形态（根只放宿主读的契约件与目录：`manifest.json` + `icon.png` + `skills/` + `ui/`；代码全在 `bin/`：入口 `index.mjs` + 主体 `app.mjs` + runtime `dsh.mjs`）。App 契约件 `manifest.json` 与身份图标都在 App 域（`packages/app/src/`），随包 `skills/` 在仓库根，壳源与主体也在 `packages/app/src/`；卡面图归 ui 域（`packages/ui/src/face.png` → 产物 `ui/face.png`，face.image 是 ui/ 相对路径，随 ui 整树产出）。源位映射收在 `scripts/shared/contract-assets.mts`（构建摆位、投稿条目与派生同步共用一份）。壳的文档侧另出 `.cache/ui/`（`node packages/ui/src/build.ts`），App 域构建整树拷进 `ui/`。cordis 子插件包另出 `.cache/cordis/`（`node packages/app/src/cordis.ts`）：它们不是安装态里的东西，出包时由 pack 落进包内 `node_modules/@dshana`。
-- 两个入口一次 rspack 构建（主体 `bin/app.mjs` / 受管 runtime `bin/dsh.mjs`），产物 `bin/index.mjs` 是它写出的静态两行壳（re-export 主体，与主体同在 `bin/`，跨构建字面不变）；先清 `dist` 再写入，壳的文档侧不在本域编译而是从 `.cache/ui/` 拷进交付目录 `ui/`（缺件即拒），随后统一做 URL 回写 / terser / 断言。
+- 构建：`node packages/app/src/build.ts` 产物 `dist/` = App 安装目录形态（根只放宿主读的契约件与目录：`manifest.json` + `icon.png` + `skills/` + `ui/`；代码全在 `bin/`：入口 `app.mjs`（manifest.entry 直接指它）+ runtime `dsh.mjs`）。App 契约件 `manifest.json` 与身份图标都在 App 域（`packages/app/src/`），随包 `skills/` 在仓库根，主体也在 `packages/app/src/`；卡面图归 ui 域（`packages/ui/src/face.png` → 产物 `ui/face.png`，face.image 是 ui/ 相对路径，随 ui 整树产出）。源位映射收在 `scripts/shared/contract-assets.mts`（构建摆位、投稿条目与派生同步共用一份）。壳的文档侧另出 `.cache/ui/`（`node packages/ui/src/build.ts`），App 域构建整树拷进 `ui/`。cordis 子插件包另出 `.cache/cordis/`（`node packages/app/src/cordis.ts`）：它们不是安装态里的东西，出包时由 pack 落进包内 `node_modules/@dshana`。
+- 两个入口一次 rspack 构建（主体 `bin/app.mjs`（= manifest.entry）/ 受管 runtime `bin/dsh.mjs`），入口就是主 bundle，不再另写静态壳；先清 `dist` 再写入，壳的文档侧不在本域编译而是从 `.cache/ui/` 拷进交付目录 `ui/`（缺件即拒），随后统一做 URL 回写 / terser / 断言。
 
 **受管 Node runtime（local-machine/external + readyMarker 就绪门）：**
 
@@ -232,7 +232,7 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」。本节按
 
 **ui/ 静态树与页面：**
 
-- `packages/ui/src/{main.html, sidebar.html, app-shell.ts}`（build:ui 出 `.cache/ui`，build:app 整树拷到 `dist/ui/`）：页面同层相对引用（`./app-shell.js`），无根路径绝对 URL；appId/路由前缀由页面 location.pathname 推导（`/api/apps/<appId>/...` 段），不硬编码整 URL。壳页轮询 boot-state、POST start/stop；主题桥（同文档）best-effort。剪贴板由 `packages/ui/src/clipboard-shadow.ts` 在壳页层 shadow `navigator.clipboard.writeText`（注入 DSH 之前装，是全局最早的一层）：**桥优先**（`__DSHANA__.clipboardWrite` → 宿主能力 `app/ui/clipboard-write`），原生只作桥缺席/桥拒绝时的回落——嵌入场景里原生必然先被 Permissions-Policy 关死，若先试原生则每次复制都先撞一次已关的门。`write(items)` 也盖（宿主能力只有 writeText 一个词，只能取 ClipboardItem 的 text/plain；只有图像/富文本的 item 明确失败，不假装成功），`readText`/`read` 不盖（宿主没有对应的读能力词）。
+- `packages/ui/src/{main.html, sidebar.html, app.ts}`（build:ui 出 `.cache/ui`，build:app 整树拷到 `dist/ui/`）：页面同层相对引用（`./app.js`），无根路径绝对 URL；appId/路由前缀由页面 location.pathname 推导（`/api/apps/<appId>/...` 段），不硬编码整 URL。壳页轮询 boot-state、POST start/stop；主题桥（同文档）best-effort。剪贴板由 `packages/ui/src/clipboard-shadow.ts` 在壳页层 shadow `navigator.clipboard.writeText`（注入 DSH 之前装，是全局最早的一层）：**桥优先**（`__DSHANA__.clipboardWrite` → 宿主能力 `app/ui/clipboard-write`），原生只作桥缺席/桥拒绝时的回落——嵌入场景里原生必然先被 Permissions-Policy 关死，若先试原生则每次复制都先撞一次已关的门。`write(items)` 也盖（宿主能力只有 writeText 一个词，只能取 ClipboardItem 的 text/plain；只有图像/富文本的 item 明确失败，不假装成功），`readText`/`read` 不盖（宿主没有对应的读能力词）。
 
 **旧插件数据迁移：**
 
@@ -241,7 +241,7 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」。本节按
 **打包与版本线：**
 
 - 版本线为单一 1.x 线（开发期停在最后已发布基线、发版经 `pnpm version` 推进、DSH 跟随策略）；cordis 子插件包与组合层包 `@dshana/dsh-app` **等值跟随**主版本（无独立版本线）；build metadata（`+dsh-<dsh 依赖>`）由 version 钩子发版时统一拼回再同步。版本线语义见 `scripts/shared/version.mts` 头注释。
-- pack（`scripts/release/pack/index.mts`）：静态项补 THIRD_PARTY_NOTICES.md；cordis 产物断言按清单校验（名单派生自包现场 `packages/dsh/*/cordis.config.mjs`，不另写一份：加一个子插件自动纳入，下线一个不留永久失败的断言）；ui/ 静态树断言（route 资源 fail-closed）；zip 根级 = `manifest.json` + `bin/`（`index.mjs` / `app.mjs` / `dsh.mjs`）+ `icon.png` + `skills/` + `ui/` + `NOTICE`/`THIRD_PARTY_NOTICES.md` + 物化的 `node_modules/`（不带 package.json：入口以 `.mjs` 定 ESM）。
+- pack（`scripts/release/pack/index.mts`）：静态项补 THIRD_PARTY_NOTICES.md；cordis 产物断言按清单校验（名单派生自包现场 `packages/dsh/*/cordis.config.mjs`，不另写一份：加一个子插件自动纳入，下线一个不留永久失败的断言）；ui/ 静态树断言（route 资源 fail-closed）；zip 根级 = `manifest.json` + `bin/`（`app.mjs` / `dsh.mjs`）+ `icon.png` + `skills/` + `ui/` + `NOTICE`/`THIRD_PARTY_NOTICES.md` + 物化的 `node_modules/`（不带 package.json：入口以 `.mjs` 定 ESM）。
 
 **子插件与组合层：**
 

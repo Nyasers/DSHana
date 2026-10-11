@@ -3,7 +3,7 @@
 //
 // scripts/release/pack/ship-manifest.mts — 工位清单的生成（交付树不带包清单）。
 //
-// 交付树里没有 package.json：App 入口是 index.mjs，Node 按扩展名就判 ESM，不需要「最近一份
+// 交付树里没有 package.json：App 入口是 bin/app.mjs，Node 按扩展名就判 ESM，不需要「最近一份
 // package.json 的 type」；包清单留在包根只会是构建面字段（scripts / devDependencies /
 // packageManager / imports）混进安装包的通道，pack 起手断言它不存在（见 assert.mts）。
 //   · 工位清单（stagingManifest）：驱动 .tmp/pkg-root/ 里那次干净安装，运行时依赖从 host 的

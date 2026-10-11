@@ -4,7 +4,7 @@
 // packages/ui/src/face-role.ts — 页面的「面」与 DSH 侧角色词
 //
 // 面的事实源是页面自己的静态声明（<meta name="hana-dshana-role"> 或 body[data-dshana-view]），
-// 不认识时回落到 default。这里只放词表与纯函数：app-shell.ts 是浏览器脚本、测试不引它，
+// 不认识时回落到 default。这里只放词表与纯函数：app.ts 是浏览器脚本、测试不引它，
 // 映射表放在可单测的模块里。
 //
 // 面与 DSH 上游角色的对应：

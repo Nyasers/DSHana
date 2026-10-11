@@ -7,7 +7,7 @@
 // sidebar）都要它，但它是**纯宿主 plumbing**——不碰 DOM 渲染、不引 dsh-inject / React，所以
 // 会话卡的聊天流态可以只带这一层（外加 SDK 的 envelope 订阅），把重型那一半留在动态 chunk 里。
 //
-// 相对资源纪律与凭据形态的来龙去脉见 packages/ui/src/app-shell.ts 顶部注释；这里只保留实现。
+// 相对资源纪律与凭据形态的来龙去脉见 packages/ui/src/app.ts 顶部注释；这里只保留实现。
 import { hana } from "@hana/plugin-sdk";
 import { type IntentKind, type IntentPayload, faceTakesIntent } from "@dshana/shared/shared-state.ts";
 import { CHANNEL_SCOPE_FALLBACK, normalizeScope, type FaceAddress } from "@dshana/shared/face-addresses.ts";

@@ -103,10 +103,10 @@ test("非目标引用原样：协议相对 / 完整 URL / data: / blob: / #frag 
 test("宿主前缀下的引用不被重复改写（已在 /api/apps/ 下）", () => {
   // 注意：本函数只做「相对化」，不判断宿主前缀；已在 /api/apps/ 下的绝对引用会被相对化，
   // 但解析结果仍落在同一前缀下（幂等，不变量是「解析后指向不变」）。
-  const html = '<script src="/api/apps/dshana/ui/app-shell.js"></script>';
+  const html = '<script src="/api/apps/dshana/ui/app.js"></script>';
   const out = rewriteRootRelativeRefs(html, DOC);
   const m = /src="([^"]+)"/.exec(out);
-  assert.equal(resolvesTo(DOC, m[1]), PREFIX + "api/apps/dshana/ui/app-shell.js");
+  assert.equal(resolvesTo(DOC, m[1]), PREFIX + "api/apps/dshana/ui/app.js");
   // 幂等：再跑一次不变
   const again = rewriteRootRelativeRefs(out, DOC);
   assert.equal(again, out);
