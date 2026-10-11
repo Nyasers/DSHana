@@ -82,7 +82,7 @@ for (const item of staticItems) {
 }
 
 // 1.5 / 1.6) 产物断言：cordis 包与组合层包的版本/完整性、交付树无包清单、App ui/ 静态树（缺失即拒包）
-assertCordisArtifacts(CORDIS_DIR, version);
+const cordisCount = assertCordisArtifacts(CORDIS_DIR, version);
 assertBundleArtifacts(BUNDLE_DIR, version);
 assertNoProductPackage(distDir);
 assertUiTree(distDir);
@@ -176,7 +176,7 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
   // 层列要的那两层必须在：缺 base 或少我们的组合层包，boot 都起不来，宁可不打包。
   const absent = requiredPackages().filter((n) => !fs.pathExistsSync(join(pkgDir, "node_modules", n, "package.json")));
   if (absent.length > 0) throw new Error(`产物缺必需的包：${absent.join("、")}（拒绝出包）`);
-  console.log("[pack] @dshana 产物就位（4 子插件 + 组合层包 dsh-app -> node_modules/@dshana），必需包齐备")
+  console.log(`[pack] @dshana 产物就位（${cordisCount} 子插件 + 组合层包 dsh-app -> node_modules/@dshana），必需包齐备`);
   // 只躺在 node_modules 里不够：DSH 按「安装树 + 被选中 bundle 的依赖图」算解析代，真机上
   // profile 在数据目录里向上解析走不到安装树，得由被选中 bundle 认领才进解析代（见 bundle-deps.mts）。
   declareInstallationPlugins(join(pkgDir, "node_modules"));

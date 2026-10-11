@@ -10,8 +10,8 @@
 //
 // 保留名单**派生**而不是手写：
 //   · `@deepseek-ai/dsh-base`——共享底座；
-//   · 上游 `OPTIONAL_BUNDLES` 那四个——它们按设计就是「随安装走、默认关，由插件管理页打开」
-//     （vendor 的 app-boot 源码里写着这句话），我们有选择地照搬这个语义。
+//   · 上游 `OPTIONAL_BUNDLES` 那份名单（运行时从 app-boot 源码读出）——它们按设计就是「随安装走、
+//     默认关，由插件管理页打开」（vendor 的 app-boot 源码里写着这句话），我们有选择地照搬这个语义。
 // 排除名单同样是派生的：vendor checkout 里所有声明 `dsh.bundle` 的包减去上面那份保留名单，
 // 再加一份显式「非 bundle 私货」（它们不声明 dsh.bundle，扫不到，但只被别的表层挂载）。
 // 上游新增表层时我们自动把它挡在门外，而不是等它悄悄进包。
@@ -36,7 +36,7 @@ function upstreamOptionalBundles(): string[] {
   }
   const names = [...block[1].matchAll(/'([^']+)'/gu)].map((m) => m[1]);
   // 解析为空 = 上游把字面量换成了别的写法（双引号、as const、嵌套…）：那时 keptBundles() 只剩
-  // dsh-base，那四个可选 bundle 会被静默排除（本 PR 刚因为砍多了一次）。宁可当场报。
+  // dsh-base，上游那份可选名单会被静默排除（本 PR 刚因为砍多了一次）。宁可当场报。
   if (names.length === 0) {
     throw new Error(`${file} 里的 OPTIONAL_BUNDLES 解析为空（上游改了写法？）：保留名单不能拍`);
   }
