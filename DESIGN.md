@@ -80,7 +80,7 @@ Hana 宿主进程（App 隔离进程内加载 dist/bin/app.mjs）
 
 - **受管 runtime**：DSH 跑在 `ctx.runtime.start` 拉起的独立 Node 子进程中。App 侧与子进程分责：App 管启动/停止/状态，子进程管 DSH 的 cordis 生命周期；崩溃可被父侧识别并重起。
 - **依赖形态（自包含打包）**：DSH 及其依赖树由 `scripts/release/pack/index.mts` 在构建时物化进**安装目录** `node_modules`，运行时**不安装、不 spawn pnpm**。运行时依赖的唯一真源是 `packages/host/package.json` 的内核声明（交付面的清单与锁都由 pack 现生成，树里不留第二份；根那份只留构建面，另留一条同名 devDependencies 供开发侧安装，两处版本由 integrations 闸守）。
-- **更新 = 装新 App 包**：无独立升级通道，装包那一次加载就把新实例接上，不是「装完再重载」的两步；宿主进程也不必重启。**重载/换实例不使已建立的会话失效**：旧会话握着的 `dshana` 句柄仍能继续调，不必压缩上下文（工具面按宿主当前注册表解析）。
+- **更新 = 装新 App 包**：装包那一次加载就把新实例接上（入口重新 import、工具与路由重登记、受管 runtime 随自动链重启）。**重载后已建立的会话照常可调**：工具面按宿主当前注册表解析，旧会话继续调 `dshana` 即可。
 - **连接与鉴权交回官方**：组合层里的官方 connection（BrowserAuth token/cookie）与 frontend-static 各自负责其位，App 侧只经 runtime 中继补 cookie。
 - **DSH Web UI**：DSH 前端以**同文档注入**方式挂进壳页（`dsh-inject.ts`：取 index → 搬 link/script → 装配 `__DSH_TRANSPORT__` + 流 mux）；到 runtime 的请求走宿主代理前缀 + 路径票据。流 mux 的失败按官方**跨 bundle 契约**打结构标记（页半与内核半类身份不通，DSH 只看标记不看 `instanceof`）：载体丢失 `kind:'carrier'`（DSH 侧按可重试的载体丢失处理，自动重连续流），宿主交付的逻辑失败 `kind:'remote'` + 域码（原样重建成带码的 RemoteError）。少了 carrier 标，一次断链会被折成 `gateway/internal` 终态，会话历史流不再自愈。
 
@@ -145,7 +145,7 @@ DSH 的 workspace 选择对话框来自 `directory-picker` seam（宿主半列�
 
 ## 已知限制
 
-- **更新 = 装新 App 包**：DSH 随包物化在安装目录，换包即换内核；受管 runtime 每次启动都是新子进程，DSH 不在宿主进程内驻留，因此没有需要从插件侧豁免的宿主模块缓存。装包这一步就把新实例接上，不需要额外的重载动作。
+- **更新 = 装新 App 包**：DSH 随包物化在安装目录，换包即换内核；装包这一步就把新实例接上。受管 runtime 每次启动都是新子进程，DSH 在宿主进程内不驻留，宿主模块缓存无需从插件侧豁免。
 - **Windows 上的命令执行是 `pwsh`**：base 组合按平台互斥挂载 shell 行（`tool-bash` / `bash-sandbox` 在 win32 停，`tool-pwsh` / `pwsh-sandbox` 只在 win32 开），派给子代理的命令按 PowerShell 写；文件读写仍走文件系统工具。
 - **主题仅在 DSH 偏好为 system 时跟随宿主**（见上，有意为之）。
 - 越界权限请求默认走审批：deferred 通知 → `dshana(action="approve")` 应答；无人应答按 `approvalTimeoutSec` 自动拒绝。
@@ -164,7 +164,7 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」。本节按
 - 设置：`contributes.settings` 的 UI 由 App 自绘设置页承担（`ui.route: /settings.html`，宿主设置区渲染）；键与缺省以 `packages/runtime/src/config.ts` 为准，读写落 `dataDir/settings.json`（旧 `config.json` 只在两键缺位时作读侧兼容）。
 - 数据读路径在 `ctx.dataDir`（宿主 `app-data/<id>/`）：list/get 读当前源的 `<DSH_HOME>/...`（projcache + jsonl zstd）；旧插件数据迁移见 `packages/runtime/src/legacy-migrate.ts` 与 `scripts/migrate/legacy.mts`。
 - 构建：`node packages/app/src/build.ts` 产物 `dist/` = App 安装目录形态（根只放宿主读的契约件与目录：`manifest.json` + `icon.png` + `skills/` + `ui/`；代码全在 `bin/`：入口 `app.mjs`（manifest.entry 直接指它）+ runtime `dsh.mjs`）。App 契约件 `manifest.json` 与身份图标都在 App 域（`packages/app/src/`），随包 `skills/` 在仓库根，主体也在 `packages/app/src/`；卡面图归 ui 域（`packages/ui/src/face.png` → 产物 `ui/face.png`，face.image 是 ui/ 相对路径，随 ui 整树产出）。源位映射收在 `scripts/shared/contract-assets.mts`（构建摆位、投稿条目与派生同步共用一份）。壳的文档侧另出 `.cache/ui/`（`node packages/ui/src/build.ts`），App 域构建整树拷进 `ui/`。cordis 子插件包另出 `.cache/cordis/`（`node packages/app/src/cordis.ts`）：它们不是安装态里的东西，出包时由 pack 落进包内 `node_modules/@dshana`。
-- 两个入口一次 rspack 构建（主体 `bin/app.mjs`（= manifest.entry）/ 受管 runtime `bin/dsh.mjs`），入口就是主 bundle，不再另写静态壳；先清 `dist` 再写入，壳的文档侧不在本域编译而是从 `.cache/ui/` 拷进交付目录 `ui/`（缺件即拒），随后统一做 URL 回写 / terser / 断言。
+- 两个入口一次 rspack 构建（主体 `bin/app.mjs`（= manifest.entry）/ 受管 runtime `bin/dsh.mjs`），入口即主 bundle；先清 `dist` 再写入，壳的文档侧不在本域编译而是从 `.cache/ui/` 拷进交付目录 `ui/`（缺件即拒），随后统一做 URL 回写 / terser / 断言。
 
 **受管 Node runtime（local-machine/external + readyMarker 就绪门）：**
 

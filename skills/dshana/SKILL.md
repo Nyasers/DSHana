@@ -38,15 +38,15 @@ DSHana wires DeepSeek Harness (DSH) into Hana as a **managed sub-agent executor*
 
 ## Updating DSHana
 
-Updating means **installing a new App package** — that load is what re-imports the server entry and re-registers tools and routes. There is no separate upgrade channel, and installing is not a two-step dance with a reload: no reload step, no host restart. The DSH version is fixed by the dependency the App declares (`@deepseek-ai/dsh`) and shows up in the artifact's version segment.
+Updating means **installing a new App package**. That load re-imports the server entry, re-registers tools and routes, and restarts the managed runtime through the automatic chain. The DSH version is fixed by the dependency the App declares (`@deepseek-ai/dsh`) and shows up in the artifact's version segment.
 
 1. **Pick the package for this machine.** A release carries one `.zip` per target (`dshana-v<version>-<target>.zip`) plus `dshana-v<version>.zip` for universal. Take the platform one, which is far smaller: it carries only that machine's dependency tree. The full target table and the exact commands live in `dshana-install-skill/SKILL.md` in the repository — that manual is deliberately not shipped inside the package, so read it from the repo.
 2. **Verify against the release's own metadata.** GitHub reports each asset's `size` and `sha256` `digest`; compare both before installing. Nothing else publishes those values for the platform packages.
 3. **Uninstall the old version first.** Over-installing the same id is not supported, so the uninstall call (`DELETE <host>/api/extensions/app:dshana`) comes before the install submission.
-4. **Install.** Submit the package, then confirm the staged install. That loads the new instance: the server entry is re-imported and tools and routes are re-registered, and the managed runtime restarts through the automatic chain. No reload step and no host restart.
+4. **Install.** Submit the package, then confirm the staged install. That loads the new instance: the server entry is re-imported, tools and routes are re-registered, and the managed runtime restarts through the automatic chain.
 5. **Re-check readiness.** Poll the App's boot-state route until `state.phase === "ready"` and `state.ready === true`. A first start after an install takes a while.
 
-**Already-established sessions need no context compaction.** Reloading the App replaces its instance, and that does **not** invalidate the `dshana` tool handle an existing session holds: the tool surface is resolved against the host's current registry, so subsequent calls in the same session land as usual. Compact that session's context (or open a new session) only if a call actually reports `RPC peer closed; cannot call callback.tools.execute`; the App itself is fine (routes and runtime are normal).
+**Already-established sessions keep calling `dshana` across an App reload.** The tool surface resolves against the host's current registry: an already-established session holds a live `dshana` handle, and subsequent calls in it land as usual. A call that reports `RPC peer closed; cannot call callback.tools.execute` clears after compacting that session's context (or opening a new session).
 
 ## DSHana card: the three states
 
