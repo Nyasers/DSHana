@@ -14,7 +14,7 @@ import { buildHanaAdapter } from "../../packages/dsh/provider/index.ts";
 import { TASK_BINDING_GLOBAL_KEY } from "@dshana/shared/task-binding.ts";
 
 const SID = "session-11111111-2222-3333-4444-555555555555";
-// big = 现实里那种“1M 上下文 / 384k 输出”的模型（published 上限远大于宿主的请求闸 65536）
+// big = 现实里那种“1M 上下文 / 384k 输出”的模型（published 上限远大于 adapter 保守线 65536）
 const MODELS = [
   { provider: "hana", id: "m1", name: "m1" }, // 未声明 maxTokens
   { provider: "hana", id: "big", name: "big", maxTokens: 393216 },
@@ -210,13 +210,13 @@ test("log 缺失也不崩（deps.log 缺省为空函数）", async () => {
 });
 
 // ---- 宿主参数校验适配（APP_MODEL_INVALID_REQUEST）----
-// 宿主 bundle 校验器原文："maxTokens must be a positive integer no larger than 65536."
-// （写死的默认 limits.maxTokens，构造 App 模型服务时没有 limits 入口），另有一条
-// "maxTokens exceeds the selected model's published limit."；温度必须 [0,2]。
-// 关键取舍：DSH 的输出预算来自模型真实上限（384k），超过宿主请求闸时**不传字段**——
+// 宿主按模型取闸：`published 上限 ?? limits.maxTokens(65536)`，校验器原文
+// "maxTokens must be a positive integer no larger than ${模型值}."（未声明 published 时
+// 那格就是 65536）；温度必须 [0,2]。
+// 关键取舍：DSH 的输出预算来自模型真实上限（384k），超过 adapter 保守线 65536 时**不传字段**——
 // 收敛到 65536 等于把输出悄悄砍到 64k。
 
-test("maxTokens：超过宿主请求闸 → 不传字段（而非压到 65536）", async () => {
+test("maxTokens：超过 adapter 保守线 65536 → 不传字段（而非压到 65536）", async () => {
   seedBinding(null);
   const hana = makeHana(okEvents);
   const warns = [];
@@ -227,7 +227,7 @@ test("maxTokens：超过宿主请求闸 → 不传字段（而非压到 65536）
   assert.match(warns[0], /改为不传/);
 });
 
-test("maxTokens：未声明 published 上限时，超闸同样不传", async () => {
+test("maxTokens：未声明 published 上限时，超保守线同样不传", async () => {
   seedBinding(null);
   const hana = makeHana(okEvents);
   const req = await streamOnce(
@@ -237,7 +237,7 @@ test("maxTokens：未声明 published 上限时，超闸同样不传", async () 
   assert.equal("maxTokens" in req, false);
 });
 
-test("maxTokens：未超宿主闸 → 原样透传，不写提示", async () => {
+test("maxTokens：未超保守线 → 原样透传，不写提示", async () => {
   seedBinding(null);
   const hana = makeHana(okEvents);
   const warns = [];
@@ -247,7 +247,7 @@ test("maxTokens：未超宿主闸 → 原样透传，不写提示", async () => 
   assert.deepEqual(warns, []);
 });
 
-test("maxTokens：未超宿主闸但超过该模型 published 上限 → 按模型上限收敛", async () => {
+test("maxTokens：未超保守线但超过该模型 published 上限 → 按模型上限收敛", async () => {
   seedBinding(null);
   const hana = makeHana(okEvents);
   const warns = [];

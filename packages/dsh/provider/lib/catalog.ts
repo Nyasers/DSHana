@@ -14,17 +14,20 @@
 // context/defaultMaxTokens/reasoning{efforts,defaultEffort}。read_image 的能力门读的就是这一份
 // inputModalities（缺字段按「未声明图像输入」拒），所以两处同源投影。reasoning effort 是 adapter 自有
 // 词汇，但**透传到宿主** models.stream.reasoningEffort 会被宿主按模型 thinking levels 校验
-// （Loe 归一 + UNSUPPORTED_REASONING）——本模块只声明宿主接受面内的 effort。
+// （归一：xhigh→max、丢弃 minimal，越界报 APP_MODEL_UNSUPPORTED_REASONING）。投影的
+// thinkingLevels 就是该归一的结果，也就是宿主接受面；supportedEfforts 与它同一口径，
+// 不按 xhigh 旗单独补档（那面旗只表示归一档含 max，见该函数）。
 // 零依赖纯函数（node --test 可直接 import）。
 
 /** 宿主/pi-ai 共用 thinking effort 词表（off..max 升序；DSH agent 默认 high 必须可接受）。 */
 export const CANONICAL_EFFORT_IDS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 /**
- * 宿主 models.stream 对**请求字段** maxTokens 的硬上限（宿主写死的默认 limits.maxTokens，
- * 校验器原文："maxTokens must be a positive integer no larger than 65536."）。这是
- * App 接口自己的闸，不是模型能力：模型 published 上限可能远大于它（如 1M 上下文 / 384k 输出）。
- * 另有一条按模型的 "maxTokens exceeds the selected model's published limit."。
+ * 宿主 models.stream 对**请求字段** maxTokens 的回退闸：宿主按模型取
+ * `published 上限 ?? 本值`（校验器原文 "maxTokens must be a positive integer no larger
+ * than ${模型值}."，本值是未声明 published 时的那一格，也是宿主默认 limits.maxTokens）。
+ * 这是 App 接口自己的闸，不是模型能力：声明了 published 的模型上限远大于它
+ * （如 1M 上下文 / 384k 输出），此时宿主收得下更大的值。
  */
 export const HOST_MAX_OUTPUT_TOKENS = 65536;
 
@@ -55,9 +58,12 @@ function asStringSet(value) {
 
 /**
  * 一条目录项的可用 thinking effort（升序、去重；空 = 模型不支持显式 effort）。
- * 来源优先级：defaultThinkingLevel / xhigh / thinkingLevels / customThinkingLevels，
- * 与 CANONICAL_EFFORT_IDS 交集过滤。取不到且条目声明 reasoning 时给保守面 [off, high]
- * （DSH agent 默认 high 必须可被接受——v1 provider 同款保证）。
+ * 来源：投影的 `thinkingLevels`（它就是宿主 stream 校验读的那一份，见文件头）、
+ * `defaultThinkingLevel` 与 `customThinkingLevels`，与 CANONICAL_EFFORT_IDS 交集过滤。
+ * **不按 `xhigh === true` 独立推导**：那面旗只表示归一档含 `max`，不表示宿主接受 `xhigh`
+ * 这个词；单凭它收进 `xhigh`，在「只标 xhigh、thinkingLevels 缺席」的条目上会给出宿主
+ * 不接受的档位。取不到且条目声明 reasoning 时给保守面 [off, high]（DSH agent 默认 high
+ * 必须可被接受）。
  */
 export function supportedEfforts(item) {
   if (!item || item.reasoning !== true) return [];
@@ -65,14 +71,10 @@ export function supportedEfforts(item) {
   if (typeof item.defaultThinkingLevel === "string" && item.defaultThinkingLevel) {
     raw.add(item.defaultThinkingLevel);
   }
-  if (item.xhigh === true) raw.add("xhigh");
   for (const s of asStringSet(item.thinkingLevels)) raw.add(s);
   for (const s of asStringSet(item.customThinkingLevels)) raw.add(s);
   const inter = CANONICAL_EFFORT_IDS.filter((id) => raw.has(id));
-  if (inter.length > 0) return inter;
-  const fallback = ["off", "high"];
-  if (item.reasoning === true) return fallback;
-  return [];
+  return inter.length > 0 ? inter : ["off", "high"];
 }
 
 /** 目录项默认 effort：defaultThinkingLevel 在 supportedEfforts 内取之；否则 reasoning 模型给 high。 */
