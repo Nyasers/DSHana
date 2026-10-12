@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.7+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.6%2Bdsh-0.2.0-rc.2...v1.0.7%2Bdsh-0.2.0-rc.2) (2026-10-12)
+
+### Bug Fixes
+
+* **provider:** 推理档投影与宿主接受面一致，宿主限额口径写回现状 ([3df661f](https://github.com/Nyasers/DSHana/commit/3df661f8603f43205b0f0019a24f9752f258195b))
+
 ## [1.0.6+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.5%2Bdsh-0.2.0-rc.2...v1.0.6%2Bdsh-0.2.0-rc.2) (2026-10-11)
 
 ### Bug Fixes
