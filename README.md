@@ -2,6 +2,8 @@
 
 > Hana App ID：`dshana`
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Nyasers/DSHana)
+
 把 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 接入 [HanaAgent](https://github.com/liliMozi/openhanako)，作为**受管子代理执行器**：App 加载后拉起一个受管 Node runtime（`ctx.runtime.start`），DSH web 服务跑在里面；DSH 前端以同文档注入方式挂进 DSHana 卡。DSH 及其依赖树随包分发，**运行时不需要安装任何东西**。
 
 ## 安装
