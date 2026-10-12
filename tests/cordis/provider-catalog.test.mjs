@@ -23,14 +23,20 @@ test("providerRoutes: 去重排序", () => {
   assert.deepEqual(providerRoutes(catalog), ["deepseek", "sensenova"]);
 });
 
-test("supportedEfforts: 与 canonical 交集 + xhigh + fallback", () => {
+test("supportedEfforts: 与 canonical 交集 + fallback（xhigh 旗不单独成档）", () => {
   const e1 = supportedEfforts(catalog[0]);
-  assert.ok(e1.includes("off") && e1.includes("high") && e1.includes("xhigh"));
+  assert.ok(e1.includes("off") && e1.includes("high") && e1.includes("max"));
   assert.ok(!e1.includes("minimal"));
+  assert.ok(!e1.includes("xhigh"), "catalog[0] 的 thinkingLevels 不含 xhigh，xhigh 旗不得补档");
   assert.deepEqual(supportedEfforts(catalog[1]), []); // 非推理模型
   assert.deepEqual(supportedEfforts(catalog[2]), ["off", "high"]); // map 过滤 false
-  // reasoning true 且无任何 effort 线索 → 保守 [off, high]
+  // reasoning true 且无任何 effort 线索 → 保守面 [off, high]
   assert.deepEqual(supportedEfforts({ reasoning: true, provider: "x", id: "y" }), ["off", "high"]);
+  // 宿主接受 xhigh 的唯一形态：thinkingLevels 同时含 xhigh 与 max
+  assert.deepEqual(
+    supportedEfforts({ reasoning: true, xhigh: true, thinkingLevels: ["low", "high", "xhigh", "max"] }),
+    ["low", "high", "xhigh", "max"],
+  );
 });
 
 test("defaultEffortOf: defaultThinkingLevel 优先，否则 high/首个", () => {

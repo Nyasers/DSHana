@@ -9,8 +9,11 @@
 // 目录条目是宿主的不透明投影（AppModelInfoV2 = Record<string, unknown>）：这里只取展示与选择用得上
 // 的那几个字段，凭据、端点、计价一概不进浏览器。
 //
-// 推理档：宿主按模型声明 defaultThinkingLevel / xhigh / thinkingLevels / customThinkingLevels，
-// 可用档取它与 off..max 词表的交集；一条都没声明但条目声明了 reasoning 时给保守面 [off, high]
+// 推理档：宿主 `models.list` 投影的 `thinkingLevels` 就是 stream 校验读的那一份（同一个
+// 归一函数：defaultThinkingLevel / customThinkingLevels 已并入，`xhigh` 已归一——档位集含
+// `max` 才保留 `xhigh`，否则映成 `max`），所以它本身就是「宿主接受面」，可用档取它与
+// off..max 词表的交集。**不按 `xhigh === true` 独立推导**：那面旗只表示归一档含 `max`，
+// 不表示宿主接受 `xhigh` 这个词。一条都没声明但条目声明了 reasoning 时给保守面 [off, high]
 // （DSH agent 的默认档 high 必须可被接受）。受管 runtime 侧 @dshana/dsh-provider 的 lib/catalog.ts
 // 持有同一套词表与优先序——两份实现分属 App 主进程与 cordis 子插件两个 bundle，不能互相 import。
 
@@ -62,14 +65,14 @@ function asStringSet(value: unknown): Set<string> {
 
 /**
  * 一条目录项的可用推理档（升序、去重；空 = 模型不支持显式档位）。
- * 来源优先级：defaultThinkingLevel / xhigh / thinkingLevels / customThinkingLevels。
+ * 来源：投影的 `thinkingLevels`（它就是宿主 stream 校验读的那一份，见文件头）、
+ * `defaultThinkingLevel` 与 `customThinkingLevels`。
  */
 export function supportedEfforts(entry: unknown): string[] {
   const item = (entry && typeof entry === "object" ? entry : {}) as Record<string, unknown>;
   if (item.reasoning !== true) return [];
   const raw = new Set<string>();
   if (typeof item.defaultThinkingLevel === "string" && item.defaultThinkingLevel) raw.add(item.defaultThinkingLevel);
-  if (item.xhigh === true) raw.add("xhigh");
   for (const s of asStringSet(item.thinkingLevels)) raw.add(s);
   for (const s of asStringSet(item.customThinkingLevels)) raw.add(s);
   const inter = CANONICAL_EFFORT_IDS.filter((id) => raw.has(id));

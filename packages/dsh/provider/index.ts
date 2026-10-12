@@ -312,12 +312,13 @@ export function buildHanaAdapter(LlmAdapter, LlmError, deps) {
       if (systemPrompt) request.systemPrompt = systemPrompt;
       if (Array.isArray(options.tools) && options.tools.length) request.tools = options.tools;
       if (options.reasoningEffort) request.reasoningEffort = String(options.reasoningEffort);
-      // maxTokens 三层（宿主校验器全文见 DESIGN）：
+      // maxTokens 三层（宿主校验口径见 DESIGN；阈值常量见 lib/catalog.ts）：
       //  ① 未给/非正整数 → 不发字段；
-      //  ② 超过宿主请求闸 HOST_MAX_OUTPUT_TOKENS(65536) → **不发字段**（不是压到 65536！
+      //  ② 超过 HOST_MAX_OUTPUT_TOKENS(65536) → **不发字段**（不是压到 65536！
       //     收敛到 65536 等于把输出悄悄砍到 64k，而模型 published 上限可能是 384k；不传则
-      //     上限交回模型/供应商默认）。想显式带 >64k 需宿主侧放宽 limits.maxTokens，那是宿主的闸；
-      //  ③ 未超宿主闸、但超过该模型 published 上限 → 按模型上限收敛（模型自身硬限，无法绕过）。
+      //     上限交回模型/供应商默认）。宿主对声明了 published 的模型收得下更大的值，本阈值是
+      //     adapter 自持的保守线，不是宿主的硬闸；
+      //  ③ 未超该阈值、但超过该模型 published 上限 → 按模型上限收敛（模型自身硬限，无法绕过）。
       if (Number.isInteger(options.maxTokens) && options.maxTokens > 0) {
         const published = modelPublishedMaxTokens(item);
         const keyBase = options.provider + "/" + options.model;
@@ -325,9 +326,8 @@ export function buildHanaAdapter(LlmAdapter, LlmError, deps) {
           noteClamp(
             warnLine,
             "maxTokens-drop:" + keyBase,
-            "DSH 请求 maxTokens=" + options.maxTokens + " 超出宿主请求上限 " + HOST_MAX_OUTPUT_TOKENS +
-              "，改为不传该字段（上限交回模型/供应商默认；如需显式声明 > " + HOST_MAX_OUTPUT_TOKENS +
-              " 需放宽宿主 limits.maxTokens）",
+            "DSH 请求 maxTokens=" + options.maxTokens + " 超出 adapter 保守线 " + HOST_MAX_OUTPUT_TOKENS +
+              "，改为不传该字段（上限交回模型/供应商默认）",
           );
         } else if (published !== null && options.maxTokens > published) {
           request.maxTokens = published;

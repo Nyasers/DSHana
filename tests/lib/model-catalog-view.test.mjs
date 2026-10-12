@@ -18,9 +18,23 @@ test("supportedEfforts: 按声明取与词表的交集（升序，不按声明�
   assert.deepEqual(CANONICAL_EFFORT_IDS.slice(0, 3), ["off", "minimal", "low"]);
 });
 
-test("supportedEfforts: 只声明 defaultThinkingLevel / xhigh 也认", () => {
+test("supportedEfforts: 只声明 defaultThinkingLevel 也认；xhigh 旗不单独成档", () => {
   assert.deepEqual(supportedEfforts({ reasoning: true, defaultThinkingLevel: "medium" }), ["medium"]);
-  assert.deepEqual(supportedEfforts({ reasoning: true, xhigh: true }), ["xhigh"]);
+  // xhigh:true 只表示归一档含 max，不是「宿主接受 xhigh」；无 thinkingLevels 时走保守面
+  assert.deepEqual(supportedEfforts({ reasoning: true, xhigh: true }), ["off", "high"]);
+});
+
+test("supportedEfforts: 以投影的 thinkingLevels 为接受面（xhigh 旗不补档）", () => {
+  // deepseek-flash 形态：xhigh:true 但投影档位里没有 xhigh（LZ 归一后是 off/medium/high/max）
+  assert.deepEqual(
+    supportedEfforts({ reasoning: true, xhigh: true, defaultThinkingLevel: "high", thinkingLevels: ["off", "medium", "high", "max"] }),
+    ["off", "medium", "high", "max"],
+  );
+  // thinkingLevels 同时含 xhigh 与 max 时，xhigh 是宿主真接受的档
+  assert.deepEqual(
+    supportedEfforts({ reasoning: true, xhigh: true, thinkingLevels: ["low", "high", "xhigh", "max"] }),
+    ["low", "high", "xhigh", "max"],
+  );
 });
 
 test("supportedEfforts: thinkingLevels 是对象形状（值为 true）也算声明", () => {
