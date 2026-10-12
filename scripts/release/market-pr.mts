@@ -13,15 +13,17 @@
 //   分开——提交是署名动作，由人收口；脚本只把能自证的事实备齐，不替人做不可逆的对外动作。
 //
 //   取正文前做一次**不下包**的核对：条目的 archive.sha256/size 与 Release 资产在 API 上的
-//   digest/size 逐字比（等价于「把包下下来再哈希」，但一个字节都不下），再拿已上架索引比一次主号不
-//   倒退。完整性真正的强校验（下载 + 哈希）留给市场 PR 的 CI 在远端做，本地不重复付那 153 MB。
+//   digest/size 逐字比（等价于「把包下下来再哈希」，但一个字节都不下），再拿上游登记台账比一次主号不
+//   倒退。登记台账（approvals.json）是「市场当前在卖哪一版」的权威，读不到直接抛——它同时是
+//   Changelog 段的区间起点，静默跳过会把中间跳过的版本从正文里丢掉。完整性真正的强校验
+//   （下载 + 哈希）留给市场 PR 的 CI 在远端做，本地不重复付那 153 MB。
 //
 // 正文形状对齐维护者（liliMozi）的更新型 PR：
 //   标题 `chore: approve <kind>/<id> <tag>`；
 //   正文 = Release / SHA-256（+ 有则 Changes）几行 + 一行本地核对说明 + Changelog 段。
 //   · Changes 只用于声明**权限变更等重要变更**，由 --changes 现给；其余「改了什么」下沉到 Changelog
 //     段——取自本仓 CHANGELOG.md 的**区间**（含各提交链接），不在这里另写一份，也就不会与它漂移。
-//     区间两端都取自外部事实：起点是市场当前版本（已上架索引），终点是仓库 Latest。
+//     区间两端都取自外部事实：起点是市场当前登记的版本（上游 approvals.json），终点是仓库 Latest。
 //   · 图标预览、截图、自测报告几栏是作者按维护者要求补的审阅材料（见上游 CONTRIBUTING 第 3 节），
 //     不由脚本生成：脚本出的是可提交的骨，这几栏按 PR 当期情况手补。
 //
@@ -41,6 +43,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { ROOT } from "../shared/root.mts";
+import { errText } from "../shared/err-text.mts";
 import { manifestPath } from "../shared/contract-assets.mts";
 
 /** 取件用的临时目录：在 .cache/ 下（已 gitignore），用完即删，不留痕。 */
@@ -78,7 +81,7 @@ const log = (m: string): void => console.error(`[market-pr] ${m}`);
 /** 无代理环境下跑 gh，并给 git 固定 HTTP/1.1。
  *  宿主环境里的 HTTP(S)_PROXY 可能指向已停的代理，会让 gh 连接失败；而 HTTP/2 过某些代理中转会
  *  Recv failure: Connection was reset。两者都在这里绕开，不依赖跑脚本的人先改好环境。
- *  maxBuffer 显式抬到 64 MB：execFileSync 默认只有 1 MB，而上游索引单份就 2.6 MB，
+ *  maxBuffer 显式抬到 64 MB：execFileSync 默认只有 1 MB，而上游台账与索引单份就过 1 MB，
  *  超限会以 ENOBUFS 抛出而不报是缓冲太小。 */
 function exec(bin: string, args: string[], cwd = ROOT): string {
   const env = { ...process.env };
@@ -193,25 +196,50 @@ function coreDowngrade(next: string, prev: string): boolean {
   return false;
 }
 
-/** 上游已上架索引（index.v2.json）：只读一次，读不到就返回 null（离线或首次上架时跳过版本比对）。
- *  走 gh api 的 raw 媒体类型：这份索引已过 1 MB，contents API 对内联内容有 1 MB 上限（超了只回
- *  元数据、content 为空），默认形态会静默拿到空串。拿它只为比一次主号不倒退，不为此拉工作副本。 */
-function publishedIndex(
-  upstream: string,
-): { items: { kind: string; id: string; version: string; publisher?: string }[] } | null {
+/** 上游登记台账（approvals.json）的解析（纯函数，可单测）：形状不符就抛。
+ *  fail-closed 的判据就在这里——非法 JSON 与缺 approvals 数组都不降级成空表。 */
+export function parseApprovals(raw: string, source = "上游 approvals.json"): { kind: string; id: string; tag: string; sha256: string }[] {
+  let parsed: { approvals?: { kind: string; id: string; tag: string; sha256: string }[] };
   try {
-    const raw = exec("gh", [
-      "api",
-      `repos/${upstream}/contents/index.v2.json`,
-      "-H",
-      "Accept: application/vnd.github.raw",
-    ]);
-    return JSON.parse(raw.replace(/^\uFEFF/, "")) as {
-      items: { kind: string; id: string; version: string; publisher?: string }[];
-    };
-  } catch {
-    return null;
+    parsed = JSON.parse(String(raw).replace(/^\uFEFF/, ""));
+  } catch (e) {
+    throw new Error(`${source} 不是合法 JSON：${errText(e).trim()}`);
   }
+  if (!parsed || !Array.isArray(parsed.approvals)) {
+    throw new Error(`${source} 形状不符（缺 approvals 数组）`);
+  }
+  return parsed.approvals;
+}
+
+/** 拉上游登记台账（approvals.json）：市场**当前在卖哪一版**的唯一事实源。读不到就抛（fail-closed）。
+ *
+ * 为什么取 approvals 而不是 index.v2.json：索引是市场侧的**生成物**，登记 PR 合并后才刷新，
+ * 实测同一时刻 approvals 已记 v1.0.4 而索引仍停在 v1.0.2——拿索引当起点会把中间跳过的版本从
+ * 正文里丢掉。登记台账是登记动作直接写的东西，才是「上次登记到哪」的权威。
+ *
+ * 为什么读不到就抛而不是返回 null：返回 null 会把「读不到」与「确实没有该条目」混成一个值，
+ * 前者被当成后者就静默退化成单版本正文（正是这个降级把区间起点丢了）。发版投稿本就不该在
+ * 拿不到市场事实时继续。
+ *
+ * 取件走 raw.githubusercontent 固定地址，不经 gh：这份台账只有十几 KB 且路径固定，没有
+ * contents API 那套「超 1 MB 只回元数据」的顾虑，也就不需要 gh 的认证与媒体类型。Node 的
+ * fetch（undici）默认不读 HTTP(S)_PROXY 环境变量，宿主环境里指向已停代理的那几个变量影响不到它
+ * （这正是 exec 里要手工剥代理的原因，这里天然免疫）。 */
+async function publishedApprovals(upstream: string): Promise<{ kind: string; id: string; tag: string; sha256: string }[]> {
+  const url = `https://raw.githubusercontent.com/${upstream}/main/approvals.json`;
+  let res: Response;
+  try {
+    res = await fetch(url, { redirect: "follow" });
+  } catch (e) {
+    throw new Error(
+      `读不到上游登记台账 ${url}（${errText(e).trim()}）——` +
+        `区间起点与版本比对都靠它，不能跳过；确认网络后重跑`,
+    );
+  }
+  if (!res.ok) {
+    throw new Error(`读不到上游登记台账 ${url}（HTTP ${res.status}）——区间起点与版本比对都靠它，不能跳过`);
+  }
+  return parseApprovals(await res.text(), `${upstream}/main/approvals.json`);
 }
 
 /** 仓库 Latest 的 tag（`gh release view` 不带 tag 即 GitHub 标 Latest 的那个）；读不到返回 null。
@@ -226,40 +254,39 @@ function repoLatestTag(repo: string): string | null {
 }
 
 /** 出正文前补身份与版本：条目里的 publisher 要跟登记一致；版本主号不得往回打。带 pre 段的完整排序不在
- *  本地重造——市场侧的 historyFor 会据已上架索引拒降级，而那道闸跑在 PR 检查里。
+ *  本地重造——市场侧的 historyFor 会据已上架台账拒降级，而那道闸跑在 PR 检查里。
  *
- *  返回**已上架的那个版本**（读不到索引、首次上架、或该 kind 无版本号时为 null）：它同时是 Changelog 段
- *  的区间**起点**——上次登记到现在跳过的那几版要并进同一条 PR 的正文，见 changelogSection。 */
-function preflightPublished(enr: Enrollment, version: string, entryPublisher: string): string | null {
+ *  返回**市场当前登记的版本**（首次上架、或该 kind 无版本号时为 null）：它同时是 Changelog 段
+ *  的区间**起点**——上次登记到现在跳过的那几版要并进同一条 PR 的正文，见 changelogSection。
+ *  台账读不到会直接抛（见 publishedApprovals），不静默退回单版本正文。 */
+async function preflightPublished(enr: Enrollment, version: string, entryPublisher: string): Promise<string | null> {
   if (entryPublisher && entryPublisher !== enr.publisher) {
     throw new Error(
       `条目里的 publisher（${entryPublisher}）与登记（${enr.publisher}）不一致，市场会拒：` +
         `先对齐 market/enrollment.json 与出包时的 --publisher`,
     );
   }
-  const idx = publishedIndex(enr.upstream);
-  if (!idx) {
-    log("读不到上游 index.v2.json，跳过版本比对");
-    return null;
-  }
-  const pub = idx.items.find((i) => i.kind === enr.kind && i.id === enr.id);
+  const approvals = await publishedApprovals(enr.upstream);
+  const pub = approvals.find((a) => a.kind === enr.kind && a.id === enr.id);
   if (!pub) {
-    log(`索引里还没有 ${enr.kind}/${enr.id}（首次上架）`);
+    log(`上游登记台账里还没有 ${enr.kind}/${enr.id}（首次上架）`);
     return null;
   }
-  if (pub.publisher && pub.publisher !== enr.publisher) {
-    log(`注意：发布者与已上架不同（${pub.publisher} → ${enr.publisher}），PR 正文里要写明登记变更`);
+  // 台账记的是 tag（`v<版本>`），比版本前剥掉 v 前缀。
+  const pubVersion = String(pub.tag || "").replace(/^v/, "");
+  if (!pubVersion) {
+    throw new Error(`上游登记台账里 ${enr.kind}/${enr.id} 的 tag 为空，无法定区间起点`);
   }
   // skill / recipe 按内容哈希更新，`0.0.0` 不是版本语义，比版本没意义（市场侧 historyFor 同样跳过）。
   if (VERSIONLESS_KINDS.has(enr.kind)) {
     log(`${enr.kind} 没有版本号（按内容哈希），跳过版本比对`);
-    return null;
+    return pubVersion;
   }
-  if (coreDowngrade(version, pub.version)) {
-    throw new Error(`版本倒退：本次 ${version} < 已上架 ${pub.version}，市场侧的 historyFor 会拒`);
+  if (coreDowngrade(version, pubVersion)) {
+    throw new Error(`版本倒退：本次 ${version} < 已登记 ${pubVersion}，市场侧的 historyFor 会拒`);
   }
-  log(`已上架 ${pub.version} → 本次 ${version}（主号不降级）`);
-  return pub.version;
+  log(`已登记 ${pubVersion} → 本次 ${version}（主号不降级）`);
+  return pubVersion;
 }
 
 /** CHANGELOG.md 里的一个版本段：版本号、标题带的 compare 链接，以及标题行之后的原文。 */
@@ -321,7 +348,7 @@ const SECTION_ORDER = ["Features", "Bug Fixes", "Performance Improvements"];
  *
  * 区间而不是单版本，是因为市场只按 approvals 的记录读 Release：上次登记之后直接跳过的那几版
  * 从没出现在任何 PR 正文里，只列本次会把它们丢掉（#30 就是这样把 v1.0.3 并进 v1.0.4 那段的）。
- * 端点取外部事实：终点 `currentVersion` 是仓库 Latest，起点 `sinceVersion` 是市场已上架版本。
+ * 端点取外部事实：终点 `currentVersion` 是仓库 Latest，起点 `sinceVersion` 是市场当前登记版本。
  * 段落按分节归并（同一标题只出一个），条目按版本从新到旧、版本内保持 CHANGELOG 的原序；
  * compare 链接也按区间拼（市场当前 → Latest），而不是照抄 CHANGELOG 标题里那对相邻版本。
  *
@@ -338,7 +365,7 @@ export function buildChangelogSection(
   const curAt = sections.findIndex((s) => s.version === currentVersion);
   if (curAt < 0) return null;
   // 起点（sinceVersion）比终点旧（在文件里更靠后）→ 区间含它到终点之间的所有版本；否则只取终点
-  // （首次上架、读不到索引、或重跑同一版本都是后者）。
+  // （首次上架、或重跑同一版本都是后者）。
   const sinceAt = sinceVersion ? sections.findIndex((s) => s.version === sinceVersion) : -1;
   const end = sinceAt > curAt ? sinceAt : curAt + 1;
   const range = sections.slice(curAt, end);
@@ -355,7 +382,7 @@ export function buildChangelogSection(
   const titles = [...buckets.keys()].sort((a, b) => rank(a) - rank(b));
   const body = titles.map((t) => `### ${t}\n\n${buckets.get(t)!.join("\n")}`).join("\n\n");
   const enc = (t: string): string => t.replace(/\+/g, "%2B");
-  // 只在起点确实比终点旧时拼区间链接：sinceAt < curAt（市场已上架版本比仓库 Latest 新，
+  // 只在起点确实比终点旧时拼区间链接：sinceAt < curAt（市场已登记版本比仓库 Latest 新，
   // 同主号不同 build 段时 coreDowngrade 拦不住）下拼出来的是反向链接，与只含终点段的正文不符，
   // 那时退回终点段自己的链接。
   const url =
@@ -404,7 +431,7 @@ async function main(): Promise<void> {
   log(`登记 ${enr.kind}/${enr.id} · tag ${tag}${versioned ? "" : "（无版本号，按内容哈希）"}`);
   const { sha256, publisher } = await waitForRelease(tag, enr.repository, entryName, !noWait);
   log(`条目 sha256 ${sha256}`);
-  const publishedVersion = preflightPublished(enr, version, publisher);
+  const publishedVersion = await preflightPublished(enr, version, publisher);
 
   const title = `chore: approve ${enr.kind}/${enr.id} ${tag}`;
   const releaseUrl = `https://github.com/${enr.repository}/releases/tag/${tag.replace(/\+/g, "%2B")}`;

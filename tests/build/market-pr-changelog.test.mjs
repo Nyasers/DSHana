@@ -11,7 +11,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { buildChangelogSection } from "../../scripts/release/market-pr.mts";
+import { buildChangelogSection, parseApprovals } from "../../scripts/release/market-pr.mts";
 
 const REPO = "Nyasers/DSHana";
 const cmp = (from, to) => `https://github.com/${REPO}/compare/v${from.replace(/\+/g, "%2B")}...v${to.replace(/\+/g, "%2B")}`;
@@ -118,4 +118,26 @@ test("区间起点比终点新时退回终点段自己的链接，不拼反向 c
 
 test("Latest 段不在 CHANGELOG 里时返回 null（调用方省掉该段）", () => {
   assert.equal(buildChangelogSection(CHANGELOG, "9.9.9+dsh-0.2.0-rc.2", "1.0.2+dsh-0.2.0-rc.2", REPO), null);
+});
+
+// ---- 上游登记台账解析：fail-closed ----
+// 台账读不到/形状不对时不得降级成空表——那会把「读不到」当成「首次上架」，静默退回单版本正文。
+test("parseApprovals: 正常台账解出条目", () => {
+  const raw = JSON.stringify({ schemaVersion: 1, approvals: [{ kind: "app", id: "dshana", tag: "v1.0.4+dsh-0.2.0-rc.2", sha256: "aa" }] });
+  const got = parseApprovals(raw);
+  assert.equal(got.length, 1);
+  assert.equal(got[0].tag, "v1.0.4+dsh-0.2.0-rc.2");
+});
+
+test("parseApprovals: 非法 JSON 抛错（不返回空表）", () => {
+  assert.throws(() => parseApprovals("{ 不是 JSON"), /不是合法 JSON/);
+});
+
+test("parseApprovals: 缺 approvals 数组抛错（不返回空表）", () => {
+  assert.throws(() => parseApprovals(JSON.stringify({ schemaVersion: 1 })), /形状不符/);
+  assert.throws(() => parseApprovals(JSON.stringify({ approvals: null })), /形状不符/);
+});
+
+test("parseApprovals: 空台账解出空数组（真空表，不是读不到）", () => {
+  assert.deepEqual(parseApprovals(JSON.stringify({ approvals: [] })), []);
 });
