@@ -14,10 +14,9 @@
 // context/defaultMaxTokens/reasoning{efforts,defaultEffort}。read_image 的能力门读的就是这一份
 // inputModalities（缺字段按「未声明图像输入」拒），所以两处同源投影。reasoning effort 是 adapter 自有
 // 词汇，但**透传到宿主** models.stream.reasoningEffort 会被宿主按模型 thinking levels 校验
-// （归一：xhigh→max、丢弃 minimal，越界报 APP_MODEL_UNSUPPORTED_REASONING）。归一后 xhigh
-// 只在 thinkingLevels 同时含 xhigh 与 max 时才是可接受档，而 supportedEfforts 按目录项声明
-// 投影（xhigh:true 即收进 xhigh），两者在「只标 xhigh、thinkingLevels 缺席」的条目上不一致
-// ——宿主接受面以宿主为准，这类条目的 xhigh 档真机不可用。
+// （归一：xhigh→max、丢弃 minimal，越界报 APP_MODEL_UNSUPPORTED_REASONING）。投影的
+// thinkingLevels 就是该归一的结果，也就是宿主接受面；supportedEfforts 与它同一口径，
+// 不按 xhigh 旗单独补档（那面旗只表示归一档含 max，见该函数）。
 // 零依赖纯函数（node --test 可直接 import）。
 
 /** 宿主/pi-ai 共用 thinking effort 词表（off..max 升序；DSH agent 默认 high 必须可接受）。 */
