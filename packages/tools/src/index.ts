@@ -11,10 +11,12 @@
 // 每个 action 模块导出同一组字段：
 //   command  subcommand 名（顶层 action 取值，全局唯一）
 //   summary  一句话语义（汇总进 description）
-//   fields   本子命令的 JSON Schema properties（不含 action）
-//   required 必填字段（不含 action）
+//   fields   本子命令专属字段的 zod 片段映射（不含 action；公共字段见 shared/fields.ts）
 //   readOnly 只读动作（不产生副作用）
 //   run(input, ctx, deps)  执行体（deps 仅单测注入提交链，线上为 undefined）
+//
+// fields 是唯一事实源：模型面 parameters 由它生成，运行期入参校验也用同一批字段——校验在本层
+// 发生，各 action 的 run 只管业务。必填/可选由 zod 的 .optional() 表达，不再单列一份 required。
 //
 // 语义对齐 subagent：open ≈ subagent（创建即带任务）、reply ≈ subagent_reply（按句柄续）、
 // close ≈ subagent_close（收工）；get / approve 是本项目特色（subagent 没有）。
@@ -28,6 +30,8 @@ import * as replyAction from "./actions/reply.ts";
 import * as closeAction from "./actions/close.ts";
 import * as getAction from "./actions/get.ts";
 import * as approveAction from "./actions/approve.ts";
+import { z } from "zod";
+import { HOST_CONTEXT } from "./shared/fields.ts";
 import type { ToolCtx } from "@dshana/shared/host.ts";
 import type { ToolInputBase } from "./shared/types.ts";
 // 查任务不经本工具：会话靠句柄（宿主 taskId）定位，任务清单由宿主提供给 Agent 的内置任务查询
@@ -49,16 +53,47 @@ export const description =
   ACTIONS.map((mod) => mod.command + "=" + mod.summary).join("; ") +
   ". Full manual: skills/dshana/SKILL.md";
 
-/** 参数 Schema：顶层 action + oneOf 分支（每个子命令独立的参数字段集）。 */
-export const parameters = {
-  type: "object",
-  oneOf: ACTIONS.map((mod) => ({
-    type: "object",
-    additionalProperties: false,
-    required: ["action", ...mod.required],
-    properties: { action: { const: mod.command }, ...mod.fields },
-  })),
-};
+// ---- zod 单一来源：同一批字段长出「模型面 parameters」与「运行期校验 union」 ----
+//
+// 分支由 z.strictObject 产出（普通 ZodObject）：discriminatedUnion 只接受普通对象 schema，分支上
+// 挂 refine/superRefine 会让它不再是 ZodObject，构造时直接抛 "Invalid discriminated union option"。
+// 故跨字段语义检查（"taskId 或 sessionId 二选一"等）不进 schema，仍留在 run() / resolveTarget() 里。
+/** discriminatedUnion 的 options 形参要求至少一支；ACTIONS 非空，这里只做类型收口。 */
+function nonEmpty<T>(items: T[]): [T, ...T[]] {
+  return items as [T, ...T[]];
+}
+
+/** 模型面分支：顶层 action 字面量 + 本动作专属字段。 */
+const modelBranches = ACTIONS.map((mod) => z.strictObject({ action: z.literal(mod.command), ...mod.fields }));
+
+/** 参数 Schema：顶层 action + oneOf 分支（每个子命令独立的参数字段集），由 zod 生成，不再手写。 */
+const { $schema, ...modelJsonSchema } = z.toJSONSchema(
+  z.discriminatedUnion("action", nonEmpty(modelBranches)),
+  { io: "input" },
+);
+export const parameters = { type: "object", ...modelJsonSchema };
+
+/**
+ * 运行期 union：与模型面同一批字段，额外接受宿主注入的 context。context 只在这里出现，
+ * 绝不进 parameters——模型不该看到也不该传它。
+ */
+const runtimeUnion = z.discriminatedUnion(
+  "action",
+  nonEmpty(modelBranches.map((branch) => branch.extend({ context: HOST_CONTEXT.optional() }))),
+);
+
+/**
+ * 入参闸门：失败抛一行抬头 + 逐条 issues（path 为空写 (root)，消息用英文，与本文件其它抛错同口径）。
+ * 只做准入，不整形数据：通过后仍把原始 input 交给 run()，各 action 的取值与兜底逻辑一行不改。
+ */
+function assertValidInput(input: unknown): void {
+  const parsed = runtimeUnion.safeParse(input);
+  if (parsed.success) return;
+  const issues = parsed.error.issues.map(
+    (issue) => "  - " + (issue.path.join(".") || "(root)") + ": [" + issue.code + "] " + issue.message,
+  );
+  throw new Error("dshana: invalid arguments\n" + issues.join("\n"));
+}
 
 /** 工具入参：公共部分 + 顶层 subcommand 名。 */
 export interface DshanaToolInput extends ToolInputBase {
@@ -70,6 +105,8 @@ export interface DshanaToolInput extends ToolInputBase {
  * 线上路径经 execute 调用时 deps 为 undefined，行为不变。
  */
 export async function doExecute(input: DshanaToolInput, ctx: ToolCtx, deps?: unknown): Promise<unknown> {
+  // 分发之前的准入校验（畸形入参在这里就拒，不进各 action 的业务）。
+  assertValidInput(input);
   const action = String((input && input.action) || "").trim();
   const mod = ACTIONS.find((m) => m.command === action);
   if (!mod) {

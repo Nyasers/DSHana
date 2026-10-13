@@ -99,6 +99,8 @@ Hana 宿主进程（App 隔离进程内加载 dist/bin/app.mjs）
 
 调用模型：句柄默认（taskId/approvalId，按宿主记录的来源会话校验归属）、凭证显式（sessionId = 我要跨对话）。每个子命令的参数在 `parameters.oneOf` 里单独成支（`additionalProperties:false`）。
 
+**参数是一份 zod schema 的两个投影**（`packages/tools/src/shared/fields.ts` 放跨 action 共享片段，各 action 在自己的 `fields` 里给专属字段，装配在 `packages/tools/src/index.ts`）：`z.toJSONSchema(…, { io: "input" })` 生成模型面 `parameters`，同一份 union 在分发前 `safeParse` 做运行期校验。**宿主不校验工具入参**（装机宿主 bundle 里 `ajv` / `zod` / `safeParse` 各出现 0 次），校验责任全在本 App，这也是这两样必须同源的原因——手写 schema 与手写 if 判断是今天唯一的口子。校验失败抛一条带全部 issues（`path` / `code` / `message`，英文原文）的错误，不做字段整形：`run()` 里的取值与兜底逻辑仍接原始入参，行为不变。运行期 union 的每支比模型面多一个 `context`（`looseObject`，只声明我们真正读的 `sessionPath` / `callToken`，其余键放行——宿主注入的形状随通道变），**它不进 `parameters`**：模型不该看到也不该传。
+
 提交链路：`ctx.tasks.create` → 受管 runtime 就绪 → `session.create` →（显式传 provider/model/effort 时才 `selectModel`）→ 绑定回写宿主任务记录（`ctx.tasks.update(taskId, { metadata: { dsh: {…} } })`，见 `packages/shared/src/task-binding.ts`）→ `session.prompt`（queue）→ runtime task-bridge 把任务状态与终态回投。
 
 ## DSH Web UI（DSHana 卡）
