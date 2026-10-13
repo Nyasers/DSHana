@@ -13,7 +13,7 @@ Read it before calling `dshana` with any action (`open` / `reply` / `close` / `g
 
 | Read | When |
 |---|---|
-| `references/parameters.md` | You need exact field names, types or required flags. Generated from the tool's zod definition, so it cannot fall behind. |
+| `references/parameters.md` | **Before composing any call.** The tool's own `parameters` are not in your context: `dshana` is a catalog (deferred) tool, and its argument schema is a top-level `oneOf` that the host's one-line summary cannot flatten, so `tool_help("dshana")` reports "no parameters" and this file is the only field list you can read. Generated from the tool's zod definition, so it cannot fall behind. |
 | `references/setup.md` | Installing or updating DSHana; the data directory; how a session picks its model. |
 | `references/troubleshooting.md` | DSH will not start, a task failed, an approval is stuck — or you need to know what this form cannot do (the known limitations). |
 | `references/ui.md` | The DSHana card, theme following, or the workspace directory picker. |
@@ -30,7 +30,7 @@ Inference is initiated from `hana.models` inside the managed runtime, spending h
 
 The top-level `action` is required, and each subcommand accepts only its own fields (`oneOf` branches + `additionalProperties: false`, so `open`'s schema has no `approvalId`).
 
-**The per-action field list lives in `references/parameters.md`** — read it when you need the exact field names, types or required flags. That file is generated from the same zod definition that produces the tool's `parameters` and validates each call, so it cannot fall behind; the prose here covers what a schema cannot express.
+**The per-action field list lives in `references/parameters.md`, and it is the only field list you can read** — the tool's own `parameters` are not in your context (see the table above), and `tool_help("dshana")` reports "no parameters" because the schema is a top-level `oneOf` the host's one-line summary cannot flatten. That file is generated from the same zod definition that produces the tool's `parameters` and validates each call, so it cannot fall behind; the prose here covers what a schema cannot express.
 
 The `parameters` are generated from one zod definition that also validates the incoming arguments before dispatch (the host itself does not validate tool arguments). A malformed call is refused with every failed field listed — `dshana: invalid arguments` followed by `<path>: [<code>] <message>` lines — rather than being silently coerced; notable cases: an unknown `action`, a key that does not belong to the subcommand, a missing required field, and an `outcome` that is neither `allowed-once` nor `rejected` (a typo there used to fall through to `allowed-once`, i.e. allow).
 

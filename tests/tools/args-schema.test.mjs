@@ -102,6 +102,24 @@ test("校验失败：未知 action / 未知顶层键 / 缺必填 / 越界 outcom
     assert.ok(msg !== null, "应抛错：" + JSON.stringify(input));
     assert.match(msg, /dshana: invalid arguments/, "抬头一致：" + msg);
     assert.match(msg, re, "错误里带可定位的 issues：" + msg);
+    // 读者是模型：除了“错在哪”，还要说“下一步去哪看”。不指 tool_help——本工具是顶层
+    // oneOf，宿主的一行摘要（paramsSummary）只认平铺 properties，那里的参数栏是空的。
+    assert.match(msg, /read the `dshana` skill/, "错误尾行要指路到技能：" + msg);
+  }
+});
+
+// description 是模型能拿到的唯一固定入口（dshana 是延迟加载工具，parameters 不在常驻前缀；
+// tool_help 对它只透传 description）。因此指路必须可解析：指技能名，不写仓库相对路径。
+test("工具 description 指技能名，不写相对路径、不指 tool_help", async () => {
+  const { description, SKILL_NAME } = await import("@dshana/tools/index.ts");
+  assert.equal(SKILL_NAME, "dshana", "技能名与 skills/ 下的目录名一致");
+  assert.match(description, /read the `dshana` skill/, "要指到技能名（技能目录按名字给 location）");
+  // 旧写法是仓库相对路径，模型无法解析（不知道相对谁）
+  assert.doesNotMatch(description, /skills\/dshana\/SKILL\.md/, "不写仓库相对路径");
+  assert.doesNotMatch(description, /tool_help/, "不指 tool_help（对本工具参数栏是空的）");
+  // 五个 action 的摘要仍在（检索入口）
+  for (const cmd of ["open", "reply", "close", "get", "approve"]) {
+    assert.match(description, new RegExp(cmd + "="), "description 仍要列出 " + cmd);
   }
 });
 

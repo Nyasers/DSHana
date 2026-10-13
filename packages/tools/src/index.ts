@@ -47,14 +47,24 @@ export const ACTIONS = [openAction, replyAction, closeAction, getAction, approve
 
 export const name = "dshana";
 
+/** 手册的技能名（技能目录按此名定位；与 skills/ 下的目录名一致，单一事实源）。 */
+export const SKILL_NAME = "dshana";
+
 /** description 前缀：模型侧唯一的固定入口（细则一律在 SKILL 全文里，这里不重复）。 */
 const DESCRIPTION_LEAD = "DeepSeek Harness (DSH) sub-agent executor. Actions: ";
 
-/** 工具描述：由各 action 的 summary 汇总（顺序即 ACTIONS 顺序），细则见 SKILL。 */
+/**
+ * 工具描述：由各 action 的 summary 汇总（顺序即 ACTIONS 顺序），末尾把读者指向手册。
+ *
+ * 指**技能名**而不是仓库里的相对路径：技能目录（系统提示里的 available_skills 段）按名字
+ * 给出每个技能的 `location` 绝对路径，模型拿得到可解析的坐标；写相对路径则模型不知道相对谁。
+ * 也不指 `tool_help`：本工具的模块面是顶层 oneOf，而宿主的参数摘要（paramsSummary）只认顶层
+ * 平铺 properties，`tool_help("dshana")` 因此返回“无参数”——指向它等于指向空页。
+ */
 export const description =
   DESCRIPTION_LEAD +
   ACTIONS.map((mod) => mod.command + "=" + mod.summary).join("; ") +
-  ". Full manual: skills/dshana/SKILL.md";
+  ". Field list and per-action rules: read the `" + SKILL_NAME + "` skill.";
 
 // ---- zod 单一来源：同一批字段长出「模型面 parameters」与「运行期校验 union」 ----
 //
@@ -86,8 +96,11 @@ const runtimeUnion = z.discriminatedUnion(
 );
 
 /**
- * 入参闸门：失败抛一行抬头 + 逐条 issues（path 为空写 (root)，消息用英文，与本文件其它抛错同口径）。
- * 只做准入，不整形数据：通过后仍把原始 input 交给 run()，各 action 的取值与兜底逻辑一行不改。
+ * 入参闸门：失败抛一行抬头 + 逐条 issues（path 为空写 (root)，消息用英文，与本文件其它抛错同口径），
+ * 末尾指路到手册。只做准入，不整形数据：通过后仍把**原始 input**交给 run()，各 action 的取值与兜底逻辑一行不改。
+ *
+ * 读者是模型（不是人）：所以既说错在哪，也说下一步去哪看。不指 `tool_help`——本工具是顶层 oneOf，
+ * 宿主的参数摘要只认平铺 properties，那里的参数栏是空的（详见 description 上方注释）。
  */
 function assertValidInput(input: unknown): void {
   const parsed = runtimeUnion.safeParse(input);
@@ -95,7 +108,9 @@ function assertValidInput(input: unknown): void {
   const issues = parsed.error.issues.map(
     (issue) => "  - " + (issue.path.join(".") || "(root)") + ": [" + issue.code + "] " + issue.message,
   );
-  throw new Error("dshana: invalid arguments\n" + issues.join("\n"));
+  throw new Error(
+    "dshana: invalid arguments\n" + issues.join("\n") + "\nFields and per-action rules: read the `" + SKILL_NAME + "` skill.",
+  );
 }
 
 /** 工具入参：公共部分 + 顶层 subcommand 名。 */
