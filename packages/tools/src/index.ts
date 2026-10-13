@@ -39,7 +39,7 @@ import type { ToolInputBase } from "./shared/types.ts";
 // 就在那份清单里，本工具面不开“先列清单再操作”的门。
 // 官方 session/list 仍被 get 用来定位读位点（见 packages/tools/src/actions/get.ts）。
 
-/** subcommand 注册表（顺序即 description 的列举顺序）。
+/** subcommand 注册表（顺序即分发与参数参照的列举顺序）。
  *
  * `export` 是给派生的参数参照用：它按这张表列出每个 action 的字段与语义，与本节装配出的
  * `parameters` 同源。派生只消费它，不再自己收一遍 action 清单。 */
@@ -51,9 +51,9 @@ export const name = "dshana";
 export const SKILL_NAME = "dshana";
 
 /**
- * 工具描述：模型侧唯一的固定入口。只讲这工具是干什么的，**不逐条列 action**——动作清单、
- * 字段与逐动作规则一律交出手册（技能 `dshana` 的 SKILL.md 与其 references/）。在这里列一遍
- * 是把同一事实再抄一份，还要求每个 action 的 summary 永远与这段文案同步。
+ * 工具描述：模型侧唯一的固定入口。只说这工具是什么，其余一律交出手册（技能 `dshana` 的
+ * SKILL.md 与其 references/）——动作清单、字段与逐动作规则都在那里；在这里重列一遍是把同一
+ * 事实再抄一份，还要求每个 action 的 summary 永远与这段文案同步。
  *
  * 指**技能名**而不是仓库里的相对路径：技能目录（系统提示里的 available_skills 段）按名字
  * 给出每个技能的 `location` 绝对路径，模型拿得到可解析的坐标；写相对路径则模型不知道相对谁。
@@ -61,8 +61,7 @@ export const SKILL_NAME = "dshana";
  * 平铺 properties，`tool_help("dshana")` 因此返回“无参数”——指向它等于指向空页。
  */
 export const description =
-  "DeepSeek Harness (DSH) sub-agent executor: start, continue, cancel and read back DSH sub-agent tasks in Hana, and answer their approvals. " +
-  "Actions, their fields and per-action rules: read the `" + SKILL_NAME + "` skill.";
+  "DeepSeek Harness (DSH) subagent: read the `" + SKILL_NAME + "` skill for details.";
 
 // ---- zod 单一来源：同一批字段长出「模型面 parameters」与「运行期校验 union」 ----
 //

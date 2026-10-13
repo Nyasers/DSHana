@@ -1,6 +1,6 @@
 ---
 name: dshana
-description: "DSHana: DeepSeek Harness as a managed sub-agent in Hana. Read before any dshana call, or for DSH troubleshooting."
+description: "DSHana: the dshana tool manual. Read before calling dshana, or for DSH troubleshooting."
 ---
 
 # dshana: tool manual

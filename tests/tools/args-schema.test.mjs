@@ -108,22 +108,8 @@ test("校验失败：未知 action / 未知顶层键 / 缺必填 / 越界 outcom
   }
 });
 
-// description 是模型能拿到的唯一固定入口（dshana 是延迟加载工具，parameters 不在常驻前缀；
-// tool_help 对它只透传 description）。它只讲这工具是干什么的，动作与字段清单全交手册：
-// 指路必须可解析（指技能名，不写仓库相对路径），且不在 desc 里再抄一遍 action 枚举。
-test("工具 description 指技能名，不写相对路径、不指 tool_help、不逐条列 action", async () => {
-  const { description, SKILL_NAME } = await import("@dshana/tools/index.ts");
-  assert.equal(SKILL_NAME, "dshana", "技能名与 skills/ 下的目录名一致");
-  assert.match(description, /read the `dshana` skill/, "要指到技能名（技能目录按名字给 location）");
-  // 旧写法是仓库相对路径，模型无法解析（不知道相对谁）
-  assert.doesNotMatch(description, /skills\/dshana\/SKILL\.md/, "不写仓库相对路径");
-  assert.doesNotMatch(description, /tool_help/, "不指 tool_help（对本工具参数栏是空的）");
-  // 职责边界：动作清单与逐动作语义在手册里，desc 不再抄一份（否则 summary 要永远与它同步）
-  for (const cmd of ["open", "reply", "close", "get", "approve"]) {
-    assert.doesNotMatch(description, new RegExp("`?" + cmd + "`?\\s*="), "desc 不列 " + cmd + " 枚举");
-  }
-  assert.match(description, /^DeepSeek Harness \(DSH\) sub-agent executor/, "保留一句话职责：这是什么工具");
-});
+// description 的守单独一处在 tests/tools/descriptions.test.mjs（工具面与技能面两条一起）；
+// 这里只管 schema 两面与校验闸门。
 
 test("approve 的 outcome 不再 fail-open：非法值被拒，缺省仍是 allowed-once", async () => {
   // 先证明非法值真的过不了闸（今日实现会静默当成 allowed-once）
