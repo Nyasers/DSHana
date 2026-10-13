@@ -73,15 +73,11 @@ Inference is initiated from `hana.models` inside the managed runtime, spending h
 
 The top-level `action` is required, and each subcommand accepts only its own fields (`oneOf` branches + `additionalProperties: false`, so `open`'s schema has no `approvalId`).
 
-The `parameters` above are generated from one zod definition that also validates the incoming arguments before dispatch (the host itself does not validate tool arguments). A malformed call is refused with every failed field listed — `dshana: invalid arguments` followed by `<path>: [<code>] <message>` lines — rather than being silently coerced; notable cases: an unknown `action`, a key that does not belong to the subcommand, a missing required field, and an `outcome` that is neither `allowed-once` nor `rejected` (a typo there used to fall through to `allowed-once`, i.e. allow).
+**The per-action field list lives in `references/parameters.md`** — read it when you need the exact field names, types or required flags. That file is generated from the same zod definition that produces the tool's `parameters` and validates each call, so it cannot fall behind; the prose here covers what a schema cannot express.
 
-| action | Required | Optional | Semantics |
-|---|---|---|---|
-| `open` | task, cwd | label, timeout, agentPreset, reasoningEffort, provider, model | Start a DSH sub-agent and hand it a first task (new session + immediately submit the first prompt) |
-| `reply` | task | taskId or sessionId (exactly one), timeout, reasoningEffort, provider, model | Send a follow-up message to the same sub-agent |
-| `close` | none | taskId or sessionId (at least one) | Cancel the task that is running |
-| `get` | none | taskId or sessionId (at least one) | Read back the final conclusion of the session's most recent round |
-| `approve` | approvalId | outcome, taskId or sessionId | Answer a suspended approval |
+The `parameters` are generated from one zod definition that also validates the incoming arguments before dispatch (the host itself does not validate tool arguments). A malformed call is refused with every failed field listed — `dshana: invalid arguments` followed by `<path>: [<code>] <message>` lines — rather than being silently coerced; notable cases: an unknown `action`, a key that does not belong to the subcommand, a missing required field, and an `outcome` that is neither `allowed-once` nor `rejected` (a typo there used to fall through to `allowed-once`, i.e. allow).
+
+**Target: exactly one, and which subset is legal varies.** `reply` needs exactly one of `taskId` (handle) / `sessionId` (credential); `close` and `get` need at least one (either resolves to the same session); `approve` is keyed by `approvalId`, which resolves through the parent task, so it needs neither. `open` takes no `sessionId` at all — use `reply` to continue an existing session. These are cross-field rules no argument schema can carry, which is why they stay in prose here rather than in `references/parameters.md`.
 
 > To inspect tasks, use the host's built-in task-query tool for the agent (on the model side that is `check_pending_tasks` in this environment): `dshana`'s open/reply create background tasks of this very session, so they already appear in that list; this tool deliberately does not open a second, read-only door for listing.
 

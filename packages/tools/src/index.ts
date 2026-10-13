@@ -39,8 +39,11 @@ import type { ToolInputBase } from "./shared/types.ts";
 // 就在那份清单里，本工具面不开“先列清单再操作”的门。
 // 官方 session/list 仍被 get 用来定位读位点（见 packages/tools/src/actions/get.ts）。
 
-/** subcommand 注册表（顺序即 description 的列举顺序）。 */
-const ACTIONS = [openAction, replyAction, closeAction, getAction, approveAction];
+/** subcommand 注册表（顺序即 description 的列举顺序）。
+ *
+ * `export` 是给派生的参数参照用：它按这张表列出每个 action 的字段与语义，与本节装配出的
+ * `parameters` 同源。派生只消费它，不再自己收一遍 action 清单。 */
+export const ACTIONS = [openAction, replyAction, closeAction, getAction, approveAction];
 
 export const name = "dshana";
 

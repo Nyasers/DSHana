@@ -16,6 +16,7 @@
 //   cordis       主 package.json#version         → packages/dsh/*/package.json（profile loader 读的包）
 //   bundle       主 package.json#version         → packages/dsh/app/package.json（组合层包）
 //   thirdparty   vendor/hana-app-sdk 的 manifest → THIRD_PARTY_NOTICES.md（分发合规）
+//   skill-params 工具域的 zod 定义              → skills/dshana/references/parameters.md（技能参照）
 //   paths        镜像包清单                       → integrations/tsconfig.paths.json（编辑器）
 //   vendor       packages/host 声明的 dsh 版本     → vendor/deepseek-harness 的 checkout（状态型）
 //
@@ -39,6 +40,7 @@ import { isDirectRun } from "../shared/run.mts";
 import { bundlePkgPaths, cordisPkgPaths, readPkg } from "../shared/version.mts";
 import { dshTask } from "../vendor/dsh.mts";
 import { packedVersion, thirdpartyTask } from "./thirdparty.mts";
+import { paramsDocTask } from "./params-doc.mts";
 import { versionMetadataTask } from "./version-metadata.mts";
 
 export { ROOT };
@@ -168,7 +170,7 @@ const vendorTask: StateTask = dshTask;
 
 /** 全部任务（main 按名筛选用；执行顺序即数组顺序——version-metadata 必须在所有读主版本的
  * 任务之前）。 */
-export const TASKS: DeriveTask[] = [versionMetadataTask, manifestTask, cordisTask, bundleTask, pathsTask, vendorTask, thirdpartyTask];
+export const TASKS: DeriveTask[] = [versionMetadataTask, manifestTask, cordisTask, bundleTask, pathsTask, vendorTask, thirdpartyTask, paramsDocTask];
 
 /** 跑一个任务：比较期望内容与磁盘，写回或报漂。返回漂移文件数。 */
 export function runTask(task: DeriveTask, { checkOnly, log = console.log } = { checkOnly: false, log: console.log as (m: string) => void }): number {

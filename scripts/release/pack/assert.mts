@@ -118,6 +118,23 @@ export function assertDeclarationTexts(outDir) {
   console.log("[pack] 声明文本在位（" + DECLARATION_TEXTS.join(" / ") + "）");
 }
 
+/**
+ * 技能参照断言：SKILL.md 指向的生成物必须在包里。
+ *
+ * 它缺失时同样不响：SKILL.md 里那句“字段表见 references/parameters.md”会指向一片空白，模型
+ * 读不到任何字段说明，而报错面不会出现（技能照旧加载，只是少了那份文件）。参照由 derive 生成、
+ * 随 skills/ 整树进包，所以缺件一定是 derive 没跑或技能目录被换掉。
+ */
+export function assertSkillReferences(outDir) {
+  const rel = join("skills", "dshana", "references", "parameters.md");
+  if (!fs.pathExistsSync(join(outDir, rel))) {
+    throw new Error(
+      "交付目录缺技能参照：" + rel + "（由 derive 的 skill-params 任务生成，随 skills/ 进包；拒绝出指向空白的包）",
+    );
+  }
+  console.log("[pack] 技能参照在位（skills/dshana/references/parameters.md）");
+}
+
 /** App ui/ 静态树断言（cards route 资源面；相对资源契约）：缺失 = 卡片 404，拒包。 */
 export function assertUiTree(outDir) {
   const uiDir = join(outDir, "ui");

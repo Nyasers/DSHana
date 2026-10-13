@@ -33,7 +33,7 @@ import { errText } from "../../shared/err-text.mts";
 import { BUNDLE_DIR, CORDIS_DIR, DIST_DIR, PKG_DIR, STAGING_ROOT } from "../../shared/paths.mts";
 import { ROOT } from "../../shared/root.mts";
 import { manifestPath } from "../../shared/contract-assets.mts";
-import { assertBundleArtifacts, assertCordisArtifacts, assertDeclarationTexts, assertNoProductPackage, assertUiTree } from "./assert.mts";
+import { assertBundleArtifacts, assertCordisArtifacts, assertDeclarationTexts, assertNoProductPackage, assertSkillReferences, assertUiTree } from "./assert.mts";
 import { declareInstallationBundle, declareInstallationPlugins } from "./bundle-deps.mts";
 import { excludedPackages, pruneExcluded, requiredPackages } from "./exclude.mts";
 import { materializeProdDeps } from "./materialize.mts";
@@ -69,6 +69,7 @@ const cordisCount = assertCordisArtifacts(CORDIS_DIR, version);
 assertBundleArtifacts(BUNDLE_DIR, version);
 assertNoProductPackage(distDir);
 assertDeclarationTexts(distDir);
+assertSkillReferences(distDir);
 assertUiTree(distDir);
 
 // 目标选择：`--target <名字>`（必须显式给，无默认）。
