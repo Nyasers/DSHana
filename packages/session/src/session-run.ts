@@ -32,7 +32,6 @@ import { ensureManagedRuntime } from "@dshana/runtime/managed-runtime.ts";
 import { nextRpcId } from "@dshana/shared/rpc-envelope.ts";
 import { isValidSessionId, dshMetadataFor } from "@dshana/shared/task-binding.ts";
 import { withSessionTurn, enterSessionTurn } from "./session-serialize.ts";
-import { readDshDefaultModel } from "@dshana/runtime/config.ts";
 import { callerPlanDeps, resolveCallerPlan } from "@dshana/models/caller-model.ts";
 import { serviceBase } from "@dshana/runtime/service-base.ts";
 import { rpcViaControl, invokeControl } from "@dshana/runtime/controller.ts";
@@ -89,26 +88,36 @@ export function normalizeCreateSend({ action, input }: { action?: unknown; input
 type ModelSelection = { provider: string; model: string; reasoningEffort?: string };
 
 /**
- * selectModel 载荷组装（纯函数）：显式传了 provider/model/effort 任一时需要；
- * 只传其一/只传 effort 时另一侧从 DSH 默认模型（settings.yaml agent-default-model）补齐；
- * 补不出且确需选择时报错（沿用 v1 文案语义）。全不传返回 null（不随请求带模型）。
+ * 显式给的模型选择（纯函数）：provider 与 model **成对**才成立，缺任一返回 null。
+ *
+ * 只给一半不在这里补齐：两个字段一起命名一条路由，拿一个来源的 provider 去配另一个来源的
+ * model，拼出来的组合可能谁都没配过。要给就成对给，要么一个都不给——由 create 的 caller-plan
+ * 或 reply 的会话选择接手。
  */
-export function resolveModelSelection(parsed, dshHome): ModelSelection | null {
-  const { provider: p, model: m, reasoningEffort: e } = parsed || {};
-  if (!p && !m && !e) return null;
-  let provider = p;
-  let model = m;
-  if (!provider || !model) {
-    const dm = readDshDefaultModel(dshHome);
-    provider = provider || (dm && dm.provider) || "";
-    model = model || (dm && dm.model) || "";
-  }
-  if (!provider || !model) {
-    throw new Error(
-      "provider/model required: pass provider/model explicitly, or pick one in DSH's own model selector (the App settings page only lists candidates, it does not set a default model)",
-    );
-  }
-  return { provider, model, ...(e ? { reasoningEffort: e } : {}) };
+export function explicitModelSelection(parsed): ModelSelection | null {
+  const provider = String((parsed && parsed.provider) || "").trim();
+  const model = String((parsed && parsed.model) || "").trim();
+  if (!provider || !model) return null;
+  const effort = String((parsed && parsed.reasoningEffort) || "").trim();
+  return { provider, model, ...(effort ? { reasoningEffort: effort } : {}) };
+}
+
+/**
+ * 只给了一半（provider 或 model 其一）时的拒绝理由；成对给或都不给返回 null。
+ *
+ * 旧实现遇到半个路由会去 DSH_HOME/settings.yaml 补另一半。那份文件在 DSH 现版里已不存在：
+ * settings 服务启动时把它整份迁进 profile，并改名成 settings.yaml.imported（见上游
+ * settings/settings 的 importLegacyDocument）。于是「补不出来」在真机上是一条谁都读不懂的
+ * 硬失败（provider/model required）——而真正的原因只是路由被拆成了两半。
+ */
+export function halfModelSelectionError(parsed): Error | null {
+  const provider = String((parsed && parsed.provider) || "").trim();
+  const model = String((parsed && parsed.model) || "").trim();
+  if (Boolean(provider) === Boolean(model)) return null;
+  return new Error(
+    "provider and model must be given together (got " + (provider ? "provider only" : "model only") +
+      "): the two name one route together, and half a route cannot be resolved",
+  );
 }
 
 // ---- DSH 一元 RPC（经 runtime 控制面转发；App 侧不直连 DSH HTTP）----
@@ -400,30 +409,46 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
         if (rejected) throw rejected;
       }
 
-      // ③ 会话模型：显式入参 > 用户设的默认（DSH 自己生效，不用我们动手）> 调用方角色卡（create 才补）
+      // ③ 会话模型：显式 provider+model > create 的 caller-plan（App 设置 / 调用方角色卡）> 不带（DSH 自己的选择）
       // 它随 create / prompt 的请求一起下传（集成层给这两个请求加了可选 model）：会话就地装上，
-      // 不碰 DSH 的全局默认——settings.yaml 那格只在用户手设过时才有值。
-      // dshHome = 当前数据源：默认模型/预设从当前源的 settings.yaml 解析
+      // 不碰 DSH 的全局默认。
+      //
+      // 单独给 effort 分两种收场：create 时由 caller-plan 补出 provider/model 再带上（补不出就拒——
+      // 强度落不到会话上，不能静默丢）；reply 时 DSH 的模型选择是一个整体（provider+model+effort），
+      // 没有「只改强度」可下传的形状，直接拒并说清怎么改。
+      const halfError = halfModelSelectionError(parsed);
+      if (halfError) throw halfError;
       const dshHome = await currentDshHome(dataDir);
-      let modelSelection = resolveModelSelection(parsed, dshHome);
+      let modelSelection = explicitModelSelection(parsed);
       if (!modelSelection && parsed.action === "create") {
         const plan = await resolveCallerPlan(parsed, callerPlanDeps(ctx, dshHome, dataDir), (m) =>
           logLine(log, "[dsh-session] 会话模型：" + m),
         );
         if (plan.kind === "select") {
+          // 显式 effort 优先于设置里那条：设置只补「用什么模型」，不覆盖本次指定的强度。
+          const effort = parsed.reasoningEffort || plan.reasoningEffort;
           modelSelection = {
             provider: plan.provider,
             model: plan.model,
-            ...(plan.reasoningEffort ? { reasoningEffort: plan.reasoningEffort } : {}),
+            ...(effort ? { reasoningEffort: effort } : {}),
           };
           logLine(
             log,
             "[dsh-session] 会话模型随请求带上：" + plan.provider + "/" + plan.model +
-              (plan.reasoningEffort ? "（推理强度 " + plan.reasoningEffort + "）" : ""),
+              (effort ? "（推理强度 " + effort + "）" : ""),
+          );
+        } else if (parsed.reasoningEffort) {
+          throw new Error(
+            "reasoningEffort was given but no model is available for this session (" + plan.reason +
+              "): pass provider+model together, or configure the session model on the App settings page / the calling agent card",
           );
         } else {
           logLine(log, "[dsh-session] 会话模型不随请求带（" + plan.reason + "）：交给 DSH 的选择");
         }
+      } else if (!modelSelection && parsed.reasoningEffort) {
+        throw new Error(
+          "reply cannot change reasoningEffort alone: DSH's model selection is one unit (provider+model+effort). Pass provider+model to change it, or pass neither to keep the session's current choice",
+        );
       }
 
       // ④ 会话建立（create 新建 / send 沿用）：模型选择随 create 的请求一起下传

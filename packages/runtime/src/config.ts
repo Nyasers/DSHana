@@ -2,9 +2,8 @@
 // Copyright (c) 2026 Nyasers
 //
 // packages/runtime/src/config.ts — dshana 配置解析共用模块
-// 零状态的只读解析：DSH 默认模型与预设（settings.yaml 行级）、reasoningEffort、审批与任务超时、
-// App 设置缺省值。不碰运行包单例，只读文件与入参，调用方静态 import。
-// 消费方横跨 App 侧多个模块（数据源设置、调用方模型、会话提交、取消链），所以自成一个无状态模块。
+// 零状态的只读解析：reasoningEffort、审批与任务超时、App 设置缺省值。不碰运行包单例，只读文件与入参，
+// 调用方静态 import。消费方横跨 App 侧多个模块（数据源设置、调用方模型、会话提交、取消链），所以自成一个无状态模块。
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -34,34 +33,6 @@ export function readDshDefaultModel(dshHome: string): { provider: string; model?
       if (v) out[k] = v.replace(/^['"]|['"]$/g, "");
     }
     return out.provider ? (out as { provider: string; model?: string }) : null;
-  } catch {
-    return null;
-  }
-}
-
-// 读 DSH_HOME/settings.yaml 的 agent-presets.default（行级解析，零依赖）——
-// dsh 默认 agent 预设：Web UI 设置后写回 settings.yaml。返回预设字符串或 null。
-export function readDshDefaultPreset(dshHome) {
-  try {
-    const f = join(dshHome, "settings.yaml");
-    if (!existsSync(f)) return null;
-    const lines = readFileSync(f, "utf8").split(/\r?\n/);
-    let inBlock = false;
-    for (const line of lines) {
-      if (/^agent-presets\s*:/.test(line)) {
-        inBlock = true;
-        continue;
-      }
-      if (!inBlock) continue;
-      const m = line.match(/^(\s+)default\s*:\s*(.*)$/);
-      if (!m) {
-        if (!/^\s/.test(line)) break; // 无缩进 = 出块（顶层键）
-        continue; // 块内其他键，继续找 default
-      }
-      const v = m[2].trim().replace(/^['"]|['"]$/g, "");
-      if (v) return v;
-    }
-    return null;
   } catch {
     return null;
   }
