@@ -8,6 +8,7 @@ import fs from "fs-extra";
 import { join } from "node:path";
 
 import { cordisPkgDirs, cordisPkgName } from "../../shared/version.mts";
+import { DECLARATION_TEXTS } from "../../shared/paths.mts";
 
 /**
  * 交付树不得出现 package.json（fail-closed）。
@@ -98,6 +99,23 @@ export function assertBundleArtifacts(bundleDir, version) {
     throw new Error(`组合层包名字不对：${j.name}（层列钉住的是 @dshana/dsh-app）`);
   }
   console.log(`[pack] 组合层包在位（@dshana/dsh-app = ${version}，2 入口 + 5 份组合文档）`);
+}
+
+/**
+ * 随包声明文本（NOTICE / THIRD_PARTY_NOTICES.md）断言：缺件拒包。
+ *
+ * 交付目录由 build:app 一次组装完整（与 skills/ 同批直出），pack 不再向它写任何东西；这里只
+ * 核实真的落位。靠 pack 事后补会把 pack 变成 dist 的写者，源改了而产物没跟时两边不同步。
+ */
+export function assertDeclarationTexts(outDir) {
+  for (const item of DECLARATION_TEXTS) {
+    if (!fs.pathExistsSync(join(outDir, item))) {
+      throw new Error(
+        "交付目录缺声明文本：" + item + "（dist 应由 build:app 一次组装完整；拒绝出少合规件的包）",
+      );
+    }
+  }
+  console.log("[pack] 声明文本在位（" + DECLARATION_TEXTS.join(" / ") + "）");
 }
 
 /** App ui/ 静态树断言（cards route 资源面；相对资源契约）：缺失 = 卡片 404，拒包。 */
