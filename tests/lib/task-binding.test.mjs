@@ -11,6 +11,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  SESSION_ID_RE,
   isValidSessionId,
   taskBindingOf,
   dshMetadataFor,
@@ -44,6 +45,14 @@ test("isValidSessionId：session-<uuid> 才合法（防畸形名进宿主查询�
   assert.equal(isValidSessionId("../../etc/passwd"), false);
   assert.equal(isValidSessionId(""), false);
   assert.equal(isValidSessionId(null), false);
+});
+
+test("SESSION_ID_RE：不带标志（大小写容忍内联在字符类里）", () => {
+  // 这份正则同时要投影成模型面 parameters 的 JSON Schema pattern，而 pattern 带不了标志：
+  // 一旦改回 /.../i，模型面就会丢掉大小写容忍、比运行期更窄。这里钉住写法本身。
+  assert.equal(SESSION_ID_RE.flags, "", "带 `i` 会在 JSON Schema 投影时丢掉大小写容忍");
+  assert.equal(SESSION_ID_RE.test(SID.toUpperCase()), true, "无标志也要收大写");
+  assert.equal(SESSION_ID_RE.test(SID.toLowerCase()), true, "小写照旧");
 });
 
 test("taskBindingOf：合法 metadata.dsh → 归一绑定（字段原样）", () => {
