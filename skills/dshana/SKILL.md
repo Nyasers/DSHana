@@ -73,6 +73,8 @@ Inference is initiated from `hana.models` inside the managed runtime, spending h
 
 The top-level `action` is required, and each subcommand accepts only its own fields (`oneOf` branches + `additionalProperties: false`, so `open`'s schema has no `approvalId`).
 
+The `parameters` above are generated from one zod definition that also validates the incoming arguments before dispatch (the host itself does not validate tool arguments). A malformed call is refused with every failed field listed — `dshana: invalid arguments` followed by `<path>: [<code>] <message>` lines — rather than being silently coerced; notable cases: an unknown `action`, a key that does not belong to the subcommand, a missing required field, and an `outcome` that is neither `allowed-once` nor `rejected` (a typo there used to fall through to `allowed-once`, i.e. allow).
+
 | action | Required | Optional | Semantics |
 |---|---|---|---|
 | `open` | task, cwd | label, timeout, agentPreset, reasoningEffort, provider, model | Start a DSH sub-agent and hand it a first task (new session + immediately submit the first prompt) |
