@@ -15,6 +15,8 @@
 //   bin/dsh.mjs          受管 Node runtime 入口（宿主以 node 执行；与主体同一次构建、共享 chunk）
 //   icon.png            App 身份图标（manifest.icon 指向的包内真实图片；源在 packages/app/src/icon.png）
 //   skills/             App skills（dshana，SKILL.md 随包分发）
+//   NOTICE              项目自身许可（MPL-2.0）；与 THIRD_PARTY_NOTICES.md 同批
+//                         由本入口直写进 dist（落位规则见 paths.mts 的 DECLARATION_TEXTS）
 //   ui/                   壳的文档侧（cards route 指向壳页，见 packages/ui/src/——相对资源路径，
 //                         宿主以 /api/apps/<id>/ui<route> 服务；由 @dshana/ui 构建产出，本入口只拷贝，
 //                         卡面图 face.png 也随该整树落位）
@@ -35,7 +37,7 @@ import {
   assertNoStaticFileUrl,
 } from "../../../scripts/build/common.mts";
 // 交付目录常量（dist、.cache/ui）与 Node 版本断言（本入口以 TypeScript 直跑，依赖原生类型剥离）
-import { DIST_DIR, UI_DIR, ROOT } from "../../../scripts/shared/paths.mts";
+import { DIST_DIR, UI_DIR, ROOT, DECLARATION_TEXTS } from "../../../scripts/shared/paths.mts";
 import { contractAssetSource, faceAssetSource, manifestPath } from "../../../scripts/shared/contract-assets.mts";
 
 const SRC_ROOT = dirname(fileURLToPath(import.meta.url)); // packages/app/src/
@@ -97,9 +99,16 @@ if (!fs.pathExistsSync(join(DIST_DIR, "bin", "app.mjs"))) {
 // 1) 静态化路径字面量回写（dist 主区）
 rewriter(DIST_DIR);
 
-// 2) App 交付目录组装（dist 根 = App 安装目录；根下是 manifest/icon/skills/ui 这类契约件与目录，入口在 bin/）
+// 2) App 交付目录组装（dist 根 = App 安装目录；根下是 manifest/icon/skills/ui/声明文本 这类契约件与目录，入口在 bin/）
 fs.copySync(manifestPath(ROOT), join(DIST_DIR, "manifest.json"));
 fs.copySync(join(ROOT, "skills"), join(DIST_DIR, "skills"));
+// 声明文本（NOTICE / THIRD_PARTY_NOTICES.md）与 skills/ 同批直线出：它们住仓库根，落位规则只有
+// DECLARATION_TEXTS 一处（pack 据此断言，不再自己往 dist 里补——那样源与产物会静默脱钩）。
+for (const item of DECLARATION_TEXTS) {
+  const src = join(ROOT, item);
+  if (!fs.pathExistsSync(src)) throw new Error("声明文本缺失（" + item + "）：拒绝出一份没有合规件的交付目录");
+  fs.copySync(src, join(DIST_DIR, item));
+}
 // 依赖部署（自包含打包）：DSH 依赖由 scripts/release/pack/index.mts 物化进安装目录 node_modules，
 // dist = App 安装目录形态（含 cordis 产物）；依赖随包物化，dist 保持轻量壳。
 

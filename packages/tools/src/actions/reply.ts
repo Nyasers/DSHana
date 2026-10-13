@@ -6,9 +6,11 @@
 // 语义对齐 subagent_reply（用句柄续同一个实例）：task 必填；目标二选一——taskId 句柄
 // （open/reply 返回，工具自己解析会话并校验归属）或 sessionId 凭证（显式 = 我要跨对话）。
 // 同会话多次 reply 由 App 侧串行化（packages/session/src/session-serialize.ts），按提交顺序排队。
+import { z } from "zod";
 import { submitDshTask } from "@dshana/session/session-run.ts";
 import { resolveTarget } from "../shared/target.ts";
 import { sessionCard } from "../shared/card.ts";
+import { timeout, reasoningEffort, provider, model, taskId, sessionId } from "../shared/fields.ts";
 import type { ToolCtx } from "@dshana/shared/host.ts";
 import type { ToolInputBase, ToolResult } from "../shared/types.ts";
 
@@ -31,15 +33,14 @@ export const summary = "continue it";
 export const readOnly = false;
 
 export const fields = {
-  task: { type: "string", description: "Message to send" },
-  taskId: { type: "string", description: "taskId returned by open/reply (handle path)" },
-  sessionId: { type: "string", description: "Session id; passing it means cross-conversation" },
-  timeout: { type: "number", description: "Seconds; defaults to the App's defaultTimeoutSec" },
-  reasoningEffort: { type: "string", description: "Reasoning effort (host-side levels)" },
-  provider: { type: "string", description: "Explicit provider for this request only" },
-  model: { type: "string", description: "Explicit model id (fallback rules in the SKILL)" },
+  task: z.string().describe("Message to send"),
+  timeout,
+  reasoningEffort,
+  provider,
+  model,
+  taskId,
+  sessionId,
 };
-export const required = ["task"];
 
 export async function run(input: ReplyInput, ctx: ToolCtx, deps?: SubmitDeps): Promise<ToolResult> {
   // 目标解析：taskId 走句柄路径（反查 + 归属校验），sessionId 走凭证路径（原样使用）

@@ -36,6 +36,12 @@ export function distDirOf(repoRoot: string): string {
 /** App 交付目录：dist 根 = App 安装目录形态（契约件在根，代码在 bin/），pack 逐份拷进包根。 */
 export const DIST_DIR = distDirOf(ROOT);
 
+/**
+ * 随包声明文本（合规件）：住仓库根，由 App 域构建写进交付树根部（与 skills/ 同批），pack 只断言。
+ * 只此一处列名——构建写、打包验都读它；各写一份就会出现「一边补了、另一边还在猜」的静默缺件。
+ */
+export const DECLARATION_TEXTS = ["NOTICE", "THIRD_PARTY_NOTICES.md"];
+
 /** 壳的文档侧产物目录（packages/ui 构建产出；App 域构建把它拷进 dist/ui）。 */
 export function uiDirOf(repoRoot: string): string {
   return path.join(repoRoot, CACHE, "ui");

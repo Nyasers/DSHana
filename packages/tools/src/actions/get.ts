@@ -26,6 +26,9 @@
 import { ensureManagedRuntime } from "@dshana/runtime/managed-runtime.ts";
 import { rpcViaControl } from "@dshana/runtime/controller.ts";
 import { resolveTarget } from "../shared/target.ts";
+import { taskId, sessionId } from "../shared/fields.ts";
+// sessionId 形态与句柄解析同源（task-binding 的 SESSION_ID_RE），本文件不再自带一份正则。
+import { SESSION_ID_RE } from "@dshana/shared/task-binding.ts";
 import type { ToolCtx } from "@dshana/shared/host.ts";
 import type { ToolInputBase } from "../shared/types.ts";
 import type { ToolResult } from "@dshana/session/tool-result.ts";
@@ -34,11 +37,7 @@ export const command = "get";
 export const summary = "read the last round's conclusion";
 export const readOnly = true;
 
-export const fields = {
-  taskId: { type: "string", description: "taskId returned by open/reply (handle path)" },
-  sessionId: { type: "string", description: "Session id; passing it means cross-conversation" },
-};
-export const required = [];
+export const fields = { taskId, sessionId };
 
 /** 动作入口：句柄优先（taskId）→ 解析出 DSH 会话并校验归属；sessionId 为显式凭证路径。 */
 export async function run(input: ToolInputBase, ctx: ToolCtx): Promise<ToolResult> {
@@ -257,7 +256,7 @@ async function readConclusion(sessionId: string, ctx: ToolCtx): Promise<ToolResu
   if (!sessionId) throw new Error("get must resolve a sessionId");
   // sessionId 格式锁死（session-<UUID>，与 dsh 生成格式一致）：畸形值直接拒，
   // 不把垃圾 id 送到 DSH（本实现不拼文件路径，格式闸仍保留）。
-  if (!/^session-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId)) {
+  if (!SESSION_ID_RE.test(sessionId)) {
     throw new Error(`malformed sessionId (expected session-<UUID>): ${sessionId}`);
   }
 

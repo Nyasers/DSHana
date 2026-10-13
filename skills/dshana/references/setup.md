@@ -1,0 +1,30 @@
+# dshana — setup, updating and models
+
+Read this when installing or updating DSHana, when a session picks the wrong model, or when you need to know where the data lives.
+
+## First install needs no configuration
+
+- **No dependencies, no Node setup**: DSH and its dependency tree ship inside the install directory's `node_modules`, and our sub-plugins land there too (`node_modules/@dshana`); startup only performs the DSH boot and service listening, and writes nothing into the data directory.
+- **No API key, no model setup**: inference is initiated from `hana.models` inside the managed runtime, and provider credentials stay in the host. The two LLM adapter rows DSH ships with (`llm-deepseek` / `llm-pi-ai`) are disabled in our composition-layer patch, so the llm routes are only the ones in the host catalog. (Those two rows want keys from the credential store, and the credentials are held by the host; left alone they would only advertise routes that report `no API key` the moment one is selected.) The 「模型」 ("Models") page in DSH settings is disabled along with them — it only edits those two rows' settings block, so with them disabled there is nothing to edit.
+- **Data directory**: fixed to an App-private directory (`.dsh` under the App data directory), ready out of the box; sharing an existing directory or switching data sources is not offered, and the user's home `~/.dsh` is not touched.
+
+## How a session picks its model
+
+A session's model follows whoever opened it:
+
+- **A tool-created session** (`open`) opens with **the model configured on the calling agent card** (`models.chat` of `agents/<id>/config.yaml`, read through `agent:list` / `agent:config`, see `app/agents.read`). The App settings page's 「会话模型」 ("Session model") can be switched to 「自定义模型」 ("Custom model") to pin one entry instead (`sessionModelProvider` / `sessionModelModel`, plus `sessionModelReasoningEffort` for a reasoning effort that model supports; the default is 「复用调用方」, "reuse the caller").
+- **A session opened directly in the DSH Web UI** picks one entry in DSH's own model selector, whose candidates come from the host catalog (the App settings page only lists candidates for 「会话模型」 and does not touch this slot). The selector's candidates are a startup snapshot; after the host changes providers, the normal path is a re-pull over the control plane, no restart needed.
+- **DSH's own default-model slot** (`agent-default-model` in `DSH_HOME/settings.yaml`) is not handled by the App settings page. Do not set it by hand: if you point it at an entry the host no longer has, the App reconciles it in place to a serviceable one (preferring another entry in the same provider, then the agent-card model, then the catalog's first entry; the log records a 「默认模型对账」, "default-model reconciliation", entry). When its user layer is empty the value falls back to the official route in the base layer — which is why a UI-opened session can report `no API key` while tool-created sessions are unaffected.
+- Per-request overrides on `open` / `reply` (`provider` / `model` / `reasoningEffort`) never change these defaults. See `references/parameters.md` and the model-selection notes in `SKILL.md`.
+
+## Updating DSHana
+
+Updating means **installing a new App package**. That load re-imports the server entry, re-registers tools and routes, and restarts the managed runtime through the automatic chain. The DSH version is fixed by the dependency the App declares (`@deepseek-ai/dsh`) and shows up in the artifact's version segment.
+
+1. **Pick the package for this machine.** A release carries one `.zip` per target (`dshana-v<version>-<target>.zip`) plus `dshana-v<version>.zip` for universal. Take the platform one, which is far smaller: it carries only that machine's dependency tree. The full target table and the exact commands live in `dshana-install-skill/SKILL.md` in the repository — that manual is deliberately not shipped inside the package, so read it from the repo.
+2. **Verify against the release's own metadata.** GitHub reports each asset's `size` and `sha256` `digest`; compare both before installing. Nothing else publishes those values for the platform packages.
+3. **Uninstall the old version first.** Over-installing the same id is not supported, so the uninstall call (`DELETE <host>/api/extensions/app:dshana`) comes before the install submission.
+4. **Install.** Submit the package, then confirm the staged install. That loads the new instance: the server entry is re-imported, tools and routes are re-registered, and the managed runtime restarts through the automatic chain.
+5. **Re-check readiness.** Poll the App's boot-state route until `state.phase === "ready"` and `state.ready === true`. A first start after an install takes a while.
+
+**Already-established sessions keep calling `dshana` across an App reload.** The tool surface resolves against the host's current registry: an already-established session holds a live `dshana` handle, and subsequent calls in it land as usual. A call that reports `RPC peer closed; cannot call callback.tools.execute` clears after compacting that session's context (or opening a new session).

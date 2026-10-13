@@ -33,7 +33,7 @@ import { errText } from "../../shared/err-text.mts";
 import { BUNDLE_DIR, CORDIS_DIR, DIST_DIR, PKG_DIR, STAGING_ROOT } from "../../shared/paths.mts";
 import { ROOT } from "../../shared/root.mts";
 import { manifestPath } from "../../shared/contract-assets.mts";
-import { assertBundleArtifacts, assertCordisArtifacts, assertNoProductPackage, assertUiTree } from "./assert.mts";
+import { assertBundleArtifacts, assertCordisArtifacts, assertDeclarationTexts, assertNoProductPackage, assertSkillReferences, assertUiTree } from "./assert.mts";
 import { declareInstallationBundle, declareInstallationPlugins } from "./bundle-deps.mts";
 import { excludedPackages, pruneExcluded, requiredPackages } from "./exclude.mts";
 import { materializeProdDeps } from "./materialize.mts";
@@ -54,37 +54,22 @@ if (version !== manifestVersion)
     `版本不一致：package.json ${version} ≠ manifest.json ${manifestVersion}（manifest 未同步，跑 node scripts/derive/index.mts 同步后再打包）`,
   );
 
-// 1. 静态项补齐交付目录。构建阶段（build:app / build:cordis）已写出安装态骨架
-//    （bin/（主体 + runtime）+ manifest.json / icon.png / skills/ / ui/），
-//    这里只补清单外的文本件；包根即 App 安装目录，不套 dist 这层目录。不在清单里的东西各有其宿主：
+// 1. 交付目录已由 build 组装完整（安装态骨架：bin/ + manifest.json / icon.png / skills/ / ui/ +
+//    声明文本）；本步不做任何补充，只断言交付目录真的齐备。包根即 App 安装目录，不套 dist 这层目录。
+//    不在交付面里的东西各有其宿主：
 //    · routes/ —— v2 走 ctx.routes.register，route 在入口（bin/app.mjs）里注册，无目录产物；
 //    · app/（卡片脚本与样式）—— 构建时内联进入口 bundle；
-//    · skills/ —— 从仓库根取（随包静态件）原样拷；manifest 与身份图标在 App 域
-//      （packages/app/src/），随 dist/ 一起进包根，本步不补；卡面图由 ui 域产出；
 //    · package.json —— 不生成也不随包：入口是 bin/app.mjs，Node 按扩展名判 ESM，安装树不需要包清单；
-//      仓库那份带 scripts / devDependencies / packageManager / imports，是构建入口（上面的断言拒收）。
+//      仓库那份带 scripts / devDependencies / packageManager / imports，是构建入口（下面的断言拒收）。
 //    · pnpm-workspace.yaml / pnpm-lock.yaml —— 不随包：装机侧不执行 pnpm install（依赖已物化进包）。
-const staticItems = ["NOTICE", "THIRD_PARTY_NOTICES.md"];
 const distDir = DIST_DIR;
-for (const item of staticItems) {
-  const src = join(ROOT, item);
-  if (!fs.pathExistsSync(src)) throw new Error(`静态项不存在：${item}`);
-  // dereference: true —— 静态项都是真实文件，无符号链接，该选项不改变复制结果。包内不含 pnpm
-  // 二进制：依赖在打包时物化进安装树，装机侧不执行 pnpm。
-  fs.copySync(src, join(distDir, item), {
-    dereference: true,
-    filter: (srcPath) => {
-      if (srcPath.includes("node_modules/.bin")) return false;
-      if (/__tests__|\.test\.|\.spec\./.test(srcPath)) return false;
-      return true;
-    },
-  });
-}
 
-// 1.5 / 1.6) 产物断言：cordis 包与组合层包的版本/完整性、交付树无包清单、App ui/ 静态树（缺失即拒包）
+// 1.5 / 1.6) 产物断言：cordis 包与组合层包的版本/完整性、交付树无包清单、声明文本、App ui/ 静态树（缺失即拒包）
 const cordisCount = assertCordisArtifacts(CORDIS_DIR, version);
 assertBundleArtifacts(BUNDLE_DIR, version);
 assertNoProductPackage(distDir);
+assertDeclarationTexts(distDir);
+assertSkillReferences(distDir);
 assertUiTree(distDir);
 
 // 目标选择：`--target <名字>`（必须显式给，无默认）。

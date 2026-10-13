@@ -8,9 +8,12 @@
 // （ctx.tasks.create → 受管 runtime 就绪 → session.create（带模型）→ 绑定回写宿主任务记录 → prompt）。
 //
 // 模块契约（五个 action 模块共用，见 packages/tools/src/index.ts）：导出 command / summary / fields /
-// required / readOnly / run；run(input, ctx, deps) 中 deps 仅单测注入提交链。
+// readOnly / run；fields 是本 action 专属字段的 zod 片段映射（公共字段见 shared/fields.ts），
+// run(input, ctx, deps) 中 deps 仅单测注入提交链。
+import { z } from "zod";
 import { submitDshTask } from "@dshana/session/session-run.ts";
 import { sessionCard } from "../shared/card.ts";
+import { timeout, reasoningEffort, provider, model } from "../shared/fields.ts";
 import type { ToolCtx } from "@dshana/shared/host.ts";
 import type { ToolInputBase, ToolResult } from "../shared/types.ts";
 
@@ -36,19 +39,15 @@ export const summary = "start a DSH sub-agent with a first task";
 export const readOnly = false;
 
 export const fields = {
-  task: { type: "string", description: "First task for the sub-agent" },
-  cwd: {
-    type: "string",
-    description: "Absolute sandbox working directory (required; no fallback)",
-  },
-  label: { type: "string", description: "Optional display name" },
-  timeout: { type: "number", description: "Seconds; defaults to the App's defaultTimeoutSec" },
-  agentPreset: { type: "string", description: "Agent preset (names defined by DSH)" },
-  reasoningEffort: { type: "string", description: "Reasoning effort (host-side levels)" },
-  provider: { type: "string", description: "Explicit provider for this request only" },
-  model: { type: "string", description: "Explicit model id (fallback rules in the SKILL)" },
+  task: z.string().describe("First task for the sub-agent"),
+  cwd: z.string().describe("Absolute sandbox working directory (required; no fallback)"),
+  label: z.string().optional().describe("Optional display name"),
+  agentPreset: z.string().optional().describe("Agent preset (names defined by DSH)"),
+  timeout,
+  reasoningEffort,
+  provider,
+  model,
 };
-export const required = ["task", "cwd"];
 
 export async function run(input: OpenInput, ctx: ToolCtx, deps?: SubmitDeps): Promise<ToolResult> {
   const callToken = (input && input.context && input.context.callToken) || "";

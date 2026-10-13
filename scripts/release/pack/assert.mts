@@ -8,6 +8,7 @@ import fs from "fs-extra";
 import { join } from "node:path";
 
 import { cordisPkgDirs, cordisPkgName } from "../../shared/version.mts";
+import { DECLARATION_TEXTS } from "../../shared/paths.mts";
 
 /**
  * 交付树不得出现 package.json（fail-closed）。
@@ -98,6 +99,61 @@ export function assertBundleArtifacts(bundleDir, version) {
     throw new Error(`组合层包名字不对：${j.name}（层列钉住的是 @dshana/dsh-app）`);
   }
   console.log(`[pack] 组合层包在位（@dshana/dsh-app = ${version}，2 入口 + 5 份组合文档）`);
+}
+
+/**
+ * 随包声明文本（NOTICE / THIRD_PARTY_NOTICES.md）断言：缺件拒包。
+ *
+ * 交付目录由 build:app 一次组装完整（与 skills/ 同批直出），pack 不再向它写任何东西；这里只
+ * 核实真的落位。靠 pack 事后补会把 pack 变成 dist 的写者，源改了而产物没跟时两边不同步。
+ */
+export function assertDeclarationTexts(outDir) {
+  for (const item of DECLARATION_TEXTS) {
+    if (!fs.pathExistsSync(join(outDir, item))) {
+      throw new Error(
+        "交付目录缺声明文本：" + item + "（dist 应由 build:app 一次组装完整；拒绝出少合规件的包）",
+      );
+    }
+  }
+  console.log("[pack] 声明文本在位（" + DECLARATION_TEXTS.join(" / ") + "）");
+}
+
+/**
+ * 技能参照断言：SKILL.md 指到的每一份 references/ 文件都必须在包里。
+ *
+ * 它缺失时同样不响：SKILL.md 里那句指针会指向一片空白，模型读不到内容，而报错面不会出现
+ * （技能照旧加载，只是少了那个文件）。参照分两类——`parameters.md` 由 derive 的 skill-params
+ * 任务生成，其余为手写——两类都随 skills/ 整树进包。
+ *
+ * 名单从 SKILL.md 正文里的 `references/<名>.md` 提，不另立一份：指到了一定要存在，这一条
+ * 对两边都成立；各写一份名录就会出现「写了指针但没建文件」。
+ */
+export function assertSkillReferences(outDir) {
+  const skillDir = join(outDir, "skills", "dshana");
+  const skillFile = join(skillDir, "SKILL.md");
+  if (!fs.pathExistsSync(skillFile)) throw new Error("交付目录缺技能主体：skills/dshana/SKILL.md");
+  const text = fs.readFileSync(skillFile, "utf8");
+  const named = [...new Set([...text.matchAll(/references\/([\w.-]+\.md)/g)].map((m) => m[1]))];
+  if (named.length === 0) {
+    throw new Error("SKILL.md 未指向任何 references/ 文件：技能主体丢掉了按需阅读的参照面");
+  }
+  for (const name of named) {
+    const rel = join("skills", "dshana", "references", name);
+    if (!fs.pathExistsSync(join(outDir, rel))) {
+      throw new Error(
+        "交付目录缺技能参照：" + rel + "（SKILL.md 指到了它但包里没有；parameters.md 由 derive 的 skill-params 任务生成）",
+      );
+    }
+  }
+  // 反向：references/ 里除了 parameters.md 之外的文件都该被 SKILL.md 指到，否则模型找不到它。
+  const onDisk = fs.pathExistsSync(join(skillDir, "references"))
+    ? fs.readdirSync(join(skillDir, "references")).filter((f) => f.endsWith(".md"))
+    : [];
+  const unlisted = onDisk.filter((f) => !named.includes(f));
+  if (unlisted.length > 0) {
+    throw new Error("references/ 下有 SKILL.md 没指到的文件（模型找不到它）：" + unlisted.join(", "));
+  }
+  console.log("[pack] 技能参照在位（SKILL.md 指向 " + named.length + " 份：" + named.join(" / ") + "）");
 }
 
 /** App ui/ 静态树断言（cards route 资源面；相对资源契约）：缺失 = 卡片 404，拒包。 */

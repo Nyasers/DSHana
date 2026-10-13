@@ -28,8 +28,16 @@
 import { errText } from "./err-text.ts";
 import { TERMINAL_STATUSES } from "./watch-sse.ts";
 
-/** dshSessionId 形态（防畸形名进宿主查询；与 tools/query 的正则同源）。 */
-export const SESSION_ID_RE = /^session-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/**
+ * dshSessionId 形态（防畸形名进宿主查询；与 tools/query 的正则同源）。
+ *
+ * 大小写容忍**内联在字符类里**，不用 `i` 标志。理由：这份正则同时要投影成模型面 parameters
+ * 的 JSON Schema（见 packages/tools/src/shared/fields.ts），而 `pattern` 关键字没有携带标志的
+ * 位置（规范里不存在 flags 字段，ECMA-262 也没有内联标志语法）——带 `i` 的正则投影出去会
+ * 丢掉大小写容忍，模型面比运行期更窄。内联写法两面逐字等价：模型的提示与运行期的闸门因此
+ * 对齐在同一个接受集合上。
+ */
+export const SESSION_ID_RE = /^[sS][eE][sS][sS][iI][oO][nN]-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 export function isValidSessionId(sessionId: unknown): boolean {
   return typeof sessionId === "string" && SESSION_ID_RE.test(sessionId);

@@ -11,6 +11,7 @@
 // 堵住宿主通道）；确认或升级的证据随后台任务通知（投递回本会话）与 App 日志落定。
 import { requestCancel } from "@dshana/session/cancel-chain.ts";
 import { resolveTarget } from "../shared/target.ts";
+import { taskId, sessionId } from "../shared/fields.ts";
 import type { ToolCtx } from "@dshana/shared/host.ts";
 import type { ToolInputBase, ToolResult } from "../shared/types.ts";
 
@@ -18,11 +19,7 @@ export const command = "close";
 export const summary = "cancel its running task";
 export const readOnly = false;
 
-export const fields = {
-  taskId: { type: "string", description: "taskId returned by open/reply (handle path)" },
-  sessionId: { type: "string", description: "Session id; passing it means cross-conversation" },
-};
-export const required = [];
+export const fields = { taskId, sessionId };
 
 export async function run(input: ToolInputBase, ctx: ToolCtx): Promise<ToolResult> {
   const target = await resolveTarget(input, ctx);
