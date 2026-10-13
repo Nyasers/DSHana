@@ -10,7 +10,7 @@
 //
 // 每个 action 模块导出同一组字段：
 //   command  subcommand 名（顶层 action 取值，全局唯一）
-//   summary  一句话语义（汇总进 description）
+//   summary  一句话语义（作参数参照里该 action 的小节标题；不进 description）
 //   fields   本子命令专属字段的 zod 片段映射（不含 action；公共字段见 shared/fields.ts）
 //   readOnly 只读动作（不产生副作用）
 //   run(input, ctx, deps)  执行体（deps 仅单测注入提交链，线上为 undefined）
@@ -50,11 +50,10 @@ export const name = "dshana";
 /** 手册的技能名（技能目录按此名定位；与 skills/ 下的目录名一致，单一事实源）。 */
 export const SKILL_NAME = "dshana";
 
-/** description 前缀：模型侧唯一的固定入口（细则一律在 SKILL 全文里，这里不重复）。 */
-const DESCRIPTION_LEAD = "DeepSeek Harness (DSH) sub-agent executor. Actions: ";
-
 /**
- * 工具描述：由各 action 的 summary 汇总（顺序即 ACTIONS 顺序），末尾把读者指向手册。
+ * 工具描述：模型侧唯一的固定入口。只讲这工具是干什么的，**不逐条列 action**——动作清单、
+ * 字段与逐动作规则一律交出手册（技能 `dshana` 的 SKILL.md 与其 references/）。在这里列一遍
+ * 是把同一事实再抄一份，还要求每个 action 的 summary 永远与这段文案同步。
  *
  * 指**技能名**而不是仓库里的相对路径：技能目录（系统提示里的 available_skills 段）按名字
  * 给出每个技能的 `location` 绝对路径，模型拿得到可解析的坐标；写相对路径则模型不知道相对谁。
@@ -62,9 +61,8 @@ const DESCRIPTION_LEAD = "DeepSeek Harness (DSH) sub-agent executor. Actions: ";
  * 平铺 properties，`tool_help("dshana")` 因此返回“无参数”——指向它等于指向空页。
  */
 export const description =
-  DESCRIPTION_LEAD +
-  ACTIONS.map((mod) => mod.command + "=" + mod.summary).join("; ") +
-  ". Field list and per-action rules: read the `" + SKILL_NAME + "` skill.";
+  "DeepSeek Harness (DSH) sub-agent executor: start, continue, cancel and read back DSH sub-agent tasks in Hana, and answer their approvals. " +
+  "Actions, their fields and per-action rules: read the `" + SKILL_NAME + "` skill.";
 
 // ---- zod 单一来源：同一批字段长出「模型面 parameters」与「运行期校验 union」 ----
 //
