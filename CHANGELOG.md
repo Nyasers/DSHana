@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.1.0+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.7%2Bdsh-0.2.0-rc.2...v1.1.0%2Bdsh-0.2.0-rc.2) (2026-10-14)
+
+### Features
+
+* **caller:** 会话模型跟随调用方会话的实际选择，并清掉三处死代码 ([c194354](https://github.com/Nyasers/DSHana/commit/c1943549c91c60812236fdbd61568f529a567771))
+* **preset:** 随包交付 dshana / dshana-ptc 两个特调 preset ([7f5a528](https://github.com/Nyasers/DSHana/commit/7f5a52842e1040d2f5d87104df3ba906ebe711b0))
+* **skill:** 参数参照改由构建期从 zod 定义生成，SKILL 只留指针 ([e1680ca](https://github.com/Nyasers/DSHana/commit/e1680cacf805189d8a95f91a82c931306568b23e))
+* **tools:** 工具参数收成一份 zod 定义（模型面 parameters + 运行期校验） ([59750e4](https://github.com/Nyasers/DSHana/commit/59750e4b05055ffe6961920b9358be1651938f55))
+* **tools:** 新增 presets 动作，open 在提交前预校 agentPreset ([874f17b](https://github.com/Nyasers/DSHana/commit/874f17bafacf949f3e8cd118c4892505d3855fa4))
+
+### Bug Fixes
+
+* **derive:** 无字段的动作不再摆空表头，改说 Takes no fields ([af267ce](https://github.com/Nyasers/DSHana/commit/af267ce2199776a8abacad38ff7006e7b797cc47))
+* **preset:** 回执形状不对时抛错，不再返回空表 ([2b14c03](https://github.com/Nyasers/DSHana/commit/2b14c03964936ffece0bec3d1ab431fa31cd130d))
+* **release:** 投稿正文的区间起点改取上游登记台账，读不到即 fail-closed ([953ca03](https://github.com/Nyasers/DSHana/commit/953ca033ef99afd9558e756245ac780d87e6682b))
+* **session:** 模型选择改为元组语义，reply 可单独改 reasoningEffort ([ec2828a](https://github.com/Nyasers/DSHana/commit/ec2828aa9708e069277d59dbcc30b180674da2c4))
+* **session:** open 未传模型时不再误判为「要选模型」，provider/model 收成成对 ([9303723](https://github.com/Nyasers/DSHana/commit/9303723962b563fae0ff39805fa450ae354fbcd1)), references [#288](https://github.com/Nyasers/DSHana/issues/288)
+* **shared:** sessionId 形态正则把大小写容忍内联进字符类 ([74e8917](https://github.com/Nyasers/DSHana/commit/74e891757ec70eba994c973983945eab33c0d229))
+
 ## [1.0.7+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.6%2Bdsh-0.2.0-rc.2...v1.0.7%2Bdsh-0.2.0-rc.2) (2026-10-12)
 
 ### Bug Fixes
