@@ -41,6 +41,25 @@ export function formatRow(row: PresetRosterRow): string {
   return parts.join("") + (notes.length ? "  [" + notes.join("；") + "]" : "");
 }
 
+/**
+ * roster 行 → 模型面文本（抬头 + 每行 + 用法）。
+ *
+ * 与 formatRow 分开导出：run 要读 runtime，测不到，而这段文案有要守的约定（不说“不会怎样”
+ * 这类否定式：那等于暗示本来可能如此），得能单独钉住。
+ */
+export function renderRoster(rows: PresetRosterRow[]): string {
+  const lines = rows.map(formatRow);
+  const brokenCount = rows.filter((r) => typeof r?.broken === "string" && r.broken).length;
+  const header = "agent preset roster（" + rows.length + " 项" + (brokenCount ? "，其中 " + brokenCount + " 项挂载失败" : "") + "）：";
+  const body = lines.length ? lines.join("\n") : "（roster 为空：该部署没有声明任何 preset，会话使用 Host 组合）";
+  const guidance = [
+    "",
+    "用法：open 的 agentPreset 取以上任一 id，空表示交给 DSH 的默认；该名字原样传给 DSH。",
+    "该值在会话开跑后锁定，要换预设得开新会话。",
+  ].join("\n");
+  return header + "\n" + body + guidance;
+}
+
 /** 动作入口：读 roster 并渲染成模型面文本。 */
 export async function run(input: ToolInputBase, ctx: ToolCtx): Promise<ToolResult> {
   let rows: PresetRosterRow[] = [];
@@ -62,27 +81,15 @@ export async function run(input: ToolInputBase, ctx: ToolCtx): Promise<ToolResul
     };
   }
 
-  const lines = rows.map(formatRow);
-  const ids = presetIds(rows);
-  const brokenCount = rows.filter((r) => typeof r.broken === "string" && r.broken).length;
-
-  const header = "agent preset roster（" + rows.length + " 项" + (brokenCount ? "，其中 " + brokenCount + " 项挂载失败" : "") + "）：";
-  const body = lines.length ? lines.join("\n") : "（roster 为空：该部署没有声明任何 preset，会话使用 Host 组合）";
-  const guidance = [
-    "",
-    "用法：open 的 agentPreset 接受以上任一 id（空表示交给 DSH 的默认）。名字原样透传，不识别别名。",
-    "该值在会话开跑后锁定，reply 不能改：选错了要么开新会话，要么继续用当前预设。",
-  ].join("\n");
-
   return {
     ok: true,
-    content: [{ type: "text", text: header + "\n" + body + guidance }],
+    content: [{ type: "text", text: renderRoster(rows) }],
     details: {
       dsh: {
         action: "presets",
         ok: true,
         count: rows.length,
-        ids,
+        ids: presetIds(rows),
         presets: rows,
       },
     },
