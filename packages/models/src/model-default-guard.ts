@@ -9,7 +9,7 @@
 // 有可能哪天从宿主目录里消失（换提供商/删凭据），留下一个跑不通的默认。
 //
 // 本模块只管这一件事：**用户层有值**且它不在宿主目录里时换一条可服务的。用户层为空一律不动手
-// ——工具建的会话由 caller-model 按调用方角色卡补，界面里开的会话用不用默认是用户的事。
+// ——工具建的会话由 caller-model 按调用方会话补，界面里开的会话用不用默认是用户的事。
 //
 // 换哪一条按这个优先序（见 planDefaultRepair）：同 provider 里换（保住原选择的方向）→ 宿主角色卡
 // （主角色优先）配的 `models.chat` → 目录第一条。角色卡那一格是「跟着宿主走」的正解：每张卡
@@ -126,7 +126,7 @@ export async function reconcileDefaultModel(deps: DefaultGuardDeps, log = (_leve
     log("warn", "默认模型对账：DSH 的 agent-default-model 段读不到（保留现值）：" + errText(e));
     return { status: "settings-unreadable" };
   }
-  // 只看用户层：base 层那份缺省不是我们的（工具建的会话由 caller-model 按调用方角色卡补），
+  // 只看用户层：base 层那份缺省不是我们的（工具建的会话由 caller-model 按调用方会话补），
   // 用户层为空就不动手——这格没被设过，没有「不可服务」可言。
   const current = view && (view as any).stored;
   if (!current || typeof current !== "object") return { status: "no-change", current: null };

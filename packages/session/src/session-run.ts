@@ -484,7 +484,7 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
       // 不碰 DSH 的全局默认。
       //
       // · 路由（provider+model）：请求给了就用请求的；没给时 create 由 caller-plan 算（App 设置 /
-      //   调用方角色卡），reply 沿用会话当前的那条。换路由本身是允许的（DSH 侧就地装上会话选择），
+      //   调用方会话当前在用的那条），reply 沿用会话当前的那条。换路由本身是允许的（DSH 侧就地装上会话选择），
       //   代价是丢上下文缓存，所以一般不推荐。
       // · 推理强度：请求给了就用请求的，没给就沿用会话当前的。单独改强度不换路由，没有缓存代价。
       // 两者都拿不到时什么都不带，交给 DSH 自己的选择。
@@ -531,7 +531,7 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
         // 只给了强度，又拿不到可搭的路由：不静默丢（强度落不到会话上），也不编一条路由。
         throw new Error(
           "reasoningEffort was given but no model route is available for this session: pass provider+model together, " +
-            "or configure the session model on the App settings page / the calling agent card",
+            "or configure a custom session model on the App settings page",
         );
       }
 

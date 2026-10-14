@@ -65,7 +65,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // GET /dshana/settings。本表的完整缺省单点就是这里。
   forceFollowFaces: [...FORCE_FOLLOW_FACES],
 });
-/** 会话模型模式：caller = 按调用方角色卡（缺省），custom = 用固定的一条。 */
+/** 会话模型模式：caller = 跟随调用方会话当前在用的那条（缺省），custom = 用固定的一条。 */
 export const SESSION_MODEL_MODES = Object.freeze(["caller", "custom"]);
 
 /** DSH 自己的默认数据目录（shared 的「DSH 默认目录」候选）。 */
