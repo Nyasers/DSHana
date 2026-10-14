@@ -30,6 +30,7 @@ import * as replyAction from "./actions/reply.ts";
 import * as closeAction from "./actions/close.ts";
 import * as getAction from "./actions/get.ts";
 import * as approveAction from "./actions/approve.ts";
+import * as presetsAction from "./actions/presets.ts";
 import { z } from "zod";
 import { HOST_CONTEXT } from "./shared/fields.ts";
 import type { ToolCtx } from "@dshana/shared/host.ts";
@@ -43,7 +44,7 @@ import type { ToolInputBase } from "./shared/types.ts";
  *
  * `export` 是给派生的参数参照用：它按这张表列出每个 action 的字段与语义，与本节装配出的
  * `parameters` 同源。派生只消费它，不再自己收一遍 action 清单。 */
-export const ACTIONS = [openAction, replyAction, closeAction, getAction, approveAction];
+export const ACTIONS = [openAction, replyAction, closeAction, getAction, approveAction, presetsAction];
 
 export const name = "dshana";
 
