@@ -10,7 +10,7 @@ Read this before passing `agentPreset` to `open`, or when deciding what a delega
 - the two this App ships — `dshana`, `dshana-ptc`;
 - **any preset a user's installed bundle contributes.** Bundles installed from the Plugins page (or added to the profile by hand) can insert their own `preset-<id>` rows, and those names are as valid here as the shipped ones.
 
-Nothing filters the value: `agentPreset` is passed through to DSH, which resolves it against its live roster. A name that is not on the roster fails at submission with `agent-preset/not-found Unknown agent preset: <id>` — **and that error names only the id you passed, not the available ones**, so it cannot be used to discover the set. Read the roster where it is displayed (DSH's own settings carry an agent-preset section listing every declared preset, including activation failures) rather than guessing, and prefer the shipped names above when you have no reason to pick something else.
+The roster is the set of accepted names: `agentPreset` goes to DSH, which resolves it against that live roster. A name that is not on it fails at submission with `agent-preset/not-found Unknown agent preset: <id>` — **and that error names only the id you passed, not the available ones**, so it cannot be used to discover the set. Read the roster where it is displayed (DSH's own settings carry an agent-preset section listing every declared preset, including activation failures), or ask this App for it with `action=presets`; prefer the shipped names above when you have no reason to pick something else.
 
 ## What the two shipped presets are for
 
@@ -28,7 +28,7 @@ They are ordinary DSH agent presets — declarable rows under `presets/` in the 
 
 `dshana-ptc` differs from `dshana` by exactly one row (`tool-presentation` with `mode: ptc`). Both carry the same tool list and the same persona; only the form the model sees changes.
 
-**No alias is recognised.** The value is passed through unchanged, so `code` names a preset only when the deployment actually declares one — and a rewritten name would make a real preset of that name unreachable, with no error to show for it. The id the preset pins is its `config.id` (`dshana` / `dshana-ptc`), not the row id.
+The id a preset pins is its `config.id` (`dshana` / `dshana-ptc`), not the row id.
 
 ## What both presets keep
 
