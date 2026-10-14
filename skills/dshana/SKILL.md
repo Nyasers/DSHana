@@ -35,7 +35,7 @@ The top-level `action` is required, and each subcommand accepts only its own fie
 
 The `parameters` are generated from one zod definition that also validates the incoming arguments before dispatch (the host itself does not validate tool arguments). A malformed call is refused with every failed field listed — `dshana: invalid arguments` followed by `<path>: [<code>] <message>` lines — rather than being silently coerced; notable cases: an unknown `action`, a key that does not belong to the subcommand, a missing required field, and an `outcome` that is neither `allowed-once` nor `rejected` (a typo there used to fall through to `allowed-once`, i.e. allow).
 
-**Target: exactly one, and which subset is legal varies.** `reply` needs exactly one of `taskId` (handle) / `sessionId` (credential); `close` and `get` need at least one (either resolves to the same session); `approve` is keyed by `approvalId`, which resolves through the parent task, so it needs neither. `open` takes no `sessionId` at all — use `reply` to continue an existing session. These are cross-field rules no argument schema can carry, which is why they stay in prose here rather than in `references/parameters.md`.
+**Target: exactly one, and which subset is legal varies.** `reply` needs exactly one of `taskId` (handle) / `sessionId` (credential); `close` and `get` need at least one (either resolves to the same session); `approve` is keyed by `approvalId`, which resolves through the parent task, so it needs neither; `presets` takes no target at all. `open` takes no `sessionId` — use `reply` to continue an existing session. These are cross-field rules no argument schema can carry, which is why they stay in prose here rather than in `references/parameters.md`.
 
 > To inspect tasks, use the host's built-in task-query tool for the agent (on the model side that is `check_pending_tasks` in this environment): `dshana`'s open/reply create background tasks of this very session, so they already appear in that list; this tool deliberately does not open a second, read-only door for listing.
 
@@ -93,7 +93,7 @@ Note: session logs are V3 format, and **the App does not read `session_projcache
 
 ### action=presets: list the selectable agent presets
 
-- **No target, no fields.** Reads the deployment's live roster and prints one line per preset: `id`, display name, `order`, whether it is the default, and the first line of its activation failure when it currently cannot compose a session.
+- Reads the deployment's live roster and prints one line per preset: `id`, display name, `order`, whether it is the default, and the first line of its activation failure when it currently cannot compose a session.
 - **Why it exists**: `agentPreset` on `open` is a pass-through value with no whitelist, and the roster is whatever the profile's installed bundles declare — including presets a user's own bundle contributes. Nothing else exposes that set: a wrong name comes back as `agent-preset/not-found Unknown agent preset: <id>`, which names only what you passed and not the alternatives. Use this action instead of guessing.
 - Read-only, but it needs the managed runtime online (same gate as `get`). It does not create a session and does not change the deployment's default.
 

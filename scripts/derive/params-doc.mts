@@ -103,8 +103,8 @@ drift from what the tool accepts: edit that source and run
 
 Field descriptions are the model-facing text, and \`Required\` mirrors the schema's \`required\`
 array. Cross-field rules that no argument schema can express — a target must be exactly one of
-\`taskId\` / \`sessionId\`, \`close\` and \`get\` need at least one, \`open\` takes no \`sessionId\` —
-are stated in \`SKILL.md\`, not here.`;
+\`taskId\` / \`sessionId\`, \`close\` and \`get\` need at least one, \`open\` takes no \`sessionId\`,
+\`presets\` takes no target — are stated in \`SKILL.md\`, not here.`;
 
 /**
  * 渲染整份参照。确定性：action 按注册表顺序、字段按 schema 声明顺序，同一份定义产出
@@ -117,17 +117,18 @@ export function renderParamsDoc(): string {
   const sections = branches.map((branch) => {
     const command = String(branch?.properties?.action?.const ?? "");
     const fields = projectBranch(branch);
-    const lines = [
-      "## `" + command + "` — " + (summaries.get(command) || ""),
-      "",
-      "| Field | Type | Required | Description |",
-      "|---|---|---|---|",
-    ];
-    for (const f of fields) {
-      const description = [f.description, ...f.constraints].filter(Boolean).join(" · ");
-      lines.push(
-        "| `" + f.name + "` | " + cell(f.type) + " | " + (f.required ? "yes" : "no") + " | " + cell(description) + " |",
-      );
+    const lines = ["## `" + command + "` — " + (summaries.get(command) || ""), ""];
+    // 无专属字段的动作不摆空表头（只有表头没有行的表看着像生成器坏了）：明说它不收字段。
+    if (fields.length === 0) {
+      lines.push("Takes no fields.");
+    } else {
+      lines.push("| Field | Type | Required | Description |", "|---|---|---|---|");
+      for (const f of fields) {
+        const description = [f.description, ...f.constraints].filter(Boolean).join(" · ");
+        lines.push(
+          "| `" + f.name + "` | " + cell(f.type) + " | " + (f.required ? "yes" : "no") + " | " + cell(description) + " |",
+        );
+      }
     }
     return lines.join("\n");
   });
