@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.1+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.1.0%2Bdsh-0.2.0-rc.2...v1.1.1%2Bdsh-0.2.0-rc.2) (2026-10-14)
+
+### Bug Fixes
+
+* **presets:** 输出文案去掉否定式叙述，并抽 renderRoster 可测 ([e17f56e](https://github.com/Nyasers/DSHana/commit/e17f56e67138865fce88c1e0ab0028f29881ccda))
+
 ## [1.1.0+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.0.7%2Bdsh-0.2.0-rc.2...v1.1.0%2Bdsh-0.2.0-rc.2) (2026-10-14)
 
 ### Features
