@@ -145,3 +145,49 @@ test("formatRow 对 null 行不炸（导出函数，不受解析器的行过滤�
   assert.doesNotThrow(() => formatRow(undefined));
   assert.equal(formatRow({ id: "a", name: "甲", order: 1, isDefault: true }), "a（甲）  [默认；order 1]");
 });
+
+// ---- 渲染文案：不许出现“不会怎样”式的否定叙述 ----
+
+/**
+ * 否定式叙述（“不识别别名”“不会被改写”）等于暗示“本来可能如此”，是此地无银三百两：
+ * 要讲就正面陈述事实（“名字原样传给 DSH”）。这里把所有渲染路径都扫一遍，防它再漂回来。
+ */
+const NEGATION_PHRASES = ["不识别别名", "不会被改写", "不会改写", "不是别名"];
+
+function assertNoNegation(text, where) {
+  for (const phrase of NEGATION_PHRASES) {
+    assert.ok(!text.includes(phrase), where + " 不该出现否定式叙述：" + phrase);
+  }
+}
+
+test("renderRoster：正常 roster 的文案不含否定式叙述", async () => {
+  const { renderRoster } = await import("@dshana/tools/actions/presets.ts");
+  const text = renderRoster([
+    { id: "standard", order: 1, isDefault: true },
+    { id: "dshana", name: "标准特调", order: 5 },
+  ]);
+  assert.match(text, /agent preset roster（2 项）：/);
+  assert.match(text, /standard\s+\[默认；order 1\]/);
+  assert.match(text, /dshana（标准特调）\s+\[order 5\]/);
+  assert.match(text, /该名字原样传给 DSH/);
+  assertNoNegation(text, "正常 roster");
+});
+
+test("renderRoster：空 roster 说明该部署没声明，而非“没有任何名字合法”", async () => {
+  const { renderRoster } = await import("@dshana/tools/actions/presets.ts");
+  const text = renderRoster([]);
+  assert.match(text, /agent preset roster（0 项）：/);
+  assert.match(text, /该部署没有声明任何 preset/);
+  assertNoNegation(text, "空 roster");
+});
+
+test("renderRoster：抬头标出挂载失败项数", async () => {
+  const { renderRoster } = await import("@dshana/tools/actions/presets.ts");
+  const text = renderRoster([
+    { id: "ok-one" },
+    { id: "broken-one", broken: "tool-pwsh: waiting for shell\nsecond line" },
+  ]);
+  assert.match(text, /agent preset roster（2 项，其中 1 项挂载失败）：/);
+  assert.match(text, /broken-one\s+\[挂载失败：tool-pwsh: waiting for shell\]/);
+  assert.ok(!text.includes("second line"), "挂载失败原因只取首行");
+});
