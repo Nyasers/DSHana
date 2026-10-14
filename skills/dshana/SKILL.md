@@ -9,11 +9,12 @@ DSHana wires DeepSeek Harness (DSH) into Hana as a **managed sub-agent executor*
 
 ## When to use this skill
 
-Read it before calling `dshana` with any action (`open` / `reply` / `close` / `get` / `approve`), or when a DSH task, its card, or its approvals need attention. The rest lives in this skill's `references/` directory — read a file when the situation calls for it:
+Read it before calling `dshana` with any action (`open` / `reply` / `close` / `get` / `approve` / `presets`), or when a DSH task, its card, or its approvals need attention. The rest lives in this skill's `references/` directory — read a file when the situation calls for it:
 
 | Read | When |
 |---|---|
 | `references/parameters.md` | **Before composing any call.** The tool's own `parameters` are not in your context: `dshana` is a catalog (deferred) tool, and its argument schema is a top-level `oneOf` that the host's one-line summary cannot flatten, so `tool_help("dshana")` reports "no parameters" and this file is the only field list you can read. Generated from the tool's zod definition, so it cannot fall behind. |
+| `references/presets.md` | **Before choosing `agentPreset`**, or when deciding what a delegated session should be able to do: the two presets this App ships (`dshana` / `dshana-ptc`), what each keeps from the shipped `standard` preset and what it drops, and why the roster is not limited to them. |
 | `references/setup.md` | Installing or updating DSHana; the data directory; how a session picks its model. |
 | `references/troubleshooting.md` | DSH will not start, a task failed, an approval is stuck — or you need to know what this form cannot do (the known limitations). |
 | `references/ui.md` | The DSHana card, theme following, or the workspace directory picker. |
@@ -22,7 +23,7 @@ This skill covers **using** `dshana`. Changing this App's own source is a differ
 
 ## Tool manual: `dshana(action, …)`
 
-The host agent side has **exactly this one tool** (one plugin, one same-named tool, actions distinguished by the top-level `action`). Semantics mirror subagent: `open` ≈ `subagent` (created with a task already attached), `reply` ≈ `subagent_reply` (continue the same one by handle), `close` ≈ `subagent_close` (wrap up); `get` and `approve` are specific to this project (subagent has no equivalent).
+The host agent side has **exactly this one tool** (one plugin, one same-named tool, actions distinguished by the top-level `action`). Semantics mirror subagent: `open` ≈ `subagent` (created with a task already attached), `reply` ≈ `subagent_reply` (continue the same one by handle), `close` ≈ `subagent_close` (wrap up); `get`, `approve` and `presets` are specific to this project (subagent has no equivalent).
 
 Inference is initiated from `hana.models` inside the managed runtime, spending host provider quota, and provider credentials stay in the host.
 
@@ -34,11 +35,11 @@ The top-level `action` is required, and each subcommand accepts only its own fie
 
 The `parameters` are generated from one zod definition that also validates the incoming arguments before dispatch (the host itself does not validate tool arguments). A malformed call is refused with every failed field listed — `dshana: invalid arguments` followed by `<path>: [<code>] <message>` lines — rather than being silently coerced; notable cases: an unknown `action`, a key that does not belong to the subcommand, a missing required field, and an `outcome` that is neither `allowed-once` nor `rejected` (a typo there used to fall through to `allowed-once`, i.e. allow).
 
-**Target: exactly one, and which subset is legal varies.** `reply` needs exactly one of `taskId` (handle) / `sessionId` (credential); `close` and `get` need at least one (either resolves to the same session); `approve` is keyed by `approvalId`, which resolves through the parent task, so it needs neither. `open` takes no `sessionId` at all — use `reply` to continue an existing session. These are cross-field rules no argument schema can carry, which is why they stay in prose here rather than in `references/parameters.md`.
+**Target: exactly one, and which subset is legal varies.** `reply` needs exactly one of `taskId` (handle) / `sessionId` (credential); `close` and `get` need at least one (either resolves to the same session); `approve` is keyed by `approvalId`, which resolves through the parent task, so it needs neither; `presets` takes no target at all. `open` takes no `sessionId` — use `reply` to continue an existing session. These are cross-field rules no argument schema can carry, which is why they stay in prose here rather than in `references/parameters.md`.
 
 > To inspect tasks, use the host's built-in task-query tool for the agent (on the model side that is `check_pending_tasks` in this environment): `dshana`'s open/reply create background tasks of this very session, so they already appear in that list; this tool deliberately does not open a second, read-only door for listing.
 
-**Shared fields**: `timeout` is in seconds (App default `defaultTimeoutSec`), and `label` is a display name shown in the host task list and result notifications. `agentPreset` and `reasoningEffort` are pass-through values whose vocabulary this App does not fix. Accepted preset names are DSH's own (empty leaves it to DSH, and `code` is accepted as an alias of `ptc`), and **the preset belongs to `open` alone**: DSH pins it to the session, rejects a differing value on resume as `agent-preset/conflict`, and locks it outright once a turn has started, so `reply` takes no `agentPreset` (a route, by contrast, can be changed on every `reply`, but only as a `provider` + `model` pair — see the next paragraph). Accepted effort levels are the **host's**: the model is the host's, the host validates the level against that model's thinking levels, and an empty value leaves it to DSH. (`supportedEfforts` in `packages/dsh/provider/lib/catalog.ts` intersects the host catalog item's declared levels with the canonical effort vocabulary.)
+**Shared fields**: `timeout` is in seconds (App default `defaultTimeoutSec`), and `label` is a display name shown in the host task list and result notifications. `agentPreset` and `reasoningEffort` are pass-through values whose vocabulary this App does not fix. The accepted names are DSH's own (empty leaves it to DSH), **plus whatever the profile's installed bundles declare** — this App ships two for delegated work (`dshana` / `dshana-ptc`) and a user's own installed bundle can contribute more; `references/presets.md` covers the two shipped names and how to pick among the rest. Pass a name from that roster; `action=presets` reads the live one. **The preset belongs to `open` alone**: DSH pins it to the session, rejects a differing value on resume as `agent-preset/conflict`, and locks it outright once a turn has started, so `reply` takes no `agentPreset` (a route, by contrast, can be changed on every `reply`, but only as a `provider` + `model` pair — see the next paragraph). Accepted effort levels are the **host's**: the model is the host's, the host validates the level against that model's thinking levels, and an empty value leaves it to DSH. (`supportedEfforts` in `packages/dsh/provider/lib/catalog.ts` intersects the host catalog item's declared levels with the canonical effort vocabulary.)
 
 **Choosing the model** (`open` / `reply`): `provider` and `model` name **one route together**, so pass them as a pair — passing only one of the two is refused, never half-resolved. The selection is a tuple (route + reasoning effort) with **omitted parts left unchanged**: a part you pass overrides, a part you omit keeps its current value. On `open`, an omitted route comes from what the calling session is currently using (or the App settings page's 「会话模型」, when switched to a custom entry). On `reply`, an omitted route keeps the session's current one, and `reasoningEffort` may be passed alone to change only the effort. Switching the route on a `reply` is allowed but rarely a good idea: DSH applies it in place for the session, and a route change discards the context cache, so an effort-only change is the cheap edit. `provider` / `model` never change DSH's global default.
 
@@ -90,9 +91,16 @@ Note: session logs are V3 format, and **the App does not read `session_projcache
 - **Turn boundary**: approval notices arrive only **at a turn boundary**. After an `open`/`reply` submission you must **end your turn**; only the next turn receives `app-task-approval-requested` (with the `approvalId`). Idling or re-sending within the same turn hits the host tool callback's 30-second limit (`RPC callback.tools.execute timed out after 30000ms`), and that session may wedge from then on (every later `reply` times out and `close` struggles to get a DSH confirmation); start a new session for such a case instead of retrying in place
 - An approval that is not answered within `approvalTimeoutSec` is rejected automatically (this App defaults to 30 seconds; setting it explicitly to 0 disables the auto-reject). Note that the host's own `timeoutMs` defaults to 0 (which does not disable, i.e. does not time out) — the 30 seconds is an App-side policy
 
+### action=presets: list the selectable agent presets
+
+- Reads the deployment's live roster and prints one line per preset: `id`, display name, `order`, whether it is the default, and the first line of its activation failure when it currently cannot compose a session.
+- **Why it exists**: `agentPreset` on `open` is a pass-through value with no whitelist, and the roster is whatever the profile's installed bundles declare — including presets a user's own bundle contributes. Nothing else exposes that set: a wrong name comes back as `agent-preset/not-found Unknown agent preset: <id>`, which names only what you passed and not the alternatives. Use this action instead of guessing.
+- Read-only, but it needs the managed runtime online (same gate as `get`). It does not create a session and does not change the deployment's default.
+
 ### Typical usage
 
 - Start work: `open` (new task) or `reply` (continue an existing sub-agent; `get` first to confirm)
+- Pick the preset: `presets` when you need to choose `agentPreset` but do not already know the accepted names
 - Read back: `get` (the final conclusion)
 - Stop the bleeding: `close`; out-of-scope permission: `approve` (yield the turn right after submission — the approval notice only arrives next turn)
 

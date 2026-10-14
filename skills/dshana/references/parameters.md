@@ -7,8 +7,8 @@ drift from what the tool accepts: edit that source and run
 
 Field descriptions are the model-facing text, and `Required` mirrors the schema's `required`
 array. Cross-field rules that no argument schema can express — a target must be exactly one of
-`taskId` / `sessionId`, `close` and `get` need at least one, `open` takes no `sessionId` —
-are stated in `SKILL.md`, not here.
+`taskId` / `sessionId`, `close` and `get` need at least one, `open` takes no `sessionId`,
+`presets` takes no target — are stated in `SKILL.md`, not here.
 
 ## `open` — start a DSH sub-agent with a first task
 
@@ -57,3 +57,7 @@ are stated in `SKILL.md`, not here.
 | `outcome` | `allowed-once` \| `rejected` | no | allowed-once = this one operation (default) / rejected |
 | `taskId` | string | no | taskId returned by open/reply (handle path) |
 | `sessionId` | string | no | Session id; passing it means cross-conversation · `pattern` = `^[sS][eE][sS][sS][iI][oO][nN]-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$` |
+
+## `presets` — list the agent presets this deployment offers
+
+Takes no fields.

@@ -1,0 +1,56 @@
+- insert:
+    - id: preset-dshana-ptc
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: dshana-ptc
+        name: PTC 特调
+        description: DSHana 特调 PTC 模式，不带交互与 shell
+        order: 6
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              suffix: >-
+                Your working directory is {{cwd}}. Your reply is read by the delegating agent,
+                which does not see your transcript, tool output, or reasoning: make it
+                self-contained. Lead with the outcome, then the facts it needs to act on — paths,
+                exact error text, counts. Omit restated tasks, narration, and self-assessment.
+                State what failed and what you already tried.
+              prefix: You are a file-scoped agent powered by the {{model}} model.
+          - id: agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+          - id: tool-fs-search
+            name: '@deepseek-ai/dsh-tool-fs-search'
+            config:
+              sampleOverCapGlobResults: false
+          - id: tool-todo
+            name: '@deepseek-ai/dsh-tool-todo'
+            config:
+              allowParallelInProgress: true
+          - id: present
+            name: '@deepseek-ai/dsh-tool-present'
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024
+          - id: tool-presentation
+            name: '@deepseek-ai/dsh-agent-tool-presentation'
+            config:
+              mode: ptc

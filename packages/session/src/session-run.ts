@@ -35,6 +35,7 @@ import { callerPlanDeps, resolveCallerPlan } from "@dshana/models/caller-model.t
 import { serviceBase } from "@dshana/runtime/service-base.ts";
 import { rpcViaControl, invokeControl } from "@dshana/runtime/controller.ts";
 import { resolveTaskTimeoutSec, resolveApprovalTimeoutMs, cancelSessionWork } from "./cancel-chain.ts";
+import { readPresetRoster, findPreset, brokenReason, assertPresetInRoster, brokenPresetError } from "./preset-roster.ts";
 
 /** 取错误的可读文本。catch 到的值类型未知，字段访问一律经这里。 */
 const errText = (e: unknown): string => ((e as any)?.message as string) || String(e);
@@ -57,14 +58,14 @@ export function normalizeCreateSend({ action, input }: { action?: unknown; input
     if (!sessionId) throw new Error("reply is missing a target session (pass a taskId handle or a sessionId credential)");
     if (!isValidSessionId(sessionId)) throw new Error("malformed sessionId (expected session-<UUID>): " + sessionId);
   }
-  // agent 预设：只在 create 生效——DSH 把预设钉在会话上（resume 带不同的值会被拒为
-  // agent-preset/conflict），会话开跑后还会彻底锁定。code → ptc；空值不传（DSH 默认）。
+  // agent preset：只在 create 生效——DSH 把预设钉在会话上（resume 带不同的值会被拒为
+  // agent-preset/conflict），会话开跑后还会彻底锁定。值原样透传（不识别别名：任何改写都会
+  // 让一个真实存在的同名 preset 变得不可达），空值不传（DSH 默认）。
   const askedPreset = String((input && input.agentPreset) || "").trim();
   if (act !== "create" && askedPreset) {
     throw new Error("reply cannot change the preset (the preset is decided by open; DSH only allows switching before the session starts running)");
   }
-  let preset = act === "create" ? askedPreset || null : null;
-  if (preset === "code") preset = "ptc";
+  const preset = act === "create" ? askedPreset || null : null;
   // 推理强度/模型：只取工具显式值（档位词汇原样透传，可接受面归宿主、按模型 thinking levels 校验）；空值不传（DSH 默认处理）
   const effort = String((input && input.reasoningEffort) || "").trim() || null;
   const provider = String((input && input.provider) || "").trim() || null;
@@ -419,6 +420,27 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
     let taskId: string | null = null;
     let sessionId: string | null = null;
     try {
+      // ⓪ agent preset 预检（仅 create；在建宿主任务之前）
+      //   不做这步的代价：错名字会先建一条宿主任务，再在第 ④ 步建会话时才撞上
+      //   `agent-preset/not-found`，于是留一条 failed 的任务记录，而错误里只有传进去的那个名字。
+      //   两层校验：名字要在 roster 上（运行期候选造 zod enum，报错自带候选），且必须能挂载
+      //   （broken 的项报它挂不起来的原因，不说名字不存在）。
+      //   fail-open：读不到 roster 就放行——一次读取抖动不该把合法名字一起拒掉；真错的
+      //   名字由 DSH 自己拒（同一条 not-found，只是没有候选）。
+      if (parsed.agentPreset) {
+        let rows: Awaited<ReturnType<typeof readPresetRoster>> | null = null;
+        try {
+          rows = await readPresetRoster(ctx);
+        } catch (e) {
+          logLine(log, "[dsh-session][warn] preset roster 读取失败（放行，交给 DSH 判定）：" + errText(e));
+        }
+        if (rows) {
+          assertPresetInRoster(parsed.agentPreset, rows);
+          const broken = brokenReason(findPreset(rows, parsed.agentPreset));
+          if (broken) throw brokenPresetError(parsed.agentPreset, broken);
+        }
+      }
+
       // ① Hana task 创建（callToken 专用一次；taskId 是稳定句柄）
       let task;
       try {
