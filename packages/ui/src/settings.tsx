@@ -426,7 +426,7 @@ function App() {
       >
         <SettingRow
           label="模式"
-          hint="复用调用方 = 用发起这次调用的那张角色卡配的模型（缺省）；自定义模型 = 固定用下面这一条。"
+          hint="复用调用方 = 用发起这次调用的会话当前在用的模型与推理强度（缺省）；自定义模型 = 固定用下面这一条。"
           layout="stacked"
           control={<Select ariaLabel="会话模型模式" value={sessionMode} options={SESSION_MODES} onChange={setSessionMode} />}
         />

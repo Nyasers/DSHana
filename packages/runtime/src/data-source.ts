@@ -65,7 +65,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // GET /dshana/settings。本表的完整缺省单点就是这里。
   forceFollowFaces: [...FORCE_FOLLOW_FACES],
 });
-/** 会话模型模式：caller = 按调用方角色卡（缺省），custom = 用固定的一条。 */
+/** 会话模型模式：caller = 跟随调用方会话当前在用的那条（缺省），custom = 用固定的一条。 */
 export const SESSION_MODEL_MODES = Object.freeze(["caller", "custom"]);
 
 /** DSH 自己的默认数据目录（shared 的「DSH 默认目录」候选）。 */
@@ -395,20 +395,4 @@ export async function currentSource() {
   const dataDir = appDataDir();
   const st = await dataSources().read();
   return sourceOf(st.settings, dataDir);
-}
-
-/**
- * 容错取当前源的 DSH_HOME（只读查询路径用：list/get 不应因设置文件问题完全不可用）。
- * 无 App 运行包（离线/单测）或设置读取失败时回落内置独立目录——与旧行为一致。
- */
-export async function currentDshHome(dataDir) {
-  const dir = dataDir || appDataDir();
-  const app = getAppRuntime();
-  if (!dir || !app || !app.ctx) return privateHomeOf(dir || "");
-  try {
-    const st = await dataSources().read();
-    return sourceOf(st.settings, dir).home;
-  } catch {
-    return privateHomeOf(dir);
-  }
 }

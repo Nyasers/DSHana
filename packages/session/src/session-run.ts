@@ -27,7 +27,6 @@
 // packages/tools/src/actions/reply.ts 的 submit 调用处完成。
 import { isAbsolute } from "node:path";
 import { appCtx, appDataDir } from "@dshana/runtime/app-runtime.ts";
-import { currentDshHome } from "@dshana/runtime/data-source.ts";
 import { ensureManagedRuntime } from "@dshana/runtime/managed-runtime.ts";
 import { nextRpcId } from "@dshana/shared/rpc-envelope.ts";
 import { isValidSessionId, dshMetadataFor } from "@dshana/shared/task-binding.ts";
@@ -451,6 +450,10 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
       }
       taskId = task && task.taskId;
       if (!taskId) throw new Error("ctx.tasks.create did not return taskId (host contract violation)");
+      // 调用方会话的稳定坐标由宿主写在任务记录里（parentSessionId）：它同时是归属校验的
+      // 事实源。工具面递过来的只有 context.sessionPath（一个路径），而 session:context 的
+      // 归属判定只认 sessionId/legacySessionPath——所以跟随调用方要用这个 id，不绕路径反查。
+      const callerSessionId = typeof (task as any)?.parentSessionId === "string" ? (task as any).parentSessionId : "";
 
       // ② 受管 runtime 就绪（单例；首启含 DSH boot）
       try {
@@ -481,13 +484,12 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
       // 不碰 DSH 的全局默认。
       //
       // · 路由（provider+model）：请求给了就用请求的；没给时 create 由 caller-plan 算（App 设置 /
-      //   调用方角色卡），reply 沿用会话当前的那条。换路由本身是允许的（DSH 侧就地装上会话选择），
+      //   调用方会话当前在用的那条），reply 沿用会话当前的那条。换路由本身是允许的（DSH 侧就地装上会话选择），
       //   代价是丢上下文缓存，所以一般不推荐。
       // · 推理强度：请求给了就用请求的，没给就沿用会话当前的。单独改强度不换路由，没有缓存代价。
       // 两者都拿不到时什么都不带，交给 DSH 自己的选择。
       const halfError = halfModelSelectionError(parsed);
       if (halfError) throw halfError;
-      const dshHome = await currentDshHome(dataDir);
       const askedRoute = requestedRoute(parsed);
       const askedEffort = requestedEffort(parsed);
       // reply 的缺省位从会话当前选择来：读它要 runtime 在线（与 establishSession 的 list 同一份
@@ -498,7 +500,7 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
       let routeFrom: "request" | "caller" | "session" | null = askedRoute ? "request" : null;
       let baseEffort = askedEffort;
       if (!route && parsed.action === "create") {
-        const plan = await resolveCallerPlan(parsed, callerPlanDeps(ctx, dshHome, dataDir), (m) =>
+        const plan = await resolveCallerPlan(parsed, callerPlanDeps(ctx, dataDir, callerSessionId), (m) =>
           logLine(log, "[dsh-session] 会话模型：" + m),
         );
         if (plan.kind === "select") {
@@ -529,7 +531,7 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
         // 只给了强度，又拿不到可搭的路由：不静默丢（强度落不到会话上），也不编一条路由。
         throw new Error(
           "reasoningEffort was given but no model route is available for this session: pass provider+model together, " +
-            "or configure the session model on the App settings page / the calling agent card",
+            "or configure a custom session model on the App settings page",
         );
       }
 
