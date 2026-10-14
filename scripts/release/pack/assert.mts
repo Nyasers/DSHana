@@ -64,7 +64,7 @@ export function assertCordisArtifacts(cordisDir, version) {
 }
 
 /**
- * 组合层包（@dshana/dsh-app）的产物断言：两个入口与四份组合文档都得在，版本与主 package.json 同批
+ * 组合层包（@dshana/dsh-app）的产物断言：两个入口与六份组合文档都得在，版本与主 package.json 同批
  * 由 derive/version 同步（pnpm version 发版流程）。它是 profile 层列里被选中的那一层——缺一件
  * 就 boot 不起来或少一半行，所以 fail-closed。
  * @param bundleDir 组合层包产物目录（.cache/bundle/dsh-app）
@@ -78,6 +78,8 @@ export function assertBundleArtifacts(bundleDir, version) {
     "presets/ptc.patch.yml",
     "presets/minimal.patch.yml",
     "presets/cordis.patch.yml",
+    "presets/dshana.patch.yml",
+    "presets/dshana-ptc.patch.yml",
     "lib/index.js",
     "lib/startup.js",
   ];
@@ -98,7 +100,7 @@ export function assertBundleArtifacts(bundleDir, version) {
   if (j.name !== "@dshana/dsh-app") {
     throw new Error(`组合层包名字不对：${j.name}（层列钉住的是 @dshana/dsh-app）`);
   }
-  console.log(`[pack] 组合层包在位（@dshana/dsh-app = ${version}，2 入口 + 5 份组合文档）`);
+  console.log(`[pack] 组合层包在位（@dshana/dsh-app = ${version}，2 入口 + 7 份组合文档）`);
 }
 
 /**

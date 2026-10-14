@@ -19,7 +19,9 @@
         "./presets/standard.patch.yml",
         "./presets/ptc.patch.yml",
         "./presets/minimal.patch.yml",
-        "./presets/cordis.patch.yml"
+        "./presets/cordis.patch.yml",
+        "./presets/dshana.patch.yml",
+        "./presets/dshana-ptc.patch.yml"
       ]
     }
   },

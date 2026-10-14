@@ -8,7 +8,7 @@
 //   lib/startup.js          web-startup 提供方（--host / --port / --trusted-host / --no-open）
 //   cordis.patch.yml        本层的组合补丁（行、与上游两份的差异见该文件头）
 //   presets/*.patch.yml     随发行版交付的 preset 声明
-//   package.json            dsh.bundle.patch 指向上面 5 份
+//   package.json            dsh.bundle.patch 指向上面 7 份
 // 依赖一律**外部化**：lib 里保留原生 import，树的解析代由本包 package.json 的 dependencies 声明，
 // 不内联也不打包——补丁里那些 name 行能不能解析，正是靠那份声明说了算。
 //
