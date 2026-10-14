@@ -8,35 +8,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-// 读 DSH_HOME/settings.yaml 的 agent-default-model（行级解析，零依赖）——
-// dsh 默认模型：**用户手设过**才有这一格（DSH 自带的模型页随两个官方 LLM adapter 一起停掉，
-// 推理路由一律由宿主提供，所以这格要么是用户手设的、要么是 model-default-guard 对账写回的可服务
-// 路由）。工具建的会话不依赖它：模型随会话请求带上，由 App 按调用方算。
-// 返回 { provider, model } 或 null。
-export function readDshDefaultModel(dshHome: string): { provider: string; model?: string } | null {
-  try {
-    const f = join(dshHome, "settings.yaml");
-    if (!existsSync(f)) return null;
-    const lines = readFileSync(f, "utf8").split(/\r?\n/);
-    let inBlock = false;
-    const out: Record<string, string> = {};
-    for (const line of lines) {
-      if (/^agent-default-model\s*:/.test(line)) {
-        inBlock = true;
-        continue;
-      }
-      if (!inBlock) continue;
-      const m = line.match(/^(\s+)([A-Za-z]+)\s*:\s*(.*)$/);
-      if (!m) break; // 无缩进或非键行 = 出块（子项缩进 ≥1 空格均视为块内，2 空格标准缩进正常解析）
-      const k = m[2];
-      const v = m[3].trim();
-      if (v) out[k] = v.replace(/^['"]|['"]$/g, "");
-    }
-    return out.provider ? (out as { provider: string; model?: string }) : null;
-  } catch {
-    return null;
-  }
-}
+// 注意：本模块**不读 DSH 的默认模型**。那份值的正主是 DSH 的 settings 段 `agent-default-model`，
+// 读写都经 DSH 自己的 settings 服务（见 packages/models/src/model-settings.ts）；
+// 而 DSH_HOME/settings.yaml 在本版 DSH 里已不存在（settings 服务启动时把它整份迁进 profile，
+// 并把文档改名为 settings.yaml.imported，见上游 settings/settings 的 importLegacyDocument）。
+// 任何对该文件的读都不是那条路的事实源，也不该由本模块承担。
 
 // reasoningEffort 解析（没有全局配置，只接受工具显式参数，无配置回退；
 // 不传时由 dsh 默认处理）。返回显式值或 null。

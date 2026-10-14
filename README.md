@@ -33,7 +33,7 @@ App 级设置由 App 自绘设置页承载，在宿主设置区渲染，不依�
 
 DSH 数据固定落在 App 内置独立目录，开箱即用；共享或切换已有 DSH 目录暂不提供。
 
-**无需配置 API Key / 模型**：推理经受管 runtime 内宿主 `ctx.models` 发起，provider 凭据不进 DSH 进程。DSH 自己那格默认模型（`DSH_HOME/settings.yaml` 的 `agent-default-model`）由 DSH 自己与对账维护，App 设置页不经手；`dshana` 的 `provider` / `model` / `reasoningEffort` 参数可显式覆盖单次任务。
+**无需配置 API Key / 模型**：推理经受管 runtime 内宿主 `ctx.models` 发起，provider 凭据不进 DSH 进程。DSH 自己那格默认模型（settings 段 `agent-default-model`）由 DSH 自己与对账维护，App 设置页不经手；`dshana` 的 `provider` / `model` / `reasoningEffort` 参数可显式覆盖单次任务。
 
 ## 主题
 

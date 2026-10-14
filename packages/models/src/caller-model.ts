@@ -1,21 +1,19 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// packages/models/src/caller-model.ts — 工具建的 DSH 会话用哪个模型（按调用方角色卡补）
+// packages/models/src/caller-model.ts — 工具建的 DSH 会话用哪个模型（跟着调用方走）
 //
-// 会话的模型跟着「谁开的」走：open 建的会话，缺省模型取调用方那张角色卡配的 models.chat，
-// 与宿主 subagent 拿上一级的模型是同一个意思。App 设置里可以改成「自定义模型」（固定一条），
-// 那时它优先——它是针对本 App 会话的更具体的选择。四种情况不补：
+// 会话的模型跟着「谁开的」走：open 建的会话，缺省模型取调用方**当前实际在用的**那条
+// （调用方会话的会话选择：provider + model + 推理强度），与宿主 subagent 拿上一级的模型
+// 是同一个意思。App 设置里可以改成「自定义模型」（固定一条），那时它优先——它是针对本
+// App 会话的更具体的选择。三种情况不补：
 //   · 工具入参已经显式给了 provider/model（显式照旧）；
 //   · App 设置是「自定义模型」且那条填好了（用它）；
-//   · DSH settings 里已经有用户手设的默认模型（那是用户的话，对所有会话生效）；
-//   · 调用方角色卡读不到，或它配的模型不在宿主目录里（补了也跑不动，让报错点到那个名字）。
+//   · 调用方会话读不到，或它用的模型不在宿主目录里（补了也跑不动，让报错点到那个名字）。
 //
-// 只在 create 上补：send 的会话已经带着自己的选择（会话内的 durable 选择），不该因为换个
-// agent 来续话就把模型换掉。
+// 为什么读会话而不是角色卡：角色卡是**静态配置**，会话是**实际在用的**——会话开跑后
+// 用户可能在会话里换过模型，那份变更只记在会话自己的事件流里，角色卡上读不到。
 
-import { readCallerCardModel, type CardModel } from "./agent-models.ts";
-import { readDshDefaultModel } from "@dshana/runtime/config.ts";
 import { readSettingsSync } from "@dshana/runtime/data-source.ts";
 import { errText } from "@dshana/shared/err-text.ts";
 import { servedHas, servedModels, type ServedModel } from "./host-models.ts";
@@ -36,7 +34,14 @@ export function pickOf(input: { provider?: unknown; model?: unknown } | null | u
 /** 会话模型的一次决策：补哪一条，或者为什么不补。 */
 export type CallerPlan =
   | { kind: "select"; provider: string; model: string; reasoningEffort?: string }
-  | { kind: "skip"; reason: "explicit" | "user-default" | "no-card" | "card-not-served" | "custom-not-served" };
+  | { kind: "skip"; reason: "explicit" | "no-session" | "session-not-served" | "custom-not-served" };
+
+/** 调用方会话当前的选择（provider/model 必填，推理强度可选）。 */
+export interface SessionSelection {
+  provider: string;
+  model: string;
+  reasoningEffort?: string;
+}
 
 /** 一条会话模型设置（App 设置页的 global.sessionModel*）。 */
 export interface SessionModelSetting {
@@ -64,16 +69,15 @@ export function sessionModelSettingOf(settings: unknown): SessionModelSetting {
 }
 
 /**
- * 工具建的会话该不该按调用方角色卡补模型（纯函数）。
+ * 工具建的会话该不该补模型、补哪一条（纯函数）。
  * @param args - explicit：工具入参显式给的；appSetting：App 设置里的会话模型；
- *   stored：DSH settings 里用户手设的；card：调用方角色卡配的；served：宿主目录
+ *   session：调用方会话当前的选择；served：宿主目录
  * @returns 决策（`select` 才随请求带上）
  */
 export function planCallerSelection(args: {
   explicit?: { provider?: unknown; model?: unknown } | null;
   appSetting?: SessionModelSetting | null;
-  stored?: { provider?: unknown; model?: unknown } | null;
-  card?: CardModel | null;
+  session?: SessionSelection | null;
   served: readonly ServedModel[];
 }): CallerPlan {
   if (pickOf(args.explicit)) return { kind: "skip", reason: "explicit" };
@@ -89,27 +93,33 @@ export function planCallerSelection(args: {
     }
     return { kind: "skip", reason: "custom-not-served" };
   }
-  if (pickOf(args.stored)) return { kind: "skip", reason: "user-default" };
-  const card = args.card;
-  if (!card || !card.provider || !card.model) return { kind: "skip", reason: "no-card" };
-  if (!servedHas(args.served, card)) return { kind: "skip", reason: "card-not-served" };
-  return { kind: "select", provider: card.provider, model: card.model };
+  // caller 模式：跟随调用方会话实际在用的那条。读不到（或它不在宿主目录里）就不补——
+  // 不换成别的来源：跟随调用方是这一模式的实义，拿角色卡上的静态配置充数就是答非所问。
+  const session = args.session;
+  if (!session) return { kind: "skip", reason: "no-session" };
+  if (!servedHas(args.served, session)) return { kind: "skip", reason: "session-not-served" };
+  return {
+    kind: "select",
+    provider: session.provider,
+    model: session.model,
+    ...(session.reasoningEffort ? { reasoningEffort: session.reasoningEffort } : {}),
+  };
 }
 
 /** 读事实的边界（可注入：单测不碰宿主面）。 */
 export interface CallerPlanDeps {
-  card?: () => Promise<CardModel | null>;
   /** App 设置里的会话模型（缺省 = 复用调用方）。 */
   setting?: () => SessionModelSetting;
-  stored?: () => { provider?: string; model?: string } | null;
+  /** 调用方会话当前的选择。 */
+  session?: () => Promise<SessionSelection | null>;
   served?: () => Promise<ServedModel[]>;
 }
 
 /**
  * 取齐决策要的几件事实，给出决策。每一步取数失败都只记一行、按最保守的结果收场：
- * 设置/默认模型读不到 → 当成没设，目录取不到 → 当成空目录，角色卡取不到 → 当成没配。
+ * 设置读不到 → 当成没设，目录取不到 → 当成空目录，会话读不到 → 当成没有来源（不补）。
  * @param explicit - 工具入参显式给的 provider/model
- * @param deps - 取数面（缺省：App 设置 / bus 读角色卡 / settings.yaml 读用户默认 / ctx.models.list）
+ * @param deps - 取数面（缺省：App 设置 / 调用方会话 / ctx.models.list）
  * @param note - 一行日志出口
  * @returns 决策
  */
@@ -128,23 +138,6 @@ export async function resolveCallerPlan(
     }
   }
   const custom = setting && setting.mode === "custom" ? setting : null;
-  let stored: { provider?: string; model?: string } | null = null;
-  if (!custom && typeof deps.stored === "function") {
-    try {
-      stored = deps.stored();
-    } catch (e) {
-      note("读 DSH 设置里的默认模型失败（当成没设）：" + errText(e));
-    }
-  }
-  const needCard = !custom && !pickOf(stored);
-  let card: CardModel | null = null;
-  if (needCard && typeof deps.card === "function") {
-    try {
-      card = await deps.card();
-    } catch (e) {
-      note("读调用方角色卡的模型失败（本次不补）：" + errText(e));
-    }
-  }
   let served: ServedModel[] = [];
   if (typeof deps.served === "function") {
     try {
@@ -153,9 +146,17 @@ export async function resolveCallerPlan(
       note("读宿主模型目录失败（本次不补）：" + errText(e));
     }
   }
-  const plan = planCallerSelection({ explicit, appSetting: setting, stored, card, served });
-  if (plan.kind === "skip" && plan.reason === "card-not-served" && card) {
-    note("调用方角色卡配的模型不在宿主目录里（本次不补）：" + card.provider + "/" + card.model);
+  let session: SessionSelection | null = null;
+  if (!custom && typeof deps.session === "function") {
+    try {
+      session = await deps.session();
+    } catch (e) {
+      note("读调用方会话的模型失败（本次不补）：" + errText(e));
+    }
+  }
+  const plan = planCallerSelection({ explicit, appSetting: setting, session, served });
+  if (plan.kind === "skip" && plan.reason === "session-not-served" && session) {
+    note("调用方会话用的模型不在宿主目录里（本次不补）：" + session.provider + "/" + session.model);
   }
   if (plan.kind === "skip" && plan.reason === "custom-not-served" && custom) {
     note("设置里自定义的会话模型不在宿主目录里（本次不补）：" + custom.provider + "/" + custom.model);
@@ -164,20 +165,50 @@ export async function resolveCallerPlan(
 }
 
 /**
- * 运行期取数面：App 设置（会话模型）+ bus 读调用方角色卡 + settings.yaml 读用户默认 + 目录。
+ * 运行期取数面：App 设置（会话模型）+ 调用方会话当前选择 + 宿主目录。
  * @param ctx - 宿主 App ctx
- * @param dshHome - 当前源的 DSH_HOME（取不到时当成用户层为空）
  * @param dataDir - App 数据目录（读 App 设置文件）
+ * @param callerSessionId - 调用方会话 id（宿主任务记录的 parentSessionId）
  */
-export function callerPlanDeps(ctx: unknown, dshHome: string | null | undefined, dataDir?: string | null): CallerPlanDeps {
+export function callerPlanDeps(ctx: unknown, dataDir?: string | null, callerSessionId?: string | null): CallerPlanDeps {
   return {
     setting: () => sessionModelSettingOf(dataDir ? readSettingsSync(dataDir) : {}),
-    card: () => readCallerCardModel(ctx),
-    // dshHome 取不到（数据源未定）时当成用户层为空：不补，不是错误
-    stored: () => (dshHome ? readDshDefaultModel(dshHome) : null),
+    session: () => readCallerSessionSelection(ctx, callerSessionId),
     served: async () => {
       const listed: any = await (ctx as any)?.models?.list?.();
       return servedModels(listed && listed.models);
     },
   };
+}
+
+/**
+ * 读调用方会话当前的选择（provider + model + 推理强度）。
+ *
+ * 「跟随调用方」跟的是**实际在用的**那条，不是角色卡上的静态配置：会话开跑后用户可能在
+ * 会话里换过模型，那份变更只记在会话自己的事件流里，角色卡上读不到。
+ *
+ * 经宿主的 session:context 读——那是为「读某个会话当前状态」造的口，一次把 model 与
+ * thinkingLevel 都给全；自己解析会话文件要拿「发生过什么」的流水反推「现在是什么」，
+ * 两串事件（model_change / thinking_level_change）各自独立，反推容易错。调用方会话不属于
+ * 本 App，所以要 scope:"all" 与 app/sessions.read。
+ *
+ * 寻址用 sessionId：session:context 的归属判定走会话 manifest，它只认 sessionId 或
+ * legacySessionPath（一条 path 单独交出去解析不出来）。调用方会话的 id 就写在宿主任务记录的
+ * parentSessionId 里（见 session-run 的取数），不用另找。
+ *
+ * 读不到一律 null（不抛）：没有 id、未授权、会话不在，都归为「调用方当前选择未知」，
+ * 由调用方按不补收场（不换来源充数）。
+ */
+async function readCallerSessionSelection(ctx: unknown, sessionId?: string | null): Promise<SessionSelection | null> {
+  const id = String(sessionId || "").trim();
+  if (!id) return null;
+  const bus = (ctx as any)?.bus;
+  if (!bus || typeof bus.request !== "function") return null;
+  const res: any = await bus.request("session:context", { sessionId: id, scope: "all" });
+  const model = res && res.model;
+  const provider = model && typeof model.provider === "string" ? model.provider.trim() : "";
+  const modelId = model && typeof model.id === "string" ? model.id.trim() : "";
+  if (!provider || !modelId) return null;
+  const effort = typeof res.thinkingLevel === "string" ? res.thinkingLevel.trim() : "";
+  return { provider, model: modelId, ...(effort ? { reasoningEffort: effort } : {}) };
 }

@@ -13,6 +13,7 @@
     "app/session.start-turn",
     "app/models.infer",
     "app/agents.read",
+    "app/sessions.read",
     "app/resources.read",
     "app/runtime.execute",
     "app/runtime.local-machine",

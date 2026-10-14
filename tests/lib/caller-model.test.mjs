@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/lib/caller-model.test.mjs — 工具建的会话按调用方角色卡补模型（packages/models/src/caller-model.ts）
+// tests/lib/caller-model.test.mjs — 工具建的会话跟着调用方（packages/models/src/caller-model.ts）
 //
-// 决策的优先序是这一段的全部内容：显式入参 > 用户设的默认 > 调用方角色卡（且它得在宿主目录里）。
+// 决策的优先序是这一段的全部内容：显式入参 > App 设置的自定义那条 > 调用方会话实际在用的
+// （且它得在宿主目录里）。**DSH 自己的默认模型不参与**：那是另一面（DSH 侧全局选择），
+// 本 App 不经手也不据它改主意。
+// 会话读不到（或它用的那条不在目录里）就不补——不换别的来源充数：跟随调用方是这一模式的
+// 实义，拿角色卡上的静态配置顶上就是答非所问。
 // resolveCallerPlan 另外守一件事：任何一步取数失败都只记一行、按最保守的结果收场（不补），
-// 不能因为读不到角色卡就让整个提交链失败。
+// 不能因为读不到就阻断整个提交链。
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { pickOf, planCallerSelection, resolveCallerPlan, sessionModelSettingOf } from "@dshana/models/caller-model.ts";
@@ -14,7 +18,7 @@ const SERVED = [
   { provider: "deepseek", id: "deepseek-flash" },
   { provider: "agnes", id: "agnes-3.0-flash" },
 ];
-const CARD = { provider: "deepseek", model: "deepseek-flash" };
+const SESSION = { provider: "agnes", model: "agnes-3.0-flash", reasoningEffort: "high" };
 const notes = () => {
   const lines = [];
   return { lines, note: (m) => lines.push(m) };
@@ -29,45 +33,40 @@ test("pickOf: provider/model 都非空才算数", () => {
 });
 
 test("显式入参在就不补（显式照旧，它自己会成为 DSH 新默认）", () => {
-  assert.deepEqual(planCallerSelection({ explicit: { provider: "a", model: "b" }, card: CARD, served: SERVED }), {
+  assert.deepEqual(planCallerSelection({ explicit: { provider: "a", model: "b" }, session: SESSION, served: SERVED }), {
     kind: "skip",
     reason: "explicit",
   });
 });
 
-test("用户设了默认就不补（那是用户的话，对所有会话生效）", () => {
-  assert.deepEqual(
-    planCallerSelection({ stored: { provider: "gemini", model: "gemini-3-pro-preview" }, card: CARD, served: SERVED }),
-    { kind: "skip", reason: "user-default" },
-  );
-  // 用户设的那条即使已经不可服务，也不该由这里改（对账是 model-default-guard 的事）
-  assert.deepEqual(
-    planCallerSelection({ stored: { provider: "gone", model: "gone" }, card: CARD, served: SERVED }),
-    { kind: "skip", reason: "user-default" },
-  );
-});
-
-test("没有用户默认 → 用调用方角色卡的模型", () => {
-  assert.deepEqual(planCallerSelection({ card: CARD, served: SERVED }), {
-    kind: "select",
-    provider: "deepseek",
-    model: "deepseek-flash",
-  });
-  assert.deepEqual(planCallerSelection({ card: { provider: "agnes", model: "agnes-3.0-flash" }, served: SERVED }), {
+test("没有显式入参时 → 用调用方会话当前的选择（含推理强度）", () => {
+  assert.deepEqual(planCallerSelection({ session: SESSION, served: SERVED }), {
     kind: "select",
     provider: "agnes",
     model: "agnes-3.0-flash",
+    reasoningEffort: "high",
   });
+  // 会话没带强度时：这一格不传（由 DSH 决定）
+  assert.deepEqual(
+    planCallerSelection({ session: { provider: "agnes", model: "agnes-3.0-flash" }, served: SERVED }),
+    { kind: "select", provider: "agnes", model: "agnes-3.0-flash" },
+  );
 });
 
-test("角色卡读不到 / 它配的模型不在目录里 → 不补（让报错点到那个名字）", () => {
-  assert.deepEqual(planCallerSelection({ card: null, served: SERVED }), { kind: "skip", reason: "no-card" });
-  assert.deepEqual(planCallerSelection({ served: SERVED }), { kind: "skip", reason: "no-card" });
+test("调用方会话读不到 → 不补（不换别的来源充数）", () => {
+  assert.deepEqual(planCallerSelection({ session: null, served: SERVED }), { kind: "skip", reason: "no-session" });
+  assert.deepEqual(planCallerSelection({ served: SERVED }), { kind: "skip", reason: "no-session" });
+});
+
+test("调用方会话用的模型不在目录里 → 不补（让报错点到那个名字）", () => {
   assert.deepEqual(
-    planCallerSelection({ card: { provider: "deepseek", model: "deepseek-v4-flash" }, served: SERVED }),
-    { kind: "skip", reason: "card-not-served" },
+    planCallerSelection({ session: { provider: "gone", model: "gone" }, served: SERVED }),
+    { kind: "skip", reason: "session-not-served" },
   );
-  assert.deepEqual(planCallerSelection({ card: CARD, served: [] }), { kind: "skip", reason: "card-not-served" });
+  assert.deepEqual(planCallerSelection({ session: SESSION, served: [] }), {
+    kind: "skip",
+    reason: "session-not-served",
+  });
 });
 
 test("sessionModelSettingOf: 模式只认 caller/custom，custom 填不全就当 caller", () => {
@@ -93,31 +92,30 @@ test("sessionModelSettingOf: 模式只认 caller/custom，custom 填不全就当
   assert.equal(sessionModelSettingOf({ sessionModelMode: "fixed", sessionModelProvider: "a", sessionModelModel: "b" }).mode, "caller");
 });
 
-test("App 设置选「自定义模型」时：它优先于角色卡与用户默认", () => {
-  const appSetting = { mode: "custom", provider: "agnes", model: "agnes-3.0-flash" };
+test("App 设置选「自定义模型」时：它优先于调用方会话", () => {
+  const appSetting = { mode: "custom", provider: "deepseek", model: "deepseek-flash" };
   assert.deepEqual(
     planCallerSelection({
       appSetting,
-      stored: { provider: "gemini", model: "gemini-3-pro-preview" },
-      card: CARD,
+      session: SESSION,
       served: SERVED,
     }),
-    { kind: "select", provider: "agnes", model: "agnes-3.0-flash" },
+    { kind: "select", provider: "deepseek", model: "deepseek-flash" },
   );
   // 显式入参仍然最高
   assert.deepEqual(
     planCallerSelection({ explicit: { provider: "a", model: "b" }, appSetting, served: SERVED }),
     { kind: "skip", reason: "explicit" },
   );
-  // 自定义那条不在目录里 → 不补（不静默滑到角色卡，让报错点到设置里那条）
+  // 自定义那条不在目录里 → 不补（不静默滑到会话或角色卡，让报错点到设置里那条）
   assert.deepEqual(
-    planCallerSelection({ appSetting: { mode: "custom", provider: "deepseek", model: "deepseek-v4-flash" }, card: CARD, served: SERVED }),
+    planCallerSelection({ appSetting: { mode: "custom", provider: "deepseek", model: "deepseek-v4-flash" }, session: SESSION, served: SERVED }),
     { kind: "skip", reason: "custom-not-served" },
   );
-  // caller 模式照旧走角色卡
+  // caller 模式跟着调用方会话走
   assert.deepEqual(
-    planCallerSelection({ appSetting: { mode: "caller", provider: "agnes", model: "agnes-3.0-flash" }, card: CARD, served: SERVED }),
-    { kind: "select", provider: "deepseek", model: "deepseek-flash" },
+    planCallerSelection({ appSetting: { mode: "caller", provider: "deepseek", model: "deepseek-flash" }, session: SESSION, served: SERVED }),
+    { kind: "select", provider: "agnes", model: "agnes-3.0-flash", reasoningEffort: "high" },
   );
 });
 
@@ -125,7 +123,6 @@ test("自定义那条带推理强度时：随选择一起交出；不填就不�
   assert.deepEqual(
     planCallerSelection({
       appSetting: { mode: "custom", provider: "agnes", model: "agnes-3.0-flash", reasoningEffort: "high" },
-      card: CARD,
       served: SERVED,
     }),
     { kind: "select", provider: "agnes", model: "agnes-3.0-flash", reasoningEffort: "high" },
@@ -139,29 +136,23 @@ test("自定义那条带推理强度时：随选择一起交出；不填就不�
   );
 });
 
-test("resolveCallerPlan: 自定义模式不读角色卡与用户默认", async () => {
+test("resolveCallerPlan: 自定义模式不读会话", async () => {
   const { lines, note } = notes();
-  let cardReads = 0;
-  let storedReads = 0;
+  let sessionReads = 0;
   const plan = await resolveCallerPlan(
     null,
     {
       setting: () => ({ mode: "custom", provider: "agnes", model: "agnes-3.0-flash" }),
-      card: async () => {
-        cardReads += 1;
-        return CARD;
-      },
-      stored: () => {
-        storedReads += 1;
-        return null;
+      session: async () => {
+        sessionReads += 1;
+        return SESSION;
       },
       served: async () => SERVED,
     },
     note,
   );
   assert.deepEqual(plan, { kind: "select", provider: "agnes", model: "agnes-3.0-flash" });
-  assert.equal(cardReads, 0);
-  assert.equal(storedReads, 0);
+  assert.equal(sessionReads, 0);
   assert.deepEqual(lines, []);
 });
 
@@ -170,11 +161,8 @@ test("resolveCallerPlan: 取数面出问题只记一行，按不补收场", asyn
   const plan = await resolveCallerPlan(
     null,
     {
-      stored: () => {
-        throw new Error("settings.yaml 读不到");
-      },
-      card: () => {
-        throw new Error("agent:config 被拒");
+      session: () => {
+        throw new Error("session:context 被拒");
       },
       served: async () => {
         throw new Error("models.list 失败");
@@ -182,41 +170,29 @@ test("resolveCallerPlan: 取数面出问题只记一行，按不补收场", asyn
     },
     note,
   );
-  assert.deepEqual(plan, { kind: "skip", reason: "no-card" });
-  assert.equal(lines.length, 3);
-  assert.match(lines[0], /默认模型/);
-  assert.match(lines[1], /角色卡/);
-  assert.match(lines[2], /模型目录/);
+  assert.deepEqual(plan, { kind: "skip", reason: "no-session" });
+  assert.equal(lines.length, 2);
+  assert.match(lines[0], /模型目录/);
+  assert.match(lines[1], /调用方会话/);
 });
 
-test("resolveCallerPlan: 取数齐全时给出补的选择，不补时也只报一行", async () => {
+test("resolveCallerPlan: 会话那条不可用时记一行", async () => {
+  const { lines, note } = notes();
+  const plan = await resolveCallerPlan(
+    null,
+    { session: async () => ({ provider: "gone", model: "gone" }), served: async () => SERVED },
+    note,
+  );
+  assert.deepEqual(plan, { kind: "skip", reason: "session-not-served" });
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /会话用的模型不在宿主目录里/);
+});
+
+test("resolveCallerPlan: 取数齐全时给出补的选择", async () => {
   const a = notes();
   assert.deepEqual(
-    await resolveCallerPlan(null, { stored: () => null, card: async () => CARD, served: async () => SERVED }, a.note),
-    { kind: "select", provider: "deepseek", model: "deepseek-flash" },
+    await resolveCallerPlan(null, { session: async () => SESSION, served: async () => SERVED }, a.note),
+    { kind: "select", provider: "agnes", model: "agnes-3.0-flash", reasoningEffort: "high" },
   );
   assert.deepEqual(a.lines, []);
-
-  const b = notes();
-  assert.deepEqual(
-    await resolveCallerPlan(
-      null,
-      { stored: () => ({ provider: "gemini", model: "gemini-3-pro-preview" }), card: async () => CARD, served: async () => SERVED },
-      b.note,
-    ),
-    { kind: "skip", reason: "user-default" },
-  );
-  assert.deepEqual(b.lines, []);
-
-  const c = notes();
-  assert.deepEqual(
-    await resolveCallerPlan(
-      null,
-      { stored: () => null, card: async () => ({ provider: "deepseek", model: "deepseek-v4-flash" }), served: async () => SERVED },
-      c.note,
-    ),
-    { kind: "skip", reason: "card-not-served" },
-  );
-  assert.equal(c.lines.length, 1);
-  assert.match(c.lines[0], /deepseek\/deepseek-v4-flash/);
 });
