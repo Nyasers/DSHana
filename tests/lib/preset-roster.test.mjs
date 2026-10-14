@@ -19,6 +19,7 @@ import {
   unknownPresetError,
   brokenPresetError,
   assertPresetInRoster,
+  parsePresetRoster,
 } from "@dshana/session/preset-roster.ts";
 
 const rows = [
@@ -113,4 +114,34 @@ test("roster 里的项缺 id / id 非字符串时不被当成候选", () => {
   assert.ok(caught);
   assert.ok(caught.message.includes('"a"'), "a 应在候选里");
   assert.doesNotMatch(caught.message, /"42"/);
+});
+
+// ---- 回执解析："读不出来" 与 "确实是空" 必须分开 ----
+
+test("合法回执：presets 数组原样收下", () => {
+  const rows = parsePresetRoster({ presets: [{ id: "a" }, { id: "b" }] });
+  assert.deepEqual(presetIds(rows), ["a", "b"]);
+});
+
+test("合法空表：该部署确实没声明 preset，如实返回空", () => {
+  assert.deepEqual(parsePresetRoster({ presets: [] }), []);
+});
+
+test("回执形状不对 → 抛错（不返回空表）", () => {
+  // 返回空表会被 open 的预检读成「没有任何名字合法」，把合法名字一起拒掉——正是 fail-open 要防的事。
+  for (const bad of [null, undefined, {}, { presets: null }, { presets: "standard" }, []]) {
+    assert.throws(() => parsePresetRoster(bad), /no presets array/, "应拒：" + JSON.stringify(bad));
+  }
+});
+
+test("行级脏数据只被滤掉，不让一行坏数据把整份读取判死", () => {
+  const rows = parsePresetRoster({ presets: [{ id: "a" }, null, 42, "x", { id: "b" }] });
+  assert.deepEqual(presetIds(rows), ["a", "b"]);
+});
+
+test("formatRow 对 null 行不炸（导出函数，不受解析器的行过滤保护）", async () => {
+  const { formatRow } = await import("@dshana/tools/actions/presets.ts");
+  assert.doesNotThrow(() => formatRow(null));
+  assert.doesNotThrow(() => formatRow(undefined));
+  assert.equal(formatRow({ id: "a", name: "甲", order: 1, isDefault: true }), "a（甲）  [默认；order 1]");
 });

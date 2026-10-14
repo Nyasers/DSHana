@@ -44,17 +44,34 @@ async function ensureReady(): Promise<void> {
 }
 
 /**
+ * 控制面回执 → roster 行。
+ *
+ * 两种情形必须分开：`presets` 不是数组 = **读不出来**（回执形状不对）→ 抛错，调用方据此
+ * fail-open；是数组但为空 = **该部署确实没声明 preset** → 如实返回空表。
+ *
+ * 前者曾经被当成后者（形状不对也返回 `[]`）：而空表在 `open` 的预检里是「没有任何名字合法」
+ * 的意思，于是一次回执畸变会把**所有**合法名字都拒掉——正是 fail-open 要防的事。
+ *
+ * 行级只滤掉非对象（没有 id 的行既不能当候选也不能展示），不让一行坏数据把整份读取判死。
+ * @param value - `agentPresets/list` 的回执原文。
+ */
+export function parsePresetRoster(value: unknown): PresetRosterRow[] {
+  const presets = (value as { presets?: unknown } | null | undefined)?.presets;
+  if (!Array.isArray(presets)) {
+    throw new Error("agentPresets/list returned no presets array (host contract violation)");
+  }
+  return presets.filter((row) => row !== null && typeof row === "object");
+}
+
+/**
  * 读当前部署的 preset roster（含挂载失败的项）。
  *
- * 失败一律上抛（不识别的部署、runtime 起不来）：调用方各自决定怎么处置——`presets` 把它渲染成
+ * 失败一律上抛（runtime 起不来、回执形状不对）：调用方各自决定怎么处置——`presets` 把它渲染成
  * 一次读失败，`open` 的预检靠它区分「名字确实错」与「读不到 roster 所以没法判」。
  */
 export async function readPresetRoster(ctx: unknown): Promise<PresetRosterRow[]> {
   await ensureReady();
-  const roster = await rpcViaControl(ctx, { method: "agentPresets/list", payload: {}, timeoutMs: 30000 });
-  return roster && Array.isArray((roster as { presets?: unknown }).presets)
-    ? ((roster as { presets: PresetRosterRow[] }).presets)
-    : [];
+  return parsePresetRoster(await rpcViaControl(ctx, { method: "agentPresets/list", payload: {}, timeoutMs: 30000 }));
 }
 
 /** id 集合（非字符串/空白的项跳过；roster 是外部数据，逐个收窄）。 */

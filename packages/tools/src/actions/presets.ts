@@ -28,15 +28,16 @@ export const fields = {};
 
 /** 一行 roster → 一行文本（id 必在；其余存在才拼，broken 单独标）。 */
 export function formatRow(row: PresetRosterRow): string {
-  const id = String(row.id ?? "").trim();
+  // 导出函数，调用方不受 parsePresetRoster 的行级过滤保护：每一处读都经 `row?.`。
+  const id = String(row?.id ?? "").trim();
   const parts = [id];
-  const name = typeof row.name === "string" && row.name ? row.name : "";
+  const name = typeof row?.name === "string" && row.name ? row.name : "";
   if (name) parts.push("（" + name + "）");
   const notes: string[] = [];
-  if (row.isDefault === true) notes.push("默认");
-  const order = typeof row.order === "number" && Number.isFinite(row.order) ? row.order : null;
+  if (row?.isDefault === true) notes.push("默认");
+  const order = typeof row?.order === "number" && Number.isFinite(row.order) ? row.order : null;
   if (order !== null) notes.push("order " + order);
-  if (typeof row.broken === "string" && row.broken) notes.push("挂载失败：" + row.broken.split("\n")[0]);
+  if (typeof row?.broken === "string" && row.broken) notes.push("挂载失败：" + row.broken.split("\n")[0]);
   return parts.join("") + (notes.length ? "  [" + notes.join("；") + "]" : "");
 }
 
