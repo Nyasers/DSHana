@@ -32,7 +32,6 @@ import { ensureManagedRuntime } from "@dshana/runtime/managed-runtime.ts";
 import { nextRpcId } from "@dshana/shared/rpc-envelope.ts";
 import { isValidSessionId, dshMetadataFor } from "@dshana/shared/task-binding.ts";
 import { withSessionTurn, enterSessionTurn } from "./session-serialize.ts";
-import { readDshDefaultModel } from "@dshana/runtime/config.ts";
 import { callerPlanDeps, resolveCallerPlan } from "@dshana/models/caller-model.ts";
 import { serviceBase } from "@dshana/runtime/service-base.ts";
 import { rpcViaControl, invokeControl } from "@dshana/runtime/controller.ts";
@@ -88,27 +87,69 @@ export function normalizeCreateSend({ action, input }: { action?: unknown; input
 /** 会话模型选择：provider/model 必填，推理强度可选（不传 = 由 DSH 决定）。 */
 type ModelSelection = { provider: string; model: string; reasoningEffort?: string };
 
+/** 一条路由（provider+model）；两者一起命名一条路由。 */
+export interface ModelRoute {
+  provider: string;
+  model: string;
+}
+
 /**
- * selectModel 载荷组装（纯函数）：显式传了 provider/model/effort 任一时需要；
- * 只传其一/只传 effort 时另一侧从 DSH 默认模型（settings.yaml agent-default-model）补齐；
- * 补不出且确需选择时报错（沿用 v1 文案语义）。全不传返回 null（不随请求带模型）。
+ * 请求里显式给的路由（纯函数）：provider 与 model **成对**才成立，缺任一返回 null。
+ *
+ * 两个字段一起命名一条路由，不给就整条不给——只给一半由 halfModelSelectionError 拒掉。
  */
-export function resolveModelSelection(parsed, dshHome): ModelSelection | null {
-  const { provider: p, model: m, reasoningEffort: e } = parsed || {};
-  if (!p && !m && !e) return null;
-  let provider = p;
-  let model = m;
-  if (!provider || !model) {
-    const dm = readDshDefaultModel(dshHome);
-    provider = provider || (dm && dm.provider) || "";
-    model = model || (dm && dm.model) || "";
-  }
-  if (!provider || !model) {
-    throw new Error(
-      "provider/model required: pass provider/model explicitly, or pick one in DSH's own model selector (the App settings page only lists candidates, it does not set a default model)",
-    );
-  }
-  return { provider, model, ...(e ? { reasoningEffort: e } : {}) };
+export function requestedRoute(parsed): ModelRoute | null {
+  const provider = String((parsed && parsed.provider) || "").trim();
+  const model = String((parsed && parsed.model) || "").trim();
+  return provider && model ? { provider, model } : null;
+}
+
+/** 请求里显式给的推理强度（空串 = 没给）。 */
+export function requestedEffort(parsed): string {
+  return String((parsed && parsed.reasoningEffort) || "").trim();
+}
+
+/**
+ * 只给了一半路由（provider 或 model 其一）时的拒绝理由；成对给或都不给返回 null。
+ *
+ * 旧实现遇到半个路由会去 DSH_HOME/settings.yaml 补另一半。那份文件在 DSH 现版里已不存在：
+ * settings 服务启动时把它整份迁进 profile，并改名成 settings.yaml.imported（见上游
+ * settings/settings 的 importLegacyDocument）。于是「补不出来」在真机上是一条谁都读不懂的
+ * 硬失败（provider/model required）——而真正的原因只是路由被拆成了两半。
+ */
+export function halfModelSelectionError(parsed): Error | null {
+  const provider = String((parsed && parsed.provider) || "").trim();
+  const model = String((parsed && parsed.model) || "").trim();
+  if (Boolean(provider) === Boolean(model)) return null;
+  return new Error(
+    "provider and model must be given together (got " + (provider ? "provider only" : "model only") +
+      "): the two name one route together, and half a route cannot be resolved",
+  );
+}
+
+/**
+ * 把请求给的那部分合并到会话当前选择上（纯函数）。元组语义：**缺省的那部分不改**。
+ *   · 路由：请求给了就用请求的，没给就沿用会话当前的；
+ *   · 推理强度：请求给了就用请求的，没给就沿用会话当前的。
+ * 两者都取不到（会话当前也读不到）时返回 null——不带模型，交给 DSH 自己的选择。
+ *
+ * 换路由本身是允许的（DSH 侧就地装上会话选择），代价是丢上下文缓存，所以一般不推荐；
+ * 单独改推理强度不换路由，没有这个代价。
+ */
+export function mergeModelSelection(args: {
+  route?: ModelRoute | null;
+  effort?: string;
+  current?: { provider?: string; model?: string; reasoningEffort?: string } | null;
+}): ModelSelection | null {
+  const current = args.current || null;
+  const route =
+    args.route ||
+    (current && current.provider && current.model
+      ? { provider: current.provider, model: current.model }
+      : null);
+  if (!route) return null;
+  const effort = args.effort || (current && current.reasoningEffort) || "";
+  return { provider: route.provider, model: route.model, ...(effort ? { reasoningEffort: effort } : {}) };
 }
 
 // ---- DSH 一元 RPC（经 runtime 控制面转发；App 侧不直连 DSH HTTP）----
@@ -182,6 +223,41 @@ async function waitTaskTerminalWithTimeout(ctx, taskId, sessionId, timeoutSec, l
 
 // ---- 会话建立/续用 ----
 // create：session.create { cwd, agentPreset? } → { sessionId }
+
+/**
+ * 读一个会话当前的模型选择（reply 合并缺省位用）。
+ *
+ * 取 `session/list` 的投影 `values.modelSelection`（DSH 自己的 durable 选择，与它
+ * prompt 装配读的是同一份，见上游 api-session-controller 的 model-selection-projection）：
+ * `next` 是「下一次请求该用的」（= pending ?? lastUsed），就是我们要的那个当前值。
+ *
+ * 读不到一律返回 null（不抛）：list 失败、会话不在列表、投影未提供都归为「会话当前选择未知」。
+ * 调用方据此决定退路——回复时只给了 effort 而当前值又读不到，那就什么都不带，
+ * 让 DSH 用它自己的选择（旧行为），而不是编一条路由出来。
+ *
+ * @param ctx - App ctx（rpcViaControl 需要）
+ * @param sessionId - 目标会话
+ * @returns 当前选择（provider/model 都在才算），或 null
+ */
+async function readSessionModelSelection(ctx, sessionId: string): Promise<ModelSelection | null> {
+  if (!sessionId) return null;
+  let items: any[] = [];
+  try {
+    const value = await rpcCall(ctx, null, { method: "session/list", payload: {} });
+    items = value && Array.isArray(value.items) ? value.items : [];
+  } catch {
+    return null;
+  }
+  const row = items.find((it) => it && it.sessionId === sessionId) || null;
+  const values = row && row.projections && row.projections.values;
+  const view = values && values.modelSelection;
+  const sel = view && (view.next || view.lastUsed);
+  const provider = sel && typeof sel.provider === "string" ? sel.provider.trim() : "";
+  const model = sel && typeof sel.model === "string" ? sel.model.trim() : "";
+  if (!provider || !model) return null;
+  const effort = sel && typeof sel.reasoningEffort === "string" ? sel.reasoningEffort.trim() : "";
+  return { provider, model, ...(effort ? { reasoningEffort: effort } : {}) };
+}
 // send：目标会话可能 (a) 持久非活跃（runtime 重启后）→ session.list 有它（带 cwd），走
 // session.create resume（{ sessionId, cwd }）；(b) 活跃/空闲在 DSH agent Map（list 不含）
 // → 直接 prompt（无 session.create）；list 也不含 = 会话不存在（prompt admission 会以
@@ -400,30 +476,61 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
         if (rejected) throw rejected;
       }
 
-      // ③ 会话模型：显式入参 > 用户设的默认（DSH 自己生效，不用我们动手）> 调用方角色卡（create 才补）
+      // ③ 会话模型（元组语义：给的那部分覆盖，没给的那部分不改）
       // 它随 create / prompt 的请求一起下传（集成层给这两个请求加了可选 model）：会话就地装上，
-      // 不碰 DSH 的全局默认——settings.yaml 那格只在用户手设过时才有值。
-      // dshHome = 当前数据源：默认模型/预设从当前源的 settings.yaml 解析
+      // 不碰 DSH 的全局默认。
+      //
+      // · 路由（provider+model）：请求给了就用请求的；没给时 create 由 caller-plan 算（App 设置 /
+      //   调用方角色卡），reply 沿用会话当前的那条。换路由本身是允许的（DSH 侧就地装上会话选择），
+      //   代价是丢上下文缓存，所以一般不推荐。
+      // · 推理强度：请求给了就用请求的，没给就沿用会话当前的。单独改强度不换路由，没有缓存代价。
+      // 两者都拿不到时什么都不带，交给 DSH 自己的选择。
+      const halfError = halfModelSelectionError(parsed);
+      if (halfError) throw halfError;
       const dshHome = await currentDshHome(dataDir);
-      let modelSelection = resolveModelSelection(parsed, dshHome);
-      if (!modelSelection && parsed.action === "create") {
+      const askedRoute = requestedRoute(parsed);
+      const askedEffort = requestedEffort(parsed);
+      // reply 的缺省位从会话当前选择来：读它要 runtime 在线（与 establishSession 的 list 同一份
+      // 投影）。读不到就当成「当前未知」，不影响只给路由的那条路。
+      const currentSelection =
+        parsed.action === "send" ? await readSessionModelSelection(ctx, parsed.sessionId) : null;
+      let route: ModelRoute | null = askedRoute;
+      let routeFrom: "request" | "caller" | "session" | null = askedRoute ? "request" : null;
+      let baseEffort = askedEffort;
+      if (!route && parsed.action === "create") {
         const plan = await resolveCallerPlan(parsed, callerPlanDeps(ctx, dshHome, dataDir), (m) =>
           logLine(log, "[dsh-session] 会话模型：" + m),
         );
         if (plan.kind === "select") {
-          modelSelection = {
-            provider: plan.provider,
-            model: plan.model,
-            ...(plan.reasoningEffort ? { reasoningEffort: plan.reasoningEffort } : {}),
-          };
-          logLine(
-            log,
-            "[dsh-session] 会话模型随请求带上：" + plan.provider + "/" + plan.model +
-              (plan.reasoningEffort ? "（推理强度 " + plan.reasoningEffort + "）" : ""),
-          );
+          route = { provider: plan.provider, model: plan.model };
+          routeFrom = "caller";
+          // 请求没给强度时才用设置里那条：设置只补「用什么模型」，不覆盖本次指定的强度。
+          if (!baseEffort) baseEffort = plan.reasoningEffort || "";
         } else {
           logLine(log, "[dsh-session] 会话模型不随请求带（" + plan.reason + "）：交给 DSH 的选择");
         }
+      } else if (!route && parsed.action === "send") {
+        routeFrom = currentSelection ? "session" : null;
+      }
+      const modelSelection = mergeModelSelection({
+        route,
+        effort: baseEffort,
+        // create 的当前值就是刚算出的路由（caller-plan）；reply 用读到的会话选择。
+        current: parsed.action === "send" ? currentSelection : null,
+      });
+      if (modelSelection) {
+        logLine(
+          log,
+          "[dsh-session] 会话模型随请求带上：" + modelSelection.provider + "/" + modelSelection.model +
+            (modelSelection.reasoningEffort ? "（推理强度 " + modelSelection.reasoningEffort + "）" : "") +
+            (routeFrom ? "（路由来自 " + routeFrom + "）" : ""),
+        );
+      } else if (askedEffort) {
+        // 只给了强度，又拿不到可搭的路由：不静默丢（强度落不到会话上），也不编一条路由。
+        throw new Error(
+          "reasoningEffort was given but no model route is available for this session: pass provider+model together, " +
+            "or configure the session model on the App settings page / the calling agent card",
+        );
       }
 
       // ④ 会话建立（create 新建 / send 沿用）：模型选择随 create 的请求一起下传
