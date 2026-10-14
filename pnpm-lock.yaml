@@ -3324,8 +3324,8 @@ packages:
         optional: true
 
   '@hana/app-sdk@file:vendor/hana-app-sdk/hana-app-sdk.tgz':
-    resolution: {integrity: sha512-HknGFyGqt8JCHZgruSXtDuXq0xM+wviy4+a/Ota3i7r2cG35Cau+USD0CeOrW4oJoCd6QUePsghOQqK6AzQnYg==, tarball: file:vendor/hana-app-sdk/hana-app-sdk.tgz}
-    version: 1.0.16-beta
+    resolution: {integrity: sha512-jtJUGRT3mItGV2pDUJ0UZtQPy86OanFDb+OEAGeAFOdqlXz3W6nUp88IDaicRrGqIoET/aTmWxiQmrbkNyNXZg==, tarball: file:vendor/hana-app-sdk/hana-app-sdk.tgz}
+    version: 1.1.0-beta
     peerDependencies:
       react: '>=19'
       react-dom: '>=19'
@@ -3336,7 +3336,7 @@ packages:
         optional: true
 
   '@hana/plugin-components@file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz':
-    resolution: {integrity: sha512-+Guu6SBCk15V4K4QY6ih0ttGcUn2Rnnt2ySjeDw81jl9xjyrLp6LDjbPzB+5fVQyQ/fXtervPvlM7ybzG9M2nw==, tarball: file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz}
+    resolution: {integrity: sha512-V/xox/mhMnkMHrCNoRbMsB+yJR9De3c8VChJ5yQ4d9XT907Hi8tBgdEzzHCh8lG64qlLQ40aKchvL7YrARJEXA==, tarball: file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz}
     version: 0.0.0
     peerDependencies:
       react: '>=19'
