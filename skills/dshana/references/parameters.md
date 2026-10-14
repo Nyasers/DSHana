@@ -57,3 +57,8 @@ are stated in `SKILL.md`, not here.
 | `outcome` | `allowed-once` \| `rejected` | no | allowed-once = this one operation (default) / rejected |
 | `taskId` | string | no | taskId returned by open/reply (handle path) |
 | `sessionId` | string | no | Session id; passing it means cross-conversation · `pattern` = `^[sS][eE][sS][sS][iI][oO][nN]-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$` |
+
+## `presets` — list the agent presets this deployment offers
+
+| Field | Type | Required | Description |
+|---|---|---|---|
