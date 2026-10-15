@@ -17,14 +17,16 @@ The shell page polls `GET /api/apps/dshana/routes/dshana/boot-state` and renders
 
 ## One session card, two mount states
 
-Both `open` and `reply` receipts carry a `details.card` (distinguished by `act=` on the route, always titled `DSHana`), served from `ui/stream.html`.
+`open` and `reply` post a card into the session: the App delivers a `display`-only custom message via `session:send-custom`, and the host renders it as an in-stream card through the manifest's `contributes.messageRenderers` mapping (short name `session-card` → the `/stream.html` card, always titled `DSHana`). The tool receipt itself carries **no** `details.card`.
 
-- **In the chat stream** it draws only an entry row (the small heading for `act`, plus a three-line coordinate block: directory / session / task). It does not inject DSH and carries no ticket, so it neither stacks nor freezes.
-- **Taken out of the stream** (the chat card's top-right menu / dragging — a host gesture that does not go through App code) onto the blackboard or into a detached window, the host mounts the same route on the new mount, and only then does the page assemble the relay and inject the full DSH scene.
+The card's instance id is the App's own, derived from the task it belongs to (`taskId` → `a_` + the first 20 hex digits of a namespaced sha256). It rides with that message as `details.cardInstanceId`, and the host adopts an author-supplied id of that shape verbatim. The card iframe never receives that payload, so the page reads its own `cardInstanceId` from the surface context — the same value — and asks the App backend (`GET /dshana/card-coords`). The backend scans the host task records (`ctx.tasks.list`), derives the id of each in turn, and returns the coordinates stored in the matching task's `metadata.dsh`. There is no separate card-id→coordinates table, and no session-entry scan.
 
-The App does not declare a manifest card and does not call `hana.cards.open` — the card center takes no slot, and session history belongs to DSH's own sidebar (open the DSH UI to browse it); the App keeps no separate list.
+If the lookup misses (the task record has been collected, or the card was delivered by an older revision), the card falls back to "follow the current selection" and says so on its face — it never blanks out and never pretends to be pinned.
 
-**A card can pin a session**: a card route carrying `?sid=<DSH session id>` pins that session; a card without `sid` (for example one taken out of an entry row and then hand-edited) follows the current selection shared across faces.
+- **In the chat stream** it draws only an entry row (the small heading, plus a three-line coordinate block: directory / session / task). It does not inject DSH and carries no ticket, so it neither stacks nor freezes.
+- **Taken out of the stream** (the chat card's top-right menu / dragging — a host gesture that does not go through App code) onto the blackboard or into a detached window, the host mounts the same card on the new mount, and only then does the page assemble the relay and inject the full DSH scene. The lookup needs nothing but the card's own id, so a detached card stays pinned as long as the host keeps handing it the same identity; when it does not, the card shows the last position it recorded, or follows the shared current selection.
+
+Session history belongs to DSH's own sidebar (open the DSH UI to browse it); the App keeps no separate list.
 
 ## Theme
 

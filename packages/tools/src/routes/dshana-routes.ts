@@ -26,6 +26,8 @@
 //                            「会话模型」按它列 provider/模型/推理档，不依赖 DSH 运行
 //   GET  /dshana/card-state  会话流卡页的状态面（按需取数：读宿主任务记录的绑定；回卡页
 //                            可直接换进 DOM 的状态行 HTML。卡页在非终态期间慢轮询，终态即停）
+//   GET  /dshana/card-coords 会话流卡页的坐标面（卡报自己的 cardInstanceId，后端在宿主任务记录里
+//                            认领那条任务并取它的 metadata.dsh；查不到回 ok:false，卡回落到「跟随当前选中」）
 //
 // 面间的直投通道（faces/*）已拆：同页的两方（FP ↔ main）走 BroadcastChannel，
 // 面间不再有 HTTP 面。
@@ -44,6 +46,7 @@ import {
   isTerminalTaskStatus,
   type TaskBinding,
 } from "@dshana/shared/task-binding.ts";
+import { matchTaskCard, readTaskRecords } from "@dshana/session/session-card.ts";
 export const DASHANA_ROUTE_PREFIX = "/dshana";
 
 // ---- 应用设置（GET/POST /dshana/settings）----
@@ -149,6 +152,24 @@ export function defaultDshanaRouteDeps(ctx) {
       return { state: "tracked", label: "运行中", detail: "App 侧仍在跟踪（rpcId " + String(binding.rpcId || "") + "）" };
     },
     readSettings: () => readSettingsView(ctx, dataDir),
+    // 会话卡坐标面：卡报自己的 cardInstanceId（值就是投递时 App 按 taskId 派生的那个），
+    // 后端**在宿主任务记录里认领**——读 ctx.tasks.list 那几条到几十条记录，逐条按同一条派生算一遍，
+    // 命中哪条取那条任务 metadata.dsh 里的坐标。没有「卡 id → 坐标」的映射表，坐标的事实源仍是
+    // 提交链写下的绑定；卡 id 由本 App 定义，不依赖宿主的哈希公式。
+    //
+    // 入参只有 cardInstanceId：派生的输入只有任务身份，候选来自任务表，认领不必先知道会话。
+    readCardCoords: async ({ cardInstanceId }) => {
+      if (!cardInstanceId) return { ok: false, reason: "缺少 cardInstanceId（卡未完成宿主握手？）" };
+      const records = await readTaskRecords(ctx);
+      const coords = matchTaskCard(records, { cardInstanceId });
+      if (!coords) {
+        return {
+          ok: false,
+          reason: "宿主任务记录里没有与这张卡匹配的任务（卡 id 由 taskId 派生，认不到时按未钉住处理）",
+        };
+      }
+      return { ok: true, ...coords };
+    },
     // 模型候选只认宿主目录（ctx.models.list）：它是「这条路走不走得通」的唯一事实源，
     // 也让候选与 DSH 在不在跑无关。
     listHostModels: async () => {
@@ -203,6 +224,10 @@ export function registerDshanaRoutes(app, deps) {
     typeof d.readCardState === "function"
       ? d.readCardState
       : () => ({ state: "unknown", label: "未接线", detail: "deps.readCardState 未注入" });
+  const readCardCoords =
+    typeof d.readCardCoords === "function"
+      ? d.readCardCoords
+      : async () => ({ ok: false, reason: "deps.readCardCoords 未注入" });
   const writeSettings = typeof d.writeSettings === "function" ? d.writeSettings : (patch) => patch;
   const listHostModels = typeof d.listHostModels === "function" ? d.listHostModels : async () => {
     throw new Error("模型候选不可用：deps.listHostModels 未注入");
@@ -268,6 +293,24 @@ export function registerDshanaRoutes(app, deps) {
       } catch (e) {
         log("warn", "/dshana/models 读取失败：" + errText(e));
         return json(c, 200, { ok: false, error: errText(e) });
+      }
+    });
+
+    // ---- GET /dshana/card-coords：会话流卡页的坐标面 ----
+    // 卡页（ui/stream.html，宿主以 /api/apps/<appId>/ui/stream.html 服务）加载后取坐标：
+    // 它把宿主盖章的 cardInstanceId 报上来，后端去宿主任务记录里认领那条任务。
+    // 一律 200，成败看 ok：坐标取不到不是错误，是「这张卡未钉住」——卡据此回落并如实标注。
+    app.get(DASHANA_ROUTE_PREFIX + "/card-coords", async (c) => {
+      const q = (c && c.req && typeof c.req.query === "function") ? c.req.query.bind(c.req) : () => "";
+      const cardInstanceId = String(q("cardInstanceId") || "").trim();
+      try {
+        const out = await readCardCoords({ cardInstanceId });
+        return json(c, 200, out && typeof out === "object" ? out : { ok: false, reason: "坐标面回包畸形" });
+      } catch (e) {
+        // 读宿主任务记录失败（未授权 / 任务面缺失）也按「取不到坐标」回，把原因带出来供诊断；
+        // 绝不编一份坐标顶上。
+        log("warn", "/dshana/card-coords 读取失败：" + errText(e));
+        return json(c, 200, { ok: false, reason: errText(e) });
       }
     });
 
@@ -375,6 +418,7 @@ export function dshanaRoutesTable() {
     ["GET", DASHANA_ROUTE_PREFIX + "/settings"],
     ["GET", DASHANA_ROUTE_PREFIX + "/models"],
     ["GET", DASHANA_ROUTE_PREFIX + "/card-state"],
+    ["GET", DASHANA_ROUTE_PREFIX + "/card-coords"],
     ["POST", DASHANA_ROUTE_PREFIX + "/start"],
     ["POST", DASHANA_ROUTE_PREFIX + "/stop"],
     ["POST", DASHANA_ROUTE_PREFIX + "/settings"],

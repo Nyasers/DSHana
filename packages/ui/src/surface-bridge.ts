@@ -349,32 +349,16 @@ export function onSelectionChanged(listener: (sessionId: string | null, at: numb
 // 旧的三件名（readPanelView / writePanelView / onPanelViewChanged）随迁移删除——两条路
 // 同时活着就是双投递。
 
-// ---- 会话卡的会话坐标（只认这张卡自己的状态，不读应用态全局）----
-// 两个来源，都在卡自身：
-//   · route 的 ?sid=（宿主出卡时写进卡面的坐标，工具出卡 / 取出时都跟着过去）；
-//   · 卡实例态 hana.state 的 sid（同一张卡在聊天流 / 黑板 / 拆窗之间换挂载时的落点）。
+// ---- 会话卡的会话坐标（只认这张卡自己的身份，不读应用态全局）----
+// 坐标的事实源是宿主任务记录的 metadata.dsh（提交链写在那里，宿主不会把它传进卡片 iframe）。
+// 卡能读到的身份是宿主盖章的 cardInstanceId，它的值就是 App 投递时写进 details 的那个派生 id，
+// 所以这里的路是：卡报 id → App 后端去任务记录里认领那条任务 → 取回坐标。
+//
+// 为什么不用 route 查询串：manifest 卡（contributes.cards[].route）的 route 由宿主校验器禁掉
+// `?` `#` `\` `..`，坐标根本写不进去。
+//
 // **不读也不写应用态全局（dshana.selection）**：那是主卡与 FP 的「当前选中」，
 // 会话卡属于它钉住的那一段会话，不因别处的选中变化就改绑自己。
-export function routeSessionId(): string {
-  try {
-    const sid = new URLSearchParams(location.search).get("sid");
-    return sid && sid.trim() ? sid.trim() : "";
-  } catch {
-    return "";
-  }
-}
-
-/** 本卡钉住的会话坐标（route 的 ?sid= / ?tid=）；两者都没有返回 null。 */
-export function cardTicket(): { sessionId: string; taskId: string } | null {
-  try {
-    const q = new URLSearchParams(location.search);
-    const sessionId = String(q.get("sid") || "").trim();
-    const taskId = String(q.get("tid") || "").trim();
-    return sessionId || taskId ? { sessionId, taskId } : null;
-  } catch {
-    return null;
-  }
-}
 
 function cardStateApi(): any {
   try {
@@ -402,16 +386,76 @@ export function writeCardState(key: string, value: unknown): Promise<any> {
   try { return Promise.resolve(st.set(key, value)).catch(() => { /* 忽略 */ }); } catch { return Promise.resolve(); }
 }
 
-// 本卡钉住的会话：route 优先（工具出卡写进卡面的坐标），没有就取卡实例态。
-export function readPinnedSession(): Promise<string | null> {
-  const sid = routeSessionId();
-  if (sid) return Promise.resolve(sid);
-  return readCardState("sid");
+/** 卡实例态的键（同卡换挂载时的落点；不是跨卡的索引，只是一张卡的 sticky 值）。 */
+const CARD_STATE_SID = "sid";
+
+/** 宿主给的卡片实例 id（绑定握手未完成 / 本页无 context 时返回 null）。 */
+export function hostCardInstanceId(): string | null {
+  try {
+    const sdk = hana as { surface?: { getContext?: () => { cardInstanceId?: unknown } | null } };
+    const ctx = sdk && sdk.surface && typeof sdk.surface.getContext === "function" ? sdk.surface.getContext() : null;
+    const id = ctx && typeof ctx.cardInstanceId === "string" ? ctx.cardInstanceId.trim() : "";
+    return id || null;
+  } catch {
+    return null;
+  }
 }
 
-// 认到就记进卡实例态：同一张卡换挂载（聊天流 / 黑板 / 拆窗）时 route 之外还有一个落点。
+/** 卡自己的坐标（App 后端按 cardInstanceId 在宿主任务记录里认领那条任务后取回）。 */
+export interface CardCoords {
+  sessionId: string;
+  taskId: string;
+  cwd: string;
+  /** 工具面动作（open / reply），卡页据此渲染状态字样。 */
+  action: string;
+}
+
+/**
+ * 向后端反查本卡坐标。
+ *
+ * `cardInstanceId` 是宿主盖章的卡身份，卡自己读得到；它的值就是 App 投递时写进 `details` 的那个
+ * 派生 id（宿主对合法形状的作者 id 原样采用），后端拿它去宿主任务记录里认领那条任务
+ * （见 packages/session/src/session-card.ts 的 matchTaskCard），不扫会话条目树、也不查任何
+ * App 自建的卡索引。
+ *
+ * 认不到 id、或后端认领不到那条任务时回 **null**——调用方据此回落「跟随当前选中」，
+ * 并在卡面如实标注未钉住。
+ */
+export function fetchCardCoords(): Promise<CardCoords | null> {
+  const cardInstanceId = hostCardInstanceId();
+  if (!cardInstanceId) return Promise.resolve(null);
+  return apiFetch("dshana/card-coords?cardInstanceId=" + encodeURIComponent(cardInstanceId), {
+    method: "GET", cache: "no-store", headers: { Accept: "application/json" },
+  }).then((res) => {
+    if (!res.ok) throw new Error("card-coords HTTP " + res.status);
+    return res.json();
+  }).then((d: any) => {
+    const sid = d && typeof d.sessionId === "string" ? d.sessionId.trim() : "";
+    if (!d || d.ok !== true || !sid) return null;
+    return {
+      sessionId: sid,
+      taskId: typeof d.taskId === "string" ? d.taskId : "",
+      cwd: typeof d.cwd === "string" ? d.cwd : "",
+      action: typeof d.action === "string" ? d.action : "",
+    };
+  }).catch(() => null);
+}
+
+/**
+ * 本卡钉住的会话：只有后端反查命中才算钉住。
+ *
+ * **不拿卡实例态的记忆值顶上**：那个值只用来在入口行上「别空着」，而这里是 ui-session 判
+ * 「这一面要不要跟着共用选中走」的输入——回它一个记忆值会把未钉住的卡说成钉住的，
+ * 于是卡面写着「未钉住」、会话却不跟随选中，两边自相矛盾。查不到就回 null（= 跟随共用选中）。
+ */
+export function readPinnedSession(): Promise<string | null> {
+  return fetchCardCoords().then((c) => (c ? c.sessionId : null));
+}
+
+// 认到就记进卡实例态：同一张卡换挂载（聊天流 / 黑板 / 拆窗）时后端之外还有一个落点。
+// 它不是坐标的事实源——只是「后端还没答上来（或答不上来）时先不空着」的兜底值。
 export function rememberCardSession(sid: string): Promise<any> {
-  if (sid) return writeCardState("sid", sid);
+  if (sid) return writeCardState(CARD_STATE_SID, sid);
   return Promise.resolve();
 }
 

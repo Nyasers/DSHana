@@ -558,7 +558,7 @@ import {
   //   default —— full（整幅 DSH UI）与 detached（拆窗）共用一页，内容一样；
   //   main    —— 主卡，无 DSH 侧栏（侧栏归 FP）；
   //   sidebar —— FP，只有侧栏；
-  //   stream  —— 只读会话流，只有中列（输入位收起），会话按 ?sid= 钉住或跟随跨面选中。
+  //   stream  —— 只读会话流，只有中列（输入位收起），会话由卡片自己的坐标钉住或跟随跨面选中。
   // 另有 settings（App 自己的设置页，不注入 DSH），它是宿主设置标签页的面，不属于上面几态。
   // 映射到 DSH 侧上游的角色词由 face-role.ts 给：default→standalone、sidebar→navigation、
   // main/settings→workspace、stream→stream。

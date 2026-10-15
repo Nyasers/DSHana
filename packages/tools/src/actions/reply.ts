@@ -9,7 +9,7 @@
 import { z } from "zod";
 import { submitDshTask } from "@dshana/session/session-run.ts";
 import { resolveTarget } from "../shared/target.ts";
-import { sessionCard } from "../shared/card.ts";
+import { sessionCardNote } from "../shared/card.ts";
 import { timeout, reasoningEffort, provider, model, taskId, sessionId } from "../shared/fields.ts";
 import type { ToolCtx } from "@dshana/shared/host.ts";
 import type { ToolInputBase, ToolResult } from "../shared/types.ts";
@@ -60,8 +60,9 @@ export async function run(input: ReplyInput, ctx: ToolCtx, deps?: SubmitDeps): P
     "已向 DSH 子代理续发消息（reply）：taskId " + loc.taskId + "，sessionId " + sid + "，rpcId " + rpc +
     (loc.cwd ? "，cwd " + loc.cwd : "") +
     "。任务在后台执行，完成/失败按 " + loc.delivery + " 档投递回本会话（下一个输入点自动贴回，不必为等结果结束回合）；要看执行过程或最终结论用 dshana action=get（taskId " +
-    loc.taskId + "）。";
-  // 与 open 同一口径挂流内卡：卡面抬头是 DSHana，小标题行写动作，右边跟这段会话的跟踪态。
+    loc.taskId + "）。" +
+    // 与 open 同一口径：卡由 App 投一条自定义消息，措辞由 shared/card.ts 单点给出。
+    sessionCardNote(loc);
   return {
     content: [{ type: "text", text }],
     details: {
@@ -73,8 +74,8 @@ export async function run(input: ReplyInput, ctx: ToolCtx, deps?: SubmitDeps): P
         status: "running",
         delivery: loc.delivery,
         cwd: loc.cwd || undefined,
+        cardEntryId: loc.cardEntryId || undefined,
       },
-      card: sessionCard({ action: "reply", sessionId: sid, taskId: loc.taskId, delivery: loc.delivery, cwd: loc.cwd }),
     },
   };
 }

@@ -15,6 +15,7 @@ import {
 } from "@dshana/tools/routes/dshana-routes.ts";
 import { initAppRuntime } from "@dshana/runtime/app-runtime.ts";
 import { resetDataSourceStore } from "@dshana/runtime/data-source.ts";
+import { sessionCardIdForTask } from "@dshana/shared/app-card-id.ts";
 
 function makeFakeApp() {
   const routes = [];
@@ -63,12 +64,13 @@ function makeFakeDeps(over = {}) {
   };
 }
 
-test("挂载清单：GET boot-state/health/settings/models/card-state/faces-poll + POST start/stop/settings/faces-send（前缀 dshana）", () => {
+test("挂载清单：GET boot-state/health/settings/models/card-state/card-coords + POST start/stop/settings/faces-send（前缀 dshana）", () => {
   const { app, routes } = makeFakeApp();
   registerDshanaRoutes(app, makeFakeDeps());
   const paths = routes.map(([m, p]) => m + " " + p).sort();
   assert.deepEqual(paths, [
     "GET /dshana/boot-state",
+    "GET /dshana/card-coords",
     "GET /dshana/card-state",
       // faces 端点已拆（面间不再有 HTTP 面）
     "GET /dshana/health",
@@ -348,9 +350,113 @@ test("GET /dshana/settings: 只回设置与 revision（不带切换面字段）"
   assert.equal(ctx.body.source.sourceId, "private", "只读的当前源回显留着（诊断用）");
 });
 
-// ---- 会话流卡的状态面（ui/card.html 加载后的一次性取数，不是轮询面）----
+// ---- 会话流卡的坐标面（卡报自己的 cardInstanceId，后端在宿主任务记录里认领那条任务）----
 
+/** 会话 id（真机形状：session-<uuid>）；下面的状态面用例用同一个。 */
 const CARD_SID = "session-0f0e0d0c-0b0a-4009-0807-060504030201";
+/** 坐标面用例里的卡 id（形状同 /^a_[0-9a-f]{20}$/，内容是编的：派生的命中性由单测另测）。 */
+const CARD_INSTANCE_ID = "a_0123456789abcdef0123";
+
+test("GET /dshana/card-coords: 命中回坐标（ok:true + 全部字段）", async () => {
+  const { app, routes } = makeFakeApp();
+  let seen = null;
+  registerDshanaRoutes(app, makeFakeDeps({
+    readCardCoords: async (args) => {
+      seen = args;
+      return {
+        ok: true,
+        action: "create",
+        sessionId: CARD_SID,
+        taskId: "task-1",
+        rpcId: "rpc-1",
+        cwd: "E:\\Hanako\\workspace",
+        delivery: "next-step",
+      };
+    },
+  }));
+  const [,, handler] = routes.find(([m, p]) => m === "GET" && p === "/dshana/card-coords");
+  const ctx = queryCtx({ cardInstanceId: CARD_INSTANCE_ID });
+  await handler(ctx);
+  assert.equal(ctx.status, 200);
+  assert.equal(ctx.body.ok, true);
+  assert.equal(ctx.body.sessionId, CARD_SID);
+  assert.equal(ctx.body.taskId, "task-1");
+  assert.deepEqual(seen, { cardInstanceId: CARD_INSTANCE_ID }, "卡只报自己的 cardInstanceId（入参只有这一个）");
+});
+
+test("GET /dshana/card-coords: 查不到回 200 + ok:false（不是错误，是这张卡未钉住）", async () => {
+  const { app, routes } = makeFakeApp();
+  registerDshanaRoutes(app, makeFakeDeps({
+    readCardCoords: async () => ({ ok: false, reason: "宿主任务记录里没有与这张卡匹配的任务" }),
+  }));
+  const [,, handler] = routes.find(([m, p]) => m === "GET" && p === "/dshana/card-coords");
+  const ctx = queryCtx({ cardInstanceId: CARD_INSTANCE_ID });
+  await handler(ctx);
+  assert.equal(ctx.status, 200, "取不到坐标不是 HTTP 错误：卡据此回落「跟随当前选中」");
+  assert.equal(ctx.body.ok, false);
+  assert.match(ctx.body.reason, /没有与这张卡匹配的任务/);
+});
+
+test("GET /dshana/card-coords: 坐标面抛错时回 ok:false 并带原因（绝不编一份坐标顶上）", async () => {
+  const { app, routes } = makeFakeApp();
+  registerDshanaRoutes(app, makeFakeDeps({
+    readCardCoords: async () => { throw new Error("ctx.tasks.list 不可用（宿主任务面缺失）"); },
+  }));
+  const [,, handler] = routes.find(([m, p]) => m === "GET" && p === "/dshana/card-coords");
+  const ctx = queryCtx({ cardInstanceId: CARD_INSTANCE_ID });
+  await handler(ctx);
+  assert.equal(ctx.status, 200);
+  assert.equal(ctx.body.ok, false);
+  assert.equal(ctx.body.sessionId, undefined, "失败时绝不带坐标字段");
+  assert.match(ctx.body.reason, /ctx\.tasks\.list 不可用/);
+});
+
+test("GET /dshana/card-coords: 缺 cardInstanceId 时坐标面自己就会拒（入参只有卡身份一个）", async () => {
+  const { app, routes } = makeFakeApp();
+  const { readCardCoords } = defaultDshanaRouteDeps({ appId: "dshana", dataDir: "", logger: { info() {} } });
+  registerDshanaRoutes(app, makeFakeDeps({ readCardCoords }));
+  const [,, handler] = routes.find(([m, p]) => m === "GET" && p === "/dshana/card-coords");
+  for (const params of [{}, { sessionId: CARD_SID }, { cardInstanceId: "", sessionId: "not-a-session" }]) {
+    const ctx = queryCtx(params);
+    await handler(ctx);
+    assert.equal(ctx.body.ok, false, "缺卡身份就回 ok:false：" + JSON.stringify(params));
+  }
+});
+
+test("GET /dshana/card-coords: 默认实现按 cardInstanceId 在宿主任务记录里认领（命中 / 未命中 / 任务面坏）", async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "dshana-card-coords-"));
+  try {
+    const hit = defaultDshanaRouteDeps({ appId: "dshana", dataDir, logger: { info() {} }, tasks: tasksWith([boundTask()]) });
+    const out = await hit.readCardCoords({ cardInstanceId: sessionCardIdForTask("task-1") });
+    assert.equal(out.ok, true, "按 taskId 派生的 id 要能认领到那条任务");
+    assert.equal(out.sessionId, CARD_SID, "坐标取自那条任务自己的 metadata.dsh");
+    assert.equal(out.taskId, "task-1");
+    assert.equal(out.rpcId, "rpc-1");
+
+    const miss = defaultDshanaRouteDeps({ appId: "dshana", dataDir, logger: { info() {} }, tasks: tasksWith([boundTask()]) });
+    const missed = await miss.readCardCoords({ cardInstanceId: sessionCardIdForTask("task-other") });
+    assert.equal(missed.ok, false, "算不出这个 id 就是没命中（不猜最近的一条）");
+    assert.match(missed.reason, /没有与这张卡匹配的任务/);
+
+    const noId = await hit.readCardCoords({});
+    assert.equal(noId.ok, false);
+    assert.match(noId.reason, /缺少 cardInstanceId/);
+
+    const broken = defaultDshanaRouteDeps({
+      appId: "dshana", dataDir, logger: { info() {} },
+      tasks: { list: async () => { throw new Error("host down"); } },
+    });
+    await assert.rejects(
+      () => broken.readCardCoords({ cardInstanceId: sessionCardIdForTask("task-1") }),
+      /宿主任务记录不可读/,
+      "任务面读不到必须抛给路由（路由据此回 ok:false，不假装未钉住）",
+    );
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+// ---- 会话流卡的状态面（ui/card.html 加载后的一次性取数，不是轮询面）----
 
 test("GET /dshana/card-state: 200 返回卡页可直接换进 DOM 的状态行 HTML", async () => {
   const { app, routes } = makeFakeApp();

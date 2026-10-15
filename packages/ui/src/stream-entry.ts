@@ -19,7 +19,7 @@
 // 认不出态就等 envelope 首帧，等到封顶仍没有信号时按聊天流收尾——宁可少画（一行坐标），
 // 也不能把整幅 DSH 现场灌进聊天转录。
 import { hana } from "@hana/plugin-sdk";
-import { apiFetch, cardTicket, declaredFaceView, readCardState, rememberCardSession, routeSessionId } from "./surface-bridge.ts";
+import { apiFetch, fetchCardCoords, declaredFaceView, readCardState, rememberCardSession } from "./surface-bridge.ts";
 import { followHostTheme } from "./host-theme.ts";
 import { FACE_ATTR } from "@dshana/shared/face-theme.ts";
 import { publishForceFollow, watchForceFollowChanges } from "./force-follow.ts";
@@ -28,6 +28,17 @@ import { publishForceFollow, watchForceFollowChanges } from "./force-follow.ts";
 // 从不发信号的旧宿主兜底。
 const MOUNT_WAIT_MS = 2000;
 const ENTRY_ID = "dsh-entry";
+
+/**
+ * 动作 → 卡内第一行的状态字样。
+ *
+ * 文案住在这里（不是投递载荷里的字段），所以改文案对已经发出的卡也生效：卡页每次都从安装树现取。
+ * 载荷只带动作词（open / reply），词到文案的映射是卡页的事。
+ */
+const ACT_TEXT: Record<string, string> = { open: "新会话", reply: "续会话", create: "新会话", send: "续会话" };
+
+/** 入口行是不是已经用来说失败原因了（置位后坐标反查不再改写它，失败原因必须留下）。 */
+let entryFailed = false;
 
 /** 挂载态（只信 hana.envelope）：chat = 聊天流，canvas = 黑板 / 拆窗，null = 信号还没到。 */
 function classifyMount(): "chat" | "canvas" | null {
@@ -44,12 +55,12 @@ function classifyMount(): "chat" | "canvas" | null {
   return null; // 还没收到信号（宿主在 iframe ready 之后才推第一帧）
 }
 
-// 入口行的高度由内容定（四行单行文本，宽度变窄也不会换行）：量一次报给宿主。
-// 但上报只是“报”：卡声明的 aspectRatio 是高度下界（见 card.ts 的 CARD_ASPECT_RATIO），
-// 上报值低于它时以比例为准，所以这一行能不能压薄取决于比例取多大。
+// 入口行的高度由内容定（一行抬头 + 三行单行文本，宽度变窄也不会换行）：量一次报给宿主。
+// manifest 卡没有 aspectRatio 字段（见 packages/app/src/manifest.json 的 session-card），
+// 所以这一步就是这张卡高度的唯一来源。
 const ENTRY_MIN_HEIGHT_PX = 96;
 
-/** 把入口行的真实高度报给宿主（运行时高度报告；旧宿主没这道门就纯按 aspectRatio 走）。 */
+/** 把入口行的真实高度报给宿主（运行时高度报告；旧宿主没这道门就按宿主缺省走）。 */
 function reportEntryHeight(): void {
   const el = document.getElementById(ENTRY_ID);
   const ui = hana && (hana as any).ui;
@@ -61,21 +72,16 @@ function reportEntryHeight(): void {
 
 /** 卡状态行右侧的跟踪态：非终态（tracked / cancelling）期间慢轮询，终态即停手。 */
 const CARD_POLL_MS = 4000;
-function mountEntryStatus(): void {
-  const ticket = cardTicket();
-  const sid = ticket ? ticket.sessionId : "";
+function mountEntryStatus(sessionId: string): void {
+  const sid = sessionId;
   const slot = document.querySelector("[data-dsh-entry-status]");
   if (!sid || !slot) return;
   let timer: ReturnType<typeof setTimeout> | null = null;
   const stop = (): void => { if (timer !== null) { clearTimeout(timer); timer = null; } };
   const loop = (): void => {
-    apiFetch("dshana/card-state?sessionId=" + encodeURIComponent(sid), {
-      method: "GET", cache: "no-store", headers: { Accept: "text/html" },
-    }).then((res) => {
-      if (!res.ok) throw new Error("card-state HTTP " + res.status);
-      return res.text();
-    }).then((html) => {
-      if (!html || !html.trim()) { stop(); slot.textContent = ""; return; }
+    // 状态面走原生同源 fetch（与坐标反查同一条路由面）：这里只需要一次 GET + 一段 HTML。
+    void cardStateFetch(sid).then((html) => {
+      if (html === null) { stop(); slot.textContent = ""; return; }
       slot.innerHTML = html;
       const stateEl = slot.querySelector("[data-state]");
       // detail（终态 / 时刻这类）不占版面：挪到悬停提示上，行里只留 label。
@@ -94,6 +100,16 @@ function mountEntryStatus(): void {
   loop();
 }
 
+/** 取一次卡状态行片段；拿不到（无凭据 / HTTP 失败）回 null。 */
+function cardStateFetch(sessionId: string): Promise<string | null> {
+  return apiFetch("dshana/card-state?sessionId=" + encodeURIComponent(sessionId), {
+    method: "GET", cache: "no-store", headers: { Accept: "text/html" },
+  }).then((res) => {
+    if (!res.ok) throw new Error("card-state HTTP " + res.status);
+    return res.text();
+  }).then((html) => (html && html.trim() ? html : null));
+}
+
 /** 写一格坐标值；空值把整行收起来（不留下悬空的标签）。 */
 function setEntryRow(selector: string, value: string): void {
   const el = document.querySelector(selector) as HTMLElement | null;
@@ -103,15 +119,44 @@ function setEntryRow(selector: string, value: string): void {
   if (row) row.style.display = value ? "" : "none";
 }
 
-/** 聊天流态：露出入口行（坐标已由页面内联脚本写好），route 没带 sid 时再从卡实例态补一次。 */
+/**
+ * 聊天流态：露出入口行，并把它自己的坐标填上。
+ *
+ * 坐标来自 App 后端按 cardInstanceId 的反查（见 surface-bridge.ts 的 fetchCardCoords）——坐标住在
+ * 宿主任务记录的 metadata.dsh 里，卡读不到那份记录，只能这样报自己的身份让后端去认领。
+ *
+ * **认不到时如实标注未钉住**（不空着，也不假装钉住了）：卡 id 由 App 按 taskId 派生，反查要在
+ * 任务记录里找到那次提交；记录已被宿主回收、或这张卡出自更早一版投递时都认不到，所以这条回落路
+ * 是设计的一部分，不是异常。
+ */
 function showEntry(): void {
   document.body.setAttribute("data-stream-view", "entry");
   reportEntryHeight();
-  mountEntryStatus();
-  if (routeSessionId()) return;
-  readCardState("sid").then((sid) => {
-    if (sid) setEntryRow("[data-dsh-entry-sid]", sid);
-  }, () => { /* 忽略 */ });
+  fetchCardCoords().then((coords) => {
+    // 装载失败已经把原因写在入口行上了（见 showLoadFailure）：坐标反查晚于它回来时不许把它盖掉，
+    // 那一行此刻是这一页唯一的失败可见面。
+    if (entryFailed) return;
+    if (coords) {
+      setEntryRow("[data-dsh-entry-state]", ACT_TEXT[coords.action] || "DSHana 会话");
+      setEntryRow("[data-dsh-entry-sid]", coords.sessionId);
+      setEntryRow("[data-dsh-entry-cwd]", coords.cwd);
+      setEntryRow("[data-dsh-entry-tid]", coords.taskId);
+      mountEntryStatus(coords.sessionId);
+      void rememberCardSession(coords.sessionId);
+      return;
+    }
+    // 未钉住：说清这张卡没有坐标，并标明它跟随的是「当前选中」那一档。
+    setEntryRow("[data-dsh-entry-state]", "DSHana 会话（未钉住）");
+    setEntryRow("[data-dsh-entry-sid]", "");
+    setEntryRow("[data-dsh-entry-cwd]", "");
+    setEntryRow("[data-dsh-entry-tid]", "");
+    const hint = document.querySelector("[data-dsh-entry-hint]") as HTMLElement | null;
+    if (hint) hint.textContent = "未取到本卡坐标，跟随当前选中的会话";
+    // 兜底：卡实例态里记过的那段会话（换挂载后后端暂时答不上来时先不空着）。
+    readCardState("sid").then((sid) => {
+      if (!entryFailed && sid) setEntryRow("[data-dsh-entry-sid]", sid + "（未钉住，按上次记录显示）");
+    }, () => { /* 忽略 */ });
+  });
 }
 
 /** 移除聊天流的入口行（黑板 / 拆窗态装配前调用）。 */
@@ -124,9 +169,13 @@ function dropEntry(): void {
 function showLoadFailure(error: unknown): void {
   const msg = error && (error as { message?: string }).message ? (error as { message: string }).message : String(error);
   console.error("[dshana/stream] 重型半装载失败：", msg);
-  setEntryRow("[data-dsh-entry-sid]", "DSH 现场装载失败");
-  setEntryRow("[data-dsh-entry-cwd]", msg);
-  showEntry();
+  entryFailed = true;
+  document.body.setAttribute("data-stream-view", "entry");
+  setEntryRow("[data-dsh-entry-state]", "DSH 现场装载失败");
+  setEntryRow("[data-dsh-entry-sid]", msg);
+  setEntryRow("[data-dsh-entry-cwd]", "");
+  setEntryRow("[data-dsh-entry-tid]", "");
+  reportEntryHeight();
 }
 
 /**
@@ -175,8 +224,7 @@ function boot(): void {
   // 聊天流态的卡不装 DSH、桥不在，但取出到黑板时会装；设置变化也得听得见。
   void publishForceFollow();
   watchForceFollowChanges();
-  // 认到 sid 就记进卡实例态（两个挂载态都记）：同一张卡换挂载时 route 之外还有落点。
-  rememberCardSession(routeSessionId());
+  // 坐标记忆不在这里做：它是后端反查回来之后才有的值（见 showEntry），两个挂载态都走同一条路。
 
   let decided = false;
   const decide = (mode: "chat" | "canvas"): void => {

@@ -1,22 +1,31 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/tools/session-card.test.mjs — 会话卡字面量（packages/tools/src/shared/card.ts）与工具回执的形状。
+// tests/tools/session-card.test.mjs — 会话卡的投递载荷、坐标与工具回执的形状。
 //
-// open 挂一张会话卡（route = ui/stream.html：聊天流里画一行入口，取出到黑板 / 拆窗后同一页
-// 注入完整 DSH 现场），reply 不挂——一个会话一张把手就够。卡字面量的字段规则由宿主定：
-// pluginId 必填且等于归属 App id、route 走 ui/ 静态树、aspectRatio 是 "宽:高" 字符串。
+// 卡走 contributes.messageRenderers + session:send-custom（不是工具回执的 details.card）：
+//   · 回执只留 details.dsh（句柄契约）与那句人可读文案；**不再有 details.card**；
+//   · 卡 id 由 taskId 派生、随投递那条自定义消息自己的 details 投出，卡读不到 payload，靠
+//     `hana.surface.getContext().cardInstanceId` 读回同一个值让后端认领那条任务（见 tests/lib/session-card.test.mjs）；
+//   · 卡的字面量（id / route / title）只在 manifest 里一份，工具面不再抄。
 // 提交链用 deps.submitDshTask 注入 fake，不触真 runtime、不碰宿主任务面。
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { doExecute } from "@dshana/tools/index.ts";
-import { SESSION_CARD_ROUTE, sessionCard } from "@dshana/tools/shared/card.ts";
+import {
+  SESSION_CARD_MANIFEST_ID,
+  SESSION_CARD_ROUTE_PATH,
+  SESSION_CARD_TYPE,
+  sessionCardNote,
+} from "@dshana/tools/shared/card.ts";
+import { manifestPath } from "../../scripts/shared/contract-assets.mts";
 
-const SID = "session-0f0e0d0c-0b0a-4009-0807-060504030201";
+const SID = "session-0f0e0d0c-0b0a-4007-0605-040302010099";
 const here = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(here, "..", "..");
 
 function fakeSubmit(loc) {
   const calls = [];
@@ -37,25 +46,52 @@ async function run(action, loc, input = {}) {
   return { out, fake };
 }
 
-/** 卡 route 的查询串（宿主把 route 拼在 App ui 静态树路径后面，查询串是卡页的数据源） */
-function cardQuery(card) {
-  assert.match(card.route, /^\/stream\.html\?/, "App 卡的 route 走 ui/ 静态树，不是 /routes/ 命名空间");
-  return new URLSearchParams(card.route.slice(card.route.indexOf("?") + 1));
-}
+const loc = (over = {}) => ({
+  action: "create",
+  sessionId: SID,
+  rpcId: "rpc-1",
+  taskId: "task-1",
+  delivery: "next-step",
+  cwd: "E:\\Hanako\\workspace",
+  cardEntryId: "entry-1",
+  cardError: null,
+  ...over,
+});
 
-test("卡页存在：SESSION_CARD_ROUTE 指向 ui/ 里真实存在的页面", () => {
-  assert.equal(SESSION_CARD_ROUTE, "/stream.html");
+test("卡页存在：SESSION_CARD_ROUTE_PATH 指向 ui/ 里真实存在的页面", () => {
+  assert.equal(SESSION_CARD_ROUTE_PATH, "/stream.html");
   assert.ok(
-    existsSync(join(here, "..", "..", "packages", "ui", "src", SESSION_CARD_ROUTE.replace(/^\//, ""))),
+    existsSync(join(ROOT, "packages", "ui", "src", SESSION_CARD_ROUTE_PATH.replace(/^\//, ""))),
     "常量指向的页面必须真的在 packages/ui/src 里（宿主按 ui 静态树取页）",
   );
 });
 
-test("open：回执带入口卡，details.dsh 形状不变", async () => {
-  const cwd = "E:\\Hanako\\workspace";
-  const loc = { action: "create", sessionId: SID, rpcId: "rpc-1", taskId: "task-1", delivery: "next-step", cwd };
-  const { out, fake } = await run("open", loc, { task: "干活", cwd, context: { callToken: "tok" } });
+test("manifest：卡与 messageRenderers 成对，route 不带查询串（宿主校验器禁 `?`）", () => {
+  const manifest = JSON.parse(readFileSync(manifestPath(ROOT), "utf8"));
+  const cards = manifest.contributes.cards;
+  const card = cards.find((c) => c.id === SESSION_CARD_MANIFEST_ID);
+  assert.ok(card, "会话卡要在 contributes.cards 里声明");
+  assert.equal(card.route, SESSION_CARD_ROUTE_PATH);
+  assert.ok(!card.route.includes("?"), "manifest 卡的 route 不能带查询串（宿主校验器 mb() 会拒）");
+  assert.ok(!/[#\\]/.test(card.route), "route 不能带 # 或反斜杠");
+  assert.ok(!card.route.includes(".."), "route 不能带 ..");
+  assert.equal(card.cardForm, "flush", "形态随到黑板绑定上");
+  assert.ok(card.face && card.face.image, "带 route 的卡要有卡面");
 
+  const renderers = manifest.contributes.messageRenderers;
+  assert.ok(Array.isArray(renderers), "要声明 contributes.messageRenderers（流内卡的渲染通道）");
+  const mapping = renderers.find((r) => r.customType === SESSION_CARD_TYPE);
+  assert.ok(mapping, "短名要与投递时用的 customType 一致");
+  assert.equal(mapping.cardId, SESSION_CARD_MANIFEST_ID, "cardId 必须指向上面那张带 route 的卡");
+  assert.ok(!mapping.customType.includes("/"), "customType 是短名，不能自带命名空间前缀");
+  assert.ok(!mapping.customType.startsWith("app:"), "customType 不能自己带 app: 前缀（宿主会剥掉再盖）");
+});
+
+test("open：回执不再有 details.card，details.dsh 形状带 cardEntryId", async () => {
+  const cwd = "E:\\Hanako\\workspace";
+  const { out, fake } = await run("open", loc({ cwd }), { task: "干活", cwd, context: { callToken: "tok" } });
+
+  assert.equal(out.details.card, undefined, "投递路径已换成自定义消息，回执里不该再有卡字面量");
   assert.deepEqual(out.details.dsh, {
     action: "open",
     sessionId: SID,
@@ -64,29 +100,33 @@ test("open：回执带入口卡，details.dsh 形状不变", async () => {
     status: "running",
     delivery: "next-step",
     cwd,
-  }, "dsh 是句柄契约的形状；delivery 陈述本任务实际的投递档位");
+    cardEntryId: "entry-1",
+  }, "dsh 是句柄契约的形状；cardEntryId 是投递那条自定义消息的节点 id");
   assert.match(out.content[0].text, /next-step/, "回执要写出档位，模型不必猜结果什么时候回来");
   assert.equal(fake.calls.length, 1, "提交链仍被调一次");
   assert.equal(fake.calls[0].action, "create", "工具面是 open，提交链内部仍是 create");
-
-  const card = out.details.card;
-  assert.equal(card.pluginId, "dshana", "宿主要求 pluginId 等于工具归属 App id，缺了或不等一律丢卡");
-  assert.match(card.aspectRatio, /^\d+:\d+$/, "aspectRatio 是 \"宽:高\" 字符串；给数字会被渲染端当非法值");
-  assert.equal(card.cardForm, "flush", "聊天卡的 cardForm 会随取出复制到黑板绑定，形态要定在这里");
-  assert.equal(card.title, "DSHana", "卡面抬头固定就是 DSHana；状态字样在卡内第一行");
-
-  const q = cardQuery(card);
-  assert.ok(Number(q.get("ts")) > 0, "?ts= 防缓存");
-  assert.equal(q.get("act"), "open", "act 是卡内状态字样的依据（文案住在卡页里）");
-  assert.equal(q.get("sid"), SID, "sid 是窗口里那段会话的唯一依据");
-  assert.equal(q.get("tid"), "task-1", "tid 给入口行回显用");
-  assert.equal(q.get("cwd"), cwd);
+  assert.equal(fake.calls[0].callToken, "tok", "投递会话卡要的令牌就是这次工具调用的");
 });
 
-test("reply：回执也挂卡（act=reply 是卡内小标题行的依据）", async () => {
-  const loc = { action: "send", sessionId: SID, rpcId: "rpc-2", taskId: "task-2", delivery: "next-step" };
-  const { out, fake } = await run("reply", loc, { task: "接着跑", sessionId: SID });
+test("open：卡投递失败时如实写进回执（不谎报卡已投出）", async () => {
+  const cwd = "E:\\Hanako\\workspace";
+  const { out } = await run("open", loc({ cwd, cardEntryId: null, cardError: "session does not belong to app" }), {
+    task: "干活",
+    cwd,
+    context: { callToken: "tok" },
+  });
+  assert.match(out.content[0].text, /会话卡未能确认投出/, "卡是会话在聊天流里唯一的把手，失败要说出来");
+  assert.match(out.content[0].text, /session does not belong to app/, "带上真实原因");
+  assert.equal(out.details.dsh.cardEntryId, undefined, "没有 entryId 就不塞这一格");
+  assert.match(out.content[0].text, /taskId task-1/, "任务本身照常报告（卡失败不阻断提交）");
+});
 
+test("reply：回执也走同一条路（无 details.card，action=reply）", async () => {
+  const { out, fake } = await run("reply", loc({ action: "send", rpcId: "rpc-2", taskId: "task-2", cwd: null }), {
+    task: "接着跑",
+    sessionId: SID,
+  });
+  assert.equal(out.details.card, undefined, "reply 与 open 同一口径：不再出卡字面量");
   assert.deepEqual(out.details.dsh, {
     action: "reply",
     sessionId: SID,
@@ -95,14 +135,18 @@ test("reply：回执也挂卡（act=reply 是卡内小标题行的依据）", as
     status: "running",
     delivery: "next-step",
     cwd: undefined,
+    cardEntryId: "entry-1",
   });
   assert.equal(fake.calls[0].action, "send", "工具面是 reply，提交链内部仍是 send");
-  assert.equal(out.details.card.pluginId, "dshana", "reply 与 open 挂同一张会话卡（抬头是动作）");
-  assert.equal(cardQuery(out.details.card).get("act"), "reply");
 });
 
-test("卡字面量：没有 cwd 就不塞这一格", () => {
-  const card = sessionCard({ action: "open", sessionId: SID, taskId: "task-3" });
-  assert.equal(card.pluginId, "dshana");
-  assert.equal(cardQuery(card).get("cwd"), null);
+test("回执措辞：成功时不额外加话，失败/未落盘时如实说清", () => {
+  assert.equal(sessionCardNote({ cardEntryId: "entry-1", cardError: null }), "", "卡已就位就不必再报一遍");
+  const failed = sessionCardNote({ cardEntryId: null, cardError: "session does not belong to app" });
+  assert.match(failed, /会话卡未能确认投出/);
+  assert.match(failed, /session does not belong to app/);
+  assert.match(failed, /任务本身已经在跑/, "卡失败不阻断提交，要说清任务照常");
+  const queued = sessionCardNote({ cardEntryId: null, cardError: null });
+  assert.match(queued, /落盘节点 id 未回执/, "消息可能还在流式队列里：如实说，不当失败");
+  assert.doesNotMatch(queued, /未能确认投出/);
 });

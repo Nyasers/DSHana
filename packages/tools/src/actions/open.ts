@@ -12,7 +12,7 @@
 // run(input, ctx, deps) 中 deps 仅单测注入提交链。
 import { z } from "zod";
 import { submitDshTask } from "@dshana/session/session-run.ts";
-import { sessionCard } from "../shared/card.ts";
+import { sessionCardNote } from "../shared/card.ts";
 import { timeout, reasoningEffort, provider, model } from "../shared/fields.ts";
 import type { ToolCtx } from "@dshana/shared/host.ts";
 import type { ToolInputBase, ToolResult } from "../shared/types.ts";
@@ -63,9 +63,10 @@ export async function run(input: OpenInput, ctx: ToolCtx, deps?: SubmitDeps): Pr
     "已开启 DSH 子代理（open）：taskId " + loc.taskId + "（后续续/关优先用它），sessionId " + sid + "，rpcId " + rpc +
     (loc.cwd ? "，cwd " + loc.cwd : "") +
     "。任务在后台执行，完成/失败按 " + loc.delivery + " 档投递回本会话（下一个输入点自动贴回，不必为等结果结束回合）；要看执行过程或最终结论用 dshana action=get（taskId " +
-    loc.taskId + "）。";
-  // 会话卡：一个会话一张把手（reply 不挂，避免叠）。聊天流里只画一行坐标，不注入 iframe；
-  // 用户把这张卡取出到黑板 / 拆窗后，同一页才装配 DSH 现场（见 packages/ui/src/app.ts）。
+    loc.taskId + "）。" +
+    // 会话卡由 App 在提交成功后往本会话投一条自定义消息（contributes.messageRenderers 渲染成流内卡），
+    // 不是工具回执里的 details.card。卡的状态措辞由 shared/card.ts 单点给出（open/reply 共用）。
+    sessionCardNote(loc);
   return {
     content: [{ type: "text", text }],
     details: {
@@ -77,8 +78,8 @@ export async function run(input: OpenInput, ctx: ToolCtx, deps?: SubmitDeps): Pr
         status: "running",
         delivery: loc.delivery,
         cwd: loc.cwd || undefined,
+        cardEntryId: loc.cardEntryId || undefined,
       },
-      card: sessionCard({ action: "open", sessionId: sid, taskId: loc.taskId, delivery: loc.delivery, cwd: loc.cwd }),
     },
   };
 }

@@ -1,82 +1,53 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// packages/tools/src/shared/card.ts — 会话卡字面量（工具返回值 details.card）
+// packages/tools/src/shared/card.ts — 会话卡在**工具面**的视图（回执措辞 + 卡身份转出）
 //
-// 一张卡，两个挂载态（页 = ui/stream.html，见 packages/ui/src/stream.html 与 packages/ui/src/app.ts）：
-//   · 聊天流里：只画一行入口（会话坐标）；不注入 DSH、不带票据，所以不叠也不冻结。
-//   · 取出到黑板 / 拆窗：宿主把同一 route 装到新的挂载上，页面自己认挂载态，注入完整 DSH 现场。
-// 「取出」是宿主手势（聊天卡右上角菜单 / 拖拽），不经过本 App 的代码；所以这里不注册
-// manifest 卡，也不调 hana.cards.open——卡片中心因此不占一格，聊天流里那张卡也不带任何写入口。
+// 卡怎么投出去、坐标怎么回到卡上，住在 packages/session/src/session-card.ts 与
+// packages/shared/src/app-card-id.ts；卡的字面量（id / route / title / cardForm / face）住在
+// packages/app/src/manifest.json（宿主读契约的唯一来源）。本模块只做两件工具面自己的事：
+//   · 把卡的身份常量转出来（工具面文案与测试要引用，但事实源不在这里）；
+//   · 提供回执里那句「卡没投出去」的措辞——open 与 reply 共用一处，两处各写一遍就会漂。
 //
-// 宿主契约（见 APPS_EN.md「Card sizing and form contract」与「Contributing a chalkboard card」）：
-//   · pluginId 必填且必须等于本工具的归属 App id（不等于会被当场丢掉）；
-//   · route 必须是宿主能解析到本 App 的写法——App 卡走 ui/ 静态树
-//     （/api/apps/<appId>/ui<route>），不是 ctx.routes 的 /routes/ 命名空间；
-//   · aspectRatio 是 "宽:高" 字符串（渲染端按它 split 出比例），不是数字；聊天卡的
-//     aspectRatio 与 cardForm 会在「取出」时复制到黑板绑定上，形态随过去。
-// 查询串在提交时快照（卡页不做轮询，只取一次状态），?ts= 防缓存。
-import { APP_ID } from "@dshana/runtime/boot-state.ts";
+// 会话卡走 contributes.messageRenderers + session:send-custom：那条路的绑定证明只绑 customType
+// 与 details 摘要，不碰 toolName。工具回执那条路走不通——宿主对工具回执卡验的 effectiveToolName
+// 来自 bridgedTool.name（app__dshana__dshana_<hash>），而签名侧用的是工具的局部名（dshana），
+// 两者不等即判 invalid，卡块不产出。
+import {
+  SESSION_CARD_CUSTOM_TYPE,
+  SESSION_CARD_ID,
+  SESSION_CARD_ROUTE,
+} from "@dshana/shared/app-card-id.ts";
 
-/** 会话卡页（App ui/ 静态树内的 stream 面）。 */
-export const SESSION_CARD_ROUTE = "/stream.html";
+/** 会话卡的 manifest 卡 id（contributes.cards[].id，也是 messageRenderers[].cardId）。 */
+export const SESSION_CARD_MANIFEST_ID = SESSION_CARD_ID;
 
-/** 聊天流里的占位比例（"宽:高"；渲染端按冒号拆，数字会被当非法值丢掉）。
-    它不只管“内容到达前”那一帧：它是这张卡高度的**下界**，入口行的 `hana.ui.resize` 上报
-    压不过它（窄窗口下看不出，窗口一宽、比例算出的高度超过内容高度时就显出来，表现为
-    “会话列一宽，这张卡就变长”）。所以要把这一行压薄，只能抬比例。
-    取 32:1：入口内容（1 行抬头 + 3 行坐标）约 96px，该比例在约 3070px 宽的会话列里算出的
-    占位高度仍不超过内容高度，于是上报值说了算，高度不再跟着窗口宽度走。 */
-const CARD_ASPECT_RATIO = "32:1";
+/** 会话卡的自定义消息短名（contributes.messageRenderers[].customType）。 */
+export const SESSION_CARD_TYPE = SESSION_CARD_CUSTOM_TYPE;
 
-/** 卡面抬头（宿主聊天卡上那一行标题）。动作不写在这里：状态字样是卡**内**第一行的事。 */
-const CARD_TITLE = "DSHana";
+/** 会话卡页（App ui/ 静态树内的 stream 面，manifest 卡 route 指向它）。 */
+export const SESSION_CARD_ROUTE_PATH = SESSION_CARD_ROUTE;
 
-/** 会话卡的动作面（写进 route 的 act=，卡页据此渲染状态字样）。 */
-export type SessionCardAction = "open" | "reply";
-
-/** sessionCard 的入参：提交成功后拿到的定位信息。 */
-export interface SessionCardInput {
-  action: SessionCardAction;
-  sessionId: string;
-  taskId: string;
-  /** 后台结果的投递档位（与工具回执 details.dsh.delivery 同一个值）。 */
-  delivery?: string | null;
-  cwd?: string | null;
+/** 交付了一条会话卡的回执事实（提交链 resolve 出来的那一份）。 */
+export interface SessionCardOutcome {
+  /** 那条自定义消息在会话 jsonl 里的节点 id；尚未落盘或投递失败时为 null。 */
+  cardEntryId?: string | null;
+  /** 投递失败的原因（成功时为 null/undefined）。 */
+  cardError?: string | null;
 }
 
-/** 宿主流内 plugin_card 块的字面量。 */
-export interface SessionCard {
-  pluginId: string;
-  route: string;
-  title: string;
-  description: string;
-  aspectRatio: string;
-  cardForm: string;
+/**
+ * 回执里关于会话卡的那一句。
+ *
+ * 三态，各说各的（都不谎报）：
+ *   · 拿到 entryId：卡就在会话里，什么都不加（坐标回执里已经有了，不必再抄一遍）。
+ *   · 没 entryId 也没错：投递被接受但节点 id 没回执（消息可能还在流式队列里），说清"未确认落盘"。
+ *   · 有错：投递失败（未授权、会话不属本 App、超时等）——**卡是这段会话在聊天流里唯一的把手**，
+ *     必须说出来，并说明任务本身照常在跑（别让用户以为整次提交失败了）。
+ */
+export function sessionCardNote({ cardEntryId, cardError }: SessionCardOutcome): string {
+  if (cardError) return "\n（会话卡未能确认投出：" + cardError + "；任务本身已经在跑。）";
+  if (!cardEntryId) return "\n（会话卡已投出，但落盘节点 id 未回执：消息可能还在流式队列里。）";
+  return "";
 }
 
-/** 会话卡字面量。 */
-export function sessionCard({ action, sessionId, taskId, delivery, cwd }: SessionCardInput): SessionCard {
-  const now = Date.now();
-  const params = [
-    "ts=" + now,
-    "at=" + now,
-    // 动作是数据，状态字样（"子代理已开启" 这类）是卡页的文案：文案住在卡页里，改文对
-    // 已经发出的卡也生效（它们每次打开都重新取那一页）。
-    "act=" + action,
-    "sid=" + encodeURIComponent(sessionId),
-    // tid 只作展示与备查：入口行把它写在副行上。
-    "tid=" + encodeURIComponent(taskId),
-  ];
-  if (cwd) params.push("cwd=" + encodeURIComponent(cwd));
-  return {
-    pluginId: APP_ID,
-    route: SESSION_CARD_ROUTE + "?" + params.join("&"),
-    title: CARD_TITLE,
-    description: sessionId.slice(0, 12) + "… · " + (cwd || "未指定工作目录") + " · taskId " + taskId +
-      (delivery ? " · 结果按 " + delivery + " 档投递" : ""),
-    aspectRatio: CARD_ASPECT_RATIO,
-    // 黑板绑定的形态跟着聊天卡过去（宿主只搬 aspectRatio 与 cardForm 两个键）。
-    cardForm: "flush",
-  };
-}

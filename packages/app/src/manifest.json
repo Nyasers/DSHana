@@ -11,9 +11,10 @@
     "app/tools.expose-to-model",
     "app/tasks.manage",
     "app/session.start-turn",
+    "app/sessions.read",
+    "app/sessions.manage",
     "app/models.infer",
     "app/agents.read",
-    "app/sessions.read",
     "app/resources.read",
     "app/runtime.execute",
     "app/runtime.local-machine",
@@ -57,6 +58,22 @@
         "face": {
           "image": "face.png"
         }
+      },
+      {
+        "id": "session-card",
+        "title": "DSHana",
+        "description": "DSHana session handle (in-stream card)",
+        "route": "/stream.html",
+        "cardForm": "flush",
+        "face": {
+          "image": "face.png"
+        }
+      }
+    ],
+    "messageRenderers": [
+      {
+        "customType": "session-card",
+        "cardId": "session-card"
       }
     ],
     "settings": {

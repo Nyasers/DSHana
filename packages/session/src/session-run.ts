@@ -36,6 +36,8 @@ import { serviceBase } from "@dshana/runtime/service-base.ts";
 import { rpcViaControl, invokeControl } from "@dshana/runtime/controller.ts";
 import { resolveTaskTimeoutSec, resolveApprovalTimeoutMs, cancelSessionWork } from "./cancel-chain.ts";
 import { readPresetRoster, findPreset, brokenReason, assertPresetInRoster, brokenPresetError } from "./preset-roster.ts";
+import { deliverSessionCard, sessionCardContent } from "./session-card.ts";
+import { sessionCardCoords } from "@dshana/shared/app-card-id.ts";
 
 /** 取错误的可读文本。catch 到的值类型未知，字段访问一律经这里。 */
 const errText = (e: unknown): string => ((e as any)?.message as string) || String(e);
@@ -161,6 +163,27 @@ async function rpcCall(ctx, _base, opts) {
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+/** 会话卡投递的有界等待（见投递处注释：宿主对工具回调有 30s 上限）。 */
+export const SESSION_CARD_DELIVERY_TIMEOUT_MS = 8000;
+
+/**
+ * 给一个 promise 加超时：超时即 reject（**不取消**底下的操作）。
+ *
+ * 为什么不取消：`session:send-custom` 是宿主的写动词，没有取消口；超时只是让我们不再等它。
+ * 那条消息可能仍然落盘（卡随后出现），所以调用方只把超时当"这次没确认"，不当作"卡一定没投出"——
+ * 措辞见 shared/card.ts 的 sessionCardNote（说清"未确认"，不谎报失败）。
+ */
+function withDeadline<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(what + "（" + ms + "ms 内没有回执）")), ms);
+    if (typeof (timer as { unref?: () => void }).unref === "function") (timer as { unref: () => void }).unref();
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
 }
 
 async function failTask(ctx, taskId, message) {
@@ -333,6 +356,10 @@ export interface DshSubmitLoc {
   taskId: string;
   delivery: string;
   cwd?: string | null;
+  /** 会话卡那条 custom 消息在会话 jsonl 里的节点 id；投递失败或尚未落盘时为 null。 */
+  cardEntryId?: string | null;
+  /** 会话卡投递失败的原因（成功时为 null）。卡只是把手，失败不阻断提交，但要如实报出来。 */
+  cardError?: string | null;
 }
 
 /** 提交句柄：ready 在 prompt 被接受后 resolve 定位键；promise 是后台生命周期（等终态、释放锁）。 */
@@ -604,6 +631,46 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
         },
       });
       logLine(log, "[dsh-session] prompt 已提交（" + parsed.action + "）session=" + sessionId + " rpcId=" + rpcId);
+      // ⑦ 会话卡投递（session:send-custom → contributes.messageRenderers）
+      //    为什么在这里：卡要挂的是「这次提交的坐标」，而坐标到这一步才全（sessionId 来自会话建立、
+      //    rpcId 刚铸）。工具回执卡那条路在本版宿主上投不出卡（见 shared/app-card-id.ts 头注释），
+      //    所以这条消息承担出卡。
+      //    卡的实例 id 由 taskId 派生（sessionCardIdForTask），随 details.cardInstanceId 投出：
+      //    宿主过形状闸后原样采用，卡从 surface context 读回同一个值，App 后端据此在宿主任务记录里
+      //    认领这次提交（坐标的事实源仍是第 ⑤ 步写下的 metadata.dsh）。
+      //    失败不阻断提交：任务已经在跑，卡只是把手（回执里如实说明，见 loc.cardError）。
+      const coords = sessionCardCoords({
+        action: parsed.action,
+        sessionId,
+        taskId,
+        rpcId,
+        cwd: established.effectiveCwd || parsed.cwd || "",
+        delivery: TASK_DELIVERY,
+      });
+      let cardEntryId: string | null = null;
+      let cardError: string | null = null;
+      try {
+        // 有界等待：这次投递排在 ready 之前（回执要如实报卡的状态），而宿主对工具回调有 30s 上限
+        // （SKILL.md「turn boundary」那条：超时会把会话卡死）。投递卡不该把整次提交拖过那个上限——
+        // 超时就当"卡没投出"如实报，任务照常。callToken 此刻仍然有效（execute 还没返回）。
+        const delivered = await withDeadline(
+          deliverSessionCard(ctx, { callToken: token, coords, content: sessionCardContent(coords) }),
+          SESSION_CARD_DELIVERY_TIMEOUT_MS,
+          "会话卡投递超时",
+        );
+        cardEntryId = delivered.entryId;
+        logLine(
+          log,
+          "[dsh-session] 会话卡已投递（" + (delivered.mode || "?") + "）entryId=" + (cardEntryId || "null") +
+            "（session=" + sessionId + "）",
+        );
+      } catch (e) {
+        cardError = errText(e);
+        logLine(
+          log,
+          "[dsh-session][warn] 会话卡投递失败（任务照常，卡面是唯一可见把手，回执里如实说明）：" + cardError,
+        );
+      }
       // ready 后 execute 可返回；本后台继续等 task 终态（释放串行化锁）
       const loc = {
         action: parsed.action,
@@ -612,6 +679,8 @@ export function submitDshTask({ action, input, callToken, log }: DshSubmitInput)
         taskId,
         delivery: TASK_DELIVERY,
         cwd: established.effectiveCwd || parsed.cwd || null,
+        cardEntryId,
+        cardError,
       };
       resolveReady(loc);
       // 后台等到终态（child task-bridge complete/fail/canceled → 宿主投递来源会话）。

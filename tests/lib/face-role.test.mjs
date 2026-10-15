@@ -50,7 +50,7 @@ test("会话流面：输入卡保留（可直接在该会话里打字），只�
 
 test("会话流面：未钉住时跟随共用选中，不把会话清空", () => {
   const src = readFileSync(join(here, "..", "..", "integrations", "ui-session", "files", "src", "client", "index.ts"), "utf8");
-  // 不带 sid 直接开页 = 跟随跨面共用的当前会话（见 ui/stream.html 的注释）。
+  // 不带坐标直接开页（或坐标反查没命中）= 跟随跨面共用的当前会话（见 ui/stream.html 的注释）。
   // 若这一支也报 MAX_SAFE_INTEGER，applyRemote 就会把它当成「最新的意思：没有会话」而 clear()。
   assert.match(src, /if \(sid === null\) return sharedSelection\(\)/, "未钉住要回落到共用选中");
   assert.ok(!/id: sid \?\? null/.test(src), "不再把「没钉住」当成「就是没有会话」");
@@ -109,12 +109,19 @@ test("侧栏收起：只在有轨的 default（standalone）面上生效，无�
   assert.match(sidebarRoot, /toggleSidebar\(\)/, "折叠钮要真的能切换");
 });
 
-test("清单与页面：会话卡由 ui/stream.html 承担（聊天卡就是这一页，不注册 manifest 卡）", () => {
+test("清单与页面：会话卡由 ui/stream.html 承担，经 messageRenderers 投成流内卡", () => {
   const html = readFileSync(join(here, "..", "..", "packages", "ui", "src", "stream.html"), "utf8");
   assert.match(html, /<meta name="hana-dshana-role" content="stream">/);
   assert.match(html, /data-dshana-view="stream"/);
   const manifest = JSON.parse(readFileSync(manifestPath(join(here, "..", "..")), "utf8"));
   const ids = manifest.contributes.cards.map((c) => c.id);
-  assert.ok(!ids.includes("stream"), "会话卡走工具的聊天流卡（details.card 指这一页），不占卡片中心一格");
+  assert.ok(ids.includes("session-card"), "会话卡要有自己的 manifest 卡声明（messageRenderers 的 cardId 只能指向它）");
+  // 会话卡不是整页主卡：它不带 realization:"page"，也不占站点导航一格。
+  const sessionCard = manifest.contributes.cards.find((c) => c.id === "session-card");
+  assert.equal(sessionCard.route, "/stream.html");
+  assert.equal(sessionCard.realization, undefined, "会话卡是普通流内卡，不是整页卡");
+  assert.equal(sessionCard.siteNavEntry, undefined, "会话卡不占站点导航一格");
   assert.ok(!ids.includes("session"), "取出由宿主手势完成，不再声明一张黑板的会话卡");
+  // 整页主卡仍在（dshana）：会话卡不夺它的位置。
+  assert.ok(ids.includes("dshana"), "整页主卡照旧");
 });
