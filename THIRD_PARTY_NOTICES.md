@@ -49,7 +49,7 @@ LICENSE and the entry is reproduced here for the inlined build-time use.
 
 ### zod
 
-- Version: 4.6.5
+- Version: 4.6.7
 - Purpose: Runtime schemas for the tool argument surface: one definition generates the model-facing JSON Schema and validates incoming arguments before dispatch.
 - Form: devDependency (`zod`), statically inlined by rspack into `bin/app.mjs` for the tool argument surface. A separate copy also ships under `node_modules/` as part of the DSH dependency tree, carrying its own LICENSE.
 - License: MIT License (full text below)
