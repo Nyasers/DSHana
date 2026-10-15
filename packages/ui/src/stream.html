@@ -32,12 +32,15 @@
       （宿主路由、公开，不是本 App 自己的资源；见该片段内的说明）。 -->
 <link rel="stylesheet" href="./face-stage.css">
 <style>
-  /* 聊天流入口态：一行抬头 + 三行坐标（会话 / 目录 / 任务）。入口行的高度按内容报给宿主
-     （hana.ui.resize）。默认不显示：取出的卡（黑板 / 拆窗）首帧不许出现坐标行——只有认到
-     聊天流态（body[data-stream-view="entry"]）才露出，认态在 stream-entry.ts 里做。 */
+  /* 聊天流入口态：一行抬头 + 三行坐标（会话 / 目录 / 任务）。默认不显示：取出的卡
+     （黑板 / 拆窗）首帧不许出现坐标行——只有认到聊天流态（body[data-stream-view="entry"]）
+     才露出，认态在 stream-entry.ts 里做。
+     **高度由内容定，不铺满 iframe**：这条自定义消息渲染出来的卡由宿主给初始高度，页面再把
+     真实高度报回去（hana.ui.resize）。若这里写 height: 100%，量到的就是宿主给的容器高度，
+     报回去等于把错误高度又确认了一遍，卡永远收不到内容高度。 */
   #dsh-entry {
-    box-sizing: border-box; height: 100%; padding: 10px 16px;
-    display: none; flex-direction: column; justify-content: center; gap: 3px;
+    box-sizing: border-box; padding: 10px 16px;
+    display: none; flex-direction: column; gap: 3px;
   }
   body[data-stream-view="entry"] #dsh-entry { display: flex; }
   #dsh-entry .entry-head { display: flex; align-items: center; gap: 10px; }

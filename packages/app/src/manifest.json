@@ -61,7 +61,7 @@
       },
       {
         "id": "session-card",
-        "title": "DSHana",
+        "title": "DSHana Session",
         "description": "DSHana session handle (in-stream card)",
         "route": "/stream.html",
         "cardForm": "flush",

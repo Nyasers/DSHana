@@ -56,18 +56,47 @@ function classifyMount(): "chat" | "canvas" | null {
 }
 
 // 入口行的高度由内容定（一行抬头 + 三行单行文本，宽度变窄也不会换行）：量一次报给宿主。
-// manifest 卡没有 aspectRatio 字段（见 packages/app/src/manifest.json 的 session-card），
-// 所以这一步就是这张卡高度的唯一来源。
+//
+// 量的是入口行自己的边框盒——stream.html 里它不铺满 iframe（不写 height:100%），所以量到的是
+// 内容高度；若它铺满，量到的会是宿主给的容器高度（视口高），报回去等于把错误高度又确认一遍。
+//
+// 这条路是这张卡高度的唯一来源：`contributes.messageRenderers` 那条路的映射不带 aspectRatio，
+// 卡也没有声明位。宿主收到后在客户端把值夹进 `[100, innerHeight - 48]`（非 card 槽位分支，
+// 常量见 ChatTranscript 的 A9/mT），所以内容高（本页约 100）落在地板附近——这就是卡的高度下限。
 const ENTRY_MIN_HEIGHT_PX = 96;
+
+/** 上一次报上去的高度：同值不重报——宿主改框会带动本页重排，无条件重报会来回弹成回环。 */
+let reportedHeight = 0;
 
 /** 把入口行的真实高度报给宿主（运行时高度报告；旧宿主没这道门就按宿主缺省走）。 */
 function reportEntryHeight(): void {
   const el = document.getElementById(ENTRY_ID);
   const ui = hana && (hana as any).ui;
   if (!el || !ui || typeof ui.resize !== "function") return;
+  // 1px 容差：亚像素级的来回报不出真变化，却足以把宿主拖进改框循环。
+  const height = Math.max(Math.ceil(el.getBoundingClientRect().height), ENTRY_MIN_HEIGHT_PX);
+  if (Math.abs(height - reportedHeight) <= 1) return;
+  reportedHeight = height;
   try {
-    ui.resize({ height: Math.max(Math.ceil(el.scrollHeight), ENTRY_MIN_HEIGHT_PX) });
-  } catch { /* 宿主拒绝就按比例走 */ }
+    ui.resize({ height });
+  } catch { /* 宿主拒绝就按宿主缺省走 */ }
+}
+
+/**
+ * 跟着入口行的内容变高变矮。
+ *
+ * 谁会让它变：坐标反查回来改写坐标行、跟踪态片段落进来（两者都在首次上报之后）。
+ * 为什么不会回环：观察的是入口行自己，而它的高度由内容定（不铺满 iframe）——宿主改框只改
+ * 本页 iframe，不会改这一行的高度，所以改框不触发重报，重报只由内容真的变了触发。
+ */
+let entrySizeObserver: ResizeObserver | null = null;
+function watchEntryHeight(): void {
+  const el = document.getElementById(ENTRY_ID);
+  if (!el || typeof ResizeObserver !== "function" || entrySizeObserver) return;
+  try {
+    entrySizeObserver = new ResizeObserver(() => reportEntryHeight());
+    entrySizeObserver.observe(el);
+  } catch { entrySizeObserver = null; /* 旧宿主没这 API：靠各内容改写点自己调 reportEntryHeight */ }
 }
 
 /** 卡状态行右侧的跟踪态：非终态（tracked / cancelling）期间慢轮询，终态即停手。 */
@@ -132,6 +161,7 @@ function setEntryRow(selector: string, value: string): void {
 function showEntry(): void {
   document.body.setAttribute("data-stream-view", "entry");
   reportEntryHeight();
+  watchEntryHeight();
   fetchCardCoords().then((coords) => {
     // 装载失败已经把原因写在入口行上了（见 showLoadFailure）：坐标反查晚于它回来时不许把它盖掉，
     // 那一行此刻是这一页唯一的失败可见面。
