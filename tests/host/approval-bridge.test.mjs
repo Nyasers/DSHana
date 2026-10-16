@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/host/approval-bridge.test.mjs — packages/host/src/approval-bridge.ts 的纯函数部分
+// tests/host/approval-bridge.test.mjs — packages/host/src/approval-bridge.ts 单测
 //
 // 这里锁的是**归属校验通则**的第一半（审批侧）：宿主审批记录自带 parentTaskId，
 // 它和我们映射里以为的 taskId 必须一致，否则 fail-closed 拒绝（绝不放行）。
 // 契约上 parentTaskId 必填 → 缺失也按不一致处理，宁可拒绝一次，不拿来源不明的审批等结果。
+//
+// 第二半是绑定侧：绑定的宿主任务已终结时按"无绑定"委托（审批不得挂到已结束的父任务上），
+// 以及 requestApproval 在途窗口里的中止/停止收尾（不留既不拒绝也不放行的挂起审批）。
+// 组装面用假 ctx（捕获 ctx.on 的 handler 再手动触发）与假 hana.tasks，不起真进程。
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -20,6 +24,8 @@ import {
   summarizeOperation,
   describeEscalation,
   buildApprovalLabel,
+  preWatchVerdict,
+  startApprovalBridge,
 } from "@dshana/host/approval-bridge.ts";
 
 test("approvalOwnsTask：parentTaskId 一致才放行", () => {
@@ -142,4 +148,204 @@ test("buildApprovalLabel：label 自带具体操作与申请的权限档，并�
   assert.ok(label.includes("danger-full-access"), label);
   const bare = buildApprovalLabel("mystery", summarizeOperation("mystery", null), describeEscalation(null));
   assert.equal(bare, "DSH 请求执行越界/敏感操作（mystery）：调用 mystery", "拿不到 args 时不编造档位");
+});
+
+// —— 认领前的收尾判定（拿到 approvalId 之后、起 watcher 之前）——
+
+test("preWatchVerdict：已中止/桥已停止 → rejected；否则 null（正常进 watch）", () => {
+  assert.equal(preWatchVerdict({ aborted: true, stopped: false }), "rejected");
+  assert.equal(preWatchVerdict({ aborted: false, stopped: true }), "rejected");
+  assert.equal(preWatchVerdict({ aborted: true, stopped: true }), "rejected");
+  assert.equal(preWatchVerdict({ aborted: false, stopped: false }), null);
+  assert.equal(preWatchVerdict({}), null, "只有布尔真才算命中");
+  assert.equal(preWatchVerdict(null), null);
+  assert.equal(preWatchVerdict(undefined), null);
+});
+
+// —— 组装面：假 ctx + 假 hana.tasks（不起真进程）——
+
+const SID = "session-11111111-2222-3333-4444-555555555555";
+
+/** 造一条宿主任务记录（形状取 AppTaskRecordV2 里绑定归一读的那几格）。 */
+function hostRec(over = {}) {
+  return {
+    taskId: "task-1",
+    status: "running",
+    metadata: { dsh: { action: "create", sessionId: SID, rpcId: "r_1", approvalTimeoutMs: 30000 } },
+    createdAt: 1,
+    updatedAt: 2,
+    ...over,
+  };
+}
+
+/** 假 ctx：捕获 ctx.on 注册的 handler，返回 fire 手动触发（模拟 DSH 瀑布事件）。 */
+function fakeCtx() {
+  const handlers = new Map();
+  return {
+    handlers,
+    ctx: {
+      on: (ev, h) => {
+        handlers.set(ev, h);
+        return () => handlers.delete(ev);
+      },
+    },
+    fire: (ev, ...args) => handlers.get(ev)(...args),
+  };
+}
+
+/**
+ * 假宿主任务面 + 假 hana.tasks。approvalGate 挂在 requestApproval 上（在途窗口用）；
+ * approvalResult 覆盖 requestApproval 的返回（默认一条 pending 审批记录）。
+ * watcher 对账读到的是"已终态但无 outcome"的审批记录 ⇒ fail-closed rejected，一轮即收敛，
+ * 不留在后台重连退避上；calls.gets 是对账读次数，>0 就说明 watcher 真的起了。
+ */
+function harness({ rows = [hostRec()], approvalGate = null, approvalResult = null } = {}) {
+  const store = new Map(rows.map((r) => [r.taskId, r]));
+  const tasks = {
+    list: async () => [...store.values()],
+    get: async (id) => store.get(id) || null,
+    update: async (id, patch) => {
+      const next = { ...(store.get(id) || {}), ...patch };
+      store.set(id, next);
+      return next;
+    },
+  };
+  const calls = { requested: [], responded: [], gets: 0 };
+  const hana = {
+    tasks: {
+      ...tasks,
+      requestApproval: async (req) => {
+        calls.requested.push(req);
+        if (approvalGate) await approvalGate;
+        return approvalResult || { approvalId: "appr-1", parentTaskId: req.taskId, status: "pending" };
+      },
+      respondApproval: async (a) => { calls.responded.push(a); return { ...a, status: "terminal" }; },
+      watch: async () => ({ body: null }),
+      get: async (id) => {
+        calls.gets += 1;
+        return { approvalId: id, parentTaskId: "task-1", status: "completed" };
+      },
+    },
+  };
+  const { ctx, fire } = fakeCtx();
+  const notes = [];
+  const stop = startApprovalBridge({ ctx, hana, log: (m) => notes.push(m) });
+  return { store, tasks, calls, hana, fire, stop, notes };
+}
+
+const req = () => ({ agent: { session: { id: SID } }, callId: "c1", toolName: "bash", reason: null, signal: null });
+const tick = () => new Promise((r) => setTimeout(r, 20));
+
+test("绑定已终结 → 按无绑定委托，不认领（不得把审批挂到已结束的父任务上）", async () => {
+  const h = harness({ rows: [hostRec({ status: "completed" })] });
+  let delegated = 0;
+  const out = await h.fire("approval/request", req(), () => { delegated += 1; return "delegated"; });
+  assert.equal(out, "delegated", "终结态绑定必须走 next() 委托");
+  assert.equal(delegated, 1);
+  assert.equal(h.calls.requested.length, 0, "不得在终结的父任务上创建审批");
+  assert.ok(h.notes.some((n) => n.includes("已终结")), "note 要说明原因：" + h.notes.join(" | "));
+  h.stop();
+});
+
+test("绑定已终结（终态各值同款）→ 委托；读取失败仍是显式 rejected（两者不混）", async () => {
+  for (const status of ["completed", "failed", "canceled", "aborted"]) {
+    const h = harness({ rows: [hostRec({ status })] });
+    let delegated = 0;
+    await h.fire("approval/request", req(), () => { delegated += 1; });
+    assert.equal(delegated, 1, status + " 应委托");
+    assert.equal(h.calls.requested.length, 0);
+    h.stop();
+  }
+  // 宿主不可达 = 状态丢了：显式拒绝且**不委托**（委托会把真因掩盖成 DSH 的 fail-closed）
+  const broken = harness();
+  broken.hana.tasks.list = async () => { throw new Error("host down"); };
+  let delegated2 = 0;
+  const out = await broken.fire("approval/request", req(), () => { delegated2 += 1; });
+  assert.equal(out, "rejected");
+  assert.equal(delegated2, 0, "读取失败不得委托");
+  broken.stop();
+});
+
+test("活动绑定 → 正常认领（不误伤这条路）", async () => {
+  const h = harness();
+  const out = await h.fire("approval/request", req(), () => { throw new Error("不该委托"); });
+  await tick(); // 让 watcher 收尾（终态帧结算后它把自己从 pendings 摘掉）
+  assert.equal(h.calls.requested.length, 1, "活动绑定的审批照旧创建");
+  assert.equal(h.calls.requested[0].taskId, "task-1", "认领时用绑定的 taskId 作父任务");
+  assert.ok(h.calls.gets > 0, "认领后起 watcher 对账等宿主终态");
+  assert.equal(out, "rejected", "宿主审批记录已终结且无 outcome ⇒ fail-closed rejected");
+  // 宿主记录已是终态，桥不替宿主动作答；stop 也不该再应答一次
+  assert.deepEqual(h.calls.responded, []);
+  h.stop();
+  assert.deepEqual(h.calls.responded, []);
+});
+
+test("审批创建即终态 → 直接按宿主结果结算，不入 pendings（stop 不重复应答）", async () => {
+  const h = harness({ approvalResult: { approvalId: "appr-1", parentTaskId: "task-1", status: "canceled" } });
+  const out = await h.fire("approval/request", req(), () => {});
+  assert.equal(out, "rejected", "终态无 outcome ⇒ fail-closed 拒绝");
+  assert.equal(h.calls.gets, 0, "已即时终态就不起 watcher");
+  h.stop();
+  assert.deepEqual(h.calls.responded, [], "宿主记录已是终态，stop 不该再应答一次");
+});
+
+test("中止窗口：requestApproval 在途被中止 → 宿主审批被 rejected 收尾，且不进 pendings", async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const h = harness({ approvalGate: gate });
+  const ac = new AbortController();
+  const p = h.fire("approval/request", { ...req(), signal: ac.signal }, () => { throw new Error("不该委托"); });
+  await tick();
+  assert.equal(h.calls.requested.length, 1, "requestApproval 已发出（在途）");
+  assert.equal(h.calls.responded.length, 0, "approvalId 还没到手，这时没有可应答的对象");
+
+  ac.abort(); // DSH 回合取消落在 requestApproval 在途期间
+  release();  // 宿主此刻才返回 approvalId
+  const verdict = await p;
+  await tick(); // 在途 answerer 拿到 approvalId 后的收尾（同一批微任务之后）
+
+  assert.equal(verdict, "cancelled", "DSH 等待者收到取消，绝不是 allowed-once");
+  assert.deepEqual(
+    h.calls.responded,
+    [{ approvalId: "appr-1", outcome: "rejected" }],
+    "宿主那条审批必须被 rejected 收尾（不留孤儿）",
+  );
+  assert.equal(h.calls.gets, 0, "已中止的审批不该起 watcher");
+  // 不进 pendings：stop() 的兜底循环扫不到它——它已经自己收尾了，不该再被应答第二次
+  h.stop();
+  assert.deepEqual(h.calls.responded, [{ approvalId: "appr-1", outcome: "rejected" }], "stop 不该重复应答");
+});
+
+test("中止窗口：先中止再拿到 approvalId（abort 早于 requestApproval 返回）同样收尾", async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const h = harness({ approvalGate: gate });
+  const ac = new AbortController();
+  const p = h.fire("approval/request", { ...req(), signal: ac.signal }, () => {});
+  await tick();
+  ac.abort();
+  await tick();
+  release();
+  const verdict = await p;
+  await tick();
+  assert.equal(verdict, "cancelled");
+  assert.deepEqual(h.calls.responded, [{ approvalId: "appr-1", outcome: "rejected" }]);
+  assert.equal(h.calls.gets, 0);
+  h.stop();
+});
+
+test("停止窗口：桥在 requestApproval 在途时停止 → 手边的审批被 rejected 收束", async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const h = harness({ approvalGate: gate });
+  const p = h.fire("approval/request", req(), () => { throw new Error("不该委托"); });
+  await tick();
+  assert.equal(h.calls.requested.length, 1);
+  h.stop();     // runtime shutdown 落在同一窗口
+  release();
+  const verdict = await p;
+  await tick();
+  assert.equal(verdict, "rejected", "桥已停止 ⇒ 既不拒绝也不放行的挂起是不允许的");
+  assert.deepEqual(h.calls.responded, [{ approvalId: "appr-1", outcome: "rejected" }]);
+  assert.equal(h.calls.gets, 0, "停止后不该再起 watcher");
 });
