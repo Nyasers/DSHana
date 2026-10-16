@@ -290,6 +290,10 @@ class SessionBridge {
     //     覆盖同一 reason/时间戳。
     try {
       if (this.bindings && typeof this.bindings.markCancel === "function" && this.taskId) {
+        // 不传第三参数：本进程不知道 App 侧那次 session.cancel 通知有没有被接受（那是 App 取消
+        // 编排的事实），只声明"取消标记存在"这一位。markCancel 的 rpcAccepted 是三态，省略 =
+        // 保留已有值——App 先写 false、RPC 被接受后改写 true，这里若显式传 false 会把那份 true
+        // 抹掉（审批挂起中的任务被取消时正是这个顺序）。
         await this.bindings.markCancel(this.taskId, "user");
       }
     } catch (e) {

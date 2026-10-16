@@ -247,7 +247,7 @@ test("markCancel：读-改-写全量 metadata，cancel 落到 metadata.dsh 且�
   const out = await index.markCancel("task-1", "timeout");
   assert.equal(out.cancel.reason, "timeout");
   assert.ok(typeof out.cancel.at === "number");
-  assert.equal(out.cancel.rpcAccepted, false, "省略第三参数 = 通知尚未被接受");
+  assert.equal(out.cancel.rpcAccepted, false, "无已有标记 + 省略第三参数 ⇒ 落 false（未确认）");
   const written = tasks.calls.update[0];
   assert.equal(written.id, "task-1");
   assert.equal(written.patch.metadata.dsh.sessionId, SID, "写入必须是全量 dsh（合并语义没写死）");
@@ -270,9 +270,66 @@ test("markCancel：rpcAccepted 写进 cancel 对象；再写一次即改写（�
   assert.equal(second.cancel.rpcAccepted, true);
   assert.equal(second.cancel.reason, "user");
   assert.equal(tasks.store.get("task-1").metadata.dsh.cancel.rpcAccepted, true);
-  // 非布尔真值不得写成 true（读侧要有稳定的归一语义）
+  // 非布尔脏值按"省略"处理（三态），不是显式重置：已有的 true 必须留下，不得被写成 false
   const third = await index.markCancel("task-1", "user", "yes");
-  assert.equal(third.cancel.rpcAccepted, false);
+  assert.equal(third.cancel.rpcAccepted, true, "非布尔 = 没声明这一位 ⇒ 保留既有 true");
+});
+
+// ---- 取消标记的三态写入（同一格被两个写入方当成两件事用的回归）----
+
+test("markCancel 三态：省略第三参数保留已有的 rpcAccepted=true", async () => {
+  const tasks = fakeTasks([rec()]);
+  const index = createTaskBindingIndex(tasks);
+  await index.markCancel("task-1", "user", true);
+  const after = await index.markCancel("task-1", "user");
+  assert.equal(after.cancel.rpcAccepted, true, "不声明这一位的写入方不得抹掉别人写的 true");
+  assert.equal(tasks.store.get("task-1").metadata.dsh.cancel.rpcAccepted, true);
+});
+
+test("markCancel 三态：显式 false 能把 true 重置掉（新一次取消请求开始）", async () => {
+  const tasks = fakeTasks([rec()]);
+  const index = createTaskBindingIndex(tasks);
+  await index.markCancel("task-1", "user", true);
+  const reset = await index.markCancel("task-1", "user", false);
+  assert.equal(reset.cancel.rpcAccepted, false, "布尔 false 是显式重置，必须写下去");
+  assert.equal(tasks.store.get("task-1").metadata.dsh.cancel.rpcAccepted, false);
+});
+
+test("markCancel 三态：没有已有标记时省略第三参数 → false", async () => {
+  const tasks = fakeTasks([rec()]);
+  const index = createTaskBindingIndex(tasks);
+  const out = await index.markCancel("task-1", "user");
+  assert.equal(out.cancel.rpcAccepted, false, "没有可保留的值 ⇒ 落 false（未确认）");
+  assert.equal(tasks.store.get("task-1").metadata.dsh.cancel.rpcAccepted, false);
+});
+
+test("markCancel 三态：非布尔值按省略处理（保留已有），不当成显式重置", async () => {
+  const tasks = fakeTasks([rec()]);
+  const index = createTaskBindingIndex(tasks);
+  for (const dirty of ["true", 1, 0, null, {}, []]) {
+    await index.markCancel("task-1", "user", true);
+    const out = await index.markCancel("task-1", "user", dirty);
+    assert.equal(
+      out.cancel.rpcAccepted,
+      true,
+      JSON.stringify(dirty) + " 不是布尔声明 ⇒ 按省略处理，保留既有 true",
+    );
+  }
+});
+
+test("markCancel 三态（回归）：task-bridge 式写入（不带第三参）不得抹掉 App 侧写的 true", async () => {
+  // 真机顺序：App 写标记(false) → RPC 被接受 → 改写(true) → DSH 中止回合 → task-bridge 结算，
+  // 其宿主 watch 观察到 status 变 canceled → onHostCancel 再写一次标记且带不上这一位。
+  const tasks = fakeTasks([rec()]);
+  const index = createTaskBindingIndex(tasks);
+  await index.markCancel("task-1", "user", false); // App：请求已发出，通知未确认
+  await index.markCancel("task-1", "user", true);  // App：RPC 被接受
+  const byBridge = await index.markCancel("task-1", "user"); // task-bridge.onHostCancel：不知道这一位
+  assert.equal(byBridge.cancel.rpcAccepted, true, "审批挂起中取消的任务不得停在 rpcAccepted:false");
+  assert.equal(tasks.store.get("task-1").metadata.dsh.cancel.rpcAccepted, true);
+  // 且标记整体语义不变：仍是一次取消请求（终态判定读的是标记存在）
+  assert.equal(byBridge.cancel.reason, "user");
+  assert.ok(typeof byBridge.cancel.at === "number");
 });
 
 test("markCancel：任务不存在返回 null；宿主写入失败抛错（调用方决定继续与否）", async () => {
