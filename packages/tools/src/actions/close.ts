@@ -32,11 +32,14 @@ export async function run(input: ToolInputBase, ctx: ToolCtx): Promise<ToolResul
     status = "idle";
     text = "会话 " + sid.slice(0, 12) + "… 当前没有运行中的 DSH 任务（映射为空）；已发送幂等 session.cancel，无副作用";
   } else if (out.status === "already-requested") {
-    text = "该会话已有取消请求在处理中（reason=" + String(out.reason || "user") + "），等待 DSH 中止确认；勿重复取消";
+    // 标记已存在**且其 DSH 通知已被接受**：这是一次重复请求，不再重发。回执只陈述已发生的事实。
+    text = "该会话的取消请求已发出并被 DSH 接受（reason=" + String(out.reason || "user") +
+      "），本次不重复发送；宿主任务的终态随后台任务通知落定";
   } else if (out.status === "dsh-rpc-failed") {
+    // RPC 未被接受：标记停在 rpcAccepted:false，结算与超窗升级照走（宿主 status 是唯一权威格）。
     status = "dsh-unreachable";
-    text = "已请求取消（session " + sid.slice(0, 12) + "…），但 DSH 侧取消调用失败：" +
-      String(out.dshError || "unknown") + "。宿主任务将以取消兜底终结；若 DSH 进程仍运行请检查 runtime 日志";
+    text = "已请求取消（session " + sid.slice(0, 12) + "…），但 DSH 侧取消调用未被接受：" +
+      String(out.dshError || "unknown") + "。任务已进入结算（超窗未获 DSH 确认时升级为宿主 cancel），终态以后台任务通知为准";
   } else {
     text = "已请求取消（session " + sid.slice(0, 12) +
       "…）：不等确认（窗口在后台走），终态随后台任务通知落定；若 DSH 超窗未停，宿主任务会被升级标记 canceled（App 日志有「升级宿主 cancel」）";

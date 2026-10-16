@@ -20,11 +20,17 @@ import { cancelAccepted } from "@dshana/shared/dsh-rpc.ts";
 
 const SID = "session-11111111-2222-3333-4444-555555555555";
 
-test("planCancel: 无取消标记 → 需 DSH cancel；有标记 → 幂等不重复", () => {
+test("planCancel: 无取消标记 → 需 DSH cancel；标记在但 rpcAccepted 假 → 仍需 DSH cancel；标记且 rpcAccepted 真 → 幂等不重复", () => {
   const fresh = { dshSessionId: SID, taskId: "task-1", rpcId: "r_1", status: "running", cancel: null };
   assert.deepEqual(planCancel(fresh), { sessionId: SID, taskId: "task-1", dshCancelNeeded: true, hostEscalateAvailable: true });
-  const marked = { ...fresh, cancel: { at: 2, reason: "user" } };
-  assert.deepEqual(planCancel(marked), { sessionId: SID, taskId: "task-1", dshCancelNeeded: false, hostEscalateAvailable: true });
+  // 标记只说明"请求过取消"；通知没被接受就还得发（否则一次 RPC 失败 = 永久墓碑）
+  const markedUnaccepted = { ...fresh, cancel: { at: 2, reason: "user", rpcAccepted: false } };
+  assert.deepEqual(planCancel(markedUnaccepted), { sessionId: SID, taskId: "task-1", dshCancelNeeded: true, hostEscalateAvailable: true });
+  // 缺 rpcAccepted（老标记/宿主记录里没这一格）同样按未接受读
+  const markedLegacy = { ...fresh, cancel: { at: 2, reason: "user" } };
+  assert.deepEqual(planCancel(markedLegacy), { sessionId: SID, taskId: "task-1", dshCancelNeeded: true, hostEscalateAvailable: true });
+  const markedAccepted = { ...fresh, cancel: { at: 2, reason: "user", rpcAccepted: true } };
+  assert.deepEqual(planCancel(markedAccepted), { sessionId: SID, taskId: "task-1", dshCancelNeeded: false, hostEscalateAvailable: true });
   assert.deepEqual(planCancel(null), { sessionId: "", taskId: "", dshCancelNeeded: false, hostEscalateAvailable: false });
 });
 
@@ -65,16 +71,58 @@ test("requestCancel: 发请求即返回，终态结算丢后台（不占工具�
   assert.deepEqual(order, ["execute", "settle:task-9", "settled"], "结算仍在后台跑完");
 });
 
-test("requestCancel: 非 cancelling 分支（无绑定/幂等/DSH 不可达）不启动结算", async () => {
+test("requestCancel: 非 cancelling 且非 dsh-rpc-failed 的分支（无绑定/幂等）不启动结算", async () => {
+  for (const status of ["no-active-work", "already-requested"]) {
+    let settled = 0;
+    const deps = {
+      executeCancel: async () =>
+        status === "no-active-work"
+          ? { status, sessionId: SID, taskId: null }
+          : { status, sessionId: SID, taskId: "task-9" },
+      settle: async () => { settled += 1; return { settled: "unresolved" }; },
+    };
+    const out = await requestCancel({ sessionId: SID, deps });
+    assert.equal(out.status, status);
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(settled, 0, status + " 不该进结算（" + (status === "no-active-work" ? "没有 taskId" : "通知已被接受") + "）");
+  }
+});
+
+test("requestCancel: dsh-rpc-failed 也启动后台结算（RPC 没被接受时升级是唯一终态来源）", async () => {
+  const order = [];
+  let releaseSettle;
+  const gate = new Promise((res) => { releaseSettle = res; });
+  const deps = {
+    executeCancel: async () => {
+      order.push("execute");
+      return { status: "dsh-rpc-failed", sessionId: SID, taskId: "task-9", dshError: "ECONNREFUSED" };
+    },
+    settle: async (a) => {
+      order.push("settle:" + a.taskId);
+      await gate;
+      order.push("settled");
+      return { settled: "escalated" };
+    },
+  };
+  const out = await requestCancel({ sessionId: SID, reason: "user", deps });
+  assert.equal(out.status, "dsh-rpc-failed");
+  assert.equal(out.taskId, "task-9", "失败路径也必须带 taskId（不带就没人能结算它）");
+  assert.deepEqual(order, ["execute", "settle:task-9"], "失败路径同样进后台结算（且不阻塞返回）");
+  releaseSettle();
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(order, ["execute", "settle:task-9", "settled"], "结算仍在后台跑完（含 settleCancelTerminal 的升级分支）");
+});
+
+test("requestCancel: dsh-rpc-failed 无 taskId 时不进结算（没有可结算的对象）", async () => {
   let settled = 0;
   const deps = {
-    executeCancel: async () => ({ status: "no-active-work", sessionId: SID, taskId: null }),
+    executeCancel: async () => ({ status: "dsh-rpc-failed", sessionId: SID, dshError: "boom" }),
     settle: async () => { settled += 1; return { settled: "unresolved" }; },
   };
   const out = await requestCancel({ sessionId: SID, deps });
-  assert.equal(out.status, "no-active-work");
+  assert.equal(out.status, "dsh-rpc-failed");
   await new Promise((r) => setTimeout(r, 10));
-  assert.equal(settled, 0, "没有 taskId 就不该进结算");
+  assert.equal(settled, 0);
 });
 
 test("settleCancelTerminal: 终态 → terminal；超窗 → 升级宿主 cancel；升级失败 → unresolved", async () => {

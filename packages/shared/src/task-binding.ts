@@ -61,10 +61,18 @@ export function taskBindingBroken(why: string, subject?: unknown): Error & { cod
   return err;
 }
 
-/** 一条工作单元里的取消标记。 */
+/** 一条工作单元里的取消标记。
+ *
+ *  标记同时承担两件事：**这是一次取消请求**（幂等键：同一任务上重复请求只当一次）与
+ *  **这次请求的 DSH 侧通知是否已被接受**（动作事实）。两者分开记，取消标记才不是墓碑：
+ *  标记已写但 `rpcAccepted` 不为真时，取消链照旧要发 DSH cancel（重按取消、确认窗口超窗、
+ *  别的入口再发起都走这条路），否则 RPC 挂一次就把任务永久钉死在非终态。
+ */
 export interface TaskCancelMark {
   at: number;
   reason: string;
+  /** DSH session.cancel 已被接受（true 才为真；缺省/非布尔 = 未确认）。 */
+  rpcAccepted?: boolean;
 }
 
 /** 归一出的一条会话↔任务绑定（字段名沿用旧的映射记录词汇，读侧语义不变）。 */
@@ -102,7 +110,13 @@ function cancelOf(dsh: Record<string, unknown> | null): TaskCancelMark | null {
   if (!c || typeof c !== "object" || Array.isArray(c)) return null;
   const at = finiteOrNull((c as any).at);
   if (at === null) return null;
-  return { at, reason: String((c as any).reason ?? "user").slice(0, 200) };
+  // rpcAccepted 只认布尔真：宿主记录是自由字典，非布尔/缺省一律读成"未确认"（宁重发一次
+  // DSH cancel，也不把没被接受的通知当成已接受）。
+  return {
+    at,
+    reason: String((c as any).reason ?? "user").slice(0, 200),
+    rpcAccepted: (c as any).rpcAccepted === true,
+  };
 }
 
 /**
@@ -155,8 +169,10 @@ export interface TaskBindingIndex {
   bySession(sessionId: string, opts?: { fresh?: boolean }): Promise<TaskBinding | null>;
   /** 按 taskId 直接读宿主记录（冷路径，不吃缓存）。 */
   byTask(taskId: string): Promise<TaskBinding | null>;
-  /** 写取消标记（读-改-写全量 metadata）并失效缓存。 */
-  markCancel(taskId: string, reason?: string): Promise<TaskBinding | null>;
+  /** 写取消标记（读-改-写全量 metadata）并失效缓存。
+   *  rpcAccepted = 这次请求的 DSH session.cancel 通知是否已被接受：写标记时先 false，
+   *  RPC 被接受后再调一次改写成 true（标记存在只说明"请求过"，不说明"通知到了"）。 */
+  markCancel(taskId: string, reason?: string, rpcAccepted?: boolean): Promise<TaskBinding | null>;
   /** 手工失效缓存（读侧写点之后调用）。 */
   invalidate(): void;
 }
@@ -273,7 +289,7 @@ export function createTaskBindingIndex(tasks: any, { ttlMs = TASK_BINDING_TTL_MS
       return binding;
     },
 
-    async markCancel(taskId, reason) {
+    async markCancel(taskId, reason, rpcAccepted) {
       const id = String(taskId || "").trim();
       if (!id) return null;
       let rec: any = null;
@@ -284,7 +300,11 @@ export function createTaskBindingIndex(tasks: any, { ttlMs = TASK_BINDING_TTL_MS
       }
       if (!rec) return null;
       const metadata = dshMetadataFor(rec, {
-        cancel: { at: Date.now(), reason: String(reason || "user").slice(0, 200) },
+        cancel: {
+          at: Date.now(),
+          reason: String(reason || "user").slice(0, 200),
+          rpcAccepted: rpcAccepted === true,
+        },
       });
       let updated: any = null;
       try {
