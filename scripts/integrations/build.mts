@@ -18,16 +18,23 @@ import { MIRROR, REPO_ROOT, listMirrorFiles, readUpstreamFromMirror } from "./mi
 import { integrationsDirOf, integrationsSrcDirOf } from "../shared/paths.mts";
 
 /**
- * 递归收集目录下源码文件里的**非相对导入 specifier**（含 type-only：列出无害）。
- * 用途有二：① 原版产物零 require 时充当 externals；② 收紧产物侧抽取的假阳性。
+ * 递归收集目录下源码文件里的非相对导入 specifier。
+ * 用途有二：① 原版产物零 require 时充当 externals（只取其中的值导入）；② 收紧产物侧抽取的假阳性。
  * 根因：压缩后工厂参数被改名成单字符（如 e），`e("data-plugin")` 这种同名调用的字符串
  * 字面会被 extractRequires 误认成 require；而真正的外部依赖一定在源码里是 import。
+ *
+ * 两种导入分开记：`import type` 在构建期被抹掉，**不产生 require**，绝不能当 external——
+ * 列进去就等于宣称「loader 会答这个词」，而它连调用都不会有（client-hmr 的 cordis 就是这种）。
  * @param {string} rootDir 源码根目录
- * @returns {Set<string>} specifier 集合
+ * @returns {{values: Set<string>, types: Set<string>}} 值导入与类型导入
  */
-function sourceSpecifiers(rootDir) {
-  const seen = new Set<string>();
-  const declRe = /(?:from|import)\s*\(?\s*["']([^"'.][^"']*)["']/g;
+export function sourceSpecifiers(rootDir) {
+  const values = new Set<string>();
+  const types = new Set<string>();
+  // `import type ... from "x"` / `import type { } from "x"`
+  const typeFrom = /import\s+type\s+[^;'"]*?from\s*["']([^"'.][^"']*)["']/g;
+  // 任意 from "x"（含 export ... from）与裸 import "x"
+  const anyFrom = /(?:from|import)\s*\(?\s*["']([^"'.][^"']*)["']/g;
   const walk = (dir) => {
     let entries;
     try { entries = readdirSync(dir, { withFileTypes: true }) } catch { return }
@@ -37,12 +44,21 @@ function sourceSpecifiers(rootDir) {
       if (!/\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(e.name)) continue;
       let text;
       try { text = readFileSync(p, "utf8") } catch { continue }
+      const localTypes = new Set<string>();
       let m;
-      while ((m = declRe.exec(text)) !== null) seen.add(m[1]);
+      typeFrom.lastIndex = 0;
+      while ((m = typeFrom.exec(text)) !== null) localTypes.add(m[1]);
+      anyFrom.lastIndex = 0;
+      while ((m = anyFrom.exec(text)) !== null) {
+        if (localTypes.has(m[1])) types.add(m[1]);
+        else values.add(m[1]);
+      }
     }
   };
   walk(rootDir);
-  return seen;
+  // 同一个词既当值又当类型用时就以值为准（真会发 require）
+  for (const t of types) if (values.has(t)) types.delete(t);
+  return { values, types };
 }
 
 /**
@@ -165,6 +181,43 @@ export function templatePackageDir(pkgName, repoRoot = REPO_ROOT) {
 }
 
 /**
+ * 从镜像读上游的平台模块词表（`packages/client/web/src/platform.ts` 的 PLATFORM_MODULES
+ * 与 PRELOADED_CLIENT_EXTERNALS）。
+ *
+ * 为何不本地手抄一份：这两个数组是上游交付口径的一部分，抄一份就是第二事实源，上游一变
+ * 我们就静默落后。读不到就返回 null，调用方退成旧行为并说一声（不静默假装知道）。
+ * @param {string} tag 镜像 tag
+ * @param {string} mirrorDir 镜像目录
+ * @returns {{platform: Set<string>, preloaded: Set<string>} | null}
+ */
+export function readPlatformWords(tag, mirrorDir) {
+  const rel = "packages/client/web/src/platform.ts";
+  let text;
+  try {
+    const buf = readUpstreamFromMirror(rel, tag, mirrorDir);
+    if (buf === null) return null;
+    text = buf.toString("utf8");
+  } catch {
+    return null;
+  }
+  /** 取一处 `const NAME = [ ... ]` 里的字符串字面（容忍换行与注释）。 */
+  const listOf = (name) => {
+    const start = text.indexOf(`const ${name}`);
+    if (start < 0) return null;
+    const open = text.indexOf("[", start);
+    if (open < 0) return null;
+    const close = text.indexOf("]", open);
+    if (close < 0) return null;
+    const body = text.slice(open, close);
+    return new Set([...body.matchAll(/["']([^"']+)["']/g)].map((m) => m[1]));
+  };
+  const platform = listOf("PLATFORM_MODULES");
+  const preloaded = listOf("PRELOADED_CLIENT_EXTERNALS");
+  if (platform === null) return null;
+  return { platform, preloaded: preloaded ?? new Set() };
+}
+
+/**
  * 把「待内联的非相对 specifier」解析成绝对文件的 alias 表。
  *
  * 为何需要（本质是幽灵依赖）：集成的摊源树（.cache/integrations-src/<短名>）只有 src/ 与 lib/，
@@ -274,19 +327,40 @@ export async function buildIntegrations(integrations, { tag, mirrorDir = MIRROR,
     } | null = null;
     if (wantClient) {
       // 3a) externals = 原版 bundle 自己的 require 集合。
-      //    例外：client 半只有类型导入的包（如 dsh-client-hmr）——原版产物里**零 require**。
-      //    这不能当「抽取失败」（fail-closed 会误杀整个集成）：改为从缓存的源码取非相对
-      //    specifier 作 externals——真正的外部依赖仍保持外部化（不被内联成重复副本），
-      //    类型导入列出来无害（会被构建抹掉）。
+      //    例外：client 半只有类型导入的包（如 dsh-client-hmr）——原版产物里**零 require**，
+      //    因为上游 preset 把「不在模块表里的一切」都内联了（eventsource-parser 就内联在产物里）。
+      //    这时不能从源码把所有非相对 import 都当 external：那会把本该内联的第三方库（甚至
+      //    `import type` 这种根本不发 require 的）一并宣告成外部，而 loader 模块表答不上它们，
+      //    运行时就是 require(...) missed the module table。
+      //    正确口径 = 上游自己的口径：只有模块表能答的词才保持外部，其余一律内联。
+      //    模块表能答的词 = PLATFORM_MODULES ∪ PRELOADED_CLIENT_EXTERNALS ∪ 本包 dsh.client.external，
+      //    前两者直接从镜像的上游 platform.ts 读（不本地手抄）。
       const pristineClient = join(template, "lib", "client.js");
       if (!existsSync(pristineClient)) throw new Error(`integration ${short}: 原版缺 lib/client.js（${pristineClient}）`);
       let externals = extractRequires(readFileSync(pristineClient, "utf8"));
       if (externals.length === 0) {
-        externals = [...sourceSpecifiers(join(stage, "src"))];
-        console.log(`[integrations] ${short}: 原版 bundle 零 require（client 半仅类型导入），externals 取自有源码（${externals.join(", ") || "空"}）`);
+        const specs = sourceSpecifiers(join(stage, "src"));
+        const words = readPlatformWords(tag, mirrorDir);
+        if (words === null) {
+          // 读不到上游词表就不能猜：退成旧行为会让第三方库变外部引用并在运行时炸。
+          throw new Error(
+            `integration ${short}: 原版 bundle 零 require，且读不到镜像 ${tag} 的 ` +
+              `packages/client/web/src/platform.ts 来判定模块表词表；无法可靠推出 externals`,
+          );
+        }
+        const manifestDsh = JSON.parse(readFileSync(join(template, "package.json"), "utf8"));
+        const declared = Array.isArray(manifestDsh?.dsh?.client?.external) ? manifestDsh.dsh.client.external : [];
+        const tableWords = new Set([...words.platform, ...words.preloaded, ...declared]);
+        externals = [...specs.values].filter((s) => tableWords.has(s));
+        const inlined = [...specs.values].filter((s) => !tableWords.has(s));
+        console.log(
+          `[integrations] ${short}: 原版 bundle 零 require，externals 按模块表取 ${externals.join(", ") || "空"}` +
+            (inlined.length ? `（其余内联：${inlined.join(", ")}）` : "") +
+            (specs.types.size ? `；类型导入不计：${[...specs.types].join(", ")}` : ""),
+        );
       }
-      // 源码里的非相对导入（后面判悬空与算别名都用它，只算一次）
-      const imported = sourceSpecifiers(join(stage, "src"));
+      // 源码里的非相对值导入（后面判悬空与算别名都用它，只算一次）
+      const imported = sourceSpecifiers(join(stage, "src")).values;
 
       // 4) 编译 client 半
       const outDir = join(stage, "lib");
@@ -308,6 +382,36 @@ export async function buildIntegrations(integrations, { tag, mirrorDir = MIRROR,
       // 而 externals 里没有它）。
       const dangling = produced.filter((s) => !externals.includes(s) && imported.has(s));
       const noise = produced.filter((s) => !externals.includes(s) && !imported.has(s));
+      // 4b-bis) 模块表闸：产物里每一个 require 的 specifier 都必须能被 loader 模块表答上。
+      // 上面的 dangling 闸只看「externals 之外且源码里有的」——当 externals 本身算错时它会失效：
+      // client-hmr 那次 fallback 把 eventsource-parser/stream 当成了 external，于是
+      // `!externals.includes(s)` 恒假，闸一言不发，装到真机上才在 web boot 时报
+      // require(...) missed the module table。所以这里不再拿 externals 做参照，而是直接问
+      // 「模块表能不能答这个词」：答不上就是错，少了一个外部声明也罢、多了一个也罢。
+      const tableWords = (() => {
+        const words = readPlatformWords(tag, mirrorDir);
+        if (words === null) return null;
+        const manifestDsh = JSON.parse(readFileSync(join(template, "package.json"), "utf8"));
+        const declared = Array.isArray(manifestDsh?.dsh?.client?.external) ? manifestDsh.dsh.client.external : [];
+        return new Set([...words.platform, ...words.preloaded, ...declared]);
+      })();
+      if (tableWords !== null) {
+        // 只拿「确实是源码里导入过的词」来问：压缩后 `e("hidden")` / `e("copied")` 这类
+        // 同名调用的字符串字面会被 extractRequires 误认成 require（上游 lint 文案就是这么进
+        // 产物的），拿它们去问模块表只会得到假阳。代价是：若某个真外部词同时不是源码导入，
+        // 这里看不见它（那种情况下上面的 dangling 闸也看不见，而两闸合起来覆盖已足够）。
+        const unanswerable = produced.filter((s) => imported.has(s) && !tableWords.has(s));
+        if (unanswerable.length) {
+          throw new Error(
+            `integration ${short}: 产物 require 了模块表答不上的词 ${unanswerable.join(", ")} —— ` +
+              `装到真机上会在 web boot 报 "require(...) missed the module table"。` +
+              `本该把它们内联（它们不在 PLATFORM_MODULES / PRELOADED_CLIENT_EXTERNALS / ` +
+              `本包 dsh.client.external 里）`,
+          );
+        }
+      } else {
+        log(`[integrations] ${short}: 读不到上游 platform.ts，跳过模块表闸`);
+      }
       if (noise.length) console.log(`[integrations] ${short}: 产物抽取忽略 ${noise.length} 个非导入字面（假阳性）：${noise.join(", ")}`);
       if (dangling.length) {
         throw new Error(

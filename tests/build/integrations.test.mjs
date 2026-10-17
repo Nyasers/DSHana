@@ -23,7 +23,8 @@ import {
   stageIntegrations,
 } from "../../scripts/integrations/mirror.mts";
 import { dshPin } from "../../scripts/shared/version.mts";
-import { extractRequires, duplicateCssClasses, patchGeneratedRequestModel } from "../../scripts/integrations/build.mts";
+import { extractRequires, duplicateCssClasses, patchGeneratedRequestModel, readPlatformWords, sourceSpecifiers } from "../../scripts/integrations/build.mts";
+import { MIRROR } from "../../scripts/integrations/mirror.mts";
 import { cssScopeOf, scopedClassName, scopeSelector } from "../../packages/app/src/cordis/client-config.mts";
 
 const upstreamFile = "packages/client/ui-layout/src/client/index.ts";
@@ -259,6 +260,69 @@ test("extractRequires：无 factory banner 时不炸、空输入得空表", () =
   assert.deepEqual(extractRequires('const x = require("zustand")'), ["zustand"]);
   assert.deepEqual(extractRequires(""), []);
   assert.deepEqual(extractRequires(null), []);
+});
+
+test("sourceSpecifiers：值导入与 `import type` 分开记，同词以值为准", () => {
+  const root = mkdtempSync(join(tmpdir(), "hana-specs-"));
+  try {
+    const src = join(root, "src");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(
+      join(src, "a.ts"),
+      [
+        "import type { Context } from '@deepseek-ai/cordis'",
+        "import { EventSourceParserStream } from 'eventsource-parser/stream'",
+        "import './local.css'",
+        "import { readFileSync } from 'node:fs'",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(src, "b.ts"),
+      ["import { Context } from '@deepseek-ai/cordis'", "export * from 'clsx'"].join("\n"),
+    );
+    const r = sourceSpecifiers(src);
+    // 类型导入不进 values（它不发 require）
+    assert.ok(!r.values.has("eventsource-parser/stream") === false, "值导入应在 values 里");
+    assert.ok(r.values.has("node:fs"));
+    assert.ok(r.values.has("clsx"));
+    // cordis 在 a.ts 是类型、在 b.ts 是值 → 以值为准，只出现在 values
+    assert.ok(r.values.has("@deepseek-ai/cordis"));
+    assert.ok(!r.types.has("@deepseek-ai/cordis"));
+    // 相对导入一条都不收
+    for (const s of r.values) assert.ok(!s.startsWith("."), `不该收相对导入 ${s}`);
+    for (const s of r.types) assert.ok(!s.startsWith("."), `不该收相对导入 ${s}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("sourceSpecifiers：仅类型导入的词进 types、不进 values", () => {
+  const root = mkdtempSync(join(tmpdir(), "hana-specs2-"));
+  try {
+    const src = join(root, "src");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "only.ts"), "import type { Context } from '@deepseek-ai/cordis'\n");
+    const r = sourceSpecifiers(src);
+    assert.deepEqual([...r.values], []);
+    assert.ok(r.types.has("@deepseek-ai/cordis"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("readPlatformWords：从镜像的上游 platform.ts 读出两个词表", () => {
+  // 参数是镜像 tag（dsh-v<版本>），不是裸版本号
+  const words = readPlatformWords(tagForVersion(dshPin()), MIRROR);
+  assert.ok(words, "当前镜像应能读到 platform.ts");
+  assert.ok(words.platform.has("react"));
+  assert.ok(words.platform.has("@deepseek-ai/cordis"));
+  // 本包产物可能内联的第三方词绝不能出现在词表里（出现就意味着它该保持外部）
+  assert.ok(!words.platform.has("eventsource-parser/stream"));
+  assert.ok(!words.preloaded.has("eventsource-parser/stream"));
+});
+
+test("readPlatformWords：裸版本号（非 tag）读不到，返回 null 而不是猜", () => {
+  assert.equal(readPlatformWords(dshPin(), MIRROR), null);
 });
 
 test("stage：把 overlay 落进 .tmp/integrations/<短名>/ 并保内容", () => {
