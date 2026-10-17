@@ -23,7 +23,8 @@ import {
   stageIntegrations,
 } from "../../scripts/integrations/mirror.mts";
 import { dshPin } from "../../scripts/shared/version.mts";
-import { extractRequires, duplicateCssClasses, patchGeneratedRequestModel } from "../../scripts/integrations/build.mts";
+import { extractRequires, duplicateCssClasses, patchGeneratedRequestModel, readPlatformWords, sourceSpecifiers } from "../../scripts/integrations/build.mts";
+import { MIRROR } from "../../scripts/integrations/mirror.mts";
 import { cssScopeOf, scopedClassName, scopeSelector } from "../../packages/app/src/cordis/client-config.mts";
 
 const upstreamFile = "packages/client/ui-layout/src/client/index.ts";
@@ -259,6 +260,133 @@ test("extractRequires：无 factory banner 时不炸、空输入得空表", () =
   assert.deepEqual(extractRequires('const x = require("zustand")'), ["zustand"]);
   assert.deepEqual(extractRequires(""), []);
   assert.deepEqual(extractRequires(null), []);
+});
+
+test("sourceSpecifiers：值导入与 `import type` 分开记，同词以值为准", () => {
+  const root = mkdtempSync(join(tmpdir(), "hana-specs-"));
+  try {
+    const src = join(root, "src");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(
+      join(src, "a.ts"),
+      [
+        "import type { Context } from '@deepseek-ai/cordis'",
+        "import { EventSourceParserStream } from 'eventsource-parser/stream'",
+        "import './local.css'",
+        "import { readFileSync } from 'node:fs'",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(src, "b.ts"),
+      ["import { Context } from '@deepseek-ai/cordis'", "export * from 'clsx'"].join("\n"),
+    );
+    const r = sourceSpecifiers(src);
+    // 类型导入不进 values（它不发 require）
+    assert.ok(!r.values.has("eventsource-parser/stream") === false, "值导入应在 values 里");
+    assert.ok(r.values.has("node:fs"));
+    assert.ok(r.values.has("clsx"));
+    // cordis 在 a.ts 是类型、在 b.ts 是值 → 以值为准，只出现在 values
+    assert.ok(r.values.has("@deepseek-ai/cordis"));
+    assert.ok(!r.types.has("@deepseek-ai/cordis"));
+    // 相对导入一条都不收
+    for (const s of r.values) assert.ok(!s.startsWith("."), `不该收相对导入 ${s}`);
+    for (const s of r.types) assert.ok(!s.startsWith("."), `不该收相对导入 ${s}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("sourceSpecifiers：仅类型导入的词进 types、不进 values", () => {
+  const root = mkdtempSync(join(tmpdir(), "hana-specs2-"));
+  try {
+    const src = join(root, "src");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "only.ts"), "import type { Context } from '@deepseek-ai/cordis'\n");
+    const r = sourceSpecifiers(src);
+    assert.deepEqual([...r.values], []);
+    assert.ok(r.types.has("@deepseek-ai/cordis"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("sourceSpecifiers：同一文件里同模块既有类型又有值导入，算值（按语句而非按文件）", () => {
+  const root = mkdtempSync(join(tmpdir(), "hana-specs3-"));
+  try {
+    const src = join(root, "src");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(
+      join(src, "mixed.ts"),
+      [
+        "import type { A } from 'react'",
+        "import { b } from 'react'",
+        "import type { C } from 'zod'",
+      ].join("\n"),
+    );
+    const r = sourceSpecifiers(src);
+    // 按文件归类的话 react 会落到 types 里，values 丢掉它 → externals 与两道闸全失明
+    assert.ok(r.values.has("react"), "同文件有值导入就必须进 values");
+    assert.ok(!r.types.has("react"), "不能因为另有一条 type 导入就整词算类型");
+    // 只有类型导入的词仍然只进 types
+    assert.deepEqual([...r.types], ["zod"]);
+    assert.ok(!r.values.has("zod"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("sourceSpecifiers：`import type from \"x\"`是默认导入名叫 type，算值", () => {
+  const root = mkdtempSync(join(tmpdir(), "hana-specs4-"));
+  try {
+    const src = join(root, "src");
+    mkdirSync(src, { recursive: true });
+    // 这里 type 是默认导入的绑定名，不是 type 修饰符
+    writeFileSync(join(src, "d.ts"), "import type from 'lodash'\n");
+    const r = sourceSpecifiers(src);
+    assert.ok(r.values.has("lodash"), "默认导入名叫 type 也不能误判成仅类型");
+    assert.ok(!r.types.has("lodash"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("sourceSpecifiers：声明正则不跨行，前一行注释不会把 type 关键字吃掉", () => {
+  const root = mkdtempSync(join(tmpdir(), "hana-specs5-"));
+  try {
+    const src = join(root, "src");
+    mkdirSync(src, { recursive: true });
+    // 真实现场（client-hmr 的 index.ts）：注释行以单词 imports 开头，下一行才是 import type
+    writeFileSync(
+      join(src, "a.ts"),
+      [
+        " * imports carry the clientModules/webServer Context merges.",
+        "import type { ClientArtifactBaseline } from '@deepseek-ai/dsh-client-modules'",
+      ].join("\n"),
+    );
+    const r = sourceSpecifiers(src);
+    assert.ok(
+      r.types.has("@deepseek-ai/dsh-client-modules"),
+      "跨行匹配会把 type 吃进中间段，把类型导入误判成值导入",
+    );
+    assert.ok(!r.values.has("@deepseek-ai/dsh-client-modules"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("readPlatformWords：从镜像的上游 platform.ts 读出两个词表", () => {
+  // 参数是镜像 tag（dsh-v<版本>），不是裸版本号
+  const words = readPlatformWords(tagForVersion(dshPin()), MIRROR);
+  assert.ok(words, "当前镜像应能读到 platform.ts");
+  assert.ok(words.platform.has("react"));
+  assert.ok(words.platform.has("@deepseek-ai/cordis"));
+  // 本包产物可能内联的第三方词绝不能出现在词表里（出现就意味着它该保持外部）
+  assert.ok(!words.platform.has("eventsource-parser/stream"));
+  assert.ok(!words.preloaded.has("eventsource-parser/stream"));
+});
+
+test("readPlatformWords：裸版本号（非 tag）读不到，返回 null 而不是猜", () => {
+  assert.equal(readPlatformWords(dshPin(), MIRROR), null);
 });
 
 test("stage：把 overlay 落进 .tmp/integrations/<短名>/ 并保内容", () => {
