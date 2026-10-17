@@ -131,12 +131,32 @@ export function stagingWorkspaceYaml(spec: TargetSpec): string {
   // 不要的表层 bundle：override 成 stub（见 exclude.mts），真件不下载、不进闭包。
   // 必须**并进已有的 overrides 块**（仓库根那份里有 @hana/* 的本地 tgz 映射，整份被带过来）：
   // 另起一个 `overrides:` 是重复键，pnpm 直接以 "duplicated mapping key" 拒掉。
+  //
+  // 仓库根已经为遥测那四个包写过 overrides（它们的 stub 住在 vendor/stubs，随工位一起拷过去，
+  // 相对路径在工位里同样成立）——同一包名只能出现一次，所以已声明的键这里不再重复：
+  // 仓库根那份是开发树用，这份是交付工位用，同一份事实两个消费者，键的重叠必须当场让掉。
   const { overrides } = prepareStubs();
-  const names = Object.keys(overrides).sort();
+  const declared = new Set(overridesKeys(base));
+  const names = Object.keys(overrides).filter((n) => !declared.has(n)).sort();
   const lines = names.map((n) => `  "${n}": "${overrides[n]}"`).join("\n");
+  if (lines === "") return base;
   const existing = /^overrides:\s*$/mu;
   if (existing.test(base)) return base.replace(existing, (key) => `${key}\n${lines}`);
   return base + `\noverrides:\n${lines}\n`;
+}
+
+/** 已有 overrides 块里声明的包名（逐行认键：`"名":` 或 `名:`，含单引号形式）。 */
+function overridesKeys(yaml: string): string[] {
+  const start = /^overrides:\s*$/mu.exec(yaml);
+  if (start === null) return [];
+  const rest = yaml.slice(start.index + start[0].length);
+  const keys: string[] = [];
+  for (const line of rest.split("\n")) {
+    if (/^\S/.test(line) && !line.startsWith("#")) break; // 下一个顶层键：块结束
+    const m = /^\s+["']?([^"':]+)["']?\s*:/.exec(line);
+    if (m) keys.push(m[1].trim());
+  }
+  return keys;
 }
 
 /**
