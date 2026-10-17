@@ -20,10 +20,13 @@
 // 上游新增表层时 ① 自动把它挡在门外，而不是等它悄悄进包。
 //
 // 两道用法：
-//   1) 物化前：把名单 override 成一个极小 stub（`file:` 指向本模块生成的空包）——pnpm 不会去
-//      下载真件，也不改锁文件的语义；stub 不声明依赖，所以它们的传递闭包（语音模型、DevTools
-//      前端那一大块）同样进不来；
-//   2) 组装时：把 stub 目录从交付树里删掉——产物里既没有真件也没有占位。
+//   1) 物化前：把名单写成 pnpm 的移除符号 `"-"`（overrides 里包名对 `-` = 依赖图中没有这个包）。
+//      这是依赖图层面的删除，不是“装一个空壳”：包不会被下载、不会被解包，它自己的依赖也不会
+//      被拉进来（语音模型、DevTools 前端那一大块因此一并消失）。
+//   2) 不需要第二步：树上本来就没有它们，所以没有要删的占位。
+//
+// 曾经用的是“生成空 stub 包 → override 成 file: → 组装时再把 stub 删掉”：前半段与 `-` 效果相同，
+// 后半段是补上“先装后删”的尾巴。`-` 把两步并成一步，也不用在 .cache 里现造 42 个包。
 //
 // ③④ 与组合层是成对的：包里不留件，packages/dsh/app/cordis.patch.yml 就必须把引用它的行按 id
 // 关掉（loader 对 disabled 的行连 import 都不发），integrations/api-remotes 则把模块级 import
@@ -32,7 +35,7 @@
 import fs from "fs-extra";
 import { join } from "node:path";
 
-import { CACHE_DIR, ROOT } from "../../shared/paths.mts";
+import { ROOT } from "../../shared/paths.mts";
 import { cordisPkgDirs, cordisPkgFullName } from "../../shared/version.mts";
 import { ON_DEMAND_BUNDLES } from "./on-demand.mts";
 
@@ -107,32 +110,6 @@ function upstreamBundles() {
   return out.sort((a, b) => (a.name < b.name ? -1 : 1));
 }
 
-/** vendor checkout 里所有包的 name → version（stub 用真件的版本号，任何范围检查都成立）。 */
-function mirrorPackageVersions(): Map<string, string> {
-  const packagesDir = join(ROOT, "vendor", "deepseek-harness", "packages");
-  const out = new Map<string, string>();
-  for (const group of fs.readdirSync(packagesDir)) {
-    const groupDir = join(packagesDir, group);
-    if (!fs.statSync(groupDir).isDirectory()) continue;
-    for (const entry of fs.readdirSync(groupDir)) {
-      const manifestPath = join(groupDir, entry, "package.json");
-      if (!fs.pathExistsSync(manifestPath)) continue;
-      try {
-        const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-        if (typeof manifest.name === "string") out.set(manifest.name, String(manifest.version ?? "0.0.0"));
-      } catch {
-        /* 读不动就跳过：版本号只影响 stub 的自述 */
-      }
-    }
-  }
-  return out;
-}
-
-/** 版本查表（stub 用真件的版本号，任何范围检查都成立）。 */
-function versionOf(name: string): string {
-  return mirrorPackageVersions().get(name) ?? "0.0.0";
-}
-
 /**
  * 交付树里不出现的包名（派生：上游表层 − 保留层；再加私货名单与剥离面）。
  * @returns 包名数组（已去重排序）。
@@ -145,56 +122,18 @@ export function excludedPackages(): string[] {
   return [...new Set([...names, ...STRAYS, ...STRIPPED, ...ON_DEMAND_BUNDLES])].sort();
 }
 
-/** stub 目录（每个包一个子目录，包名里的 / 换成 __）。 */
-function stubDirOf(name: string): string {
-  return join(CACHE_DIR, "pkg-stubs", name.replace("/", "__"));
-}
-
 /**
- * 生成 stub 包并给出 pnpm overrides 表（`包名 → file:<绝对路径>`）。
- * @returns { overrides, stubs }：overrides 直接进工位的 pnpm-workspace.yaml。
- */
-export function prepareStubs(): { overrides: Record<string, string>; stubs: string[] } {
-  const overrides: Record<string, string> = {};
-  const stubs: string[] = [];
-  for (const name of excludedPackages()) {
-    const dir = stubDirOf(name);
-    fs.removeSync(dir);
-    fs.ensureDirSync(dir);
-    fs.writeFileSync(
-      join(dir, "package.json"),
-      JSON.stringify({ name, version: versionOf(name), private: true }, null, 2) + "\n",
-      "utf8",
-    );
-    overrides[name] = `file:${dir.replace(/\\/gu, "/")}`;
-    stubs.push(name);
-  }
-  return { overrides, stubs };
-}
-
-/**
- * 把被排除的包从交付树里删掉（包括上面那些 stub）。
+ * 工位 overrides：包名 → `"-"`（pnpm 的依赖移除符号）。
  *
- * 为什么要删而不是留着 stub：产物里不该有"装着但永远不加载"的槽位。删完之后树里既没有真件也
- * 没有占位，而 pnpm 的账本早已随工位一起清掉（装机器不执行 install），所以缺这几个目录不会让
- * 任何东西解析失败——DSH 的解析代只走"被选中 bundle 的依赖图"。
- * @param nodeModulesDir 组装台里的 node_modules
- * @param names 要删的包名（默认取 excludedPackages()）
- * @returns 实际删掉的包名
+ * 为什么是 `-` 而不是 `file:` 指向空包：两者都让 pnpm 不去下载真件，但 `-` 让这个包在依赖图里
+ * **不存在**，而空包是一个能被解析的东西：谁按名字 import 它就拿到一个什么都不做的模块，安装
+ * 成功、行为静默缺失。本仓要的是“不交付”，不是“交付一个假的”。
+ * @returns overrides 表，直接进工位的 pnpm-workspace.yaml。
  */
-export function pruneExcluded(nodeModulesDir: string, names: string[] = excludedPackages()): string[] {
-  const pruned: string[] = [];
-  for (const name of names) {
-    const dir = join(nodeModulesDir, name);
-    if (fs.pathExistsSync(dir)) {
-      fs.removeSync(dir);
-      pruned.push(name);
-    }
-  }
-  // scope 目录空了就一并收掉（@deepseek-ai 还有别的包，通常不会触发）
-  const scope = join(nodeModulesDir, "@deepseek-ai");
-  if (fs.pathExistsSync(scope) && fs.readdirSync(scope).length === 0) fs.removeSync(scope);
-  return pruned;
+export function removalOverrides(): Record<string, string> {
+  const overrides: Record<string, string> = {};
+  for (const name of excludedPackages()) overrides[name] = "-";
+  return overrides;
 }
 
 /** 交付树里必须出现的包（fail-closed 断言的正面清单）。

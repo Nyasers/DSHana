@@ -24,10 +24,10 @@ overrides:
   "@hana/plugin-components": "file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz"
 
   # 空实现剥离依赖
-  "@deepseek-ai/dsh-otel": "file:vendor/stubs/dsh-otel"
-  "@deepseek-ai/dsh-session-telemetry": "file:vendor/stubs/dsh-session-telemetry"
-  "@deepseek-ai/dsh-session-telemetry-otel": "file:vendor/stubs/dsh-session-telemetry-otel"
-  "@deepseek-ai/dsh-host-product-telemetry-otel": "file:vendor/stubs/dsh-host-product-telemetry-otel"
+  "@deepseek-ai/dsh-otel": "-"
+  "@deepseek-ai/dsh-session-telemetry": "-"
+  "@deepseek-ai/dsh-session-telemetry-otel": "-"
+  "@deepseek-ai/dsh-host-product-telemetry-otel": "-"
 
 # 打包目标设置
 # >>> pack-targets

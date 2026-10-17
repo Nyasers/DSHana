@@ -140,7 +140,7 @@ export function assertNotDelivered(nodeModulesDir: string): void {
   if (present.length > 0) {
     throw new Error(
       `按需 bundle 仍在交付树里（stub 通道漏了这几条）：${present.join("、")}\n`
-        + "  它们该在 exclude.mts 的 excludedPackages() 里，物化前就 override 成 stub。",
+        + "  它们该在 exclude.mts 的 excludedPackages() 里，物化前就在 overrides 里写成 \"-\"。",
     );
   }
 }

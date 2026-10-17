@@ -35,7 +35,7 @@ import { ROOT } from "../../shared/root.mts";
 import { manifestPath } from "../../shared/contract-assets.mts";
 import { assertBundleArtifacts, assertCordisArtifacts, assertDeclarationTexts, assertNoProductPackage, assertSkillReferences, assertUiTree } from "./assert.mts";
 import { declareInstallationBundle, declareInstallationPlugins } from "./bundle-deps.mts";
-import { excludedPackages, pruneExcluded, requiredPackages } from "./exclude.mts";
+import { excludedPackages, requiredPackages } from "./exclude.mts";
 import { assertMatchesUpstreamOptional, assertNotDelivered, injectOnDemandCatalog, unshipFromAnchor, ON_DEMAND_BUNDLES } from "./on-demand.mts";
 import { materializeProdDeps } from "./materialize.mts";
 import { minifyCordisStatics } from "./minify.mts";
@@ -130,15 +130,11 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
     filter: (srcPath) => !/[\/\\]node_modules[\/\\]\./.test(srcPath),
   });
   applyIntegrations(join(pkgDir, "node_modules"));
-  // 被排除的表层 bundle 与它们的私货：物化时已 override 成 stub（不下载真件），这里把占位也从
-  // 产物里删掉——交付树里既没有真件也没有槽位。断言两端：名单必须命中，且删干净。
-  const pruned = pruneExcluded(join(pkgDir, "node_modules"));
-  if (pruned.length === 0) {
-    throw new Error("排除名单一个都没命中（工位 overrides 没生效？）：拒绝产出带全量表层的包");
-  }
+  // 被排除的表层 bundle 与它们的私货：物化时已在 overrides 里写成 `"-"`，pnpm 直接把它们从依赖
+  // 图里移除——真件没下载、没解包，传递闭包一并消失。这里只核实它们真的不在。
   const leftover = excludedPackages().filter((n) => fs.pathExistsSync(join(pkgDir, "node_modules", n)));
-  if (leftover.length > 0) throw new Error(`被排除的包仍在产物里：${leftover.join("、")}`);
-  console.log(`[pack] 排除表层/私货包 ${pruned.length} 个（产物里不留槽位）：${pruned.join(", ")}`);
+  if (leftover.length > 0) throw new Error(`被排除的包仍在产物里（overrides 的 "-" 没生效？）：${leftover.join("、")}`);
+  console.log(`[pack] 排除表层/私货包 ${excludedPackages().length} 个（物化阶段即不进树）：${excludedPackages().join(", ")}`);
   // 按需面（上游 OPTIONAL_BUNDLES 那 12 个）：本形态一条都不用，但它们因为写在内核 dependencies 里
   // 而被当作「内置」随每个安装揣着。改成按需安装，三处必须成对：
   //   ① 包不在树里 —— 作 exclude.mts 的 stub 通道完成（物化前就 override，真件不下载），这里只核实；
