@@ -81,16 +81,17 @@ interface OwnedSession {
 }
 
 /**
- * Refuse a Session workspace that cannot serve as a process working directory.
+ * Refuse a directory that cannot serve as a process working directory.
  *
- * The Session header records the directory the Session was created in, and that
- * directory can be gone when a terminal opens later (a scratch tree, a deleted
- * checkout, a moved project). Each platform then fails at a different,
- * hard-to-attribute point: ConPTY surfaces the CreateProcess ERROR_DIRECTORY as an
- * opaque child exit code, and POSIX fails the forked child's chdir. The precondition
- * is checked once here, so the refusal names the directory instead of leaving a bare
- * child outcome.
- * @param cwd - Session working directory about to become a terminal's working directory.
+ * A terminal's cwd can be gone by the time one opens (a scratch tree, a deleted checkout, a
+ * moved project). Each platform then fails at a different, hard-to-attribute point: ConPTY
+ * surfaces the CreateProcess ERROR_DIRECTORY as an opaque child exit code, and POSIX fails the
+ * forked child's chdir. The precondition is checked once here, so the refusal names the
+ * directory instead of leaving a bare child outcome.
+ *
+ * 这是 `workingDirectory.ensure()` 之后的 TOCTOU 兜底，不是主闸：ensure 已经验证过目录并在目录
+ * 消失时恢复到原始项目，但从 ensure 返回到 spawnTerminal 落地之间那一小段里目录仍可能被删。
+ * @param cwd - directory about to become a terminal's working directory.
  * @throws RemoteError code `terminal/cwd-unavailable` when the directory is absent.
  */
 function requireSessionWorkspace(cwd: string): void {
@@ -344,11 +345,12 @@ export class TerminalController extends TypertRemoteService {
   }
 
   private async spawn(agent: Agent, owner: OwnedSession, request: TerminalCreateRequest, signal: AbortSignal): Promise<BrowserTerminal> {
-    // 本覆盖层：目录已消失时先给出带路径的失败（terminal/cwd-unavailable），
-    // 比 provider 分配后的子进程退出码好归因；上游 0.2.1 起 cwd 的权威值来自 workingDirectory。
-    requireSessionWorkspace(this.environment(agent, signal).cwd)
     const { subprocess, workingDirectory } = this.execution(agent)
+    // 本覆盖层：目录已消失时给出带路径的失败（terminal/cwd-unavailable），比 provider 分配后的
+    // 子进程退出码好归因。位置必须在 ensure() 之后：它会在当前目录消失时恢复到原始项目并返回
+    // 恢复后的路径，检查排在它前面就会抢在恢复动作之前抛出，把本来能救回来的那一次变成硬失败。
     const cwd = await workingDirectory.ensure(agent, signal)
+    requireSessionWorkspace(cwd)
     const shell = request.shellPath === undefined
       ? await resolveShell(subprocess, this.config.shell, signal)
       : (await this.shells(agent, signal)).find(candidate => candidate.path === request.shellPath)
