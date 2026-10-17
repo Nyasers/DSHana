@@ -4,11 +4,13 @@
   "files": [
     {
       "path": "src/client/AppFrame.tsx",
-      "upstreamSha256": "9354b627962e0a7e8f2f3fa01d3fb5463e8a28e37531d73d426d262bc755edda"
+      "upstreamSha256": "c45f1ed8ba134bba265af4ac1f9786067f686b8572a13e3617d489cf929644ea",
+      "deltaSha256": "59c70aab4b0fcdc5f0906cbbd7e089cf1e29c3d4d996e60355c998c020417499"
     },
     {
       "path": "src/client/AppFrame.module.css",
-      "upstreamSha256": "24a720b480ae02550584b809b66098b0cf6899cb9be31a13de8c66182f504b7f"
+      "upstreamSha256": "f0bce7eb34595a249c7865b5e0542cfae175a50804060af46344aba906e6789c",
+      "deltaSha256": "98bb254ccab64ca53969eed56cff675baeea7fce6a679c6b5e2e9b1b665d6470"
     }
   ],
   "notes": [

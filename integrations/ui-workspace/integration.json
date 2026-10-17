@@ -4,15 +4,18 @@
   "files": [
     {
       "path": "src/client/index.ts",
-      "upstreamSha256": "75df0d00062eb9db67c570f098128ada1db46c44dd5085b2f77973ae7dc7583e"
+      "upstreamSha256": "d0c1b1bb83d88e160d2a7d69c465c5d64000a678456e662e2a410bcc534bb307",
+      "deltaSha256": "d1dd230c2a105473af49a1dcc73dcff339a22460f6a52bc531b46c2f92bfd38d"
     },
     {
       "path": "src/client/navigation.ts",
-      "upstreamSha256": "99ca4c11126f9d367576891adead79fdd44a0d477d054c9d32ee7242680ee2bc"
+      "upstreamSha256": "bfadd0cf84e98e61dad4ac943259d789956b0e902e515fb8c96440b2e10f416e",
+      "deltaSha256": "d79e1582dc3b3612755ca3317bdaf0b929eb5edebf9bde21bdd988927c8f2005"
     },
     {
       "path": "src/client/rows/WorkspaceBrowser.tsx",
-      "upstreamSha256": "21549a2c39407538e3793822862903e95f56119253d9e6daa38b9a58c2df4650"
+      "upstreamSha256": "0cec4cb11595b46d84f7d2ee49c5b73d45ab0303e31aa293cb00d92e4c699527",
+      "deltaSha256": "f458799bc8a09a3af3f555f028b7bfb79710040e08ed0d5071ee1faa191af6e4"
     }
   ],
   "notes": [

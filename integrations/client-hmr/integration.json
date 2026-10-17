@@ -11,11 +11,13 @@
   "files": [
     {
       "path": "src/client/index.ts",
-      "upstreamSha256": "569fb912a465a69ec3c971e73de5a6982f624bab8c3fafba293de1ca09313b42"
+      "upstreamSha256": "491a3a66baae773d4983c78dde37f2f6c04b14e7ab7d1cb5007ab678f674b09c",
+      "deltaSha256": "06f5c88ab3793e59135e56ebf7933d6a2c98ca3a5b54d66b9752dee533285ad3"
     },
     {
       "path": "src/index.ts",
-      "upstreamSha256": "c44bd4146a459aae2ebf75adaa31a5db96e3e5d17279ec6d80cb3682c1e17534"
+      "upstreamSha256": "c44bd4146a459aae2ebf75adaa31a5db96e3e5d17279ec6d80cb3682c1e17534",
+      "deltaSha256": "53b6bcf405974778fe7ba6b44c0ceb14a18bd4f7ac87d512b89b6bc5576fe874"
     }
   ],
   "notes": [

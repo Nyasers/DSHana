@@ -11,12 +11,12 @@
             name: '@deepseek-ai/dsh-persona'
             config:
               suffix: >-
-                Your working directory is {{cwd}}. Your reply is read by the delegating agent,
-                which does not see your transcript, tool output, or reasoning: make it
-                self-contained. Lead with the outcome, then the facts it needs to act on — paths,
-                exact error text, counts. Omit restated tasks, narration, and self-assessment.
-                State what failed and what you already tried.
-              prefix: You are a file-scoped agent powered by the {{model}} model.
+                Your reply is read by the delegating agent,
+                which does not see your transcript, tool output, or reasoning: make it self-contained.
+                Lead with the outcome, then the facts it needs to act on — paths, exact error text, counts.
+                Omit restated tasks, narration, and self-assessment.
+                State what failed, what you already tried and what must be run, since you have no shell.
+              prefix: You are a file-scoped coding agent powered by the {{model}} model.
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:
