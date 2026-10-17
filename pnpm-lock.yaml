@@ -168,10 +168,9 @@ overrides:
   '@hana/plugin-protocol': file:vendor/hana-app-sdk/hana-plugin-protocol-0.0.0.tgz
   '@hana/plugin-components': file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz
   '@deepseek-ai/dsh-otel': file:vendor/stubs/dsh-otel
+  '@deepseek-ai/dsh-session-telemetry': file:vendor/stubs/dsh-session-telemetry
   '@deepseek-ai/dsh-session-telemetry-otel': file:vendor/stubs/dsh-session-telemetry-otel
   '@deepseek-ai/dsh-host-product-telemetry-otel': file:vendor/stubs/dsh-host-product-telemetry-otel
-  '@deepseek-ai/dsh-session-telemetry': file:vendor/stubs/dsh-session-telemetry
-  '@modelcontextprotocol/client': 2.2.0
 
 importers:
 
@@ -4050,9 +4049,6 @@ packages:
 
   '@types/jsonfile@6.1.4':
     resolution: {integrity: sha512-D5qGUYwjvnNNextdU59/+fI+spnwtTFmyQP0h+PfIOSkNfpU6AOICUOkm4i0OnSk+NyjdPJrxCDro0sJsWlRpQ==}
-
-  '@types/node@26.6.4':
-    resolution: {integrity: sha512-ldVPDCzj7fsaGZrLB0NuHuTvJcsNasysBAqMolr/cgxrLd1xbqxIr3XJiPnHHJUCxj5sNF1vnRj9aWnrVh5Jcg==}
 
   '@types/node@26.6.5':
     resolution: {integrity: sha512-uMzsv9stDdofIZBx4UGh4Z9ZgXnGC9seRDscilBcTHAeOFk67MZg/k9bWVfO+bk4qZmG+l52hRnLwUiH2LnJTg==}
@@ -9533,28 +9529,24 @@ snapshots:
 
   '@types/archiver@8.0.0':
     dependencies:
-      '@types/node': 26.6.4
+      '@types/node': 26.6.5
       '@types/readdir-glob': 1.1.5
 
   '@types/clean-css@4.2.11':
     dependencies:
-      '@types/node': 26.6.4
+      '@types/node': 26.6.5
       source-map: 0.6.1
 
   '@types/fs-extra@11.0.4':
     dependencies:
       '@types/jsonfile': 6.1.4
-      '@types/node': 26.6.4
+      '@types/node': 26.6.5
 
   '@types/html-minifier-terser@7.0.2': {}
 
   '@types/jsonfile@6.1.4':
     dependencies:
-      '@types/node': 26.6.4
-
-  '@types/node@26.6.4':
-    dependencies:
-      undici-types: 8.9.0
+      '@types/node': 26.6.5
 
   '@types/node@26.6.5':
     dependencies:
@@ -9570,7 +9562,7 @@ snapshots:
 
   '@types/readdir-glob@1.1.5':
     dependencies:
-      '@types/node': 26.6.4
+      '@types/node': 26.6.5
 
   '@types/retry@0.12.0': {}
 

@@ -8,10 +8,13 @@
 // 守两件事。其一：安装树里不得出现 package.json——App 入口是 bin/app.mjs，Node 按扩展名就判 ESM，
 // 包根没有需要它定 type 的地方；它出现只可能是构建面字段（scripts / devDependencies /
 // packageManager / imports / 内核声明）混进交付。其二：工位清单只活在 .tmp/pkg-root/ 那次干净
-// 安装里，字段是实体三项 + host 派生的运行时依赖（内核声明住 host，不抄第二份）。
+// 安装里，字段是实体四项（含 packageManager）+ host 派生的运行时依赖（内核声明住 host，不抄第二份）。
+//
+// packageManager 看似构建面字段，但工位清单不进交付（交付树根没有 package.json），它在这里是
+// 反方向的闸：**必须**带上，否则工位那次 install 会落到宿主机全局 pnpm。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertNoProductPackage } from "../../scripts/release/pack/assert.mts";
@@ -48,13 +51,19 @@ test("交付树出现 package.json 就拒包（无论字段是构建面还是实
   }
 });
 
-test("stagingManifest：实体三项 + host 派生的运行时依赖，版本跟随入参", async () => {
+test("stagingManifest：实体字段 + host 派生的运行时依赖，版本跟随入参", async () => {
   const { dshPin, shipDependencies } = await import("../../scripts/shared/version.mts");
   const staging = stagingManifest(VERSION);
-  assert.deepEqual(Object.keys(staging).sort(), ["dependencies", "name", "type", "version"]);
+  assert.deepEqual(Object.keys(staging).sort(), ["dependencies", "name", "packageManager", "type", "version"]);
   assert.equal(staging.name, "dshana");
   assert.equal(staging.version, VERSION);
   assert.equal(staging.type, "module", "工位里 pnpm 与 node 都按 ESM 读它");
+  // packageManager 必须随工位清单走：工位里那次 install 以 --dir 从仓库根起跳，pnpm 按
+  // 「工作目录 → 向上第一份 package.json」取版本，缺了它就落到宿主机全局 pnpm，
+  // 而那棵树是直接进 zip 的——构建机换一台就可能装出另一棵。
+  const repoPkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"));
+  assert.equal(staging.packageManager, repoPkg.packageManager, "工位 pnpm 版本必须与仓库钉的一致");
+  assert.match(String(staging.packageManager), /^pnpm@\d/, "packageManager 必须是 pnpm 声明");
   assert.deepEqual(staging.dependencies, shipDependencies());
   assert.ok(dshPin(), "host 应声明 @deepseek-ai/dsh");
   assert.equal(staging.dependencies["@deepseek-ai/dsh"], dshPin(), "工位清单的内核声明从 host 派生");

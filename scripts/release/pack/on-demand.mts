@@ -30,7 +30,7 @@
 import fs from "fs-extra";
 import { join } from "node:path";
 
-import { listMirrorFiles, readUpstreamFromMirror, MIRROR } from "../../integrations/mirror.mts";
+import { listMirrorFiles, readUpstreamFromMirror } from "../../integrations/mirror.mts";
 import { dshPin } from "../../shared/version.mts";
 
 /** 安装锚点（内核包）：交付面依赖与 shipped 判定都读它。 */
@@ -57,14 +57,24 @@ export const ON_DEMAND_BUNDLES: readonly string[] = [
   "@deepseek-ai/dsh-experimental-tool-worktree",
 ];
 
-/** 上游 app-boot 源码里那份 OPTIONAL_BUNDLES（判据来源，不另维护第二份名单）。 */
-export function upstreamOptionalBundles(): string[] {
-  const file = join(MIRROR, "packages", "boot", "app-boot", "src", "profile.ts");
-  const text = fs.readFileSync(file, "utf8");
+/**
+ * 上游 app-boot 源码里那份 OPTIONAL_BUNDLES（判据来源，不另维护第二份名单）。
+ *
+ * 从**镜像 tag** 读，不读 checkout 工作树：工作树会被人改、被分支切走，而同一个文件在
+ * `pnpm run package` 与直接跑 index.mts 两种姿势下可能读出不同答案。更要紧的是
+ * injectOnDemandCatalog 按同一 tag 读 meta——两边必须同源，否则“名单里有、catalog 里没有”
+ * （或反之）的拼美会静默发生。
+ * @param tag 镜像 tag（默认取内核 pin）
+ */
+export function upstreamOptionalBundles(tag = `dsh-v${dshPin()}`): string[] {
+  const rel = "packages/boot/app-boot/src/profile.ts";
+  const buf = readUpstreamFromMirror(rel, tag);
+  if (buf === null) throw new Error(`镜像 ${tag} 里没有 ${rel}（pin 与镜像对不上？）`);
+  const text = buf.toString("utf8");
   const block = /export const OPTIONAL_BUNDLES[^=]*=\s*\[([\s\S]*?)\]/u.exec(text);
-  if (block === null) throw new Error(`${file} 里找不到 OPTIONAL_BUNDLES 的字面量（上游改了结构？）`);
+  if (block === null) throw new Error(`${tag}:${rel} 里找不到 OPTIONAL_BUNDLES 的字面量（上游改了结构？）`);
   const names = [...block[1].matchAll(/'([^']+)'/gu)].map((m) => m[1]);
-  if (names.length === 0) throw new Error(`${file} 里的 OPTIONAL_BUNDLES 解析为空（上游改了写法？）`);
+  if (names.length === 0) throw new Error(`${tag}:${rel} 里的 OPTIONAL_BUNDLES 解析为空（上游改了写法？）`);
   return names;
 }
 

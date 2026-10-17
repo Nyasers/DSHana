@@ -188,12 +188,34 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
       disposers.push(await ctx.remote.$mount(contribution))
     }
   } catch (error) {
-    for (const dispose of disposers.reverse()) await dispose()
+    // 逐个拆，**一个失败不拦后面**：拆到一半就抛会把已挂上的命名空间留在原地，
+    // 而这里唯一有意义的结果是原始挂载错误——清理出错不能把它盖掉。
+    const cleanupErrors = await disposeAll(disposers)
+    if (cleanupErrors.length > 0) throw new AggregateError([error, ...cleanupErrors], 'remote assembly failed and cleanup left errors')
     throw error
   }
   // Unwound in reverse mount order, so a namespace never outlives one mounted
   // after it.
   return async () => {
-    for (const dispose of disposers.reverse()) await dispose()
+    const failures = await disposeAll(disposers)
+    // 正常拆卸也不静默吞：调用方（或调试者）至少能看到哪些命名空间没拆成。
+    if (failures.length > 0) throw new AggregateError(failures, 'remote teardown left errors')
   }
+}
+
+/**
+ * 按挂载逆序拆除，把每个失败收集起来继续拆完。
+ * @param disposers 挂载时拿到的 disposer（本函数会就地反转，调用方不要再复用顺序）
+ * @returns 拆卸过程中抛出的错误（空 = 全部成功）
+ */
+async function disposeAll(disposers: Array<() => Promise<void>>): Promise<unknown[]> {
+  const failures: unknown[] = []
+  for (const dispose of disposers.reverse()) {
+    try {
+      await dispose()
+    } catch (error) {
+      failures.push(error)
+    }
+  }
+  return failures
 }
