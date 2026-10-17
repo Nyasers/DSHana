@@ -25,16 +25,23 @@ import { integrationsDirOf, integrationsSrcDirOf } from "../shared/paths.mts";
  *
  * 两种导入分开记：`import type` 在构建期被抹掉，**不产生 require**，绝不能当 external——
  * 列进去就等于宣称「loader 会答这个词」，而它连调用都不会有（client-hmr 的 cordis 就是这种）。
+ *
+ * 分类的粒度是**语句**而非文件：同一个文件里完全可以既有 `import type { A } from "react"`
+ * 又有 `import { b } from "react"`，按文件归会把后者一起当成类型（react 从此不在 values 里，
+ * externals 与两道闸全部失明）。所以先逐条认出声明、再看这一条带没带 `type`。
  * @param {string} rootDir 源码根目录
  * @returns {{values: Set<string>, types: Set<string>}} 值导入与类型导入
  */
 export function sourceSpecifiers(rootDir) {
   const values = new Set<string>();
   const types = new Set<string>();
-  // `import type ... from "x"` / `import type { } from "x"`
-  const typeFrom = /import\s+type\s+[^;'"]*?from\s*["']([^"'.][^"']*)["']/g;
-  // 任意 from "x"（含 export ... from）与裸 import "x"
-  const anyFrom = /(?:from|import)\s*\(?\s*["']([^"'.][^"']*)["']/g;
+  // 一条声明 = 关键字 + 可选的 `type` + 中间那段（绑定了什么）+ from "spec"；
+  // 或裸 `import "spec"`。
+  // 中间段用 [^;'"`\n] 把住三件事：不跨过字符串（否则会掳到上一个声明的引号）、
+  // 不跨过分号、**不跨行**。不卡换行时会跨过前一行注释：`… merges.\nimport type { X } from`
+  // 里 `import` 会从注释末尾那个单词起匹配，`type` 关键字被吃进中间段，
+  // 于是类型导入被误判成值导入，凭空给 externals 加一个模块表答不上的词。
+  const declRe = /\b(import|export)\s*(type\s+)?([^;'"`\n]*?)\bfrom\s*(["'])([^"']+)\4|\bimport\s*(["'])([^"']+)\6/g;
   const walk = (dir) => {
     let entries;
     try { entries = readdirSync(dir, { withFileTypes: true }) } catch { return }
@@ -44,14 +51,19 @@ export function sourceSpecifiers(rootDir) {
       if (!/\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(e.name)) continue;
       let text;
       try { text = readFileSync(p, "utf8") } catch { continue }
-      const localTypes = new Set<string>();
+      declRe.lastIndex = 0;
       let m;
-      typeFrom.lastIndex = 0;
-      while ((m = typeFrom.exec(text)) !== null) localTypes.add(m[1]);
-      anyFrom.lastIndex = 0;
-      while ((m = anyFrom.exec(text)) !== null) {
-        if (localTypes.has(m[1])) types.add(m[1]);
-        else values.add(m[1]);
+      while ((m = declRe.exec(text)) !== null) {
+        // 裸 import "spec"（无绑定）永远是值导入
+        const spec = m[5] ?? m[7];
+        // 相对路径 / 绝对路径 / 子路径别名不是包，不进外部表（相对导入由打包器自己拼）
+        if (!spec || spec.startsWith(".") || spec.startsWith("/") || spec.startsWith("#")) continue;
+        const bound = (m[3] ?? "");
+        // `type` 关键字之后必须跟 `{...}` 或 `*` 才算仅类型；`import type from "x"`（默认导入
+        // 恰好叫 type）是值导入，不能误伤。
+        const typeOnly = Boolean(m[2]) && /[\{*]/.test(bound);
+        if (typeOnly) types.add(spec);
+        else values.add(spec);
       }
     }
   };

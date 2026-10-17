@@ -310,6 +310,70 @@ test("sourceSpecifiers：仅类型导入的词进 types、不进 values", () => 
   }
 });
 
+test("sourceSpecifiers：同一文件里同模块既有类型又有值导入，算值（按语句而非按文件）", () => {
+  const root = mkdtempSync(join(tmpdir(), "hana-specs3-"));
+  try {
+    const src = join(root, "src");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(
+      join(src, "mixed.ts"),
+      [
+        "import type { A } from 'react'",
+        "import { b } from 'react'",
+        "import type { C } from 'zod'",
+      ].join("\n"),
+    );
+    const r = sourceSpecifiers(src);
+    // 按文件归类的话 react 会落到 types 里，values 丢掉它 → externals 与两道闸全失明
+    assert.ok(r.values.has("react"), "同文件有值导入就必须进 values");
+    assert.ok(!r.types.has("react"), "不能因为另有一条 type 导入就整词算类型");
+    // 只有类型导入的词仍然只进 types
+    assert.deepEqual([...r.types], ["zod"]);
+    assert.ok(!r.values.has("zod"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("sourceSpecifiers：`import type from \"x\"`是默认导入名叫 type，算值", () => {
+  const root = mkdtempSync(join(tmpdir(), "hana-specs4-"));
+  try {
+    const src = join(root, "src");
+    mkdirSync(src, { recursive: true });
+    // 这里 type 是默认导入的绑定名，不是 type 修饰符
+    writeFileSync(join(src, "d.ts"), "import type from 'lodash'\n");
+    const r = sourceSpecifiers(src);
+    assert.ok(r.values.has("lodash"), "默认导入名叫 type 也不能误判成仅类型");
+    assert.ok(!r.types.has("lodash"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("sourceSpecifiers：声明正则不跨行，前一行注释不会把 type 关键字吃掉", () => {
+  const root = mkdtempSync(join(tmpdir(), "hana-specs5-"));
+  try {
+    const src = join(root, "src");
+    mkdirSync(src, { recursive: true });
+    // 真实现场（client-hmr 的 index.ts）：注释行以单词 imports 开头，下一行才是 import type
+    writeFileSync(
+      join(src, "a.ts"),
+      [
+        " * imports carry the clientModules/webServer Context merges.",
+        "import type { ClientArtifactBaseline } from '@deepseek-ai/dsh-client-modules'",
+      ].join("\n"),
+    );
+    const r = sourceSpecifiers(src);
+    assert.ok(
+      r.types.has("@deepseek-ai/dsh-client-modules"),
+      "跨行匹配会把 type 吃进中间段，把类型导入误判成值导入",
+    );
+    assert.ok(!r.values.has("@deepseek-ai/dsh-client-modules"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("readPlatformWords：从镜像的上游 platform.ts 读出两个词表", () => {
   // 参数是镜像 tag（dsh-v<版本>），不是裸版本号
   const words = readPlatformWords(tagForVersion(dshPin()), MIRROR);
