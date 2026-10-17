@@ -4,15 +4,18 @@
   "files": [
     {
       "path": "src/client/SettingsRoot.tsx",
-      "upstreamSha256": "01966a7299b66d16b2f80106c72dd1f37c541bbfe2d3a0397ca9edd96c21f466"
+      "upstreamSha256": "01966a7299b66d16b2f80106c72dd1f37c541bbfe2d3a0397ca9edd96c21f466",
+      "deltaSha256": "a421afae48ac302cc2b726fbd27167a86cd86f4bc97be089d8f0c27160031fa9"
     },
     {
       "path": "src/client/SettingsRoot.module.css",
-      "upstreamSha256": "886528a854b668db25c60cbc46ad982687142fcb02fda1f533dcbf491dc73513"
+      "upstreamSha256": "886528a854b668db25c60cbc46ad982687142fcb02fda1f533dcbf491dc73513",
+      "deltaSha256": "a090bb81208e483858c7b78fd15720feca3f960a0064ae1d8fb67d1df2b74f3f"
     },
     {
       "path": "src/client/locales.ts",
-      "upstreamSha256": "9174829c38582386113fc654fea3e3ba83ac9aafdde6955d68018f4cfd6ff678"
+      "upstreamSha256": "9174829c38582386113fc654fea3e3ba83ac9aafdde6955d68018f4cfd6ff678",
+      "deltaSha256": "3defd7b92f56e0d07aa9cce779f9c809b5039e6fe5752cb3b332cca26a0eafae"
     }
   ],
   "notes": [

@@ -11,7 +11,8 @@
   "files": [
     {
       "path": "src/catalog.ts",
-      "upstreamSha256": "7e41fce50d05350fd33c165197157d71920d490026ab26d2df06523133172cfa"
+      "upstreamSha256": "7e41fce50d05350fd33c165197157d71920d490026ab26d2df06523133172cfa",
+      "deltaSha256": "6832267ea6943bae615bafa2c272710c2fec226c45e667d3a11e0259aa6b8b8d"
     }
   ],
   "notes": [

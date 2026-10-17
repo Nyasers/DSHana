@@ -4,7 +4,8 @@
   "files": [
     {
       "path": "src/client/locales.ts",
-      "upstreamSha256": "7abc0a0d2cc8411335e64eff385231480ba5f8176903ddcf365151dd5dcb959c"
+      "upstreamSha256": "7abc0a0d2cc8411335e64eff385231480ba5f8176903ddcf365151dd5dcb959c",
+      "deltaSha256": "d04b8397b9aef326c765222a5fb9652fe52507bf9b9b2d6f405610a0631d2c9b"
     }
   ],
   "notes": [

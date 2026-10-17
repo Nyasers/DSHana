@@ -16,6 +16,7 @@ import {
   tagForVersion,
   verifyIntegrations,
 } from "../../scripts/integrations/verify.mts";
+import { deltaOf, describeDelta } from "../../scripts/integrations/delta.mts";
 import {
   REPO_ROOT,
   loadIntegrations,
@@ -125,6 +126,85 @@ test("尚无 overlay 的集成被记为 empty（允许，但会被提示）", ()
   const r = verifyIntegrations(integrations, () => null);
   assert.equal(r.files, 0);
   assert.deepEqual(r.empty, ["ui-layout", "ui-sidebar"]);
+});
+
+test("闸会响：delta 弄丢了（上游哈希对得上，但 delta 指纹不对）", () => {
+  const upstream = "a\nb\nc\n";
+  // 我们的 overlay 曾经在上游 b 的位置加了一行；rebase 时被整份上游覆盖，delta 没了。
+  const integrations = [
+    {
+      dir: "ui-layout",
+      package: "p",
+      upstreamDir: "d",
+      files: [{ path: "src/x.ts", upstreamSha256: sha256(upstream), deltaSha256: sha256("原 delta") }],
+    },
+  ];
+  assert.throws(
+    () => verifyIntegrations(integrations, () => Buffer.from(upstream), {
+      readOverlay: () => upstream, // overlay 与上游逐字相同 = delta 被冲掉了
+    }),
+    (e) => {
+      assert.match(e.message, /delta 漂了/);
+      assert.match(e.message, /上游哈希对得上/);
+      return true;
+    },
+  );
+});
+
+test("delta 指纹对得上时通过，并计入 deltaChecked", () => {
+  const upstream = "a\nb\nc\n";
+  const overlay = "a\nb\nB\nc\n";
+  const integrations = [
+    {
+      dir: "ui-layout",
+      package: "p",
+      upstreamDir: "d",
+      files: [{ path: "src/x.ts", upstreamSha256: sha256(upstream), deltaSha256: "__placeholder__" }],
+    },
+  ];
+  // 先用真 delta 算出指纹，再拿它当记录值（纯函数，不碰文件系统）
+  const fingerprint = deltaOf(upstream, overlay).sha256;
+  integrations[0].files[0].deltaSha256 = fingerprint;
+  const r = verifyIntegrations(integrations, () => Buffer.from(upstream), { readOverlay: () => overlay });
+  assert.equal(r.files, 1);
+  assert.equal(r.deltaChecked, 1);
+});
+
+test("清单没写 deltaSha256 时跳过第二道闸（向后兼容）", () => {
+  const upstream = "a\n";
+  const integrations = [
+    { dir: "a", package: "p", upstreamDir: "d", files: [{ path: "x.ts", upstreamSha256: sha256(upstream) }] },
+  ];
+  const r = verifyIntegrations(integrations, () => Buffer.from(upstream), { readOverlay: () => "a\nb\n" });
+  assert.equal(r.files, 1);
+  assert.equal(r.deltaChecked, 0);
+});
+
+test("deltaOf：无 delta 时区间为空、计数为 0", () => {
+  const r = deltaOf("a\nb\n", "a\nb\n");
+  assert.deepEqual(r.hunks, []);
+  assert.equal(r.added, 0);
+  assert.equal(r.removed, 0);
+  assert.match(describeDelta(r), /无 delta/);
+});
+
+test("deltaOf：区间是 overlay 侧行号、连续改动折叠成一段", () => {
+  const upstream = "a\nb\nc\nd\ne\n";
+  const overlay = "a\nb\nX\nY\nd\ne\n";
+  const r = deltaOf(upstream, overlay);
+  assert.equal(r.added, 2);
+  assert.equal(r.removed, 1);
+  assert.deepEqual(r.hunks, [{ start: 3, end: 4 }]);
+});
+
+test("deltaOf：指纹只跟内容走，上游其他行改动不影响同一份 delta", () => {
+  // 同一处改动放在不同位置：内容一样，指纹应当一样（行号不进指纹）
+  const a = deltaOf("a\nb\nc\n", "a\nb\nX\nc\n");
+  const b = deltaOf("d\ne\nf\n", "d\ne\nX\nf\n");
+  assert.equal(a.sha256, b.sha256);
+  // 改动内容变了，指纹必变
+  const c = deltaOf("a\nb\nc\n", "a\nb\nY\nc\n");
+  assert.notEqual(a.sha256, c.sha256);
 });
 
 test("仓库真实清单：能解析、字段齐（当前为批次①两枚、尚无 overlay）", () => {

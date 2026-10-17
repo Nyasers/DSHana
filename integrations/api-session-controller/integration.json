@@ -11,15 +11,18 @@
   "files": [
     {
       "path": "src/index.ts",
-      "upstreamSha256": "a85ee64c5e5cb20bfa40d3a7f07cdd2f490c82268f08cfc53df6fd72458574c4"
+      "upstreamSha256": "a85ee64c5e5cb20bfa40d3a7f07cdd2f490c82268f08cfc53df6fd72458574c4",
+      "deltaSha256": "7fa8bff99e627c5e039027bde64924c335043ac939263c6474f8a5929d1b1874"
     },
     {
       "path": "src/types.ts",
-      "upstreamSha256": "72a35c7df913a2a2d0548b40aa8a7abbbbc7807e55f4f9f5fb236a9a2550a042"
+      "upstreamSha256": "72a35c7df913a2a2d0548b40aa8a7abbbbc7807e55f4f9f5fb236a9a2550a042",
+      "deltaSha256": "1973509a4425bed14cf68df5ee581b17b4b71219ad5a39f621c5e712716372c0"
     },
     {
       "path": "src/commands.ts",
-      "upstreamSha256": "b1d3f6cc7b42d850a391d988a8d5dc2bee2e5f10f35ae4e6c1ae88e836c165b1"
+      "upstreamSha256": "b1d3f6cc7b42d850a391d988a8d5dc2bee2e5f10f35ae4e6c1ae88e836c165b1",
+      "deltaSha256": "32c26900a2b135d3c4df2ae85514b96e7764a5af895c81a356154956fa6ebeab"
     }
   ],
   "generatedPatches": [

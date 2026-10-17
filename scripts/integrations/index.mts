@@ -6,6 +6,7 @@
 // 用法：
 //   node scripts/integrations/index.mts verify          # 镜像版本一致 + 每个 overlay 记录的上游哈希仍成立
 //   node scripts/integrations/index.mts stage           # verify 后把 overlay 落进 .tmp/integrations/<短名>/
+//   node scripts/integrations/index.mts delta           # 打每个 overlay 相对上游的 delta（行区间与行数）
 //   node scripts/integrations/index.mts hash <仓库相对路径>   # 打印上游该文件的 sha256（写清单时用）
 //   node scripts/integrations/index.mts list
 //
@@ -13,12 +14,17 @@
 // 构建时用**当前镜像**重算比对；不一致 = 上游动过 → 构建失败并指名要 rebase 的文件。
 // 于是"拷贝即冻结"在流程上不可能发生。
 //
-// 分工：校验纯函数在 verify.mts，镜像访问与落盘在 mirror.mts，编译进包在 build.mts；
-// 本文件是 CLI 门面（子命令表 + 过闸），退出码 2 = 用法/子命令错，1 = 运行期失败。
+// 分工：校验纯函数在 verify.mts，delta 与指纹在 delta.mts，镜像访问与落盘在 mirror.mts，
+// 编译进包在 build.mts；本文件是 CLI 门面（子命令表 + 过闸），退出码 2 = 用法/子命令错，
+// 1 = 运行期失败。
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { errText } from "../shared/err-text.mts";
 import { isDirectRun } from "../shared/run.mts";
 import { dshPin, readPkg } from "../shared/version.mts";
 import { buildIntegrations } from "./build.mts";
+import { deltaOf, describeDelta } from "./delta.mts";
 import { loadIntegrations, mirrorHasTag, readUpstreamFromMirror, stageIntegrations } from "./mirror.mts";
 import { sha256, tagForVersion, verifyIntegrations } from "./verify.mts";
 
@@ -42,8 +48,15 @@ async function gate(tag, version) {
   }
   console.log(`[integrations] 镜像 ${tag} = ${commit.slice(0, 9)}（pin ${version}）`);
   const integrations = loadIntegrations();
-  const result = verifyIntegrations(integrations, (rel) => readUpstreamFromMirror(rel, tag));
-  console.log(`[integrations] 漂移闸通过：${result.packages} 个集成、${result.files} 个 overlay 文件`);
+  const result = verifyIntegrations(integrations, (rel) => readUpstreamFromMirror(rel, tag), {
+    // 读我们的 overlay：delta 指纹要用它与上游比
+    readOverlay: (name, rel) => {
+      const file = join(integrations.find((it) => it.dir === name)?.root ?? "", "files", rel);
+      return existsSync(file) ? readFileSync(file, "utf8") : null;
+    },
+  });
+  const deltaNote = result.deltaChecked > 0 ? `、${result.deltaChecked} 份校了 delta 指纹` : "";
+  console.log(`[integrations] 漂移闸通过：${result.packages} 个集成、${result.files} 个 overlay 文件${deltaNote}`);
   if (result.empty.length) {
     console.log(`[integrations] 注意：以下集成尚无 overlay（批次未落地）：${result.empty.join(", ")}`);
   }
@@ -68,6 +81,30 @@ const COMMANDS = {
     for (const it of loadIntegrations()) {
       console.log(`${it.dir}  → ${it.package}  上游 ${it.upstreamVersion}  overlay=${(it.files || []).length}`);
     }
+  },
+  /**
+   * 打 delta：每份 overlay 相对该 tag 上游改了哪几行。给人看，也是写清单时取 deltaSha256 的入口。
+   * 只读：不写任何文件。
+   */
+  delta: async ({ tag }: CommandContext) => {
+    const integrations = loadIntegrations();
+    const only = process.argv[3];
+    let shown = 0;
+    for (const it of integrations) {
+      if (only !== undefined && it.dir !== only) continue;
+      for (const f of it.files ?? []) {
+        const upstream = readUpstreamFromMirror(`${it.upstreamDir}/${f.path}`, tag);
+        if (upstream === null) {
+          console.log(`${it.dir}/${f.path}  ⚠ 上游已无此文件（${tag}）`);
+          continue;
+        }
+        const overlay = readFileSync(join(it.root, "files", f.path), "utf8");
+        const result = deltaOf(upstream.toString("utf8"), overlay);
+        console.log(`${it.dir}/${f.path}\n  ${describeDelta(result)}\n  deltaSha256 ${result.sha256}`);
+        shown += 1;
+      }
+    }
+    if (shown === 0) console.log(`[integrations] 没有可打的 overlay${only === undefined ? "" : `（筛选 ${only}）`}`);
   },
   verify: async ({ tag, version }: CommandContext) => {
     await gate(tag, version);
