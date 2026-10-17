@@ -1,10 +1,12 @@
 /** Composes viewport operations, reading policy, and history navigation for Chat. */
 import { useCallback, useLayoutEffect, useMemo, useRef, type RefObject } from 'react'
+import type { TranscriptViewMode } from '../../chat-settings.ts'
 import type { ChatSnapshot } from '../contract/snapshot.ts'
 import type { ChatViewSlotProps } from '../contract/slots.ts'
 import { useChatNavigation, type ChatNavigation, type ChatNavigationInput } from './use-chat-navigation.ts'
 import { useChatReading, type ChatReadingState } from './use-chat-reading.ts'
-import { useChatViewport, type ViewportScroll } from './use-chat-viewport.ts'
+import { useChatViewport } from './use-chat-viewport.ts'
+import type { FlowMotionRows } from './flow-motion.ts'
 
 // DSHana delta：滚到顶自动续页的触发距离。阅读位离顶 ≤ 此值即认为读者在请求更早一页。
 const LOAD_OLDER_TOP_PX = 32
@@ -19,6 +21,10 @@ export interface ChatScrollInput extends ChatNavigationInput {
   readonly steeringId: string | null
   readonly submissionId: string | null
   readonly running: boolean
+  /** Enable the browser-local delayed-fold experiment and its input reveal animation. */
+  readonly deferCompletedTurns: boolean
+  /** A changed work-details preference resets fold reservations after the layout settles. */
+  readonly transcriptView: TranscriptViewMode
   readonly loadedTurns: ReturnType<ChatSnapshot['navigation']['items']>
 }
 
@@ -29,18 +35,20 @@ interface ChatScrollState extends ChatReadingState {
   readonly navigateToTurn: ChatNavigation['navigateToTurn']
   readonly loadEarlier: ChatNavigation['loadEarlier']
   readonly returnToBottom: () => void
+  readonly motion: FlowMotionRows
 }
 
 /**
- * Coordinate scroll policy after Chat content commits.
+ * Coordinate scroll policy after Chat content commits. Initial history must be ready
+ * before automatic scroll or resize handling can initialize reading state and fold motion.
  * New submitted input supersedes pending reader sampling.
  * @param input - current Chat content, scroll memory, and history operations.
  * @returns element refs, visible reading state, and navigation callbacks.
  */
 export function useChatScroll(input: ChatScrollInput): ChatScrollState {
   const {
-    ready, order, firstSeq, lastKey, lastIsUser, steeringId, submissionId, running,
-    loadedTurns, chatScroll, hasMore, loadingOlder, loadOlder, loadThrough,
+    ready, order, firstSeq, lastKey, lastIsUser, steeringId, submissionId, running, deferCompletedTurns,
+    loadedTurns, chatScroll, hasMore, loadingOlder, loadOlder, loadThrough, transcriptView,
   } = input
   const { viewport, listRef, columnRef } = useChatViewport()
   const { reading, state } = useChatReading(viewport, chatScroll, loadedTurns.at(-1)?.turn ?? null)
@@ -54,9 +62,13 @@ export function useChatScroll(input: ChatScrollInput): ChatScrollState {
   // DSHana delta：滚动监听只在装配时接一次，而续页的守卫要读最新的 hasMore / loadingOlder。
   const latestInput = useRef(input)
   latestInput.current = input
+  // A fold batch owns layout and scrolling until it lands: at the tail for own input or a following
+  // reader, otherwise with the reader's content still. Growth consumes any room the landing installed.
+  const cancelPendingFollow = useCallback(() => { viewport.motion.cancelInput() }, [viewport])
 
   const processContent = useCallback(() => {
     const current = content.current.input
+    if (!current.ready && !content.current.opened) return
     const previous = content.current.applied
     const ownInput = (current.lastIsUser && current.lastKey !== previous?.lastKey)
       || (current.steeringId !== null && current.steeringId !== previous?.steeringId
@@ -73,7 +85,8 @@ export function useChatScroll(input: ChatScrollInput): ChatScrollState {
     }
     if (ownInput) {
       navigation.cancel()
-      reading.followTail()
+      if (current.deferCompletedTurns && reading.followInputFold()) return
+      reading.followTail(current.deferCompletedTurns ? 'smooth' : 'instant')
       return
     }
     if (navigation.contentCommitted()) {
@@ -86,6 +99,7 @@ export function useChatScroll(input: ChatScrollInput): ChatScrollState {
       || current.steeringId !== previous.steeringId || current.submissionId !== previous.submissionId
     if (tipChanged && reading.followingTail) {
       navigation.cancel()
+      if (current.deferCompletedTurns && reading.followInputFold()) return
       reading.followTail()
     } else navigation.reconcile()
   }, [reading, navigation])
@@ -97,21 +111,34 @@ export function useChatScroll(input: ChatScrollInput): ChatScrollState {
     //   · movedByReader：只有读者输入算数，续页后的程序化补偿不连轴触发；
     //   · 距离 ≤ LOAD_OLDER_TOP_PX：贴顶才算，正常阅读不误触；
     //   · hasMore && !loadingOlder：没有更早的页或已在加载时不重复发起。
-    const onViewportScroll = (scroll: ViewportScroll): void => {
-      reading.onScroll(scroll)
-      const latest = latestInput.current
-      if (scroll.movedByReader && scroll.metrics.top <= LOAD_OLDER_TOP_PX
-        && latest.hasMore && !latest.loadingOlder) navigation.loadEarlier()
-    }
     const disconnectViewport = viewport.connect({
-      scroll: onViewportScroll,
-      scrollEnd: () => {
-        reading.onScrollEnd()
+      scroll: (event) => {
+        if (!content.current.opened) return
+        if (!event.movedByReader && viewport.motion.foldActive()) return
+        reading.onScroll(event)
+        // DSHana delta：读者自己滚到顶就续页（上游只给了「加载更早」按钮，长会话回翻要一直去够它）。
+        // 走与按钮同一个入口 navigation.loadEarlier：锚定补偿由 viewport 负责，续下的页不会把阅读位顶跑。
+        // 三个安全前提：
+        //   · movedByReader：只有读者输入算数，续页后的程序化补偿不连轴触发；
+        //   · 距离 ≤ LOAD_OLDER_TOP_PX：贴顶才算，正常阅读不误触；
+        //   · hasMore && !loadingOlder：没有更早的页或已在加载时不重复发起。
+        const latest = latestInput.current
+        if (event.movedByReader && event.metrics.top <= LOAD_OLDER_TOP_PX
+          && latest.hasMore && !latest.loadingOlder) navigation.loadEarlier()
+      },
+      scrollEnd: (outer) => {
+        reading.onScrollEnd(outer)
         navigation.readerSettled()
       },
       interact: () => { navigation.cancel() },
+      intent: () => { cancelPendingFollow(); reading.interruptFollow() },
       resize: () => {
-        if (!navigation.contentCommitted()) reading.onResize()
+        if (!content.current.opened) return
+        if (navigation.contentCommitted()) {
+          navigation.reconcile()
+          return
+        }
+        if (!content.current.input.deferCompletedTurns || !viewport.motion.foldActive()) reading.onResize()
         navigation.reconcile()
       },
     })
@@ -125,30 +152,49 @@ export function useChatScroll(input: ChatScrollInput): ChatScrollState {
       content.current.opened = false
       content.current.applied = null
     }
-  }, [viewport, reading, navigation, processContent])
+  }, [viewport, reading, navigation, processContent, cancelPendingFollow])
 
   useLayoutEffect(() => {
     const previous = content.current.input
     content.current.input = {
-      ready, order, lastKey, lastIsUser, steeringId, submissionId, running, loadedTurns, chatScroll, ...navigationInput,
+      ready, order, lastKey, lastIsUser, steeringId, submissionId, running, loadedTurns, chatScroll,
+      deferCompletedTurns, transcriptView, ...navigationInput,
+    }
+    if (!deferCompletedTurns) {
+      cancelPendingFollow()
+      reading.interruptFollow()
     }
     viewport.updateTurns(loadedTurns)
     const layoutChanged = previous.order !== order || previous.ready !== ready
     if (layoutChanged) viewport.invalidate()
+    viewport.reclaimBelow()
     processContent()
-    if (layoutChanged) reading.refreshActiveTurn()
+    if (layoutChanged && content.current.opened) reading.refreshActiveTurn()
   }, [
     viewport, reading, processContent, navigationInput, ready, order, lastKey, lastIsUser,
-    steeringId, submissionId, running, loadedTurns, chatScroll,
+    steeringId, submissionId, running, loadedTurns, chatScroll, deferCompletedTurns, transcriptView, cancelPendingFollow,
   ])
 
+  const previousView = useRef(transcriptView)
+  useLayoutEffect(() => {
+    if (previousView.current === transcriptView) return
+    previousView.current = transcriptView
+    cancelPendingFollow()
+    reading.interruptFollow()
+    return viewport.motion.onFoldIdle(() => {
+      viewport.resetBelow()
+      if (content.current.opened) reading.onResize()
+    })
+  }, [transcriptView, viewport, reading, cancelPendingFollow])
+
   const returnToBottom = useCallback(() => {
+    cancelPendingFollow()
     navigation.cancel()
     reading.followTail()
-  }, [navigation, reading])
+  }, [navigation, reading, cancelPendingFollow])
 
   return {
-    listRef, columnRef, ...state, busyTurn,
+    listRef, columnRef, ...state, busyTurn, motion: viewport.motion,
     navigateToTurn: navigation.navigateToTurn,
     loadEarlier: navigation.loadEarlier,
     returnToBottom,

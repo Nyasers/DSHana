@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "DSHana web app",
+    "description": "The Web surface over dsh-base: page assets, runtime config, and DSHana plugins."
+  }
+}

@@ -5,7 +5,7 @@
 //
 // 产物是一个能被 profile 选中的 bundle 包（形态与上游 packages/bundle/web-app 同形）：
 //   lib/index.js            粘合插件（dist 服务、信任采样、提示段落、bash 变量、URL 行）
-//   lib/startup.js          web-startup 提供方（--host / --port / --trusted-host / --no-open）
+//   lib/startup.js          web-startup 提供方（--host / --port / --public-url / --trusted-host / --no-open / TLS）
 //   cordis.patch.yml        本层的组合补丁（行、与上游两份的差异见该文件头）
 //   presets/*.patch.yml     随发行版交付的 preset 声明
 //   package.json            dsh.bundle.patch 指向上面 7 份
@@ -31,7 +31,7 @@ import { BUNDLE_DIR, ROOT } from "../../../scripts/shared/paths.mts";
 
 const PKG_DIR = dirname(fileURLToPath(import.meta.url)); // packages/dsh/app/
 /** 随包原样带走的静态件（进产物根）。 */
-const STATIC = ["package.json", "cordis.patch.yml", "presets"];
+const STATIC = ["package.json", "cordis.patch.yml", "presets", "locale"];
 
 async function buildLib() {
   await build({

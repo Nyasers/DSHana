@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "DSHana 启动配置",
+    "description": "解析 --host / --port / --public-url / --trusted-host / --no-open 与 TLS 参数。"
+  }
+}

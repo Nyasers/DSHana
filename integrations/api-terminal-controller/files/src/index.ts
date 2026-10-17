@@ -5,12 +5,13 @@ import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
-import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import type {} from '@deepseek-ai/dsh-working-directory'
+import { Remote, RemoteError, TypertRemoteService, type RemoteStream } from '@deepseek-ai/dsh-typert-protocol'
 import { discoverShells, resolveShell } from './shells.ts'
 import { BrowserTerminal } from './terminal.ts'
 import { TerminalRetention } from './retention.ts'
 import type {
-  TerminalShell, TerminalAttachmentId, TerminalCreateRequest, TerminalEnvironment, TerminalFrame, TerminalRetentionFrame,
+  TerminalShell, TerminalInput, TerminalCreateRequest, TerminalEnvironment, TerminalFrame, TerminalRetentionFrame,
   WebTerminalId, WebTerminalInfo,
 } from './types.ts'
 
@@ -51,9 +52,9 @@ export interface Config {
   readonly maxRows: number
   /** Screen history rows retained for reconnecting clients. */
   readonly scrollback: number
-  /** Maximum queued UTF-8 frame bytes per output follower before disconnection. */
+  /** Maximum queued UTF-8 frame bytes per output follower and in the Client input buffer. */
   readonly maxBufferedBytes: number
-  /** Maximum UTF-8 bytes in one input request. */
+  /** Maximum raw UTF-8 bytes per input command and across unacknowledged Client input. */
   readonly maxInputBytes: number
   /** Provider process-termination grace period in milliseconds. */
   readonly disposeGraceMs: number
@@ -106,7 +107,7 @@ function requireSessionWorkspace(cwd: string): void {
 
 /** Typed Remote control of transient Session-owned terminal processes. */
 export class TerminalController extends TypertRemoteService {
-  static inject = ['subprocess', 'sandboxPolicy', 'typert']
+  static inject = ['subprocess', 'sandboxPolicy', 'workingDirectory', 'typert']
   static Config: z<Config> = z.object({
     shell: z.union([z.object({
       path: z.string().required(), name: z.string().required(), args: z.array(z.string()).default([]),
@@ -142,17 +143,17 @@ export class TerminalController extends TypertRemoteService {
   }
 
   /**
-   * Read the Session working directory and terminal limits without resolving a shell.
+   * Read the Session's current directory and terminal limits without filesystem validation or shell lookup.
    * @param agent - Session owner supplied by the Gateway.
    * @param signal - request cancellation.
-   * @returns the Session workspace directory and terminal limits.
+   * @returns the logged current directory and terminal limits; retained terminals keep their own process directories.
    */
   @Remote
   environment(agent: Agent, signal: AbortSignal): TerminalEnvironment {
     signal.throwIfAborted()
-    const { sandboxPolicy } = this.execution(agent)
-    return { cwd: agent.session.header.cwd ?? sandboxPolicy.workspaceRoot,
-      maxInputBytes: this.config.maxInputBytes, maxCols: this.config.maxCols,
+    const { workingDirectory } = this.execution(agent)
+    return { cwd: workingDirectory.get(agent.session),
+      maxInputBytes: this.config.maxInputBytes, maxBufferedBytes: this.config.maxBufferedBytes, maxCols: this.config.maxCols,
       maxRows: this.config.maxRows, scrollback: this.config.scrollback }
   }
 
@@ -238,46 +239,17 @@ export class TerminalController extends TypertRemoteService {
   }
 
   /**
-   * Attach to a terminal without binding its process lifetime to the transport.
+   * Attach terminal input and output to one physical Remote stream.
    * @param agent - Session owner supplied by the Gateway.
    * @param id - terminal identity.
-   * @param attachmentId - new exclusive input attachment.
-   * @param signal - physical stream cancellation.
-   * @returns screen recovery followed by output and metadata changes.
+   * @param signal - attachment cancellation; the process remains alive and input is never replayed.
+   * @returns screen recovery, output, writable state and provider-acceptance acknowledgements.
    */
   @Remote({ mode: 'stream' })
-  follow(agent: Agent, id: WebTerminalId, attachmentId: TerminalAttachmentId, signal: AbortSignal): AsyncIterable<TerminalFrame> {
-    if (!/^[\w-]{1,128}$/u.test(attachmentId)) throw new Error('Invalid terminal attachment identity')
-    return this.terminal(agent, id).follow(attachmentId, signal)
-  }
-
-  /**
-   * Deliver raw input, including Tab completion and control characters.
-   * @param agent - Session owner supplied by the Gateway.
-   * @param id - terminal identity.
-   * @param attachmentId - current writable attachment.
-   * @param data - input bytes represented as UTF-8 text.
-   * @returns after provider input acceptance.
-   */
-  @Remote
-  async write(agent: Agent, id: WebTerminalId, attachmentId: TerminalAttachmentId, data: string): Promise<void> {
-    if (Buffer.byteLength(data, 'utf8') > this.config.maxInputBytes) throw new Error('Terminal input exceeds the configured limit')
-    await this.terminal(agent, id).write(attachmentId, data)
-  }
-
-  /**
-   * Update the dimensions of the PTY and recovery screen.
-   * @param agent - Session owner supplied by the Gateway.
-   * @param id - terminal identity.
-   * @param attachmentId - current writable attachment.
-   * @param cols - column count.
-   * @param rows - row count.
-   * @returns after the resize completes.
-   */
-  @Remote
-  async resize(agent: Agent, id: WebTerminalId, attachmentId: TerminalAttachmentId, cols: number, rows: number): Promise<void> {
-    this.dimensions(cols, rows)
-    await this.terminal(agent, id).resize(attachmentId, cols, rows)
+  attach(agent: Agent, id: WebTerminalId, signal: AbortSignal): RemoteStream<TerminalFrame, TerminalInput> {
+    const invocation = this.ctx.invocation
+    if (invocation === undefined) throw new Error('Terminal attachment requires a Remote invocation')
+    return this.terminal(agent, id).attach(invocation.uplink<TerminalInput>(), this.config, signal, invocation.uplinkWindow)
   }
 
   /**
@@ -361,31 +333,34 @@ export class TerminalController extends TypertRemoteService {
       || !Number.isSafeInteger(rows) || rows < 1 || rows > this.config.maxRows) throw new Error('Terminal dimensions exceed the configured limits')
   }
 
-  private execution(agent: Agent): { subprocess: Context['subprocess']; sandboxPolicy: Context['sandboxPolicy'] } {
+  private execution(agent: Agent): { subprocess: Context['subprocess']; sandboxPolicy: Context['sandboxPolicy']; workingDirectory: Context['workingDirectory'] } {
     // The Agent context selects execution providers but does not inject consumer services.
     const subprocess = agent.ctx.get('subprocess')
     const sandboxPolicy = agent.ctx.get('sandboxPolicy')
     if (subprocess === undefined || sandboxPolicy === undefined) throw new Error('The Session execution environment requires subprocess and sandbox policy providers')
-    return { subprocess, sandboxPolicy }
+    const workingDirectory = agent.ctx.get('workingDirectory')
+    if (workingDirectory === undefined) throw new Error('The Session execution environment requires a working-directory provider')
+    return { subprocess, sandboxPolicy, workingDirectory }
   }
 
   private async spawn(agent: Agent, owner: OwnedSession, request: TerminalCreateRequest, signal: AbortSignal): Promise<BrowserTerminal> {
-    const environment = this.environment(agent, signal)
-    // The Session's recorded directory can be gone by now; refuse it before allocating a provider.
-    requireSessionWorkspace(environment.cwd)
-    const { subprocess } = this.execution(agent)
+    // 本覆盖层：目录已消失时先给出带路径的失败（terminal/cwd-unavailable），
+    // 比 provider 分配后的子进程退出码好归因；上游 0.2.1 起 cwd 的权威值来自 workingDirectory。
+    requireSessionWorkspace(this.environment(agent, signal).cwd)
+    const { subprocess, workingDirectory } = this.execution(agent)
+    const cwd = await workingDirectory.ensure(agent, signal)
     const shell = request.shellPath === undefined
       ? await resolveShell(subprocess, this.config.shell, signal)
       : (await this.shells(agent, signal)).find(candidate => candidate.path === request.shellPath)
     if (shell === undefined) throw new Error('Selected shell is not available in this execution environment')
     const handle = await subprocess.spawnTerminal({
-      argv: [shell.path, ...shell.args], cwd: environment.cwd, cols: request.cols, rows: request.rows,
+      argv: [shell.path, ...shell.args], cwd, cols: request.cols, rows: request.rows,
       terminalType: 'xterm-256color', env: { DSH_SESSION_ID: agent.id },
       shellActivity: true,
       graceMs: this.config.disposeGraceMs, signal,
     })
     const info: WebTerminalInfo = {
-      id: request.id, shell, title: shell.name, cwd: environment.cwd,
+      id: request.id, shell, title: shell.name, cwd,
       cols: request.cols, rows: request.rows, state: 'running', exitCode: null,
     }
     try {

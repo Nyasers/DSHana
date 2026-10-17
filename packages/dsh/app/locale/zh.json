@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "DSHana 组合层",
+    "description": "dsh-base 之上的 Web 表层：页面资源、运行配置与 DSHana 定制插件。"
+  }
+}

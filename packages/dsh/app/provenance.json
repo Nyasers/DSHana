@@ -1,37 +1,57 @@
 {
   "package": "@deepseek-ai/dsh-web-app",
-  "upstreamVersion": "0.2.0-rc.2",
+  "upstreamVersion": "0.2.1-rc.2",
   "upstreamDir": "packages/bundle/web-app",
   "mirror": "vendor/deepseek-harness",
-  "mirrorTag": "dsh-v0.2.0-rc.2",
+  "mirrorTag": "dsh-v0.2.1-rc.2",
   "files": [
     {
       "path": "cordis.patch.yml",
-      "upstreamSha256": "df7653ee4c324dca706034631926c86f13a2cf17c280cc018f8c070a0aaad19e"
+      "upstreamSha256": "3e1f923309612ed8551141127409d662e78758e2d0d125218a3f70514417e472"
     },
     {
       "path": "presets/standard.patch.yml",
-      "upstreamSha256": "6cd2f197737fc94a45e487d0bb57869461dd6f392d45f6429b576e75d973eda8"
+      "upstreamSha256": "0d398d2a6872a73a106cb3bd19303ecccf1637e1fcad4d0bf9d8a72d2c2c68f5"
     },
     {
       "path": "presets/ptc.patch.yml",
-      "upstreamSha256": "8fcf6b04dce7c2c76fab925129f6ac9b05ebb546840508e6cde72aa2da991832"
+      "upstreamSha256": "9e355c947bf61c3d2fe9bf3214b386f83c0d99d37579ce22576d4b82cb6e1a2c"
     },
     {
       "path": "presets/minimal.patch.yml",
-      "upstreamSha256": "71ef887f43d8a37931ba3b014e5b116f79018af873d06625fb22e280a23c1dfc"
+      "upstreamSha256": "a2a9ba1c9c392a45466708f18bc0aefbf300577f9b544dc06049f73a8a5b3267"
     },
     {
       "path": "presets/cordis.patch.yml",
-      "upstreamSha256": "b74d71901b692f11111d02d20072735b2fe94b74744ee7e3bfdc5d972f1a3aa5"
+      "upstreamSha256": "01b0fc94fd49136b332254a7ae5658e43ffe646f7248047dba65d499cfc74596"
     },
     {
       "path": "src/index.ts",
-      "upstreamSha256": "a8302cd9b13b6cb1be94ebd2a51b0f42920bb09862eaa8ecf824f9a3e1c7525b"
+      "upstreamSha256": "3f0afba1922c1dc25fbb5528a29e83639956846f8b9f054b90fd4f7a6b37ab51"
     },
     {
       "path": "src/startup.ts",
-      "upstreamSha256": "796b31607564f7662c6328457f900ba0f3d1b8fb06eb1d99b0a09ebe0e869d69"
+      "upstreamSha256": "dd04c1ef79fbc5e465f0a2124d20db639d8f249067edcc258a45c7cac5755ed8"
+    },
+    {
+      "path": "src/public-url.ts",
+      "upstreamSha256": "468db4ff7f868460bff611ca375fcfef6cb5f9d5a22e80677659751cdb900f98"
+    },
+    {
+      "path": "locale/en.json",
+      "upstreamSha256": "fb54a52d363b9326f7a766f404a34caa8beaf5b3a0002f7455ae2ccd73b62a13"
+    },
+    {
+      "path": "locale/zh.json",
+      "upstreamSha256": "5620c558d8f6bb2b58ad4f8f910f3920a645e304f9203522a96a1a676b52dbca"
+    },
+    {
+      "path": "locale/startup/en.json",
+      "upstreamSha256": "1215423a99cf15ca80d3cc5bdd1d1c796eaf541ff33f7a1e7f48ad4a8a214fd4"
+    },
+    {
+      "path": "locale/startup/zh.json",
+      "upstreamSha256": "2d774916a08b3c7d5ce21269c31b8388d07b2068a27b7c5876330a7523ee09c4"
     }
   ]
 }

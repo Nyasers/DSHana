@@ -28,7 +28,7 @@ import css from './AppFrame.module.css'
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
   & PropsRuntime<'root'>
-  & PropsRenderSlots<'sidebar' | 'main' | 'rightbar' | 'shell.overlay' | 'shell.leading'>
+  & PropsRenderSlots<'sidebar' | 'main' | 'rightbar' | 'shell.bottom' | 'shell.overlay' | 'shell.leading'>
   & PropsStore<ReturnType<typeof createLayoutStore>>
   & PropsLocale<'common'>
 
@@ -355,6 +355,10 @@ export function AppFrame({
           {sidebar}
         </div>
       )}
+      {/* 底部槽位：上游的 shell.bottom 照挂（默认空、不占高），只把「面」交给网格排。 */}
+      <div className={css.bottomRow} data-shell-bottom>
+        {renderSlot('shell.bottom', {})}
+      </div>
       {/* 局部面只有 FP（navigation）：它寄居在主卡的窗口里，列与 chrome 都不是自己的，
           app 级 overlay 不归它挂。其余面（workspace 主卡 / stream 会话卡 / standalone 拆窗）
           各自就是一幅 app 视图，自己拥有这一层。门必须按“排掉局部面”写而不是枚举整幅面：

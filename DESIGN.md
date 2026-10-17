@@ -256,6 +256,12 @@ DSHana 就是「Hana App v2（隔离 App 进程 + `apply(ctx)`）」。本节按
 | `@dshana/dsh-theme` | 宿主主题注入 DSH Web UI | `tapIndex` 注入静态 fallback + 动态桥（见「主题跟随」） |
 | `@dshana/dsh-app` | 组合层包（profile 层列里被选中的那一层） | 派生自上游 web-app，承载 roster 行、对官方行的取值与 `@dshana/*` insert；逐文件上游 sha256 见 `provenance.json` |
 
+组合层跟着上游 web-app 走，每升一版内核就整层 rebase 一次：upstream 补丁与 presets 整份搬过来，我们的 delta 只留在 `cordis.patch.yml` 与 `presets/dshana*.patch.yml` 里（其余 presets 与上游逐字相同）；`provenance.json` 记着每一份所基于的上游 sha256，`verify:bundle` 漂了就拦。内核 0.2.1 起三件事要记住：
+
+- **`{{cwd}}` 不再是提示词变量。** 会话工作目录改由 `dsh-working-directory` 以「必需的用户上下文快照」给出，循环里没有这个变量了，任何 persona 模板再写 `{{cwd}}` 都会在组装提示词时严格插值报错。所以我们的两个特调 preset 的 suffix 不再带那句 `Your working directory is …`，`system-prompt` 行也不再重述 `personaSuffix`。
+- **信任栅栏的 authority 换源。** 上游把 `webRuntime` 那个依赖 bind 的服务收掉了：`connection` 行直接读 `webStartup.trustedHosts`（bind 地址另算），`web-runtime` 行只负责公告 URL（`publicUrl`，宿主不传就是 bind 地址）。我们照上游写，不再往 `webRuntime` 上挂东西。
+- **`shell.bottom` 槽位回来。** `ui-layout` 恢复了三列下方的底部行，我们的覆盖层跟着挂上它（空内容不占高），面认（`data-dshana-surface`）与列排不变。
+
 官方自带的两个 LLM adapter（`llm-deepseek` / `llm-pi-ai`）在组合层停用：它们各要自己的凭据段与凭据库，而凭据在宿主手里，永远拿不到 key，官方那条 `deepseek-official` 路由却照样出现在模型选择器里（base 层的缺省模型也正指向它），选中它就在提交时报 no API key。停用之后 llm 注册表里只剩宿主目录那几条路由，模型面单一事实源；设置里的「模型」页随之一并停用（它只编辑那两行的 settings 段）。目录选择器不动：官方 `directory-picker-auto` 在 win32 + loopback 下挑 native，而 native 的客户端半优先读页面里的目录桥——壳页在注入 DSH index 前把 `__DSH_DIRECTORY_PICKER__` 装上（照 `hana.resources.pick` 要目录，见 `packages/ui/src/dsh-inject.ts`）。
 
 **测试与真机边界：**

@@ -12,6 +12,7 @@ import type {
 } from '@deepseek-ai/dsh-api-session-controller/client'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
+import type { RemoteEndpoint } from '@deepseek-ai/dsh-api-remote-access/client'
 // ui-workspace 的导航面（declare merge 的 ctx.uiWorkspace）：切会话请本面所属文档的视图所有者代劳。
 import type { UiWorkspace } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import { notifySubscribers } from '@deepseek-ai/dsh-client-store'
@@ -160,6 +161,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     useSessions: UseSessions
     useSessionStatus: UseSessionStatus
     useSessionRetainInfo: UseSessionRetainInfo
+    /** Whether the current Peer may call `action` on one Session resource. */
+    useSessionAccess: (sessionId: SessionId, action: RemoteEndpoint) => boolean
   }
 
   interface SessionStandardProps {
@@ -169,6 +172,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     sessionId: SessionId
     /** Host-computed projection values addressed by projection key. */
     useProjection: UseProjection
+    /** Whether the current Peer may call `action` on this Session resource. */
+    useAccess: (action: RemoteEndpoint) => boolean
   }
 
   interface SessionMaybeStandardProps {
@@ -178,6 +183,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     sessionId: SessionId | undefined
     /** Host-computed projection values; every key is absent without a Session. */
     useProjection: UseProjection
+    /** The bound Session's access answer; `undefined` without a Session, which callers treat as not allowed. */
+    useAccess: (action: RemoteEndpoint) => boolean | undefined
   }
 }
 
@@ -669,8 +676,8 @@ function claimStandardProp(kind: StandardMemberKind, name: string, finalProps: S
   finalProps.add(propName)
 }
 
-/** Required Controller and renderer services. */
-export const inject = ['sessions', 'slots', 'remote']
+/** Required Controller, renderer, Remote, and access services. */
+export const inject = ['sessions', 'slots', 'remote', 'remoteAccess']
 
 /**
  * Install the Session root source and scoped adapter.
@@ -685,9 +692,19 @@ export function apply(ctx: Context): void {
     },
     keyedHooks: {
       sessionRetainInfo: key => ctx.sessions.retainInfo(key as SessionId),
+      sessionAccess: (sessionId, action) => action === undefined
+        ? undefined
+        : ctx.remoteAccess.source('session', sessionId, action),
     },
   } satisfies RootStandardSourceContribution)
   ctx.slots.installScope('session', service.adapter)
+  // 上游 0.2.1 自己把 keyed hook `access` 接到了 remoteAccess，我们那份同名 hook 随之下岗。
+  service.provide({
+    keyedHooks: ['access'],
+    resolve: binding => ({
+      keyedHooks: { access: action => ctx.remoteAccess.source('session', binding.sessionId, action) },
+    }),
+  })
   installCrossSurfaceSelection(ctx)
 }
 

@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "src/client/index.ts",
-      "upstreamSha256": "569fb912a465a69ec3c971e73de5a6982f624bab8c3fafba293de1ca09313b42"
+      "upstreamSha256": "491a3a66baae773d4983c78dde37f2f6c04b14e7ab7d1cb5007ab678f674b09c"
     },
     {
       "path": "src/index.ts",
