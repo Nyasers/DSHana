@@ -184,7 +184,20 @@ export function assertBootBloom(nodeModulesDir) {
   if (js.includes("_spin_u7vgf_45") || css.includes("_spin_u7vgf_45")) {
     throw new Error("启动页花瓣：仍有转圈环残留（旧动画没被完全替换）");
   }
-  console.log("[pack] 启动页花瓣在位（四花标记 + 绽放动画，无转圈环残留）");
+  // 选择器必须真的以点开头。曾经把 "._spinner_u7vgf_45{…}" 写成 "_spinner_u7vgf_45{…}"，
+  // 字符串里仍有类名、上面几条都过得去，但选择器成了元素选择器，整条规则作废：
+  // spinner 容器失去尺寸与定位，整个 WebUI 只剩底下一团。所以这里要看**规则形式**而非关键字。
+  const straySelectors = css.match(/(?:^|[};])\s*(_spinner_u7vgf_45[^{]*\{)/g);
+  if (straySelectors !== null) {
+    throw new Error(
+      `启动页花瓣：有选择器丢了前导点，整条规则作废：${straySelectors.slice(0, 3).join(" ")}`,
+    );
+  }
+  // 花瓣容器自身的规则必须在（尺寸/定位），否则即使动画在，布局也会塌。
+  if (!/(?:^|[};])\._spinner_u7vgf_45\{[^}]*width:20px/.test(css)) {
+    throw new Error("启动页花瓣：._spinner_u7vgf_45 自身规则缺失或没带尺寸");
+  }
+  console.log("[pack] 启动页花瓣在位（四花标记 + 绽放动画，无转圈环残留，选择器合法）");
 }
 
 /** App ui/ 静态树断言（cards route 资源面；相对资源契约）：缺失 = 卡片 404，拒包。 */

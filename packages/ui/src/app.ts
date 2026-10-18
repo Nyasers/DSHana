@@ -117,9 +117,11 @@ import {
 
   // 台面上唯一那行小字：只报状态（报错内容在下方 <pre> 里，不在这里重复）。
   function statusText(view, s) {
-    if (view === "booting") return "正在启动 DSH…";
-    if (view === "idle") return "DSH 未启动";
-    if (view === "action") return s && s.phase === "stopped" ? "DSH 已停止" : "启动失败";
+    // 自举台只出现在加载期间；这里的措辞跟 DSH WebUI 自己保持一致（英文），
+    // 其余面向用户的文案仍旧是中文。
+    if (view === "booting") return "Booting DeepSeek Harness…";
+    if (view === "idle") return "Waiting to boot DeepSeek Harness";
+    if (view === "action") return s && s.phase === "stopped" ? "DeepSeek Harness stopped" : "Failed to boot DeepSeek Harness";
     return "";
   }
 

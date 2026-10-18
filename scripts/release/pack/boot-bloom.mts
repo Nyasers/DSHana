@@ -101,13 +101,13 @@ const K_END = (2.35 / PERIOD_SEC) * 100;
 
 /** 替换掉转圈环的样式，换成花瓣动画。 */
 const BLOOM_CSS = [
-  "_spinner_u7vgf_45{position:relative;width:20px;height:20px;color:var(--dsw-alias-brand-primary, var(--dsh-boot-brand))}",
+  "._spinner_u7vgf_45{position:relative;width:20px;height:20px;color:var(--dsw-alias-brand-primary, var(--dsh-boot-brand))}",
   `._spinner_u7vgf_45 svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;display:block;opacity:0;animation:_bloomLife_boot var(--dsh-boot-pace,${PERIOD_SEC.toFixed(2)}s) linear infinite both}`,
-  "_spinner_u7vgf_45 svg:nth-child(1){animation-delay:0s}",
+  "._spinner_u7vgf_45 svg:nth-child(1){animation-delay:0s}",
   `._spinner_u7vgf_45 svg:nth-child(2){animation-delay:${String(CYCLE_SEC)}s}`,
   `._spinner_u7vgf_45 svg:nth-child(3){animation-delay:${(CYCLE_SEC * 2).toFixed(2)}s}`,
   `._spinner_u7vgf_45 svg:nth-child(4){animation-delay:${(CYCLE_SEC * 3).toFixed(2)}s}`,
-  "_spinner_u7vgf_45 path{fill:none;stroke:currentColor;stroke-width:1.68;stroke-linejoin:round}",
+  "._spinner_u7vgf_45 path{fill:none;stroke:currentColor;stroke-width:1.68;stroke-linejoin:round}",
   `.${PETAL_CLASS}{transform-origin:0 0;animation:_bloomPetal_boot var(--dsh-boot-pace,${PERIOD_SEC.toFixed(2)}s) linear infinite both}`,
   `.${CORE_CLASS}{fill:currentColor;stroke:none;transform-origin:0 0;animation:_bloomCore_boot var(--dsh-boot-pace,${PERIOD_SEC.toFixed(2)}s) linear infinite both}`,
   // 缓动挂在关键帧上时作用于「到下一个关键帧」那一段：开花与消散两段需要 easeInOutCubic 的形状，
