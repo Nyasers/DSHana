@@ -1,0 +1,37 @@
+# api-session-controller
+
+## 不端出 OS 关联的「打开方式」
+
+`workspacePathApplications` 恒返回空表。那样应用会把工作区状态与索引写进 `~`，而受管运行时把 `~`
+换成了宿主分配的 `.runtime-tmp`。
+
+空表的效果：文件控件只留「显示文件位置」（`OpenTargetButton` 的 footer 项，client 硬编码，不经过本
+接口），而目录控件走的是 catalog（另一条路），不受影响。`openWorkspacePath`（reveal 与显式打开走
+它）不动。
+
+## 调用方自带的模型选择
+
+「模型随请求走」，不落 `settings.yaml`。
+
+缝选在这里：`session/create` 与 `session/prompt` 的请求多一个可选 `model`，服务端按会话就地装上。
+这是唯一一条「模型配置跟着请求走」的入口。唯一收模型的选择 API `session/selectModel` 会顺带
+`saveSelection` 落全局默认，那是给「在页面上选模型」的语义，不是给调用方的。
+
+语义三条：只装会话选择（`selectForNextRequest`），不碰全局默认；走既有的 `resolveCallConfig` 校验，
+路由不可服务时报 `session/model-unavailable`（与 `selectModel` 同一套错误码与文案）；`prompt` 上带
+`model` 时同一回合生效，并留给该会话后续请求（会话自己的 durable 选择，不是全局配置）。
+
+为什么不用合成路由或单条 provider：Web UI 里的模型选择器要照旧列全宿主目录，用户可能直接在那儿选，
+那条路仍走 `selectModel`、会落默认，是用户自己的选择。
+
+谁在用：受管 runtime 里 open 建的会话把调用方会话当前在用的那条（或 App 设置里那条自定义）带上。
+于是 DSH 侧不需要任何用户模型状态：默认模型那格（settings 段 `agent-default-model`）只在用户自己
+在 DSH 侧设过时才有值，与调用方带过来的选择是两回事。
+
+## 为什么还要打生成物
+
+`lib/typert.host.js` 是上游发布时从 FaceModel 生成的 RPC 校验表，不在上游 git 里，也不由我们编译。
+它按 request 类型逐字段列 zod，而 `z.object` 对未声明的键默认剥离。只改 `src/types.ts` 等于没改：
+字段在边界就被拿走，服务端收到 `undefined`，现场只剩「模型没生效」。
+
+所以构建时按锚点把同一个字段补进 create / prompt 两份 schema（见 `patchGeneratedRequestModel`）。

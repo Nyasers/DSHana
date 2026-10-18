@@ -1,0 +1,19 @@
+# ui-open-in-app
+
+本批与 `client-hmr` 同批（第二波）。
+
+浏览器的裸 fetch 打宿主源必被凭据闸 403（`missing_credential`，真机 `/open-in-app/apps`）。与样例
+0.7.0 的 ui-open-in-app 补丁同一处改法：
+
+```
+upstream:  const controller = new OpenInAppController()
+样例:      new OpenInAppController((input, init) => transport.fetch(new URL(input,'http://dsh.internal'), init))
+我们:      new OpenInAppController(fetcher)  // fetcher 来自 globalThis.__DSH_TRANSPORT__.fetch
+```
+
+`controller.ts` **不改**：上游 `OpenInAppController` 的构造器本来就收可选 fetcher（默认原生 fetch），
+所以样例也只是在 `index.ts` 传了一个。传 `undefined` 时行为与上游一致。
+
+控制器内部用 `new URL(ROUTE, hostBase())` 拼绝对地址（`hostBase = location.origin`），我们的
+fetcher 再以 `dsh.internal` 为基址规范化一次；transport 的 `mapRuntimeUrl` 允许 pageOrigin 同源的
+URL，最终重写到 `privateBase`。
