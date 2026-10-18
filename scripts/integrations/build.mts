@@ -291,11 +291,18 @@ export async function buildIntegrations(integrations, { tag, mirrorDir = MIRROR,
     const template = templatePackageDir(pkg, repoRoot);
     if (!existsSync(template)) throw new Error(`integration ${short}: 本机依赖树找不到原版包 ${template}`);
 
-    // 1) 摊源（上游 src 全量，保留相对路径——entry 就是上游的 src/client/index.ts）
+    // 两半声明在摊源之前就得读：纯数据集成（halves 全 false）连“上游有没有 src”都不必问。
+    const halves = it.halves && typeof it.halves === "object" ? it.halves : {};
+    const staticOnly = halves.client === false && halves.server === false;
+
+    // 1) 摊源（上游 src 全量，保留相对路径——entry 就是上游的 src/client/index.ts）。
+    //    纯数据集成（halves 全 false）没有 src 要摊，也不该因为“上游这个包没有 src”而被拦：
+    //    它的 overlay 是包根文件（cordis.patch.yml），下面第 2 步会自己把它写进去。
     const stage = join(integrationsSrcDirOf(repoRoot), short);
     rmSync(stage, { recursive: true, force: true });
+    mkdirSync(stage, { recursive: true });
     const files = listMirrorFiles(tag, `${upstreamDir}/src`, mirrorDir);
-    if (files.length === 0) throw new Error(`integration ${short}: 镜像 ${tag} 下没有 ${upstreamDir}/src`);
+    if (files.length === 0 && !staticOnly) throw new Error(`integration ${short}: 镜像 ${tag} 下没有 ${upstreamDir}/src`);
     for (const rel of files) {
       const buf = readUpstreamFromMirror(rel, tag, mirrorDir);
       if (buf === null) throw new Error(`integration ${short}: 读不到 ${rel}`);
@@ -324,10 +331,11 @@ export async function buildIntegrations(integrations, { tag, mirrorDir = MIRROR,
 
     // 3) 分派两半：integrations/<短名>/integration.json 的 halves。没写 halves = 只有 client 半
     //    （既有八个集成都是这样）；server 半是上游 api 包那一类（发布单文件 ESM bundle）。
-    const halves = it.halves && typeof it.halves === "object" ? it.halves : {};
+    //    两半都显式 false = **只盖静态文件**（如 dsh-base 的 cordis.patch.yml）：补丁文档是纯数据，
+    //    没有可编译的入口，构建只把它原样盖回交付树。
     const serverDecl = halves.server && typeof halves.server === "object" ? halves.server : null;
     const wantClient = halves.client !== false;
-    if (!wantClient && !serverDecl) {
+    if (!wantClient && !serverDecl && !staticOnly) {
       throw new Error(`integration ${short}: halves 既没 client 也没 server（没东西可编译）`);
     }
 
@@ -456,6 +464,13 @@ export async function buildIntegrations(integrations, { tag, mirrorDir = MIRROR,
     if (serverArtifact) {
       mkdirSync(dirname(join(out, "lib", serverArtifact.file)), { recursive: true });
       cpSync(join(stage, "lib", serverArtifact.file), join(out, "lib", serverArtifact.file));
+    }
+    // 5a) 静态 overlay：非 src/ 下的文件（cordis.patch.yml、presets、locale…）原样盖回包根。
+    //    纯数据集成（halves 全 false）就靠这一步：它的全部内容都在这里。
+    for (const f of Array.isArray(it.files) ? it.files : []) {
+      const rel = String(f.path ?? "");
+      if (rel.startsWith("src/")) continue; // 源码已参与编译，产物已覆盖
+      cpSync(join(stage, rel), join(out, rel));
     }
 
     // 5b) 生成物补丁：模板里那份 RPC 校验表不认识我们从源码加进请求的字段，不改它就等于没加

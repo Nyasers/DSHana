@@ -8,7 +8,7 @@
 //   1. 解析器对锁的 `packages:` 段认得出平台切分条目（拿一段内联夹具当样本，不依赖仓库锁的形态）；
 //   2. 目标矩阵的三种粒度是同一份矩阵的投影——平台包并集 = 双架构包并集 = 通用包；
 //   3. 目标矩阵与 release.yml 的矩阵/必需清单两处各自表达，仍要对得上。
-// 注：仓库锁含 devDependencies（rspack / rolldown / typescript / @pnpm/exe 同样按平台切分），
+// 注：仓库锁含 devDependencies（rspack / rolldown / typescript 同样按平台切分），
 // 所以它只当「任意一份形态真实的输入」用——真正随包的资产由 pack 那一刻的物化锁决定。
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -126,11 +126,14 @@ test("三种粒度是同一份矩阵的投影：平台包并集 = 双架构包�
 });
 
 test("packageManager 链：pnpm 本体及其传递依赖（@pnpm/exe.*）不进树，不当资产", () => {
+  // 夹具里带一条 packageManagerDependencies（仓库锁已经不带了：`packageManager` 字段走 corepack，
+  // 不把 pnpm 本体当依赖装）。判据本身仍必须成立：万一哪天锁里再出现它，那一族不能进随包资产。
   const pm = packageManagerClosure(FIXTURE);
   assert.ok(pm.has("pnpm"), "应认出 packageManagerDependencies 里的 pnpm");
-  // 仓库锁里 @pnpm/exe.win32-x64 是 pnpm 的 optionalDependencies，应在闭包内
-  const repoPm = packageManagerClosure(LOCK_TEXT);
-  assert.ok(repoPm.has("@pnpm/exe.win32-x64"), "@pnpm/exe.* 应被归入 packageManager 链");
+  assert.ok(pm.has("@pnpm/exe.win32-x64"), "@pnpm/exe.* 应被归入 packageManager 链");
+  const fixtureAssets = platformAssetsFor(FIXTURE, targetSpec("win32-x64"));
+  assert.ok(!fixtureAssets.some((a) => a.startsWith("@pnpm/exe")), "@pnpm/exe.* 不该出现在随包资产里");
+  // 仓库锁现状：这条链整个不存在（pnpm 本体不再作为依赖物化），仍断言一遍不会误入资产。
   const assets = platformAssetsFor(LOCK_TEXT, targetSpec("win32-x64"));
   assert.ok(!assets.some((a) => a.startsWith("@pnpm/exe")), "@pnpm/exe.* 不该出现在随包资产里");
 });
