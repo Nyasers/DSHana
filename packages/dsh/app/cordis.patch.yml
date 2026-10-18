@@ -70,14 +70,19 @@
     - id: subagent-model-selection-settings
       name: '@deepseek-ai/dsh-tool-subagent/model-selection-settings'
 
-    - id: message-feedback
-      name: '@deepseek-ai/dsh-message-feedback'
-      config:
-        maxNoteBytes: 8192
+    # 本形态不带消息反馈（点赞/点踩 + 反馈表单）：那一整族包（message-feedback /
+    # client-ui-message-feedback / command-feedback）都不进 dependencies，也不进交付树。
+    # 注释保留供上游对账：
+    # - id: message-feedback
+    #   name: '@deepseek-ai/dsh-message-feedback'
+    #   config:
+    #     maxNoteBytes: 8192
 
     # Browser Session export: `/export` command plus the shared download dialog.
-    - id: session-log-download
-      name: '@deepseek-ai/dsh-session-log-export'
+    # 本形态不带（strip 面）：它的 HeaderAction 还抱着反馈入口与官方日志上传的偏好项，
+    # 而这两样在本形态都不存在。注释保留供上游对账：
+    # - id: session-log-download
+    #   name: '@deepseek-ai/dsh-session-log-export'
 
     # Session-header "Open In..." split button over the host application
     # resolution (macOS/Windows/Linux; a host with no resolved application
@@ -143,13 +148,15 @@
     - id: schedule
       name: '@deepseek-ai/dsh-schedule'
 
-    # Configuration-surface reads and writes over Typert Remote. Each method
-    # reports an actionable error when its settings-domain provider is absent.
-    - id: ui-settings-account
-      name: '@deepseek-ai/dsh-client-ui-settings-account'
-
-    - id: account-controller
-      name: '@deepseek-ai/dsh-api-account-controller'
+    # 本形态不带账号面：登录、余额、赠金通知、退出登录这一整套（ui-settings-account /
+    # account-controller，以及 base 里给它们供 token 的 deepseek-account 与 llm-deepseek-account）
+    # 都不进 dependencies。settings.launcher 槽位因此回落到通用齿轮按钮——设置按钮旁不再有
+    # 「登录 / 意见反馈」那一列。注释保留供上游对账：
+    # - id: ui-settings-account
+    #   name: '@deepseek-ai/dsh-client-ui-settings-account'
+    #
+    # - id: account-controller
+    #   name: '@deepseek-ai/dsh-api-account-controller'
 
     - id: settings-controller
       name: '@deepseek-ai/dsh-api-settings-controller'
@@ -417,15 +424,19 @@
     # The feedback surface: Like/Dislike in the assistant-message action
     # strip, the feedback dialog behind Dislike and /feedback with its
     # acknowledgement toast, over the messageFeedback and sessionFeedback Remotes.
-    - id: ui-message-feedback
-      name: '@deepseek-ai/dsh-client-ui-message-feedback'
+    # 本形态不带（已随 strip 面移除），注释保留供上游对账：
+    # - id: ui-message-feedback
+    #   name: '@deepseek-ai/dsh-client-ui-message-feedback'
 
     # Model selection: the /model popupSelect + composer seat over session.models.
     - id: ui-model-selection
       name: '@deepseek-ai/dsh-client-ui-model-selection'
 
-    - id: ui-deepseek-model-label-1017
-      name: '@deepseek-ai/dsh-client-ui-deepseek-model-label-1017'
+    # 「DeepSeek 官方模型」那个小标（官方 provider 的 label）：本形态只有宿主目录的路由，
+    # 它那两条判断（provider.id 是 deepseek-account / deepseek-official）永远不成立，包不在交付树。
+    # 注释保留供上游对账：
+    # - id: ui-deepseek-model-label-1017
+    #   name: '@deepseek-ai/dsh-client-ui-deepseek-model-label-1017'
 
     - id: ui-permission
       name: '@deepseek-ai/dsh-client-ui-permission-presets'
@@ -435,8 +446,11 @@
     - id: ui-agent-preset
       name: '@deepseek-ai/dsh-client-ui-agent-preset'
 
-    - id: ui-settings-session-log
-      name: '@deepseek-ai/dsh-client-ui-settings-session-log'
+    # 设置里的「使用官方模型 API 时上传 Session Log」开关：它开关的是 base 的
+    # session-log-deepseek（把会话日志随请求带给官方 API），本形态没有那条行，开关也就没有对象。
+    # 注释保留供上游对账：
+    # - id: ui-settings-session-log
+    #   name: '@deepseek-ai/dsh-client-ui-settings-session-log'
 
     # The Built-in plugins settings section: the navigation entry and the tab
     # row the inventory tab registers into. The official configuration pages
@@ -489,15 +503,17 @@
 - id: tool-plugin-manager
   disabled: true
 
-# 遥测：上游 base 的 roster 里带两行（otel / session-telemetry-otel），默认 mode=FEEDBACK_ONLY、
-# OTLP 端点默认打 https://dsh-otel-collector.deepseeksvc.com/v1/logs。我们不需要它——本地单用户
-# 应用，不应往外送任何东西。用上游自己开的关闸（行级 disabled），与上面 tool-bash 那一族同一手法；
-# 不改上游文件。
-- id: otel
-  disabled: true
-- id: session-telemetry-otel
-  disabled: true
-
+# ── 剥离面：账号 / 反馈 / 遥测 / 官方 adapter ──────────────────────────────────
+#
+# 这些面本形态**根本不交付包**，清单在 scripts/release/pack/exclude.mts 的 STRIPPED 里。
+# 包不在树里，引用它的行就必须**不在文档里**（而不是标 disabled）：loader 对 disabled 的行
+# 确实不发 import，但那只做到「不加载」，包仍旧装在交付树里占体积、进依赖面。
+#
+# 这些行本层一律**不写**：它们要么已在 integrations/dsh-base 里整行删掉（base 的十条），
+# 要么本来就不由本层插入（web-app 的五条）。
+#
+# 注意：不要在这里补 `- id: X` + `disabled: true`——上游文档里已经没这一行，那条补丁会
+# 静默落到 “entry not found” 的 warning 上，看起来像生效了实则什么都没做。
 - id: tool-bash
   disabled: true
 
@@ -611,18 +627,9 @@
 
 # ── 本层对官方 base 行的停用 ─────────────────────────────────────────────────
 
-# 官方自带的两个 LLM adapter 行停掉：本形态的推理一律走宿主（@dshana/dsh-provider 在受管 runtime
-# 内经 hana.models 发起，路由集合 = 宿主目录 models.list）。这两行各要自己的凭据
-# （llm-deepseek 的 `llm-deepseek:` 段 + 凭据库，llm-pi-ai 的 `llm-pi-ai:` 段里的 provider
-# profiles），而凭据在宿主手里，它们永远拿不到 key；官方那条 deepseek-official 路由却照样出现在
-# 模型选择器里（base 层的缺省模型也正指向它），于是选中它、或干脆用缺省，就在提交时报 no API key。
-# 停掉之后 llm 注册表里只剩宿主目录那几条路由，模型面单一事实源。
-- id: llm-deepseek
-  disabled: true
-
-- id: llm-pi-ai
-  disabled: true
-
+# 官方自带的两个 LLM adapter 行跟着 base 一起删了（integrations/dsh-base）：本形态的推理一律
+# 走宿主（@dshana/dsh-provider 在受管 runtime 内经 hana.models 发起，路由集合 = 宿主目录
+# models.list），DSH 侧一个 adapter 都不需要；它们的包也不在交付树里。
 # ── @dshana/* 定制插件 ─────────────────────────────────────────────────────
 
 # 目录选择器不动：官方 web 层的 directory-picker-auto 在 win32 + loopback 下挑 native，而 native

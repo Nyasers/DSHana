@@ -16,7 +16,7 @@ import fs from "fs-extra";
 import { join } from "node:path";
 
 import { ROOT } from "../../shared/root.mts";
-import { prepareStubs } from "./exclude.mts";
+import { removalOverrides } from "./exclude.mts";
 
 /**
  * 打包目标描述。libc 仅 linux 目标声明（用于 supportedArchitectures.libc）；显式给出形状，
@@ -128,15 +128,62 @@ export function stagingWorkspaceYaml(spec: TargetSpec): string {
     : repoWs + "\n" + block;
   // nodeLinker 必须在工作区文件里（CLI 传参形式实测不生效）
   const base = "# scripts/release/pack/index.mts 生成（每次打包重建，勿手改）\nnodeLinker: hoisted\n\n" + body;
-  // 不要的表层 bundle：override 成 stub（见 exclude.mts），真件不下载、不进闭包。
+  // 不要的表层 bundle：overrides 里给它们写 `"-"`（见 exclude.mts），pnpm 直接把它们从依赖图里
+  // 移除——不下载、不解包、它们的传递闭包一并消失。
   // 必须**并进已有的 overrides 块**（仓库根那份里有 @hana/* 的本地 tgz 映射，整份被带过来）：
   // 另起一个 `overrides:` 是重复键，pnpm 直接以 "duplicated mapping key" 拒掉。
-  const { overrides } = prepareStubs();
-  const names = Object.keys(overrides).sort();
-  const lines = names.map((n) => `  "${n}": "${overrides[n]}"`).join("\n");
-  const existing = /^overrides:\s*$/mu;
-  if (existing.test(base)) return base.replace(existing, (key) => `${key}\n${lines}`);
-  return base + `\noverrides:\n${lines}\n`;
+  //
+  // 已有同名键一律**改写值**，不是跳过：仓库根里若已有一条 `file:`（历史上的遥测空实现），跳过
+  // 就会把那个空包留进工位，“移除”静默失效（它会以“还在树里”被组装断言抓到，但不该靠那一步）。
+  return applyRemovalOverrides(base, removalOverrides());
+}
+
+/**
+ * 把移除名单并进一份 yaml 的 overrides 块：同名键改写为 `-`，新键追加，无块则新建。
+ * @param yaml 工位 yaml（已含仓库根那份 overrides）
+ * @param removals 包名 → `-`
+ * @returns 改好的 yaml
+ */
+function applyRemovalOverrides(yaml: string, removals: Record<string, string>): string {
+  const start = /^overrides:\s*$/mu.exec(yaml);
+  if (start === null) {
+    const added = remainingRemovals(removals, new Set());
+    return added.length === 0 ? yaml : `${yaml}\noverrides:\n${added.join("\n")}\n`;
+  }
+  const head = yaml.slice(0, start.index + start[0].length);
+  const lines = yaml.slice(start.index + start[0].length).split("\n");
+  const handled = new Set<string>();
+  // 块从 overrides: 下一行开始；碰到下一个顶层键（顶头写、非空、非注释）就结束。
+  let end = lines.length;
+  for (let i = 1; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (line.trim() !== "" && !line.startsWith(" ") && !line.startsWith("#")) {
+      end = i;
+      break;
+    }
+  }
+  const block: string[] = [];
+  for (let i = 1; i < end; i += 1) {
+    const line = lines[i];
+    const m = /^\s+["']?([^"':]+)["']?\s*:/.exec(line);
+    const name = m ? m[1].trim() : null;
+    if (name !== null && removals[name] !== undefined) {
+      block.push(`  "${name}": "${removals[name]}"`);
+      handled.add(name);
+      continue;
+    }
+    block.push(line);
+  }
+  block.push(...remainingRemovals(removals, handled));
+  return [head, ...block, ...lines.slice(end)].join("\n");
+}
+
+/** 名单里还没落进 overrides 块的键（保持排序，产出稳定）。 */
+function remainingRemovals(removals: Record<string, string>, handled: Set<string>): string[] {
+  return Object.keys(removals)
+    .filter((n) => !handled.has(n))
+    .sort()
+    .map((n) => `  "${n}": "${removals[n]}"`);
 }
 
 /**
