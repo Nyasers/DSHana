@@ -12,7 +12,9 @@
 //       （无 scope 的 ctx.on 因 context filter 收不到 agent-scope 瀑布事件；
 //       EventOptions.global = true 无视 context filter，收所有 agent）
 //     → 按宿主任务记录定位宿主 task（metadata.dsh.sessionId → taskId；绑定读取见
-//       @dshana/shared/task-binding.ts）
+//       @dshana/shared/task-binding.ts）。绑定的宿主任务已终结时按"无绑定"委托——
+//       同一会话里用户收尾后接着跑（WebUI 直开）时，索引取到的最新绑定可能仍是那条旧任务，
+//       把审批挂上去不会被任何一层拦住（宿主归属校验只看 parentTaskId 的会话是否一致）
 //     → hana.tasks.requestApproval({ taskId, label, details, timeoutMs })
 //     → 挂起 ApprovalOutcome 承诺，经 watch(approvalId) SSE（snapshot 首条 + app-task；
 //       断线 get() 对账；reset 重读快照——@dshana/shared/watch-sse.ts）等宿主终态：
@@ -24,6 +26,11 @@
 //
 //   DSH 请求侧取消（req.signal abort / 回合中止）：宿主审批若仍 pending → 应答 rejected
 //   收尾（不留孤儿审批；父任务终态兜底），DSH 侧 resolve 'cancelled'——不把取消当授权。
+//   abort 可以落在 requestApproval 在途期间：那时 approvalId 还没到手，先记下"已中止"，
+//   拿到 approvalId 后立即 rejected 收尾（不加入 pendings、不起 watcher）。桥 stop() 同理
+//   （在途 answerer 也看得到停止标志）。
+//   fail-closed 总原则：任何路径都不得留下"既不拒绝也不放行"的挂起审批；中止/停止一律投
+//   rejected，绝不投 allowed-once。
 //
 // 审批载荷写出**具体操作**：宿主那条通知的正文是 `Approval requested: <label>`，label 之外的部分
 // 不保证写进审批方的视线；而审批是 Agent 的活，拿不到"要动什么"就只能凭信任签字。所以 label 由
@@ -36,6 +43,7 @@
 // 独立自动拒绝。
 import {
   createTaskBindingIndex,
+  isTerminalTaskStatus,
   isValidSessionId,
   type TaskBindingIndex,
 } from "@dshana/shared/task-binding.ts";
@@ -220,6 +228,16 @@ export function approvalOwnsTask(approval: Partial<AppTaskApprovalRecordV2> | nu
   return Boolean(got) && got === want;
 }
 
+/** 纯函数：拿到 approvalId 之后、起 watcher 之前的收尾判定。
+ *
+ *  DSH 请求侧已中止（回合取消/执行超时）或桥已停止时，这条审批没有 watcher 替它等结果，
+ *  必须在开始等之前直接结算成 rejected；返回 null = 正常进入 watch。绝不返回放行，
+ *  也绝不返回"再等等"（那正是留下的孤儿审批）。
+ */
+export function preWatchVerdict(flags: { aborted?: boolean; stopped?: boolean } | null | undefined): "rejected" | null {
+  return flags && (flags.aborted === true || flags.stopped === true) ? "rejected" : null;
+}
+
 /** tool-call 缓存：callId → { name, args }（审批请求只带 callId，name/args 由模型
  *  assistant/message 的 tool-call 块补齐——v1 toolCache 同款信息源）。 */
 export function collectToolCallsFromEvent(sessionId: string | null, ev: any): ToolCallFrame[] {
@@ -300,6 +318,9 @@ export function startApprovalBridge({ ctx, hana, bindings, log }: { ctx: any; ha
   const note = (msg: string) => {
     try { if (typeof log === "function") log("[approval-bridge] " + msg); } catch { /* 忽略 */ }
   };
+  // 桥停止标志：在途 answerer 也要看得到（stop 时正在 requestApproval 的那条审批没有
+  // pendings 条目可扫，只能靠这个标志在它拿到 approvalId 后自己收尾）。
+  let stopped = false;
 
   const onEvent = (event: string, handler: (...args: any[]) => unknown, opts?: BridgeEventOptions) => {
     try {
@@ -340,6 +361,17 @@ export function startApprovalBridge({ ctx, hana, bindings, log }: { ctx: any; ha
       note("审批无任务绑定（session=" + sessionId.slice(0, 12) + "）——委托，不认领");
       return next();
     }
+    // 绑定指向的任务已终结：会话是 dshana 建的，但用户收尾后在同一会话里接着跑（WebUI 直开，
+    // 绑定按 createdAt 取到的最新一条仍是那条旧任务）。审批挂到已终结的父任务上不会被任何一层
+    // 拦住——宿主归属校验只比 parentTaskId → 父任务 sessionId，会话确实一致。按"无绑定"处理：
+    // 这条审批没有属于它的活动父任务，交给别的应答者（同为 fail-closed，不隐式放行）。
+    if (isTerminalTaskStatus(binding.status)) {
+      note(
+        "审批绑定的宿主任务已终结（session=" + sessionId.slice(0, 12) + " task=" + String(binding.taskId) +
+          " status=" + String(binding.status) + "）——按无绑定委托，不认领",
+      );
+      return next();
+    }
     const callId = (req && req.callId) || null;
     const cached = callId ? cache.get(sessionId, callId) : null;
     const toolName = (req && req.toolName) || (cached && cached.name) || "tool";
@@ -370,13 +402,19 @@ export function startApprovalBridge({ ctx, hana, bindings, log }: { ctx: any; ha
       };
     });
     // req.signal 中止 = DSH 回合取消/中止：宿主审批收尾为 rejected（不留孤儿），
-    // DSH 等待者 resolve 'cancelled'（不是 allowed-once——取消绝不当授权，v1 教训）
+    // DSH 等待者 resolve 'cancelled'（不是 allowed-once——取消绝不当授权，v1 教训）。
+    // approvalId 到手前 doRespond 还不存在，这时只记下"已中止"：拿到 approvalId 之后按它收尾
+    // （此刻默默什么都不做，宿主就留下一条永不结算的挂起审批，而 DSH 侧已认为回合取消）。
     const signal = req && req.signal;
+    const rejectHostApproval = () => {
+      if (!doRespond) return;
+      try { doRespond("rejected").catch(() => {}); } catch { /* 忽略 */ }
+    };
+    let abortRequested = false;
     const onAbort = () => {
       if (settled) return;
-      if (doRespond) {
-        try { doRespond("rejected").catch(() => {}); } catch { /* 忽略 */ }
-      }
+      abortRequested = true;
+      rejectHostApproval();
       settleOutcome("cancelled");
     };
     if (signal) {
@@ -419,6 +457,20 @@ export function startApprovalBridge({ ctx, hana, bindings, log }: { ctx: any; ha
       return pending;
     }
     doRespond = (outcome) => hana.tasks.respondApproval({ approvalId, outcome });
+    // requestApproval 在途期间被中止（DSH 回合取消/超时 cancel 链）或桥已停止：这条审批既没有
+    // pendings 条目、也没起 watcher，没人会再来结算它——必须在开始等之前自己把它收尾成
+    // rejected。fail-closed 总原则：绝不留下"既不拒绝也不放行"的挂起审批。
+    const unwind = preWatchVerdict({ aborted: abortRequested, stopped });
+    if (unwind) {
+      note(
+        "审批 " + approvalId.slice(0, 12) + " 创建成功但" +
+          (abortRequested ? "请求已中止" : "审批桥已停止") +
+          "——立即 " + unwind + " 收尾（不留孤儿，不入 pendings）",
+      );
+      try { await hana.tasks.respondApproval({ approvalId, outcome: unwind }); } catch { /* 尽力：宿主侧应答失败也仍投 rejected */ }
+      settleOutcome(unwind);
+      return pending;
+    }
     // 宿主权威字段交叉校验：审批记录自带 parentTaskId。不一致或缺失说明我们读到的绑定
     // 与宿主审批记录已经漂移——这种情况把审批结算成 rejected（fail-closed，绝不放行），
     // 不继续等一个可能属于别人的结果。
@@ -477,7 +529,6 @@ export function startApprovalBridge({ ctx, hana, bindings, log }: { ctx: any; ha
   }
   onEvent("approval/request", (req, next) => answerer(req, next), { global: true, prepend: true });
 
-  let stopped = false;
   const stop = () => {
     if (stopped) return;
     stopped = true;
@@ -486,7 +537,8 @@ export function startApprovalBridge({ ctx, hana, bindings, log }: { ctx: any; ha
     }
     offs.length = 0;
     cache.clear();
-    // 中止未结算 watcher（等待者由 DSH 信号/宿主终态自然收尾；stop 只是释放流）
+    // 中止未结算 watcher（等待者由 DSH 信号/宿主终态自然收尾；stop 只是释放流）。
+    // 此刻 requestApproval 还在途的 answerer 不在 pendings 里，靠上面的 stopped 标志自己收尾。
     for (const p of [...pendings]) {
       try {
         if (p && p.sessionId && p.approvalId) {

@@ -61,10 +61,26 @@ export function taskBindingBroken(why: string, subject?: unknown): Error & { cod
   return err;
 }
 
-/** 一条工作单元里的取消标记。 */
+/** 一条工作单元里的取消标记。
+ *
+ *  标记同时承担两件事：**这是一次取消请求**（幂等键：同一任务上重复请求只当一次）与
+ *  **这次请求的 DSH 侧通知是否已被接受**（动作事实）。两者分开记，取消标记才不是墓碑：
+ *  标记已写但 `rpcAccepted` 不为真时，取消链照旧要发 DSH cancel（重按取消、确认窗口超窗、
+ *  别的入口再发起都走这条路），否则 RPC 挂一次就把任务永久钉死在非终态。
+ *
+ *  这一格有多个写入方，各自只知道自己那一位：App 侧取消编排
+ *  （packages/session/src/cancel-chain.ts）知道 DSH 通知是否被接受，宿主侧反向取消
+ *  （packages/host/src/task-bridge.ts 的 onHostCancel）不知道。所以写入按**三态**走
+ *  （见 TaskBindingIndex.markCancel）：不声明这一位的写入方不会把它抹掉——审批挂起中的任务
+ *  取消时 App 先写 false、RPC 被接受后改写 true，随后 task-bridge 结算还要再写一次标记，
+ *  那一笔不带这一位，true 必须留下。
+ */
 export interface TaskCancelMark {
   at: number;
   reason: string;
+  /** DSH session.cancel 已被接受（true 才为真；缺省/非布尔 = 未确认）。
+   *  写入侧是三态（省略 = 保留本格已有值），见 TaskBindingIndex.markCancel。 */
+  rpcAccepted?: boolean;
 }
 
 /** 归一出的一条会话↔任务绑定（字段名沿用旧的映射记录词汇，读侧语义不变）。 */
@@ -102,7 +118,13 @@ function cancelOf(dsh: Record<string, unknown> | null): TaskCancelMark | null {
   if (!c || typeof c !== "object" || Array.isArray(c)) return null;
   const at = finiteOrNull((c as any).at);
   if (at === null) return null;
-  return { at, reason: String((c as any).reason ?? "user").slice(0, 200) };
+  // rpcAccepted 只认布尔真：宿主记录是自由字典，非布尔/缺省一律读成"未确认"（宁重发一次
+  // DSH cancel，也不把没被接受的通知当成已接受）。
+  return {
+    at,
+    reason: String((c as any).reason ?? "user").slice(0, 200),
+    rpcAccepted: (c as any).rpcAccepted === true,
+  };
 }
 
 /**
@@ -155,8 +177,14 @@ export interface TaskBindingIndex {
   bySession(sessionId: string, opts?: { fresh?: boolean }): Promise<TaskBinding | null>;
   /** 按 taskId 直接读宿主记录（冷路径，不吃缓存）。 */
   byTask(taskId: string): Promise<TaskBinding | null>;
-  /** 写取消标记（读-改-写全量 metadata）并失效缓存。 */
-  markCancel(taskId: string, reason?: string): Promise<TaskBinding | null>;
+  /** 写取消标记（读-改-写全量 metadata）并失效缓存。
+   *  rpcAccepted 是**三态**——写入方只声明它知道的那一位：
+   *    · `true`      → 写 true（这次请求的 DSH session.cancel 通知已被接受）；
+   *    · `false`     → 写 false（显式重置：新一次取消请求开始，通知还没被接受）；
+   *    · 省略/非布尔 → **保留已有标记里的这一位**（没有已有标记则 false）——调用方不知道
+   *                    通知的下场（宿主侧反向取消就是这种），不得把别人写下的 true 抹掉。
+   *  `at`/`reason` 照旧每次覆盖：它们描述"最近一次取消请求"，本就该由最近写入方刷新。 */
+  markCancel(taskId: string, reason?: string, rpcAccepted?: boolean): Promise<TaskBinding | null>;
   /** 手工失效缓存（读侧写点之后调用）。 */
   invalidate(): void;
 }
@@ -273,7 +301,7 @@ export function createTaskBindingIndex(tasks: any, { ttlMs = TASK_BINDING_TTL_MS
       return binding;
     },
 
-    async markCancel(taskId, reason) {
+    async markCancel(taskId, reason, rpcAccepted) {
       const id = String(taskId || "").trim();
       if (!id) return null;
       let rec: any = null;
@@ -283,8 +311,17 @@ export function createTaskBindingIndex(tasks: any, { ttlMs = TASK_BINDING_TTL_MS
         throw new Error("task-binding: 取消标记写入前读任务失败（" + errText(e) + "，task=" + id + "）");
       }
       if (!rec) return null;
+      // rpcAccepted 三态：布尔入参是"我知道这一位"的声明（true=已接受 / false=显式重置），
+      // 省略或非布尔则是"我不知道"——保留记录里已有的值（读侧归一：只有布尔真算真），
+      // 没有已有标记就落 false。非布尔脏值不得被当成显式 false 用（那会抹掉别人写的 true）。
+      const prior = cancelOf(dshObjectOf(rec));
+      const accepted = typeof rpcAccepted === "boolean" ? rpcAccepted : prior?.rpcAccepted === true;
       const metadata = dshMetadataFor(rec, {
-        cancel: { at: Date.now(), reason: String(reason || "user").slice(0, 200) },
+        cancel: {
+          at: Date.now(),
+          reason: String(reason || "user").slice(0, 200),
+          rpcAccepted: accepted,
+        },
       });
       let updated: any = null;
       try {

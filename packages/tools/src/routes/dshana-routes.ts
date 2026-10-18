@@ -143,8 +143,18 @@ export function defaultDshanaRouteDeps(ctx) {
           detail: "终态 " + String(binding.status || "terminal") + (stampMinute(at) ? " · " + stampMinute(at) : ""),
         };
       }
+      // 取消标记存在有两种含义：通知已被 DSH 接受（在等中止）与请求已发出但通知未被接受
+      // （RPC 挂了，正在结算/超窗升级）。两者都是“取消进行中”，但后者还没真正止住 DSH，
+      // 卡页不能一律写成「已请求取消」——那会把没生效的当成在生效的。
       if (binding.cancel) {
-        return { state: "cancelling", label: "已请求取消", detail: "reason " + String(binding.cancel.reason || "user") };
+        const asked = String(binding.cancel.reason || "user");
+        return binding.cancel.rpcAccepted === true
+          ? { state: "cancelling", label: "已请求取消", detail: "DSH 已接受中止请求 · reason " + asked }
+          : {
+            state: "cancelling",
+            label: "取消请求未被接受",
+            detail: "DSH 侧未确认，正在结算（超窗则升级宿主 cancel） · reason " + asked,
+          };
       }
       return { state: "tracked", label: "运行中", detail: "App 侧仍在跟踪（rpcId " + String(binding.rpcId || "") + "）" };
     },

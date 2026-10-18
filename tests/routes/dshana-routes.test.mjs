@@ -420,11 +420,25 @@ test("GET /dshana/card-state: 默认实现读宿主任务记录（无绑定 / �
     assert.equal(trackedState.state, "tracked");
     assert.match(trackedState.detail, /rpc-1/);
 
+    // 取消标记存在有两种含义，卡页必须分开说：通知已被接受 = 「已请求取消」；
+    // 请求已写但通知未被接受（rpcAccepted 不为真，含缺省）= 取消还在路上，DSH 未必已经停。
     const cancelling = defaultDshanaRouteDeps({
       appId: "dshana", dataDir, logger: { info() {} },
       tasks: tasksWith([boundTask({ cancel: { at: 5, reason: "user" } })]),
     });
-    assert.equal((await cancelling.readCardState(CARD_SID)).state, "cancelling");
+    const pendingCancel = await cancelling.readCardState(CARD_SID);
+    assert.equal(pendingCancel.state, "cancelling");
+    assert.match(pendingCancel.label, /未被接受/, "rpcAccepted 缺省 = 通知未确认，不能写成「已请求取消」");
+    assert.match(pendingCancel.detail, /结算/);
+
+    const accepted = defaultDshanaRouteDeps({
+      appId: "dshana", dataDir, logger: { info() {} },
+      tasks: tasksWith([boundTask({ cancel: { at: 5, reason: "user", rpcAccepted: true } })]),
+    });
+    const acceptedState = await accepted.readCardState(CARD_SID);
+    assert.equal(acceptedState.state, "cancelling");
+    assert.match(acceptedState.label, /已请求取消/);
+    assert.match(acceptedState.detail, /已接受/);
 
     const ended = defaultDshanaRouteDeps({
       appId: "dshana", dataDir, logger: { info() {} }, tasks: tasksWith([boundTask({ status: "completed" })]),
