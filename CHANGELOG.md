@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.2.0+dsh-0.2.1-rc.2](https://github.com/Nyasers/DSHana/compare/v1.1.1%2Bdsh-0.2.0-rc.2...v1.2.0%2Bdsh-0.2.1-rc.2) (2026-10-18)
+
+### Features
+
+* **integrations:** 给 overlay 加 delta 指纹闸与 `delta` 子命令 ([8e0bea9](https://github.com/Nyasers/DSHana/commit/8e0bea9d850cd680b57c1f88ae700827613631db)), references [#300](https://github.com/Nyasers/DSHana/issues/300)
+* **preset:** 特调身份补上 coding，并把无 shell 的边界写进回复规范 ([22751e2](https://github.com/Nyasers/DSHana/commit/22751e262c1c7ad2f58225701339d10f62ade40b))
+
+### Bug Fixes
+
+* **approval:** 审批只挂活动父任务，并补上中止窗口的收尾 ([5930c77](https://github.com/Nyasers/DSHana/commit/5930c7709eaa959bd8a759c8461b1160d68387b3))
+* **cancel:** 卡页与 SKILL 跟上 rpcAccepted，不再把未接受的请求写成已请求 ([6a7d442](https://github.com/Nyasers/DSHana/commit/6a7d4421670e65581100822cfd0a69de2560b8fc))
+* **cancel:** 取消标记拆分幂等键与已发出的动作 ([69e35e5](https://github.com/Nyasers/DSHana/commit/69e35e504d581b49fe722e03db024b451ab3e716))
+* **cancel:** markCancel 的 rpcAccepted 改三态，不声明则保留 ([c7bfe6b](https://github.com/Nyasers/DSHana/commit/c7bfe6b5d02c1d9290dad42965cafb0932dc1342))
+* **integrations:** 导入分类改成按语句，声明识别不跨行 ([9d6e567](https://github.com/Nyasers/DSHana/commit/9d6e567927548b1acac36df47a9db763883052c4))
+* **integrations:** client 半的 externals 按模块表取，不再把所有源码导入当外部 ([147d393](https://github.com/Nyasers/DSHana/commit/147d3933df0c1b9207bf065b701fb7ec644dfd03))
+* **pack:** 工位锁定 pnpm 版本，按需名单改从 pin 读，清理不丢挂载错误 ([3082e0b](https://github.com/Nyasers/DSHana/commit/3082e0b25f89b087fce727f659f4a0ca358afde4))
+* **terminal:** cwd 校验挪到 workingDirectory.ensure() 之后 ([2c397a1](https://github.com/Nyasers/DSHana/commit/2c397a1b0b7f7b1ea0c8fac54b1f49466be4b6c8)), references [#300](https://github.com/Nyasers/DSHana/issues/300)
+
 ## [1.1.1+dsh-0.2.0-rc.2](https://github.com/Nyasers/DSHana/compare/v1.1.0%2Bdsh-0.2.0-rc.2...v1.1.1%2Bdsh-0.2.0-rc.2) (2026-10-14)
 
 ### Bug Fixes
