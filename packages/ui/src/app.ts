@@ -21,6 +21,9 @@ import { isFaceView, roleForView } from "./face-role.ts";
 import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPreference } from "./seed-tokens.ts";
 import { followHostTheme } from "./host-theme.ts";
 import { FACE_ATTR } from "@dshana/shared/face-theme.ts";
+// 花瓣的几何与时间轴住在 @dshana/bloom：壳页与独立包两处渲染共一份算法，改一处不会漂。
+// 壳页只用它的数据与 toMarkup()，动画由 face-stage.css 的 keyframes 驱动（加载页不起 rAF）。
+import { toMarkup as bloomMarkup } from "@dshana/bloom/geometry.ts";
 import { publishForceFollow, watchForceFollowChanges } from "./force-follow.ts";
 import {
   SURFACE_API,
@@ -52,52 +55,8 @@ import {
   }
 
   // ---- 自举台的花瓣 ----
-  // 与 DSH 启动页、app 内思考指示器同一套几何：四朵花叠在一起，各自 7.6 秒一轮、
-  // 彼此错开 1.9 秒，所以一朵满开时上一朵正在散场。动画全在 face-stage.css 里，
-  // 这里只负责把标记塞进去（main / default 两个壳页共用）。
-  var PETALS = {
-    plum: "M0,-2 C-3.8,-2.8 -4.8,-9 0,-9.3 C4.8,-9 3.8,-2.8 0,-2Z",
-    sakura: "M0,-2 C-3.4,-3 -4.8,-7.8 -2,-9.3 L0,-7.9 L2,-9.3 C4.8,-7.8 3.4,-3 0,-2Z",
-    lotus: "M0,0 C-4,-3 -3.8,-9.8 0,-13.2 C3.8,-9.8 4,-3 0,0Z",
-    orchid: "M0,-1.2 C-2.8,-3.6 -2.9,-8 0,-10.2 C2.9,-8 2.8,-3.6 0,-1.2Z",
-    lip: "M0,-1 C-2.6,-1.6 -3,-4.8 0,-5.4 C3,-4.8 2.6,-1.6 0,-1Z"
-  };
-  function ring(n) { var out = []; for (var i = 0; i < n; i += 1) out.push(i * 360 / n); return out; }
-  var FLOWERS = [
-    { core: 1, baseY: 0, groups: [{ d: PETALS.plum, angles: ring(5) }] },
-    { core: 0.9, baseY: 0, groups: [{ d: PETALS.sakura, angles: ring(5) }] },
-    { core: 0, baseY: 5.5, groups: [
-      { d: PETALS.lotus, angles: [-34, 34] },
-      { d: PETALS.lotus, angles: [-62, 0, 62], lengths: [0.78, 1, 0.78] }
-    ] },
-    { core: 0.8, baseY: 0.6, groups: [
-      { d: PETALS.orchid, angles: [0, -118, 118] },
-      { d: PETALS.lip, angles: [180] }
-    ] }
-  ];
-  /** 四朵花的花瓣标记（字符串；每朵一个 svg，CSS 负责错峰与周期）。
-   *  每朵的花瓣延迟必须叠加自己的 offset（i × 1.9s）：`animation-delay` 写在 <g class="petal">
-   *  上，不会继承父 <svg> 的 delay，不叠加就会变成四朵的花瓣全在每轮 0.35s 同时张开。 */
-  function bloomMarkup() {
-    return FLOWERS.map(function (f, fi) {
-      var flowerOffset = fi * 1.9;
-      var petals = "";
-      f.groups.forEach(function (g, gi) {
-        g.angles.forEach(function (angle, pi) {
-          var len = (g.lengths && g.lengths[pi]) || 1;
-          var delay = flowerOffset + gi * 0.16 + pi * 0.04;
-          petals +=
-            '<g transform="rotate(' + angle + ')">' +
-            '<g class="petal" style="animation-delay:' + delay.toFixed(2) + 's">' +
-            '<g transform="scale(1 ' + len + ')"><path d="' + g.d + '"/></g>' +
-            '</g></g>';
-        });
-      });
-      var core = f.core === 0 ? "" : '<circle class="core" r="' + f.core + '" style="animation-delay:' + (flowerOffset + 0.4).toFixed(2) + 's" transform="scale(0)"/>';
-      return '<svg viewBox="-10.5 -10.5 21 21" aria-hidden="true">' +
-        '<g transform="translate(0 ' + f.baseY + ')">' + petals + core + '</g></svg>';
-    }).join("");
-  }
+  // 几何、路径、错峰常量都在 @dshana/bloom（与独立组件包同一份算法）；
+  // 壳页这里只负责把标记塞进容器，动画全在 face-stage.css。
   /** 把花瓣装进自举台的空容器。重复调用不会叠加。 */
   function mountBloom() {
     var host = $("#dsh-spin");
