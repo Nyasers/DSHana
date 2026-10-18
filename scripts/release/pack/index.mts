@@ -33,13 +33,14 @@ import { errText } from "../../shared/err-text.mts";
 import { BUNDLE_DIR, CORDIS_DIR, DIST_DIR, PKG_DIR, STAGING_ROOT } from "../../shared/paths.mts";
 import { ROOT } from "../../shared/root.mts";
 import { manifestPath } from "../../shared/contract-assets.mts";
-import { assertBundleArtifacts, assertCordisArtifacts, assertDeclarationTexts, assertNoProductPackage, assertSkillReferences, assertUiTree } from "./assert.mts";
+import { assertBundleArtifacts, assertCordisArtifacts, assertDeclarationTexts, assertNoProductPackage, assertSkillReferences, assertUiTree, assertBootBloom } from "./assert.mts";
 import { declareInstallationBundle, declareInstallationPlugins } from "./bundle-deps.mts";
 import { excludedPackages, requiredPackages } from "./exclude.mts";
 import { assertMatchesUpstreamOptional, assertNotDelivered, injectOnDemandCatalog, unshipFromAnchor, ON_DEMAND_BUNDLES } from "./on-demand.mts";
 import { materializeProdDeps } from "./materialize.mts";
 import { minifyCordisStatics } from "./minify.mts";
 import { applyIntegrations } from "./overlays.mts";
+import { applyBootBloom } from "./boot-bloom.mts";
 import { failUsage, targetSpec } from "./targets.mts";
 import { describeTrim, trimDeliveryTree } from "./trim.mts";
 
@@ -130,6 +131,7 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
     filter: (srcPath) => !/[\/\\]node_modules[\/\\]\./.test(srcPath),
   });
   applyIntegrations(join(pkgDir, "node_modules"));
+  applyBootBloom(join(pkgDir, "node_modules"));
   // 被排除的表层 bundle 与它们的私货：物化时已在 overrides 里写成 `"-"`，pnpm 直接把它们从依赖
   // 图里移除——真件没下载、没解包，传递闭包一并消失。这里只核实它们真的不在。
   const leftover = excludedPackages().filter((n) => fs.pathExistsSync(join(pkgDir, "node_modules", n)));
@@ -151,6 +153,8 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
   // 断言因此检查的是裁完的树（裁过头会当场抛错）。
   const trim = trimDeliveryTree(pkgDir);
   console.log(describeTrim(trim));
+  // 启动页花瓣：换掉官方产物的转圈环。失败就拒包：那颗包装到真机上启动页会静默退回转圈环。
+  assertBootBloom(join(pkgDir, "node_modules"));
   // @dshana 的两个 scope 内容落进安装树的 node_modules（与 @deepseek-ai/* 同锚点）：DSH 的 runtime
   // 解析模式从安装树 + bundle 依赖图算解析代、不建链接，它们因此不能住在安装树外的位置。两者本来
   // 都不在交付面里（产物在 .cache/cordis 与 .cache/bundle），到这一步才按交付布局落进

@@ -158,6 +158,35 @@ export function assertSkillReferences(outDir) {
   console.log("[pack] 技能参照在位（SKILL.md 指向 " + named.length + " 份：" + named.join(" / ") + "）");
 }
 
+/**
+ * 启动页花瓣断言：改写过的前端产物里必须真的有花瓣标记与样式。
+ * 缺了就说明 applyBootBloom 没跑或锚点静默失效（上游换了产物），那种包装到真机上启动页会退回
+ * 转圈环、且现场很难归因，所以在打包这一步拒包。
+ * @param {string} nodeModulesDir 交付树的 node_modules
+ */
+export function assertBootBloom(nodeModulesDir) {
+  const pkgDir = join(nodeModulesDir, "@deepseek-ai/dsh-web-frontend");
+  if (!fs.pathExistsSync(pkgDir)) return;
+  const assets = join(pkgDir, "dist", "assets");
+  const jsName = fs.readdirSync(assets).find((n) => n.startsWith("index-") && n.endsWith(".js"));
+  const cssName = fs.readdirSync(assets).find((n) => n.startsWith("index-") && n.endsWith(".css"));
+  if (!jsName || !cssName) {
+    throw new Error("启动页花瓣：前端 dist 里找不到 index-*.js / index-*.css");
+  }
+  const js = fs.readFileSync(join(assets, jsName), "utf8");
+  const css = fs.readFileSync(join(assets, cssName), "utf8");
+  if (!js.includes("_bloomPetal_boot")) {
+    throw new Error("启动页花瓣：JS 里没有花瓣标记（applyBootBloom 未生效；上游产物变了就该重做改写）");
+  }
+  if (!css.includes("_bloomLife_boot")) {
+    throw new Error("启动页花瓣：CSS 里没有花瓣动画（applyBootBloom 未生效或替换锚点失效）");
+  }
+  if (js.includes("_spin_u7vgf_45") || css.includes("_spin_u7vgf_45")) {
+    throw new Error("启动页花瓣：仍有转圈环残留（旧动画没被完全替换）");
+  }
+  console.log("[pack] 启动页花瓣在位（四花标记 + 绽放动画，无转圈环残留）");
+}
+
 /** App ui/ 静态树断言（cards route 资源面；相对资源契约）：缺失 = 卡片 404，拒包。 */
 export function assertUiTree(outDir) {
   const uiDir = join(outDir, "ui");
