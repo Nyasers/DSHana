@@ -184,6 +184,15 @@ export function assertBootBloom(nodeModulesDir) {
   if (js.includes("_spin_u7vgf_45") || css.includes("_spin_u7vgf_45")) {
     throw new Error("启动页花瓣：仍有转圈环残留（旧动画没被完全替换）");
   }
+  // 错峰靠写死的延迟秒数，周期必须固定。若周期变成变量（如接到一个随进度变的 --dsh-boot-pace），
+  // 延迟就与周期脱钩：4s 周期下四朵相位会乱成 0/48/95/43，第三四朵叠住、一二朵中间空半个周期。
+  if (/animation:[^;{}]*var\(--[^)]*pace/i.test(css)) {
+    throw new Error("启动页花瓣：周期被接成了变量，会破坏四朵错峰（延迟是固定秒数，不能跟周期一起缩）");
+  }
+  // 旧进度变量不能留成坟墓：updateProgress 改完之后不应再写 --dsh-boot-arc。
+  if (js.includes("dsh-boot-arc")) {
+    throw new Error("启动页花瓣：updateProgress 仍在写 --dsh-boot-arc（没人读它，应与 glow 一起清掉）");
+  }
   // 选择器必须真的以点开头。曾经把 "._spinner_u7vgf_45{…}" 写成 "_spinner_u7vgf_45{…}"，
   // 字符串里仍有类名、上面几条都过得去，但选择器成了元素选择器，整条规则作废：
   // spinner 容器失去尺寸与定位，整个 WebUI 只剩底下一团。所以这里要看**规则形式**而非关键字。

@@ -101,15 +101,15 @@ const K_END = (2.35 / PERIOD_SEC) * 100;
 
 /** 替换掉转圈环的样式，换成花瓣动画。 */
 const BLOOM_CSS = [
-  "._spinner_u7vgf_45{position:relative;width:20px;height:20px;color:var(--dsw-alias-brand-primary, var(--dsh-boot-brand))}",
-  `._spinner_u7vgf_45 svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;display:block;opacity:0;animation:_bloomLife_boot var(--dsh-boot-pace,${PERIOD_SEC.toFixed(2)}s) linear infinite both}`,
+  "._spinner_u7vgf_45{position:relative;width:20px;height:20px;color:var(--dsw-alias-brand-primary, var(--dsh-boot-brand));opacity:var(--dsh-boot-glow,0.55)}",
+  `._spinner_u7vgf_45 svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;display:block;opacity:0;animation:_bloomLife_boot ${PERIOD_SEC.toFixed(2)}s linear infinite both}`,
   "._spinner_u7vgf_45 svg:nth-child(1){animation-delay:0s}",
   `._spinner_u7vgf_45 svg:nth-child(2){animation-delay:${String(CYCLE_SEC)}s}`,
   `._spinner_u7vgf_45 svg:nth-child(3){animation-delay:${(CYCLE_SEC * 2).toFixed(2)}s}`,
   `._spinner_u7vgf_45 svg:nth-child(4){animation-delay:${(CYCLE_SEC * 3).toFixed(2)}s}`,
   "._spinner_u7vgf_45 path{fill:none;stroke:currentColor;stroke-width:1.68;stroke-linejoin:round}",
-  `.${PETAL_CLASS}{transform-origin:0 0;animation:_bloomPetal_boot var(--dsh-boot-pace,${PERIOD_SEC.toFixed(2)}s) linear infinite both}`,
-  `.${CORE_CLASS}{fill:currentColor;stroke:none;transform-origin:0 0;animation:_bloomCore_boot var(--dsh-boot-pace,${PERIOD_SEC.toFixed(2)}s) linear infinite both}`,
+  `.${PETAL_CLASS}{transform-origin:0 0;animation:_bloomPetal_boot ${PERIOD_SEC.toFixed(2)}s linear infinite both}`,
+  `.${CORE_CLASS}{fill:currentColor;stroke:none;transform-origin:0 0;animation:_bloomCore_boot ${PERIOD_SEC.toFixed(2)}s linear infinite both}`,
   // 缓动挂在关键帧上时作用于「到下一个关键帧」那一段：开花与消散两段需要 easeInOutCubic 的形状，
   // 保持段参考实现本来就是直线。花瓣与花心用带回弹的曲线，保留过冲。
   `@keyframes _bloomLife_boot{0%{opacity:0;transform:rotate(-50deg) scale(.7)}` +
@@ -194,6 +194,22 @@ export function applyBootBloom(nodeModulesDir) {
     `${jsAnchor}this.spinner.innerHTML=${JSON.stringify(bloomMarkup())},`,
     "JS boot page spinner",
   );
+
+  // 1b) JS：进度从「弧长」改成「花色浓度」。
+  //     原来的 updateProgress 写 --dsh-boot-arc（环的填充角度），换掉转圈环之后没人读它。
+  //     而**不能**把进度接到 animation-duration 上：四朵错峰靠的是一组写死的延迟秒数
+  //     （0 / 1.9 / 3.8 / 5.7），周期一变，延迟就与周期脱钩——4s 时相位会乱成 0/48/95/43，
+  //     第三四朵几乎叠住、一二朵中间空掉半个周期。错峰是这套动画的骸架，不能赌。
+  //     所以进度换一个与周期无关的维度：已装载比例↑，描边越不透明。
+  // 整句替换：原句以射入 --dsh-boot-arc 结尾，连同它一起换掉。
+  // （只匹配到第一个分会的做法会把旧句剩在末尾——虽然没人读，但留着就是坟墓。）
+  const progressFull =
+    'updateProgress(){const e=this.total===0?0:Math.min(this.active.size/this.total,1);' +
+    'this.spinner.style.setProperty("--dsh-boot-arc",`${String(Math.round(72+e*216))}deg`)}}';
+  const progressReplacement =
+    'updateProgress(){const e=this.total===0?0:Math.min(this.active.size/this.total,1);' +
+    'this.spinner.style.setProperty("--dsh-boot-glow",String(0.55+e*0.45))}}';
+  js = replaceOnce(js, progressFull, progressReplacement, "JS boot page progress");
 
   // 2) CSS：整段换掉转圈环规则（含它的旋转关键帧）。
   const cssFrom = css.indexOf("._spinner_u7vgf_45{position:relative");
