@@ -12,27 +12,5 @@
       "upstreamSha256": "f0bce7eb34595a249c7865b5e0542cfae175a50804060af46344aba906e6789c",
       "deltaSha256": "98bb254ccab64ca53969eed56cff675baeea7fce6a679c6b5e2e9b1b665d6470"
     }
-  ],
-  "notes": [
-    "批次①：解黑屏 + FP 面。官方 client entry 在 0.1.5 仅 171 行：export inject = ['slots','theme','locale']、",
-    "provideRoot({hooks:{panelInfo}})（usePanelInfo 的来源）、reflect.provide('layout')、slots.register({name:'root',",
-    "children:{sidebar, main(keyed), rightbar, 'shell.overlay'}})。",
-    "逐字照样例（0.7.0 的 ui-layout 补丁）的四分支：role∈{workspace,navigation,settings,standalone}；workspace 是「其余」那一支而非「未知」，只有 role 缺失或不是角色词时才回落到 standalone（上游整幅 UI）。",
-    "  主卡 workspace   ：中列 + 右列；侧栏槽位挂成绝对定位的 settingsShell（主卡内设置浮层）",
-    "  FP   navigation  ：纯侧栏单列，轨道整幅 minmax(0,1fr)，侧栏宽度取整框宽",
-    "  设置 settings    ：侧栏槽位横跨全轨（settingsCol）",
-    "  拆窗 standalone  ：侧栏 + 中列 + 右列，带拖柄",
-    "轨道模板固定三条、列各自认领 grid-column（CSS overlay），不看渲染集拼模板——按渲染集拼轨曾把",
-    "centerCol 落进 56px 侧栏轨（真机 56px 挤压）。",
-    "columns.ts 不进 overlay：0.1.6 的 computeColumns 有第四参 collapsedWidth（0 = 把列整条藏掉，",
-    "否则是收起宽度），与 sidebarPresent 同槽位、语义更宽，本地 delta 归零；",
-    "改由 AppFrame 传「本面有轨就上游值、无轨就 0」。",
-    "收起状态按上游语义算，只在有轨的 standalone 面上生效：宽幅看 sidebar === 0，窄幅看 narrowExpanded；",
-    "收起后的轨道宽走上游的 collapsedWidth（桌面平台 0，其余 56px 图标轨），所以「本面无侧栏」与「用户收起」两件事互不污染。",
-    "frameSidebarPreference 取 0 只表示「本面无侧栏轨道」。",
-    "全局名用我们自己的 __DSHANA__（样例叫 __HANA_DSH__）。",
-    "productTitle 仍走上游 process.env.DSH_CLIENT_TITLE ?? t('brand.localBuild')（样例硬编码成产品名），属最小 delta。",
-    "index.ts / stores.ts / DocumentTitle.tsx 不改；样例对 index 的改动是主题 token 映射与 inject 列表，属后续批次。",
-    "发布侧：壳页 packages/ui/src/app-shell.ts 在注入 DSH 前写 window.__DSHANA__（当前只有 role）。"
   ]
 }

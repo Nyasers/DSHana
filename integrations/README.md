@@ -16,8 +16,12 @@
 ```
 integrations/<短名>/
   integration.json          # 清单：对应官方包、上游目录、overlay 文件与其「基于的上游哈希」
+  NOTES.md                  # 给人看的说明：这一刀为啥落在这里、delta 边界在哪（不参与构建）
   files/<上游相对路径>       # overlay：整文件拷贝 = 上游该文件 + 我们的 delta
 ```
+
+`NOTES.md` 是散文，不参与构建：`verify` 只读清单里的包名、上游目录与两个哈希。分开写是因为说明会长到
+篇级，塞进 JSON 的字符串数组里就没法排版了（没有段落、没有列表、没有代码块）。
 
 `integration.json`：
 

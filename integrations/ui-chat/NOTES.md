@@ -1,0 +1,13 @@
+# ui-chat
+
+滚到顶自动续页：上游只给了「加载更早」按钮（`chat.loadOlder`），长会话回翻要一直去够那个按钮。
+
+0.1.7 把滚动与翻页逻辑从 `ChatView` 抽成 `use-chat-scroll` / `use-chat-reading` /
+`use-chat-navigation` 三个模块，缝随之落在 `use-chat-scroll`：它手握 `viewport.connect` 的读者输入
+入口（scroll 回调带 `movedByReader`）与 `navigation.loadEarlier`（与按钮同一个入口）。
+
+delta 只在 scroll 回调里加一句：读者自己滚到顶（top ≤ 32px）且还有更早的页、当前没在加载时调
+`navigation.loadEarlier()`。锚定补偿归 `viewport.beginPaging` / `preserve`，续下的页不会把阅读位顶
+跑；三个边界（只认读者输入、贴顶才算、`hasMore && !loadingOlder` 守卫）都写进代码注释。
+
+为什么不在外层做运行时钩子：与「贴上游 + 构建期闸、不做运行时 shim」的路线相悖。

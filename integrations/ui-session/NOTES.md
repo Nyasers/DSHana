@@ -1,0 +1,26 @@
+# ui-session
+
+跨面会话选中同步（「FP 点会话、主卡跟着切」）。
+
+缝选在这里：ui-session 的 `apply(ctx)` 手握 `ctx.sessions`（list / retainInfo），且它同时被 FP 与主卡
+两个 DSH 实例加载。一份 overlay 同时落发射端与接收端，按 role 分派：
+
+- `role='navigation'`（FP / sidebar）与 `'workspace'`（主卡）对称参与：本地选中变化 →
+  `bridge.writeSelection(current)`；共享状态变化 → 请本面所属文档的视图所有者
+  `ctx.uiWorkspace.openSession(target)` 导航。选中表达为主视图保留，导航归视图所有者；导航面在装配
+  次序上晚于本插件，用动态注入等它到场。
+- `role='stream'`（只读会话流卡）只读不写：`?sid=` 钉住那一段，未钉住才跟随共用选中。
+- settings / standalone 不参与。
+
+## 不打架靠三条
+
+意见带写入时刻 `at`（只采纳比自己动手更新的）；自己请求的那次导航落地时打 `pendingApply` 标记
+（那一刻不回宣告）；期望目标是本面的不动点，列表每次变动都重新对齐一次。DSH 客户端自己会把「上次
+打开的会话」从 localStorage 的 `dsh.sessions.current` 恢复成主视图保留，与期望目标无关，靠这一次次
+对齐纠回来。
+
+启动握手靠读快照：载体是 App 全局存储（始终有当前值），不会像 BroadcastChannel 那样「接收端晚启动
+就错过宣告」。两个边界：列表 `phase !== 'ready'` 不宣告（避开恢复中间态）；启动宣告为「无选中」时
+不写 null（视为无意见），免得清掉主卡自己恢复出来的选中。
+
+设计依据（V4 单向收敛结论）：导航源只在 sidebar，main 无切换 UI；载体是 App 全局存储。
