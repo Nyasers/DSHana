@@ -44,13 +44,60 @@ body[data-view="ready"] #dsh-stage { display: none; }
   color: var(--text, #2A2622);
 }
 .ring {
+  position: relative;
   width: 22px; height: 22px; flex: none;
-  border: 2px solid var(--border, #D8CFBE);
-  border-top-color: var(--accent, #537D96);
-  border-radius: 50%;
-  animation: dsh-spin 0.9s linear infinite;
+  color: var(--accent, #537D96);
 }
-@keyframes dsh-spin { to { transform: rotate(360deg); } }
+/* 四朵花叠在一起，每朵乘 7.6 秒一轮、彼此错开 1.9 秒：一朵满开时上一朵正在散场。 */
+.ring svg {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  overflow: visible; display: block;
+  opacity: 0;
+  animation: dsh-bloom-life 7.6s linear infinite both;
+}
+.ring svg:nth-child(1) { animation-delay: 0s; }
+.ring svg:nth-child(2) { animation-delay: 1.9s; }
+.ring svg:nth-child(3) { animation-delay: 3.8s; }
+.ring svg:nth-child(4) { animation-delay: 5.7s; }
+.ring path {
+  fill: none; stroke: currentColor;
+  stroke-width: 1.68; stroke-linejoin: round;
+}
+.ring .petal {
+  transform-origin: 0 0;
+  animation: dsh-bloom-petal 7.6s linear infinite both;
+}
+.ring .core {
+  fill: currentColor;
+  transform-origin: 0 0;
+  animation: dsh-bloom-core 7.6s linear infinite both;
+}
+
+/* 整朵花：淡入时后仰，随开随回正，满开后极慢地倾，最后向外散开淡出。 */
+@keyframes dsh-bloom-life {
+  0%      { opacity: 0; transform: rotate(-50deg) scale(.7); }
+  4.6%    { opacity: 1; transform: rotate(-50deg) scale(1); }
+  17.76%  { opacity: 1; transform: rotate(0deg) scale(1); }
+  25%     { opacity: 1; transform: rotate(4deg) scale(1); }
+  30.92%  { opacity: 0; transform: rotate(30deg) scale(.82); }
+  100%    { opacity: 0; transform: rotate(30deg) scale(.82); }
+}
+@keyframes dsh-bloom-petal {
+  0%, 4.6%    { transform: scale(.38, .5); }
+  12.5%, 100% { transform: scale(1, 1); }
+}
+@keyframes dsh-bloom-core {
+  0%, 5.26%    { transform: scale(0); }
+  13.16%       { transform: scale(1.05); }
+  17.76%, 100% { transform: scale(1); }
+}
+/* 要求减弱动态时只留第一朵、直接停在满开。 */
+@media (prefers-reduced-motion: reduce) {
+  .ring svg { animation: none; opacity: 1; transform: none; }
+  .ring svg:not(:first-child) { display: none; }
+  .ring .petal, .ring .core { animation: none; transform: none; }
+}
 #dsh-status { font-size: 12.5px; color: var(--text-muted, #6B6158); margin: 0; }
 
 /* 诊断容器：空则完全不占版面；有内容时就是一块 <pre>。 */
