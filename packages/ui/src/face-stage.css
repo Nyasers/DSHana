@@ -44,13 +44,67 @@ body[data-view="ready"] #dsh-stage { display: none; }
   color: var(--text, #2A2622);
 }
 .ring {
+  position: relative;
   width: 22px; height: 22px; flex: none;
-  border: 2px solid var(--border, #D8CFBE);
-  border-top-color: var(--accent, #537D96);
-  border-radius: 50%;
-  animation: dsh-spin 0.9s linear infinite;
+  color: var(--accent, #537D96);
 }
-@keyframes dsh-spin { to { transform: rotate(360deg); } }
+/* 四朵花叠在一起，彼此错开 1.9 秒：一朵满开时上一朵正在散场。
+   周期 8.05s = 3 × 1.9（前三朵的起点）+ 2.35（最后一朵活到散完）。
+   用 4 × 1.9 = 7.6 会把第四朵的消散阶段截掉 0.45s。 */
+.ring svg {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  overflow: visible; display: block;
+  opacity: 0;
+  animation: dsh-bloom-life 8.05s linear infinite both;
+}
+.ring svg:nth-child(1) { animation-delay: 0s; }
+.ring svg:nth-child(2) { animation-delay: 1.9s; }
+.ring svg:nth-child(3) { animation-delay: 3.8s; }
+.ring svg:nth-child(4) { animation-delay: 5.7s; }
+.ring path {
+  fill: none; stroke: currentColor;
+  stroke-width: 1.68; stroke-linejoin: round;
+}
+.ring .petal {
+  transform-origin: 0 0;
+  animation: dsh-bloom-petal 8.05s linear infinite both;
+}
+.ring .core {
+  fill: currentColor;
+  transform-origin: 0 0;
+  animation: dsh-bloom-core 8.05s linear infinite both;
+}
+
+/* 整朵花：淡入时后仰，随开随回正，满开后极慢地倾，最后向外散开淡出。
+   缓动写在关键帧上，作用于“到下一个关键帧”这一段：
+     4.35%  → 开花段（需 easeInOutCubic 形状）
+     16.77% → hold 段（参考就是直线）
+     23.60% → fade 段（也是 easeInOutCubic） */
+@keyframes dsh-bloom-life {
+  0%      { opacity: 0; transform: rotate(-50deg) scale(.7); }
+  4.35%   { opacity: 1; transform: rotate(-50deg) scale(1); animation-timing-function: cubic-bezier(.6, -.08, .4, 1.08); }
+  16.77%  { opacity: 1; transform: rotate(0deg) scale(1); }
+  23.60%  { opacity: 1; transform: rotate(4deg) scale(1); animation-timing-function: cubic-bezier(.6, -.08, .4, 1.08); }
+  29.19%  { opacity: 0; transform: rotate(30deg) scale(.82); }
+  100%    { opacity: 0; transform: rotate(30deg) scale(.82); }
+}
+/* 花瓣开合带过冲：开到略过 1 再收回，与参考实现的 easeOutOvershoot 同形。 */
+@keyframes dsh-bloom-petal {
+  0%, 4.35% { transform: scale(.38, .5); animation-timing-function: cubic-bezier(.36, 1.36, .72, .96); }
+  12.11%, 100% { transform: scale(1, 1); }
+}
+@keyframes dsh-bloom-core {
+  0%, 5.0%   { transform: scale(0); animation-timing-function: cubic-bezier(.36, 1.36, .72, .96); }
+  12.5%      { transform: scale(1.05); }
+  16.77%, 100% { transform: scale(1); }
+}
+/* 要求减弱动态时只留第一朵、直接停在满开。 */
+@media (prefers-reduced-motion: reduce) {
+  .ring svg { animation: none; opacity: 1; transform: none; }
+  .ring svg:not(:first-child) { display: none; }
+  .ring .petal, .ring .core { animation: none; transform: none; }
+}
 #dsh-status { font-size: 12.5px; color: var(--text-muted, #6B6158); margin: 0; }
 
 /* 诊断容器：空则完全不占版面；有内容时就是一块 <pre>。 */
