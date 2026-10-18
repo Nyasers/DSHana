@@ -54,17 +54,26 @@ const FLOWERS = [
 const PETAL_CLASS = "_bloomPetal_boot";
 const CORE_CLASS = "_bloomCore_boot";
 
+/** 每朵花接手的间隔（秒）。 */
+const CYCLE_SEC = 1.9;
+
+/** 一轮动画周期：前三朵的起点 3×1.9 + 最后一朵活到散完 2.35。 */
+const PERIOD_SEC = 3 * CYCLE_SEC + 2.35;
+
 /** 生成四朵叠放的 SVG 标记。 */
 function bloomMarkup() {
-  return FLOWERS.map((flower) => {
+  return FLOWERS.map((flower, fi) => {
+    // animation-delay 写在 <g class="petal"> 上，不继承父 <svg> 的 delay：
+    // 每朵的花瓣必须自己叠上花朵 offset，否则四朵的花瓣会在每轮同一刻同时张开。
+    const flowerOffset = fi * CYCLE_SEC;
     let petals = "";
     flower.groups.forEach((group, gi) => {
       group.angles.forEach((angle, pi) => {
         const length = group.lengths?.[pi] ?? 1;
-        const delay = gi * 0.16 + pi * 0.04;
+        const delay = flowerOffset + gi * 0.16 + pi * 0.04;
         petals +=
           `<g transform="rotate(${String(angle)})">` +
-          `<g class="${PETAL_CLASS}" style="animation-delay:${String(delay)}s">` +
+          `<g class="${PETAL_CLASS}" style="animation-delay:${delay.toFixed(2)}s">` +
           `<g transform="scale(1 ${String(length)})"><path d="${group.d}"/></g>` +
           `</g></g>`;
       });
@@ -72,7 +81,7 @@ function bloomMarkup() {
     const core =
       flower.core === 0
         ? ""
-        : `<circle class="${CORE_CLASS}" r="${String(flower.core)}" style="animation-delay:0.4s" transform="scale(0)"/>`;
+        : `<circle class="${CORE_CLASS}" r="${String(flower.core)}" style="animation-delay:${(flowerOffset + 0.4).toFixed(2)}s" transform="scale(0)"/>`;
     return (
       `<svg viewBox="-10.5 -10.5 21 21">` +
       `<g transform="translate(0 ${String(flower.baseY)})">${petals}${core}</g>` +
@@ -81,20 +90,39 @@ function bloomMarkup() {
   }).join("");
 }
 
+/**
+ * 关键帧百分比。参考实现的四段：花苞 0.35、绽放 1.0、保持 0.55、消散 0.45（单朵共 2.35）。
+ * 百分比乘周期，得到与参考一致的秒数。
+ */
+const K_BUD = (0.35 / PERIOD_SEC) * 100;
+const K_FULL = (1.35 / PERIOD_SEC) * 100;
+const K_HOLD = (1.9 / PERIOD_SEC) * 100;
+const K_END = (2.35 / PERIOD_SEC) * 100;
+
 /** 替换掉转圈环的样式，换成花瓣动画。 */
 const BLOOM_CSS = [
-  "._spinner_u7vgf_45{position:relative;width:20px;height:20px;color:var(--dsw-alias-brand-primary, var(--dsh-boot-brand))}",
-  "._spinner_u7vgf_45 svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;display:block;opacity:0;animation:_bloomLife_boot var(--dsh-boot-pace,7.6s) linear infinite both}",
-  "._spinner_u7vgf_45 svg:nth-child(1){animation-delay:0s}",
-  "._spinner_u7vgf_45 svg:nth-child(2){animation-delay:1.9s}",
-  "._spinner_u7vgf_45 svg:nth-child(3){animation-delay:3.8s}",
-  "._spinner_u7vgf_45 svg:nth-child(4){animation-delay:5.7s}",
-  "._spinner_u7vgf_45 path{fill:none;stroke:currentColor;stroke-width:1.68;stroke-linejoin:round}",
-  `.${PETAL_CLASS}{transform-origin:0 0;animation:_bloomPetal_boot var(--dsh-boot-pace,7.6s) linear infinite both}`,
-  `.${CORE_CLASS}{fill:currentColor;stroke:none;transform-origin:0 0;animation:_bloomCore_boot var(--dsh-boot-pace,7.6s) linear infinite both}`,
-  "@keyframes _bloomLife_boot{0%{opacity:0;transform:rotate(-50deg) scale(.7)}4.6%{opacity:1;transform:rotate(-50deg) scale(1)}17.76%{opacity:1;transform:rotate(0) scale(1)}25%{opacity:1;transform:rotate(4deg) scale(1)}30.92%{opacity:0;transform:rotate(30deg) scale(.82)}100%{opacity:0;transform:rotate(30deg) scale(.82)}}",
-  "@keyframes _bloomPetal_boot{0%,4.6%{transform:scale(.38,.5)}12.5%,100%{transform:scale(1,1)}}",
-  "@keyframes _bloomCore_boot{0%,5.26%{transform:scale(0)}13.16%{transform:scale(1.05)}17.76%,100%{transform:scale(1)}}",
+  "_spinner_u7vgf_45{position:relative;width:20px;height:20px;color:var(--dsw-alias-brand-primary, var(--dsh-boot-brand))}",
+  `._spinner_u7vgf_45 svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;display:block;opacity:0;animation:_bloomLife_boot var(--dsh-boot-pace,${PERIOD_SEC.toFixed(2)}s) linear infinite both}`,
+  "_spinner_u7vgf_45 svg:nth-child(1){animation-delay:0s}",
+  `._spinner_u7vgf_45 svg:nth-child(2){animation-delay:${String(CYCLE_SEC)}s}`,
+  `._spinner_u7vgf_45 svg:nth-child(3){animation-delay:${(CYCLE_SEC * 2).toFixed(2)}s}`,
+  `._spinner_u7vgf_45 svg:nth-child(4){animation-delay:${(CYCLE_SEC * 3).toFixed(2)}s}`,
+  "_spinner_u7vgf_45 path{fill:none;stroke:currentColor;stroke-width:1.68;stroke-linejoin:round}",
+  `.${PETAL_CLASS}{transform-origin:0 0;animation:_bloomPetal_boot var(--dsh-boot-pace,${PERIOD_SEC.toFixed(2)}s) linear infinite both}`,
+  `.${CORE_CLASS}{fill:currentColor;stroke:none;transform-origin:0 0;animation:_bloomCore_boot var(--dsh-boot-pace,${PERIOD_SEC.toFixed(2)}s) linear infinite both}`,
+  // 缓动挂在关键帧上时作用于「到下一个关键帧」那一段：开花与消散两段需要 easeInOutCubic 的形状，
+  // 保持段参考实现本来就是直线。花瓣与花心用带回弹的曲线，保留过冲。
+  `@keyframes _bloomLife_boot{0%{opacity:0;transform:rotate(-50deg) scale(.7)}` +
+    `${K_BUD.toFixed(2)}%{opacity:1;transform:rotate(-50deg) scale(1);animation-timing-function:cubic-bezier(.6,-.08,.4,1.08)}` +
+    `${K_FULL.toFixed(2)}%{opacity:1;transform:rotate(0) scale(1)}` +
+    `${K_HOLD.toFixed(2)}%{opacity:1;transform:rotate(4deg) scale(1);animation-timing-function:cubic-bezier(.6,-.08,.4,1.08)}` +
+    `${K_END.toFixed(2)}%{opacity:0;transform:rotate(30deg) scale(.82)}` +
+    "100%{opacity:0;transform:rotate(30deg) scale(.82)}}",
+  `@keyframes _bloomPetal_boot{0%,${K_BUD.toFixed(2)}%{transform:scale(.38,.5);animation-timing-function:cubic-bezier(.36,1.36,.72,.96)}` +
+    `${(((0.35 + 0.6) / PERIOD_SEC) * 100).toFixed(2)}%,100%{transform:scale(1,1)}}`,
+  `@keyframes _bloomCore_boot{0%,${((0.4 / PERIOD_SEC) * 100).toFixed(2)}%{transform:scale(0);animation-timing-function:cubic-bezier(.36,1.36,.72,.96)}` +
+    `${((1.0 / PERIOD_SEC) * 100).toFixed(2)}%{transform:scale(1.05)}` +
+    `${K_FULL.toFixed(2)}%,100%{transform:scale(1)}}`,
   "@media (prefers-reduced-motion:reduce){._spinner_u7vgf_45 svg{animation:none;opacity:1;transform:none}._spinner_u7vgf_45 svg:not(:first-child){display:none}._bloomPetal_boot,._bloomCore_boot{animation:none;transform:none}}",
 ].join("");
 

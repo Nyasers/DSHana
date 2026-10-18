@@ -75,22 +75,25 @@ import {
       { d: PETALS.lip, angles: [180] }
     ] }
   ];
-  /** 四朵花的花瓣标记（字符串；每朵一个 svg，CSS 负责错峰与周期）。 */
+  /** 四朵花的花瓣标记（字符串；每朵一个 svg，CSS 负责错峰与周期）。
+   *  每朵的花瓣延迟必须叠加自己的 offset（i × 1.9s）：`animation-delay` 写在 <g class="petal">
+   *  上，不会继承父 <svg> 的 delay，不叠加就会变成四朵的花瓣全在每轮 0.35s 同时张开。 */
   function bloomMarkup() {
-    return FLOWERS.map(function (f) {
+    return FLOWERS.map(function (f, fi) {
+      var flowerOffset = fi * 1.9;
       var petals = "";
       f.groups.forEach(function (g, gi) {
         g.angles.forEach(function (angle, pi) {
           var len = (g.lengths && g.lengths[pi]) || 1;
-          var delay = gi * 0.16 + pi * 0.04;
+          var delay = flowerOffset + gi * 0.16 + pi * 0.04;
           petals +=
             '<g transform="rotate(' + angle + ')">' +
-            '<g class="petal" style="animation-delay:' + delay + 's">' +
+            '<g class="petal" style="animation-delay:' + delay.toFixed(2) + 's">' +
             '<g transform="scale(1 ' + len + ')"><path d="' + g.d + '"/></g>' +
             '</g></g>';
         });
       });
-      var core = f.core === 0 ? "" : '<circle class="core" r="' + f.core + '" style="animation-delay:0.4s" transform="scale(0)"/>';
+      var core = f.core === 0 ? "" : '<circle class="core" r="' + f.core + '" style="animation-delay:' + (flowerOffset + 0.4).toFixed(2) + 's" transform="scale(0)"/>';
       return '<svg viewBox="-10.5 -10.5 21 21" aria-hidden="true">' +
         '<g transform="translate(0 ' + f.baseY + ')">' + petals + core + '</g></svg>';
     }).join("");
