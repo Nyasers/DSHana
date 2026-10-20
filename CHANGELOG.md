@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.2+dsh-0.2.1-rc.2](https://github.com/Nyasers/DSHana/compare/v1.2.1%2Bdsh-0.2.1-rc.2...v1.2.2%2Bdsh-0.2.1-rc.2) (2026-10-20)
+
+### Features
+
+* **bloom:** 花瓣几何抽成 @dshana/bloom，壳页改为引用它 ([6589cdc](https://github.com/Nyasers/DSHana/commit/6589cdca2cea217d19c378cf3e61e0f4266b17e0))
+* **boot:** 壳页自举台的圆环也换成四花绽放 ([cde0b63](https://github.com/Nyasers/DSHana/commit/cde0b6336ec8656b0aa3bbf2af36613b1debe4a6)), references [#dsh-spin](https://github.com/Nyasers/DSHana/issues/dsh-spin)
+* **boot:** 启动页的转圈环换成四花绽放 ([08f4fc9](https://github.com/Nyasers/DSHana/commit/08f4fc9ef0dac12e9768d576e1d7edd6ae5977d2))
+
+### Bug Fixes
+
+* **boot:** 进度不再驱动周期，改用花色浓度 ([e80e62b](https://github.com/Nyasers/DSHana/commit/e80e62b85acf583b05e1a985d7ad4d165e1fad09)), references [#308](https://github.com/Nyasers/DSHana/issues/308)
+* **boot:** 修正花瓣动画的周期、缓动与错峰 ([4acb751](https://github.com/Nyasers/DSHana/commit/4acb751ce2e0b632eabfcd21ed79fc14428545f7))
+* **boot:** 修正花瓣选择器丢前导点，并给断言补上结构检查 ([28b9d84](https://github.com/Nyasers/DSHana/commit/28b9d840477f9ef1d32c5661f69c57f55baa86c3))
+
 ## [1.2.1+dsh-0.2.1-rc.2](https://github.com/Nyasers/DSHana/compare/v1.2.0%2Bdsh-0.2.1-rc.2...v1.2.1%2Bdsh-0.2.1-rc.2) (2026-10-18)
 
 ## [1.2.0+dsh-0.2.1-rc.2](https://github.com/Nyasers/DSHana/compare/v1.1.1%2Bdsh-0.2.0-rc.2...v1.2.0%2Bdsh-0.2.1-rc.2) (2026-10-18)
