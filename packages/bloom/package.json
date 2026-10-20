@@ -1,0 +1,11 @@
+{
+  "name": "@dshana/bloom",
+  "version": "0.0.0",
+  "private": true,
+  "description": "花瓣绽放的几何与时间轴（四种花、四段生命周期）。渲染由调用方决定：壳页拼成 SVG 标记交给 CSS，独立包逐帧求值",
+  "license": "MPL-2.0",
+  "type": "module",
+  "exports": {
+    "./*": "./src/*"
+  }
+}

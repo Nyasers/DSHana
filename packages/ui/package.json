@@ -9,6 +9,7 @@
     "./*": "./src/*"
   },
   "dependencies": {
+    "@dshana/bloom": "workspace:*",
     "@dshana/shared": "workspace:*"
   }
 }

@@ -175,6 +175,8 @@ importers:
         specifier: workspace:*
         version: link:../tools
 
+  packages/bloom: {}
+
   packages/dsh/app:
     dependencies:
       '@deepseek-ai/cordis':
@@ -626,6 +628,9 @@ importers:
 
   packages/ui:
     dependencies:
+      '@dshana/bloom':
+        specifier: workspace:*
+        version: link:../bloom
       '@dshana/shared':
         specifier: workspace:*
         version: link:../shared
