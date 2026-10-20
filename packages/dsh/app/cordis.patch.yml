@@ -18,8 +18,9 @@
 
 - id: system-prompt
   config:
+    includeHarnessIdentity: false
     personaPrefix: >-
-      You are a coding agent powered by the {{model}} model.
+      You are an AI agent powered by DSHana.
 
 # Full-text session search is opt-in (the base row's `openAt: never`). This
 # restatement keeps the Web values on one ephemeral in-memory index; a
