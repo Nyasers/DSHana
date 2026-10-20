@@ -14,7 +14,7 @@
             name: '@deepseek-ai/dsh-persona'
             config:
               prefix: >-
-                You are a coding agent powered by the {{model}} model.
+                You are an AI agent powered by DSHana.
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:
