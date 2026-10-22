@@ -1,12 +1,32 @@
 version: 2
 updates:
+  # 依赖：只监控仓库根。dshana 是多包工作区（packages/*、packages/*/*），但子包不在本条视野内：
+  # packages/dsh/app 拜 128 个外部依赖里 121 个是 @deepseek-ai/*\ 固定版 0.2.1-rc.2，
+  # 它们跟 packages/host 声明的 dsh 上游版走（derive:vendor 与 bundle 两个任务维护，
+  # 与 vendor/deepseek-harness 的 checkout 对得上），让 dependabot 去提 PR 只会跟这条派生链打架。
+  # 真正需要盯的是根这 40 个包（构建链、类型、工具）。
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"
+    # vendor/ 下的 file: 依赖是本地 tgz，dependabot 不会去版本库里查它们。
     open-pull-requests-limit: 20
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]
       major:
         update-types: ["major"]
+    # 上游快照类包不由版本号推进，而是跟随 vendor 的 tag，交给 derive 链更合适。
+    ignore:
+      - dependency-name: "@deepseek-ai/*"
+
+  # Actions：workflow 里 pin 的是具体补丁版（如 actions/checkout@v7.0.1），
+  # 不是浮动主标签，所以补丁发版时不会自己漂过去，得靠这条来提。
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      actions:
+        patterns: ["*"]
