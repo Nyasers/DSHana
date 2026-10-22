@@ -16,11 +16,46 @@ const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const ROOT_MODULE = join(REPO, "scripts", "shared", "root.mts");
 
 test("satisfiesNodeRange：本仓范围的边界", () => {
-  const range = "^22.22.2 || ^24.15.0 || ^26.8.1";
-  for (const ok of ["22.22.2", "22.30.0", "24.15.0", "24.20.1", "26.8.1", "26.9.0"]) {
-    assert.equal(satisfiesNodeRange(range, ok), true, `应满足：${ok}`);
+  // 范围从 package.json 读，不在这里抄第二份：抄一份出来的结果是「改了 engines 忘了改测试」
+  // 或反过来，两种漂移都让这条断言变成自说自话。
+  const range = JSON.parse(readFileSync(join(REPO, "package.json"), "utf8")).engines.node;
+
+  for (const clause of String(range).split("||").map((c) => c.trim()).filter(Boolean)) {
+    const base = clause.replace(/^[\^>=]+/, "");
+    const [major, minor, patch] = base.split(".").map(Number);
+
+    assert.equal(satisfiesNodeRange(range, base), true, `下界本身必须满足：${base}`);
+    assert.equal(
+      satisfiesNodeRange(range, `${major}.${minor}.${patch + 1}`),
+      true,
+      `下界之上必须满足：${major}.${minor}.${patch + 1}`,
+    );
+
+    // 下界下面一格必须被拒：下界就不是真的下界了
+    if (patch > 0) {
+      assert.equal(
+        satisfiesNodeRange(range, `${major}.${minor}.${patch - 1}`),
+        false,
+        `下界之下一格必须拒绝：${major}.${minor}.${patch - 1}`,
+      );
+    } else if (minor > 0) {
+      assert.equal(
+        satisfiesNodeRange(range, `${major}.${minor - 1}.99`),
+        false,
+        `下界之下一格必须拒绝：${major}.${minor - 1}.99`,
+      );
+    }
+
+    // major 不跨：^ 的语义就是只承诺本大版本
+    assert.equal(
+      satisfiesNodeRange(range, `${major + 1}.0.0`),
+      false,
+      `^ 不得跨大版本：${major + 1}.0.0`,
+    );
   }
-  for (const bad of ["20.19.0", "22.21.0", "23.0.0", "24.14.9", "25.0.0", "27.0.0"]) {
+
+  // 三条线之外的 major 一律拒绝（20 / 23 / 25 / 27）
+  for (const bad of ["20.19.0", "23.0.0", "25.0.0", "27.0.0"]) {
     assert.equal(satisfiesNodeRange(range, bad), false, `应拒绝：${bad}`);
   }
 });

@@ -159,6 +159,6 @@
     "@dshana/dsh-session": "workspace:*",
     "@dshana/dsh-theme": "workspace:*",
     "commander": "^15.0.0",
-    "open": "^11.0.2"
+    "open": "^11.0.4"
   }
 }
