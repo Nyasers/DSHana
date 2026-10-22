@@ -8,15 +8,15 @@ jobs:
     # runner 钉具体版本：镜像换代是 GitHub 侧的静默变化，CI 要可复现的环境
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           # vendor/deepseek-harness 是 submodule，镜像校验要读它的 tag（dsh-v<版本>）；
           # 浅克隆拿不到 tag，submodule 不递归则目录为空。两者都必要。
           submodules: recursive
           fetch-depth: 0
       # 显式装 pnpm（读 package.json packageManager 字段钉版本），不依赖 runner 预装 corepack
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version-file: ".nvmrc"
           cache: pnpm
