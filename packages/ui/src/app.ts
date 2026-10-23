@@ -465,8 +465,6 @@ import {
     if (!data || typeof data !== "object") return;
     if (data.dshHanaThemeRequest) { try { sendThemeTo(e.source); } catch (err) { /* 忽略 */ } }
   });
-  // 剪贴板实现（writeClipboard）随低层管道移到了 packages/ui/src/surface-bridge.ts 的 clipboardWrite，
-  // 契约与现场结论的来龙去脉见那里的注释；本文件只是把它挂进 SURFACE_API（见上方 import）。
   // 主题跟随（**事件驱动，不轮询**）：宿主主题变化由 SDK 通知（事件名 hana.theme.changed，
   // 常量见 @hana/plugin-protocol 的 THEME_CHANGED），SDK 侧即 hana.theme.subscribe；
   // 当前主题的官方读法是 hana.theme.getSnapshot()。SDK README 另写明：重绘本身由 SDK
