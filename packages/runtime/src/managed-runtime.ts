@@ -23,8 +23,9 @@
 // 参数契约（与 packages/host/src/options.ts 对偶；增删需两处同步 + tests/）：
 //   唯一的子进程入参是私有运行时配置文件路径（argv[1]），由 writeRuntimeConfigFile 落盘、
 //   buildRuntimeConfig 生产 schema；命令行不带明文参数（凭据/端口不进 argv）。
-import { join } from "node:path";
-import { mkdirSync, writeFileSync, chmodSync, rmSync, readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { mkdirSync, writeFileSync, chmodSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { randomInt, randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { appDataDir, appLogger, getAppRuntime } from "./app-runtime.ts";
@@ -40,6 +41,8 @@ export const MAX_START_ATTEMPTS = 3; // 端口占用（抽中的号被抢或撞�
 /** runtime 终态集合（宿主 runtime state 契约）。 */
 export const TERMINAL_STATES = new Set(["failed", "exited", "stopped"]);
 export const READY_POLL_MS = 300;
+/** 端口探针的超时（它只做一次 bind，正常几十毫秒内结束）。 */
+export const PORT_PROBE_TIMEOUT_MS = 10000;
 export const READY_TIMEOUT_MS = 240000; // 首次启动含 DSH boot，需更宽容限
 export const START_ERROR_HINTS = {
   "port-busy": "port busy or DSH cannot listen (service proxy not ready). A random port retry was already attempted; if it still fails, check the runtime log and confirm a loopback port is available on this machine.",
@@ -205,8 +208,10 @@ export function chooseBridgePort(rng = randomInt, range: PortRange = FALLBACK_PO
 /**
  * 实际读一次系统动态端口段。读不到则回落到 IANA 默认值。
  *
- * 只在 host 子进程里能跑（那里有 spawn 权限）；App 主进程调它会把错误吞掉并回落，
- * 不会因为读不到而崩。
+ * **只在 host 子进程里有效**：App 主进程没有 child_process 权限，`execFileSync` 会抛
+ * ERR_ACCESS_DENIED，被吃掉后直接走回落。换句话说，在 App 侧调它等价于永远拿回落值——
+ * 所以两个端口都不走这条路：中继端口走探针（`bin/port-probe.mjs`），DSH 内部端口交给系统（0）。
+ * 保留导出供子进程侧与测试用。
  */
 export function readPortRange(): PortRange {
   const range = parsePortRange(
@@ -570,6 +575,75 @@ async function startWithPortRetry(opts) {
   throw lastError || new Error(START_ERROR_HINTS.unknown);
 }
 
+/**
+ * App 安装根：从本 bundle 所在位置向上找 `manifest.json`。
+ *
+ * 不用 `ctx` 里的字段：它的 `dataDir` 是**数据**目录，安装目录只读且不对外暴露。
+ * 与 host 侧 `resolveInstallRoot` 同规则（两者都从 bundle 自身路径反推）。
+ * 构建会把 `import.meta.url` 的静态化字面量回写（见 packages/app/src/build.ts 的 url rewriter）。
+ * @returns 安装根绝对路径；找不到则抛。
+ */
+function appInstallRoot() {
+  const here = fileURLToPath(import.meta.url);
+  let dir = dirname(here);
+  for (;;) {
+    if (existsSync(join(dir, "manifest.json"))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) {
+      // 不用 import.meta.url 拼错误信息：它会被构建期静态求值成构建机路径（交付断言会拒包）。
+      throw new Error("无法定位 App 安装根：从 " + here + " 向上未找到 manifest.json（安装包不完整？）");
+    }
+    dir = parent;
+  }
+}
+
+/**
+ * 用探针子进程向系统要一个可绑的端口。
+ *
+ * 探针是随包发布的 `bin/port-probe.mjs`，用 `execFileSync` 拉起并**显式传 `--allow-net`**：
+ * 权限模型不继承给子进程（实测父进程无 `--allow-net` 时，子进程自带 `--allow-net` 仍能 bind）。
+ * 结果从 stdout 直读，单行一个端口号，不经文件。
+ *
+ * 为什么走子进程而不在本进程 bind：App 主进程被 Hana 的权限模型管着，`server.listen()`
+ * 直接 `ERR_ACCESS_DENIED`。而中继端口又必须由我们给出确定值（SDK 不允许交给宿主分配）。
+ *
+ * 任何一环失败（找不到探针 / spawn 被拒 / 输出非法）都返回 null，由调用方回落盲抽。
+ * 不让探针成为启动硬依赖：它只是把选号的把握度提高一档。
+ *
+ * @param installRoot - App 安装根（探针在它下面的 bin/ 里）。
+ * @returns 可绑的端口号；探测不成则 null。
+ */
+function probeBridgePort(installRoot) {
+  const probePath = join(installRoot, "bin", "port-probe.mjs");
+  if (!existsSync(probePath)) {
+    logApp("warn", "[managed-runtime] 探针不在位（" + probePath + "）——回落区间盲抽");
+    return null;
+  }
+  try {
+    // 清掉继承的 NODE_OPTIONS（Node 会把父进程的 --permission 重注入给子进程），
+    // 再显式给 --allow-net：子进程只需这一个 flag 就能 bind。
+    const env = { ...process.env };
+    delete env.NODE_OPTIONS;
+    const out = execFileSync(process.execPath, ["--allow-net", probePath], {
+      encoding: "utf8",
+      timeout: PORT_PROBE_TIMEOUT_MS,
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+      env,
+    });
+    const port = Number(String(out).trim());
+    if (Number.isInteger(port) && port > 0 && port <= 65535) {
+      logApp("info", "[managed-runtime] 端口探针给出 " + port);
+      return port;
+    }
+    logApp("warn", "[managed-runtime] 端口探针输出非法（" + JSON.stringify(String(out).slice(0, 40)) + "）——回落区间盲抽");
+    return null;
+  } catch (e) {
+    logApp("warn", "[managed-runtime] 端口探针不可用（" + errText(e).slice(0, 160) + "）——回落区间盲抽");
+    return null;
+  }
+}
+
 async function doStartManaged(opts, attempt = 1) {
   const app = getAppRuntime();
   if (!app || !app.ctx || typeof app.ctx.runtime?.start !== "function") {
@@ -583,7 +657,9 @@ async function doStartManaged(opts, attempt = 1) {
   // 源默认取当前自持设置；带 dshHome 覆盖时用它（切换链要能在落盘之前先按新源启动）
   const base = await currentSource();
   const source = typeof opts.dshHome === "string" && opts.dshHome ? { ...base, home: opts.dshHome } : base;
-  const bridgePort = chooseBridgePort(randomInt, readPortRange());
+  // 中继端口：先让探针子进程向系统要一个「此刻确实可绑」的号（它有 --allow-net）；
+  // 探针不成再回落区间盲抽，由 MAX_START_ATTEMPTS 兼底。
+  const bridgePort = probeBridgePort(appInstallRoot()) ?? chooseBridgePort(randomInt, FALLBACK_PORT_RANGE);
   const dshPort = 0;
   const bridgeKey = randomBytes(24).toString("base64url");
   const controlKey = randomBytes(24).toString("base64url");

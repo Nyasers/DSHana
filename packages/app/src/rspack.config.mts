@@ -31,6 +31,10 @@ export default {
     "bin/app": path.join(ROOT, "packages", "app", "src", "app.ts"),
     // 受管 runtime 入口（宿主以 node 执行 bin/dsh.mjs）
     "bin/dsh": path.join(ROOT, "packages", "host", "src", "main.ts"),
+    // 端口探针（App 主进程用 execFileSync 拉起它拿一个可绑的回环端口）：
+    // 独立入口而非静态拷贝——它得经同一条构建链，否则源码与产物会静默脱钩。
+    // 产物 bin/port-probe.mjs 自包含（node 内置模块走 externals），不需共享 chunk。
+    "bin/port-probe": path.join(ROOT, "packages", "app", "src", "bin", "port-probe.ts"),
     // 产物 bin/app.mjs 就是入口本身：没有另写的壳（manifest.entry 指它）
   },
   output: {

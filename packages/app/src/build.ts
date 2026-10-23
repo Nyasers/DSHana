@@ -66,7 +66,13 @@ const rspack = rspackPkg.rspack ?? rspackPkg.default?.rspack;
 // 源码收集（供 URL 回写）：app 主体与 host runtime 同一次构建，两域的 .ts 都要收
 // （runtime 入口用 import.meta.url 定位安装根，静态化的 file:// 字面量必须回写）。
 const rewriter = makeUrlRewriter(
-  new Map([...collectSource(SRC_ROOT), ...collectSource(join(ROOT, "packages", "host", "src"))]),
+  new Map([
+    ...collectSource(SRC_ROOT),
+    ...collectSource(join(ROOT, "packages", "host", "src")),
+    // runtime 域也进回写面：managed-runtime 用 import.meta.url 定位安装根（找 bin/port-probe.mjs），
+    // 不回写就会被 swc 静态求值成构建机路径（交付断言会拒包）。
+    ...collectSource(join(ROOT, "packages", "runtime", "src")),
+  ]),
 );
 
 // 单 compiler 编译封装（rspack 一次 run/close；stats 报错即 reject）

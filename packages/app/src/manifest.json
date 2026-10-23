@@ -15,6 +15,7 @@
     "app/agents.read",
     "app/sessions.read",
     "app/resources.read",
+    "app/process.spawn",
     "app/runtime.execute",
     "app/runtime.local-machine",
     "app/runtime.network",
