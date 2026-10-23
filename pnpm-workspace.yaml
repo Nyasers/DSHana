@@ -29,6 +29,16 @@ overrides:
   "@deepseek-ai/dsh-session-telemetry-otel": "-"
   "@deepseek-ai/dsh-host-product-telemetry-otel": "-"
 
+  # 安全修复：dsh-mcp-client 把 @modelcontextprotocol/client 钉在 2.2.0（精确版，非范围），
+  # 而 2.2.0 落在 GHSA-6prh-2h8m-c8cw（>=2.0.0 <2.3.0）的受影响区间。抬到 2.3.1：同 major，
+  # 进线只有 eventsource-parser ^3.0.0 → ^3.0.8 与核心包跟随，无 peer 约束、无断代。
+  "@modelcontextprotocol/client": 2.3.1
+
+  # 安全修复：dsh-agent-loop / dsh-llm 把 zod 钉在 4.4.3（精确版，非范围），而 4.4.3 落在
+  # GHSA-mrhx-c7xc-m3w5（<4.6.6，数组校验无上限地累积 issue 可致内存耗尽）的受影响区间。
+  # 树里另有 4.6.7（dsh-acp 链路在用），同 major 内抬到补丁版；等上游改声明后可评估移除。
+  zod: 4.6.7
+
 # 打包目标设置
 # >>> pack-targets
 supportedArchitectures:
