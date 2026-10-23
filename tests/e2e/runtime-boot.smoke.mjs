@@ -26,6 +26,7 @@
 import { fork } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { randomBytes, randomInt } from "node:crypto";
+import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -74,6 +75,27 @@ async function probeOk(port) {
   } catch {
     return false;
   }
+}
+
+/**
+ * 挑一个本机真能绑得上的端口（127.0.0.1）。
+ *
+ * 不能只靠 randomInt 碰运气：Windows 会把大段端口划进保留区间（Hyper-V / WSL 等），
+ * 落进去一次就是 `EACCES: permission denied`，冒烟会以 BOOT_FAIL 误报成产品缺陷。
+ * 这里先实际 bind 一次再放开，拿不到就换一个。
+ * @returns 一个当前可绑的端口号。
+ */
+async function freePort() {
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const port = randomInt(38000, 52000);
+    const usable = await new Promise((resolve) => {
+      const server = createServer();
+      server.once("error", () => { resolve(false) });
+      server.listen(port, "127.0.0.1", () => { server.close(() => { resolve(true) }) });
+    });
+    if (usable) return port;
+  }
+  throw new Error("38000-52000 里找不到可绑定的端口（本机保留区间过多）");
 }
 
 /** 写私有运行时配置文件（0600）；返回路径。argv[1] 是子进程唯一入参。 */
@@ -140,9 +162,9 @@ async function stopChild(child, exitOf) {
 }
 
 async function runBoot() {
-  const bridgePort = randomInt(38000, 52000);
-  let dshPort = randomInt(38000, 52000);
-  while (dshPort === bridgePort) dshPort = randomInt(38000, 52000);
+  const bridgePort = await freePort();
+  let dshPort = await freePort();
+  while (dshPort === bridgePort) dshPort = await freePort();
   const configPath = writeConfig({
     dataDir,
     dshHome: join(dataDir, ".dsh"),

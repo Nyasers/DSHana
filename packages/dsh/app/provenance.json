@@ -1,13 +1,13 @@
 {
   "package": "@deepseek-ai/dsh-web-app",
-  "upstreamVersion": "0.2.1-rc.2",
+  "upstreamVersion": "0.2.1-rc.3",
   "upstreamDir": "packages/bundle/web-app",
   "mirror": "vendor/deepseek-harness",
-  "mirrorTag": "dsh-v0.2.1-rc.2",
+  "mirrorTag": "dsh-v0.2.1-rc.3",
   "files": [
     {
       "path": "cordis.patch.yml",
-      "upstreamSha256": "3e1f923309612ed8551141127409d662e78758e2d0d125218a3f70514417e472"
+      "upstreamSha256": "cdceb423fc34c31ceb9c47ef2117a88eeda6fd9cc21f94d58cfd21e7c3e035de"
     },
     {
       "path": "presets/standard.patch.yml",
