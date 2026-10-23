@@ -447,6 +447,13 @@
     - id: ui-agent-preset
       name: '@deepseek-ai/dsh-client-ui-agent-preset'
 
+    # 三个区域各一个 More 菜单（浏览插件 / 创建插件草稿）。两个动作在本形态都没有
+    # 落点：Plugins 页已由 ui-plugin-manager 行提供，多一个入口是重复；创建草稿要用
+    # agentPreset 'cordis' 开新会话，而本形态的会话由 Hana 侧编排。
+    # 注释保留供上游对账：
+    # - id: entry-customization
+    #   name: '@deepseek-ai/dsh-client-ui-entry-customization'
+
     # 设置里的「使用官方模型 API 时上传 Session Log」开关：它开关的是 base 的
     # session-log-deepseek（把会话日志随请求带给官方 API），本形态没有那条行，开关也就没有对象。
     # 注释保留供上游对账：

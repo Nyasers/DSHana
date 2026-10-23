@@ -405,6 +405,14 @@
       "@deepseek-ai/dsh-client-ui-dockkit": [
         "../vendor/deepseek-harness/packages/client/ui-dockkit/src/index.ts"
       ],
+      "@deepseek-ai/dsh-client-ui-entry-customization": [
+        "../vendor/deepseek-harness/packages/client/ui-entry-customization/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-entry-customization"
+      ],
+      "@deepseek-ai/dsh-client-ui-entry-customization/client": [
+        "../vendor/deepseek-harness/packages/client/ui-entry-customization/src/client/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-entry-customization"
+      ],
       "@deepseek-ai/dsh-client-ui-goal": [
         "../vendor/deepseek-harness/packages/client/ui-goal/src/index.ts",
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-goal"
