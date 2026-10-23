@@ -8,14 +8,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   choosePort,
-  pickPorts,
+  chooseBridgePort,
+  parsePortRange,
+  readPortRange,
+  FALLBACK_PORT_RANGE,
   makeReadyMarker,
   buildRuntimeConfig,
   classifyRuntimeFailure,
   READY_MARKER,
   RUNTIME_ENTRY,
-  PORT_MIN,
-  PORT_MAX,
   RUNTIME_HANDOFF_DIR,
   writeRuntimeConfigFile,
 } from "@dshana/runtime/managed-runtime.ts";
@@ -24,29 +25,65 @@ import { mkdtempSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 
-test("choosePort: 落在 [PORT_MIN, PORT_MAX) 的确定整数（宿主 service 端口契约 1024..65535）", () => {
-  assert.equal(choosePort(() => PORT_MIN), PORT_MIN);
-  assert.equal(choosePort(() => PORT_MAX - 1), PORT_MAX - 1);
-  assert.ok(PORT_MIN >= 1024 && PORT_MAX <= 65535);
+test("choosePort: 缺省区间 = 回落区间（宿主 service 端口契约 1024..65535）", () => {
+  assert.ok(FALLBACK_PORT_RANGE.min >= 1024 && FALLBACK_PORT_RANGE.max <= 65536);
+  assert.equal(choosePort(() => FALLBACK_PORT_RANGE.min), FALLBACK_PORT_RANGE.min);
+  assert.equal(choosePort(() => FALLBACK_PORT_RANGE.max - 1), FALLBACK_PORT_RANGE.max - 1);
   for (let i = 0; i < 200; i++) {
     const p = choosePort();
-    assert.ok(Number.isInteger(p) && p >= PORT_MIN && p < PORT_MAX, "port=" + p);
+    assert.ok(Number.isInteger(p) && p >= FALLBACK_PORT_RANGE.min && p < FALLBACK_PORT_RANGE.max, "port=" + p);
   }
 });
 
-test("pickPorts: 中继端口与 DSH 内部端口不相等（撞车时继续取）", () => {
-  const seq = [40000, 40000, 40001];
-  let i = 0;
-  const rng = () => seq[i++];
-  const { bridgePort, dshPort } = pickPorts(rng);
-  assert.equal(bridgePort, 40000);
-  assert.equal(dshPort, 40001);
+test("chooseBridgePort: 只选中继端口（DSH 内部端口已交给系统，不再配对避让）", () => {
+  assert.equal(chooseBridgePort(() => 40000, { min: 40000, max: 50000 }), 40000);
   for (let n = 0; n < 100; n++) {
-    const p = pickPorts();
-    assert.notEqual(p.bridgePort, p.dshPort);
-    assert.ok(p.bridgePort >= PORT_MIN && p.bridgePort < PORT_MAX);
-    assert.ok(p.dshPort >= PORT_MIN && p.dshPort < PORT_MAX);
+    const p = chooseBridgePort();
+    assert.ok(p >= FALLBACK_PORT_RANGE.min && p < FALLBACK_PORT_RANGE.max, "port=" + p);
   }
+});
+
+test("parsePortRange: Windows（netsh 的 Start Port / Number of Ports）", () => {
+  const out = "\r\nProtocol tcp Dynamic Port Range\r\n---\r\nStart Port      : 49152\r\nNumber of Ports : 16384\r\n";
+  const r = parsePortRange("win32", () => { throw new Error("不该读文件") }, () => out);
+  assert.deepEqual(r, { min: 49152, max: 65536 });
+});
+
+test("parsePortRange: Linux（ip_local_port_range 两个数）", () => {
+  const r = parsePortRange("linux", () => "32768\t60999\n", () => { throw new Error("不该 spawn") });
+  assert.deepEqual(r, { min: 32768, max: 61000 });
+});
+
+test("parsePortRange: macOS（sysctl 两行两个数）", () => {
+  const r = parsePortRange("darwin", () => { throw new Error("不该读文件") }, () => "49152\n65535\n");
+  assert.deepEqual(r, { min: 49152, max: 65536 });
+});
+
+test("parsePortRange: 输出认不出时返回 null（由调用方回落）", () => {
+  assert.equal(parsePortRange("win32", () => "", () => "乱入的文本"), null);
+  assert.equal(parsePortRange("linux", () => "nonsense", () => ""), null);
+  assert.equal(parsePortRange("darwin", () => "", () => "1"), null);
+});
+
+test("parsePortRange: spawn 抛错时不外泄，返回 null", () => {
+  const r = parsePortRange("win32", () => "", () => { throw new Error("netsh 不存在") });
+  assert.equal(r, null);
+});
+
+test("readPortRange: 本机读出来是一个合法区间（读不到则是回落值）", () => {
+  const r = readPortRange();
+  assert.ok(Number.isInteger(r.min) && Number.isInteger(r.max), JSON.stringify(r));
+  assert.ok(r.min >= 1024 && r.max <= 65536 && r.min < r.max, JSON.stringify(r));
+});
+
+test("choosePort: 可注入区间（不再写死常量）", () => {
+  assert.equal(choosePort((a) => a, { min: 40000, max: 50000 }), 40000);
+  assert.ok(FALLBACK_PORT_RANGE.min >= 1024 && FALLBACK_PORT_RANGE.max <= 65536);
+});
+
+test("buildRuntimeConfig: dshPort 允许 0（系统分配）", () => {
+  const c = buildRuntimeConfig({ dataDir: "/x", dshPort: 0, bridgePort: 40000, bridgeKey: "k".repeat(32), controlKey: "c".repeat(32) });
+  assert.equal(c.dshPort, 0);
 });
 
 test("makeReadyMarker: 前缀 + 随机 opaque；不含换行；两次不同", () => {
@@ -134,8 +171,6 @@ test("classifyRuntimeFailure: 退出码契约归类（packages/host/src/main.ts 
 test("常量契约：entry 相对安装根 / marker 前缀 / 端口区间", () => {
   assert.equal(RUNTIME_ENTRY, "bin/dsh.mjs");
   assert.equal(READY_MARKER, "DSH_READY");
-  assert.equal(PORT_MIN, 38000);
-  assert.equal(PORT_MAX, 52000);
 });
 
 test("私有运行时配置落在宿主临时目录 .runtime-tmp，不另开目录", () => {

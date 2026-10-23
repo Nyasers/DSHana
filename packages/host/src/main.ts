@@ -117,9 +117,14 @@ function probeHttp(port, timeoutMs) {
 /**
  * 等 webServer 真实就绪：① DSH 侧 webServer 服务声称绑定了期望端口（防「别的进程占
  * 端口、探测撞到别人」的虚假 READY——若 DSH bind 失败，其服务端口不会等于期望值）；
- * ② 对 127.0.0.1:<expectedPort>/ 的 HTTP 探测成功。任一不满足即继续等至超时抛错。
+ * ② 对 127.0.0.1:<port>/ 的 HTTP 探测成功。任一不满足即继续等至超时抛错。
+ *
+ * `expectedPort === 0` 表示交给系统选号（DSH webserver 的 `port: 0` 语义）：此时不比对
+ * 具体号，只要求 `webServer.port` 报出非零值且能应答，并把**实际号**返回。
+ * @returns 实际监听端口（自选号时就是系统给的号）。
  */
 async function waitWebReady({ ctx, expectedPort, log }) {
+  const autoPort = expectedPort === 0;
   const deadline = Date.now() + READY_TIMEOUT_MS;
   let lastPort = 0;
   for (;;) {
@@ -131,10 +136,11 @@ async function waitWebReady({ ctx, expectedPort, log }) {
       /* 服务未暴露：继续等 */
     }
     lastPort = port;
-    if (port === expectedPort && (await probeHttp(expectedPort, 1200))) return port;
+    const matched = autoPort ? port > 0 : port === expectedPort;
+    if (matched && (await probeHttp(port, 1200))) return port;
     if (Date.now() >= deadline) {
       throw new Error(
-        `DSH webserver 未在期望端口 ${expectedPort} 就绪（webServer 服务端口=${lastPort || "未暴露"}，HTTP 探测失败）。完整运行日志见宿主 runtime 日志。`,
+        `DSH webserver 未在期望端口 ${autoPort ? "（系统分配）" : expectedPort} 就绪（webServer 服务端口=${lastPort || "未暴露"}，HTTP 探测失败）。完整运行日志见宿主 runtime 日志。`,
       );
     }
     await sleep(250);
@@ -448,8 +454,10 @@ export async function main(argv: string[]): Promise<number> {
   info(`DSH boot 完成（ctx=${!!boot.ctx}，shutdown=${typeof boot.shutdown}）——等待 webserver 真实监听`);
 
   // ---- 6) 就绪门：webServer 服务端口 === 期望端口 且 HTTP 探测成功，才打 readyMarker ----
+  // 期望端口为 0 时交给系统选号，实际号由下面接住（后面的凭据交换与中继上游都用它）。
+  let dshPort = opts.dshPort;
   try {
-    await waitWebReady({ ctx: boot.ctx, expectedPort: opts.dshPort, log: info });
+    dshPort = await waitWebReady({ ctx: boot.ctx, expectedPort: opts.dshPort, log: info });
   } catch (e) {
     const text = errText(e);
     const kind = /未在期望端口/.test(text) ? "port-unreachable" : "boot-failed";
@@ -459,7 +467,7 @@ export async function main(argv: string[]): Promise<number> {
     await shutdown("ready-failed", EXIT.PORT);
     return EXIT.PORT;
   }
-  info(`webserver 已在 127.0.0.1:${opts.dshPort} 真实监听——准备凭据交换与中继`);
+  info(`webserver 已在 127.0.0.1:${dshPort} 真实监听——准备凭据交换与中继`);
   // ---- 7) 桥挂载：订阅 DSH 事件 → Hana task/审批。
   // 先于 readyMarker（App 等到 ready 后才提交 session.create/prompt，事件在 prompt 之后
   // 才发生——先挂订阅无遗漏窗口）。失败不阻断就绪（桥不可用时任务将无终态/审批回投，
@@ -468,7 +476,7 @@ export async function main(argv: string[]): Promise<number> {
   // 官方 connection（BrowserAuth）生效后，宿主 runtime 代理会剥 cookie，App 页/App 主进程都
   // 无法直接携带 DSH 凭据。交换得到 DSH cookie 后由中继统一注入——注册给宿主的 service.port
   // 是中继端口，DSH 真实端口只在中继上游出现（对齐官方样例 hana-dsh 的 bootstrap.mjs）。
-  const upstreamOrigin = "http://127.0.0.1:" + opts.dshPort;
+  const upstreamOrigin = "http://127.0.0.1:" + dshPort;
   let dshCookie = "";
   try {
     const connection = typeof boot.ctx.get === "function" ? boot.ctx.get("connection") : null;
