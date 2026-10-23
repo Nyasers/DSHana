@@ -17,7 +17,7 @@
 //
 // 产物落在 .tmp/overlay-deltas/<tag>/<集成名>/<文件>.diff（.tmp 已忽略，不进仓）。
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { ROOT } from "../shared/root.mts";
@@ -43,6 +43,87 @@ function readUpstream(repoRel: string, tag: string): string | null {
 }
 
 /**
+ * 去掉 git 为「特殊路径」加的双引号与 C 风格转义。
+ * Windows 下 git 认为含反斜杠的路径需要引号，于是写出 `--- "a/C:\\x\\y\\.scratch\\a"`——
+ * 引号里的路径不是原文，必须先还原再比对。
+ */
+function unquoteGitPath(token: string): string {
+  if (token.length < 2 || !token.startsWith('"') || !token.endsWith('"')) return token;
+  const body = token.slice(1, -1);
+  const bytes: number[] = [];
+  const push = (s: string) => bytes.push(...Buffer.from(s, "utf8"));
+  // 单趟扫描：\\t 是「反斜杠 + t」两个字符，不能先还原 \\ 再套 \t，否则变成真正的制表符——
+  // 而 Windows 的 E:\tmp 这类路径正好含 \\t，一回错就再也对不上临时路径。
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i];
+    if (ch !== "\\") {
+      push(ch);
+      continue;
+    }
+    const next = body[i + 1];
+    if (next === undefined) {
+      push("\\");
+      break;
+    }
+    const octal = /^[0-7]{3}$/.exec(body.slice(i + 1, i + 4));
+    if (octal !== null) {
+      // git 对非 ASCII 用八进制转义（\346\226\207…），合起来才是原来的 UTF-8 字节
+      bytes.push(Number.parseInt(octal[0], 8));
+      i += 3;
+      continue;
+    }
+    const mapped: Record<string, string> = { '"': '"', "\\": "\\", t: "\t", n: "\n", r: "\r", b: "\b", f: "\f", v: "\v", a: "\x07" };
+    push(mapped[next] ?? `\\${next}`);
+    i += 1;
+  }
+  return Buffer.from(bytes).toString("utf8");
+}
+
+/** 路径含空白或引号时按 git 的规矩加引号，免得出现 "--- a/my file.ts" 这种半截头部。 */
+function quoteGitPath(path: string): string {
+  return /[\s"]/.test(path) ? `"${path.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"` : path;
+}
+
+/**
+ * 只改写 git 生成的头部行（`diff --git` / `--- ` / `+++`），正文一行不动。
+ *
+ * 早先是对整份文本做 split(a).join(...)：label 里含 a/b 之类的字符会污染，正文里恰好出现临时
+ * 路径字符串也会被改；而且一旦按整串替换，未加引号的 `a/E:\…` 根本匹配不上带引号的头部，
+ * 等于什么都没换（Windows 上实测就是这样）。
+ */
+function relabelDiffPaths(text: string, a: string, b: string, label: string): string {
+  const wanted: Record<"a" | "b", string> = { a, b };
+  const side = (token: string, which: "a" | "b"): string | null => {
+    const raw = unquoteGitPath(token);
+    const target = wanted[which];
+    const bare = raw === target ? raw : raw.startsWith(`${which}/`) && raw.slice(2) === target ? target : null;
+    return bare === null ? null : quoteGitPath(`${which}/${label}`);
+  };
+  return text
+    .split("\n")
+    .map((line) => {
+      if (line.startsWith("--- ")) {
+        const next = side(line.slice(4), "a");
+        return next === null ? line : `--- ${next}`;
+      }
+      if (line.startsWith("+++ ")) {
+        const next = side(line.slice(4), "b");
+        return next === null ? line : `+++ ${next}`;
+      }
+      if (line.startsWith("diff --git ")) {
+        // 两侧可能各自带引号，按 git 的引号规则切，别用 split(" ")
+        const m = /^("(?:[^"\\]|\\.)*"|\S+)\s+("(?:[^"\\]|\\.)*"|\S+)$/.exec(line.slice(11));
+        if (m === null) return line;
+        const left = side(m[1], "a");
+        const right = side(m[2], "b");
+        return left === null || right === null ? line : `diff --git ${left} ${right}`;
+      }
+      return line;
+    })
+    .join("\n");
+}
+
+/**
  * 两段文本的 unified diff（-U6 给足上下文，重放到新上游时锚点更稳）。
  * 用 git diff --no-index 而不是手写差异：它给的是标准格式，能直接 `git apply` 试重放。
  */
@@ -60,12 +141,47 @@ function unifiedDiff(before: string, after: string, label: string, outDir: strin
       maxBuffer: 128 * 1024 * 1024,
     });
   } catch (e) {
-    // 有差异时退出码是 1，输出仍在 stdout；无差异时是空串
-    const stdout = (e as { stdout?: unknown }).stdout;
-    text = typeof stdout === "string" ? stdout : "";
+    // git diff 的退出码：0 无差异，1 有差异（stdout 里就是 diff），2 及以上是真出错。
+    //
+    // 但退出码 1 有两种含义，不能只看它：实测 Windows 下路径读不了时，git 报
+    // `error: Could not access '…'` 而**退出码仍是 1、stdout 为空**。只看退出码会把这个当成
+    // 「有差异但内容为空」，照样写出一份空 diff。所以再加一道：退出码 1 但 stdout 为空、
+    // stderr 有内容时，仍然当出错。
+    const { status, stdout, stderr } = e as { status?: unknown; stdout?: unknown; stderr?: unknown };
+    const errText = typeof stderr === "string" ? stderr.trim() : "";
+    const outText = typeof stdout === "string" ? stdout : "";
+    if (status !== 1 || (outText.length === 0 && errText.length > 0)) {
+      const detail = errText.length > 0 ? errText : "没有 stderr 输出";
+      throw new Error(`git diff --no-index 失败（退出码 ${String(status ?? "未知")}）：${detail}（比对 ${label}）`);
+    }
+    text = outText;
   }
-  // 把临时路径换成有意义的名字，diff 才读得懂
-  return text.split(a).join(`a/${label}`).split(b).join(`b/${label}`);
+  return relabelDiffPaths(text, a, b, label);
+}
+
+/**
+ * 数一份 diff 里新增/删除的行数。
+ *
+ * 只算 hunk 内（`@@` 行之后）行首恰为一个 `+` / `-` 的行：`---` / `+++` 文件头不在 hunk 里，
+ * 天然被排除；正文里以 `++`、`--` 开头的真实变更行则照算——之前用 /^\+(?!\+\+)/ 会把这些
+ * 真变更漏掉，计数偏小。
+ */
+function countChanges(diff: string): { adds: number; dels: number } {
+  const lines = diff.split("\n");
+  if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  let adds = 0;
+  let dels = 0;
+  let inHunk = false;
+  for (const line of lines) {
+    if (line.startsWith("@@")) {
+      inHunk = true;
+      continue;
+    }
+    if (!inHunk) continue;
+    if (line.startsWith("+")) adds++;
+    else if (line.startsWith("-")) dels++;
+  }
+  return { adds, dels };
 }
 
 /** 集成清单：integrations 下每个子目录里的 integration.json。 */
@@ -107,6 +223,10 @@ function main(): void {
     process.exit(2);
   }
   const outRoot = join(OUT_ROOT, tag);
+  // 每次运行前清空本 tag 的产物目录，否则会混进上一次的结果：切到 --bundle 时上一轮的全量
+  // diff 还留着，某个文件变成 MISS 时它的旧 diff 也不会消失——目录看起来「还是齐的」，其实不是。
+  // 只清这一个 tag 的子目录，OUT_ROOT 下别的 tag 的结果要留着。
+  rmSync(outRoot, { recursive: true, force: true });
   let count = 0;
 
   if (!onlyBundle) {
@@ -128,8 +248,7 @@ function main(): void {
         const outPath = join(outDir, f.path.replace(/[\\/]/g, "_") + ".diff");
         mkdirSync(dirname(outPath), { recursive: true });
         writeFileSync(outPath, diff, "utf8");
-        const adds = (diff.match(/^\+(?!\+\+)/gm) ?? []).length;
-        const dels = (diff.match(/^-(?!--)/gm) ?? []).length;
+        const { adds, dels } = countChanges(diff);
         console.log(`${it.dir.padEnd(24)} ${f.path.padEnd(44)} +${adds}/-${dels}`);
         count++;
       }
@@ -156,8 +275,7 @@ function main(): void {
       const outPath = join(outDir, f.path.replace(/[\\/]/g, "_") + ".diff");
       mkdirSync(dirname(outPath), { recursive: true });
       writeFileSync(outPath, diff, "utf8");
-      const adds = (diff.match(/^\+(?!\+\+)/gm) ?? []).length;
-      const dels = (diff.match(/^-(?!--)/gm) ?? []).length;
+      const { adds, dels } = countChanges(diff);
       console.log(`bundle                   ${f.path.padEnd(44)} +${adds}/-${dels}`);
       count++;
     }
