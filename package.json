@@ -37,6 +37,8 @@
     "package": "node scripts/release/pack/index.mts",
     "postpackage": "node scripts/release/clean-cache.mts",
     "install:local": "node scripts/dev/install-local.mts",
+    "dsh:sync-probe": "node scripts/dev/dsh-sync-probe.mts",
+    "dsh:overlay-deltas": "node scripts/dev/overlay-deltas.mts",
     "probe:host": "node scripts/probe/host-surface.mts",
     "smoke:packed": "node tests/e2e/runtime-boot.smoke.mjs --packed",
     "market:entry": "node scripts/release/market-entry.mts",
