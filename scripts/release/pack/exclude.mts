@@ -52,9 +52,9 @@ const STRAYS = ["@deepseek-ai/dsh-skill-office"];
  *
  * 与 `STRAYS` 的区别是它们**不是**表层私货，而是 base / web-app 自己的依赖——所以只有显式
  * 列出来才挡得住。每一条都要求引用它的**行已经不在文档里**（不是 disabled，是删掉）：
- * `integrations/dsh-base` 删掉了 base 那十条，`packages/dsh/app/cordis.patch.yml` 不插
- * web-app 那五条，`integrations/api-remotes` 删掉了模块级 import。包不在树里而行还在，就是
- * boot 期 ERR_MODULE_NOT_FOUND；三者必须成对。
+ * `scripts/release/pack/prune-mirror.mts` 的 `PRUNE_TARGETS` 剃掉 base 那十条，
+ * `packages/dsh/app/cordis.patch.yml` 不插 web-app 那五条，`integrations/api-remotes`
+ * 删掉了模块级 import。包不在树里而行还在，就是 boot 期 ERR_MODULE_NOT_FOUND；三者必须成对。
  *
  * 与 disabled 的区别是本质的：行留着、只标 disabled，loader 不 import 它，但包仍然装在交付
  * 树里、仍然占体积与依赖面。删行 + 不交付包，才是真的「不导入」。

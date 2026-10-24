@@ -40,6 +40,7 @@ import { assertMatchesUpstreamOptional, assertNotDelivered, injectOnDemandCatalo
 import { materializeProdDeps } from "./materialize.mts";
 import { minifyCordisStatics } from "./minify.mts";
 import { applyIntegrations } from "./overlays.mts";
+import { pruneDeliveredPatches } from "./prune-mirror.mts";
 import { applyBootBloom } from "./boot-bloom.mts";
 import { failUsage, targetSpec } from "./targets.mts";
 import { describeTrim, trimDeliveryTree } from "./trim.mts";
@@ -131,6 +132,9 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
     filter: (srcPath) => !/[\/\\]node_modules[\/\\]\./.test(srcPath),
   });
   applyIntegrations(join(pkgDir, "node_modules"));
+  // 剔除行：包已经被 overrides 的 "-" 挡在依赖图外，但上游 patch 里还挂着指向它们的行。
+  // 包不在树里而行还在，boot 期就是 ERR_MODULE_NOT_FOUND。必须在组装台拷贝之后、断言之前。
+  pruneDeliveredPatches(join(pkgDir, "node_modules"));
   applyBootBloom(join(pkgDir, "node_modules"));
   // 被排除的表层 bundle 与它们的私货：物化时已在 overrides 里写成 `"-"`，pnpm 直接把它们从依赖
   // 图里移除——真件没下载、没解包，传递闭包一并消失。这里只核实它们真的不在。
