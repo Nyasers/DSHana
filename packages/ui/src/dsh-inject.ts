@@ -15,7 +15,6 @@
 //
 // 依赖：全部走浏览器原生 API（DOMParser / fetch / WebSocket / <script> 注入），无第三方包。
 
-import { installClipboardShadow } from "./clipboard-shadow.ts";
 import {
   ChunkAssembler,
   MUX_CHUNK_QUERY,
@@ -717,19 +716,16 @@ export function installTransport(
     // integrations/ui-settings-general 靠它做「FP 点设置、主卡打开」。
     ...(bridge && typeof bridge === "object" ? bridge : {}),
   };
-  // 剪贴板影子：壳级全局安装，也必须在 DSH 注入之前。
-  // 理由（实读 dsh-web-frontend 主 bundle 的 writeClipboard）：它在调用时才读
-  // navigator.clipboard?.writeText，而原生一失败就 `return false`，execCommand 兜底只在
-  // writeText **不存在**时才走——嵌入场景里原生被 Permissions-Policy 关死，于是复制永远失败，
-  // 还每次先留一条 [Violation]。影子必须在属性被读到之前就位；桥面已就绪，故放在 __DSHANA__ 之后。
-  const restoreClipboard = installClipboardShadow({ bridge: window.__DSHANA__ });
+  // 剪贴板：不做任何接管。宿主能力 `app/ui/clipboard-write` 已撤（card slot 里本就不允许），
+  // 而嵌入场景的 `navigator.clipboard.writeText` 又被 Permissions-Policy 关死——两条路都不通，
+  // 装影子只会把失败变成“看起来好像做过什么”。交给 DSH 上游 `writeClipboard` 自己如实报错。
+
   // 目录选择器桥：同样必须在 DSH 注入之前（客户端在流程激活时读一次）。SDK 由壳页传入——
   // 它是模块作用域的导入，不在 globalThis 上。
   const restoreDirectoryPicker = installDirectoryPickerBridge(sdk);
   return {
     dispose() {
       try { restoreDirectoryPicker(); } catch { /* 忽略 */ }
-      try { restoreClipboard(); } catch { /* 忽略 */ }
       try { restoreTakeover(); } catch { /* 忽略 */ }
       try { delete window.__DSH_TRANSPORT__; } catch { /* 忽略 */ }
       try { delete window.__DSH_FILE_UPLOAD__; } catch { /* 忽略 */ }

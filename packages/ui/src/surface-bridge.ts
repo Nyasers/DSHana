@@ -415,34 +415,13 @@ export function rememberCardSession(sid: string): Promise<any> {
   return Promise.resolve();
 }
 
-// ---- 剪贴板 ----
-// 宿主 SDK 的 written:false 与异常都 reject 并打印原因，让失败可见（不假装成功）。
-export function clipboardWrite(text: string): Promise<boolean> {
-  if (!hana || !hana.clipboard || typeof hana.clipboard.writeText !== "function") {
-    console.warn("[dshana/clipboard] 宿主 SDK 无 hana.clipboard.writeText（能力 app/ui.clipboard-write 未授予？）");
-    return Promise.reject(new Error("host clipboard API unavailable"));
-  }
-  return Promise.resolve(hana.clipboard.writeText(text)).then(
-    (payload: any) => {
-      if (payload && payload.written === false) {
-        console.warn("[dshana/clipboard] 宿主返回 written:false（复制未发生）：", payload);
-        throw new Error("host clipboard write refused");
-      }
-      return true;
-    },
-    (error: any) => {
-      console.warn("[dshana/clipboard] 宿主能力调用失败：", (error && error.message) || error);
-      throw error instanceof Error ? error : new Error(String(error));
-    },
-  );
-}
-
 // ---- 挂到宿主桥（__DSHANA__）上的跨面接口 ----
 //   通用面 → 任意词表内 kind（publishIntent / readIntentState / registerIntentLanding）；
 //   具名面保留按名的包装，内部坐上面三件：
 //     会话选中 → integrations/ui-session；主面板选中 → ui-sidebar（FP 发射）与 ui-layout（主卡落地）；
 //   会话坐标 → ui-session 的只读面（readPinnedSession）；
-//   剪贴板 → 壳页的 clipboardWrite（宿主能力 clipboard.writeText；DSH 侧那个 client 半已下线）。
+//   剪贴板不在此列：宿主能力 app/ui/clipboard-write 已撤（card slot 里本就不允许），
+//   嵌入场景原生又被 Permissions-Policy 关死，桥这条路不存在了。
 export const SURFACE_API = {
   // 通用面（七个 kind 都走这三件：指名投递 / 读当前值 / 登记落地）
   publishIntent,
@@ -453,5 +432,4 @@ export const SURFACE_API = {
   writeSelection,
   onSelectionChanged,
   readPinnedSession,
-  clipboardWrite,
 };

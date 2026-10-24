@@ -12,13 +12,11 @@
     "app/tasks.manage",
     "app/session.start-turn",
     "app/models.infer",
-    "app/agents.read",
     "app/sessions.read",
     "app/resources.read",
     "app/runtime.execute",
     "app/runtime.local-machine",
     "app/runtime.network",
-    "app/ui.clipboard-write",
     "app/ui.open-external"
   ],
   "network": {
