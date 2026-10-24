@@ -44,6 +44,25 @@ const LOOPBACK_PORT = (value, field) => {
   return n;
 };
 
+/**
+ * DSH 内部 webserver 端口：允许 0，表示「交给系统选号」。
+ *
+ * 上游 webserver 的 config 注释写明 `port: 0` 请求系统分配，而且它把实际号记在
+ * `webServer.port` 上。这个号不需要提前告知宿主（它不是 service.port），所以不用像
+ * bridgePort 那样必须定值。
+ */
+const DSH_PORT = (value, field) => {
+  // 只接受 number 或数字字符串；null/true 之类会被 Number() 悄悄转成 0，必须显式挡住。
+  if (value === null || typeof value === "boolean" || typeof value === "object") {
+    throw new UsageError(`配置项 ${field} 必须是 0..65535 的整数（0 = 系统分配，收到 ${JSON.stringify(value)}）`);
+  }
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isInteger(n) || n < 0 || n > 65535) {
+    throw new UsageError(`配置项 ${field} 必须是 0..65535 的整数（0 = 系统分配，收到 ${JSON.stringify(value)}）`);
+  }
+  return n;
+};
+
 /** 配置归一 + 校验（纯函数，便于单测）。preflight 模式单独一支：不要求端口/凭据，只要求目标 home 与结果路径。 */
 export function normalizeRuntimeConfig(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
@@ -78,9 +97,9 @@ export function normalizeRuntimeConfig(input) {
   if (input.preflight !== undefined && input.preflight !== false) {
     throw new UsageError("配置项 preflight 只能是 true 或省略（收到 " + JSON.stringify(input.preflight) + "）");
   }
-  const dshPort = LOOPBACK_PORT(input.dshPort, "dshPort");
+  const dshPort = DSH_PORT(input.dshPort, "dshPort");
   const bridgePort = LOOPBACK_PORT(input.bridgePort, "bridgePort");
-  if (dshPort === bridgePort) throw new UsageError("配置项 dshPort 与 bridgePort 不能相同");
+  if (dshPort !== 0 && dshPort === bridgePort) throw new UsageError("配置项 dshPort 与 bridgePort 不能相同");
   const bridgeKey = typeof input.bridgeKey === "string" ? input.bridgeKey : "";
   if (bridgeKey.length < 16) throw new UsageError("配置项 bridgeKey 必填且不短于 16 字符");
   const controlKey = typeof input.controlKey === "string" ? input.controlKey : "";

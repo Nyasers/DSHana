@@ -79,12 +79,23 @@ test("parseRuntimeConfig: readyMarker 缺省 DSH_READY", () => {
   assert.equal(o.readyMarker, "DSH_READY");
 });
 
-test("normalizeRuntimeConfig: 端口契约——0/负/越界/非数/dshPort==bridgePort 均拒绝", () => {
+test("normalizeRuntimeConfig: bridgePort 拒 0/负/越界/非数", () => {
   for (const bad of [0, -1, 65536, 1.5, "abc", null]) {
     assert.throws(() => normalizeRuntimeConfig({ ...GOOD, bridgePort: bad }), (e) => e instanceof UsageError, "bridgePort=" + String(bad));
+  }
+});
+
+test("normalizeRuntimeConfig: dshPort 允许 0（交给系统选号），其余非法值仍拒", () => {
+  assert.equal(normalizeRuntimeConfig({ ...GOOD, dshPort: 0 }).dshPort, 0);
+  for (const bad of [-1, 65536, 1.5, "abc", null]) {
     assert.throws(() => normalizeRuntimeConfig({ ...GOOD, dshPort: bad }), (e) => e instanceof UsageError, "dshPort=" + String(bad));
   }
+});
+
+test("normalizeRuntimeConfig: dshPort 显式给值时不与 bridgePort 相同", () => {
   assert.throws(() => normalizeRuntimeConfig({ ...GOOD, dshPort: GOOD.bridgePort }), (e) => e instanceof UsageError && /不能相同/.test(e.message));
+  // 0 不受这条约束：系统分配时无从得知会不会撞。
+  assert.equal(normalizeRuntimeConfig({ ...GOOD, dshPort: 0 }).dshPort, 0);
 });
 
 test("normalizeRuntimeConfig: dataDir 必填", () => {
