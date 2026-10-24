@@ -1,6 +1,6 @@
 {
   "name": "@dshana/dsh-app",
-  "version": "1.2.3+dsh-0.2.1-rc.3",
+  "version": "1.2.4+dsh-0.2.1-rc.3",
   "private": true,
   "description": "The DSH composition layer for DSHana: the web surface on top of dsh-base.",
   "license": "MIT",
