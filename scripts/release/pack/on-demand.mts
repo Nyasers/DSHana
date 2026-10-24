@@ -31,6 +31,7 @@ import fs from "fs-extra";
 import { join } from "node:path";
 
 import { listMirrorFiles, readUpstreamFromMirror } from "../../integrations/mirror.mts";
+import { ROOT } from "../../shared/paths.mts";
 import { dshPin } from "../../shared/version.mts";
 
 /** 安装锚点（内核包）：交付面依赖与 shipped 判定都读它。 */
@@ -39,23 +40,31 @@ const ANCHOR_PACKAGE = "@deepseek-ai/dsh";
 const APP_BOOT_PACKAGE = "@deepseek-ai/dsh-app-boot";
 
 /**
- * 改成按需安装的实验性 bundle。名单必须与上游 OPTIONAL_BUNDLES 一一对应，
- * 少了或多了都在打包时当场报（见 assertMatchesUpstreamOptional）。
+ * 改成按需安装的实验性 bundle：从根 `pnpm-workspace.yaml` 的 `excluded-on-demand`
+ * 标记段读（那段是事实源，与本地 install、打包工位共用同一份）。
+ *
+ * 名单必须与上游 OPTIONAL_BUNDLES 一一对应，少了或多了都在打包时当场报
+ * （见 assertMatchesUpstreamOptional）。不声明 dsh.bundle / 不在上游可选名单里的包
+ * 不该写在那个段里：它们没有装回路径。
+ * @param rootDir - 仓库根（测试可换）
+ * @returns 包名数组（保持 yaml 里的顺序）
  */
-export const ON_DEMAND_BUNDLES: readonly string[] = [
-  "@deepseek-ai/dsh-experimental-session-search",
-  "@deepseek-ai/dsh-experimental-ralph-bundle",
-  "@deepseek-ai/dsh-experimental-terminal-bundle",
-  "@deepseek-ai/dsh-experimental-badge-skill-bundle",
-  "@deepseek-ai/dsh-experimental-session-titles-bundle",
-  "@deepseek-ai/dsh-experimental-agent-team-profile",
-  "@deepseek-ai/dsh-experimental-voice-input-bundle",
-  "@deepseek-ai/dsh-experimental-cot-translation-bundle",
-  "@deepseek-ai/dsh-experimental-auto-review",
-  "@deepseek-ai/dsh-experimental-inspector-profile",
-  "@deepseek-ai/dsh-experimental-plugin-market-bundle",
-  "@deepseek-ai/dsh-experimental-tool-worktree",
-];
+export function onDemandBundles(rootDir = ROOT): readonly string[] {
+  const text = fs.readFileSync(join(rootDir, "pnpm-workspace.yaml"), "utf8");
+  const out: string[] = [];
+  let inBlock = false;
+  for (const line of text.split("\n")) {
+    if (/^\s*# >>> excluded-on-demand\s*$/.test(line)) {
+      inBlock = true;
+      continue;
+    }
+    if (/^\s*# <<< excluded-on-demand\s*$/.test(line)) break;
+    if (!inBlock) continue;
+    const entry = /^\s+"(@[^"]+)":\s*"-"\s*$/.exec(line);
+    if (entry !== null) out.push(entry[1]);
+  }
+  return out;
+}
 
 /**
  * 上游 app-boot 源码里那份 OPTIONAL_BUNDLES（判据来源，不另维护第二份名单）。
@@ -84,7 +93,7 @@ export function upstreamOptionalBundles(tag = `dsh-v${dshPin()}`): string[] {
  */
 export function assertMatchesUpstreamOptional(): void {
   const upstream = new Set(upstreamOptionalBundles());
-  const ours = new Set(ON_DEMAND_BUNDLES);
+  const ours = new Set(onDemandBundles());
   const missing = [...upstream].filter((n) => !ours.has(n));
   const extra = [...ours].filter((n) => !upstream.has(n));
   if (missing.length || extra.length) {
@@ -111,7 +120,7 @@ export function unshipFromAnchor(nodeModulesDir: string): string[] {
   const manifest = fs.readJSONSync(manifestPath);
   const dependencies = { ...(manifest.dependencies ?? {}) };
   const dropped: string[] = [];
-  for (const name of ON_DEMAND_BUNDLES) {
+  for (const name of onDemandBundles()) {
     if (dependencies[name] === undefined) continue;
     delete dependencies[name];
     dropped.push(name);
@@ -136,7 +145,7 @@ export function unshipFromAnchor(nodeModulesDir: string): string[] {
  * @param nodeModulesDir 交付树的 node_modules
  */
 export function assertNotDelivered(nodeModulesDir: string): void {
-  const present = ON_DEMAND_BUNDLES.filter((n) => fs.pathExistsSync(join(nodeModulesDir, n, "package.json")));
+  const present = onDemandBundles().filter((n) => fs.pathExistsSync(join(nodeModulesDir, n, "package.json")));
   if (present.length > 0) {
     throw new Error(
       `按需 bundle 仍在交付树里（stub 通道漏了这几条）：${present.join("、")}\n`
@@ -255,11 +264,11 @@ export function injectOnDemandCatalog(nodeModulesDir: string, tag = `dsh-v${dshP
   const openIndex = text.indexOf("[", at + marker.length);
   const endIndex = findArrayEnd(text, openIndex);
   const existing = text.slice(openIndex, endIndex + 1);
-  const already = ON_DEMAND_BUNDLES.filter((n) => existing.includes(`"${n}"`));
+  const already = onDemandBundles().filter((n) => existing.includes(`"${n}"`));
   if (already.length > 0) {
     throw new Error(`catalog 里已经有按需 bundle（${already.join("、")}）：上游把它们收进 catalog 了，本步骤该撤。`);
   }
-  const entries = ON_DEMAND_BUNDLES.map((name) => {
+  const entries = onDemandBundles().map((name) => {
     const meta = metaOf(name, tag);
     return `{\n\tpackageName: ${JSON.stringify(name)},\n\tmeta: {\n\t\ttitle: ${JSON.stringify(meta.title)},\n\t\tdescription: ${JSON.stringify(meta.description)},\n\t\ticon: ${JSON.stringify(meta.icon)}\n\t}\n}`;
   });
