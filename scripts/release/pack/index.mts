@@ -36,7 +36,7 @@ import { manifestPath } from "../../shared/contract-assets.mts";
 import { assertBundleArtifacts, assertCordisArtifacts, assertDeclarationTexts, assertNoProductPackage, assertSkillReferences, assertUiTree, assertBootBloom } from "./assert.mts";
 import { declareInstallationBundle, declareInstallationPlugins } from "./bundle-deps.mts";
 import { excludedPackages, requiredPackages } from "./exclude.mts";
-import { assertMatchesUpstreamOptional, assertNotDelivered, injectOnDemandCatalog, unshipFromAnchor, ON_DEMAND_BUNDLES } from "./on-demand.mts";
+import { assertMatchesUpstreamOptional, assertNotDelivered, injectOnDemandCatalog, onDemandBundles, unshipFromAnchor } from "./on-demand.mts";
 import { materializeProdDeps } from "./materialize.mts";
 import { minifyCordisStatics } from "./minify.mts";
 import { applyIntegrations } from "./overlays.mts";
@@ -151,7 +151,7 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
   assertNotDelivered(join(pkgDir, "node_modules"));
   unshipFromAnchor(join(pkgDir, "node_modules"));
   injectOnDemandCatalog(join(pkgDir, "node_modules"));
-  console.log(`[pack] 按需面 ${ON_DEMAND_BUNDLES.length} 个 bundle 不在交付树（每个安装省下它们与整份传递闭包）`);
+  console.log(`[pack] 按需面 ${onDemandBundles().length} 个 bundle 不在交付树（每个安装省下它们与整份传递闭包）`);
   // 交付面裁剪：依赖树里运行时不读的东西（测试目录、包内源码与类型声明、构建元数据、文档与夹具）。
   // 规则与判据见 trim.mts 头注；只动 node_modules，跳过 @dshana。放在必需产物断言之前，
   // 断言因此检查的是裁完的树（裁过头会当场抛错）。
