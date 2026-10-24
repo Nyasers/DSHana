@@ -25,9 +25,6 @@
 //      被拉进来（语音模型、DevTools 前端那一大块因此一并消失）。
 //   2) 不需要第二步：树上本来就没有它们，所以没有要删的占位。
 //
-// 曾经用的是“生成空 stub 包 → override 成 file: → 组装时再把 stub 删掉”：前半段与 `-` 效果相同，
-// 后半段是补上“先装后删”的尾巴。`-` 把两步并成一步，也不用在 .cache 里现造 42 个包。
-//
 // ③④ 与组合层是成对的：包里不留件，packages/dsh/app/cordis.patch.yml 就必须把引用它的行按 id
 // 关掉（loader 对 disabled 的行连 import 都不发），integrations/api-remotes 则把模块级 import
 // 删干净。④ 另要摘内核 dependencies 并注入 app-boot 的离线 catalog（否则页面标「内置」或根本
