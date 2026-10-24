@@ -23,7 +23,7 @@ overrides:
   "@hana/plugin-protocol": "file:vendor/hana-app-sdk/hana-plugin-protocol-0.0.0.tgz"
   "@hana/plugin-components": "file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz"
 
-  # 本形态不交付的产品面
+  # 不使用的产品面
   "@deepseek-ai/dsh-acp-app": "-"
   "@deepseek-ai/dsh-api-account-controller": "-"
   "@deepseek-ai/dsh-client-product-analytics": "-"
@@ -56,6 +56,7 @@ overrides:
   "@deepseek-ai/dsh-subagent-codex": "-"
   "@deepseek-ai/dsh-web-app": "-"
 
+  # 按需安装的包
   # >>> excluded-on-demand
   "@deepseek-ai/dsh-experimental-agent-team-profile": "-"
   "@deepseek-ai/dsh-experimental-auto-review": "-"
@@ -72,10 +73,8 @@ overrides:
   # <<< excluded-on-demand
 
   # 安全修复
-
   ## CVE-2023-54404
   zod: 4.6.7
-
   ## CVE-2026-111769
   "@modelcontextprotocol/client": 2.3.1
 
