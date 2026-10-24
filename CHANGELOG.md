@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.2.4+dsh-0.2.1-rc.3](https://github.com/Nyasers/DSHana/compare/v1.2.3%2Bdsh-0.2.1-rc.2...v1.2.4%2Bdsh-0.2.1-rc.3) (2026-10-24)
+
+### Features
+
+* **deps:** 42 个不交付的包在根级 override 成 "-" ([498c418](https://github.com/Nyasers/DSHana/commit/498c41832c350d40b94a03b55486f7d7070fcf70))
+* **dev:** 补两个跟进上游用的脚本（双重同步判定、overlay delta 打点） ([9cfda4e](https://github.com/Nyasers/DSHana/commit/9cfda4e82dcf90896198ec3c42861402a28755b8))
+* **runtime:** 端口探针经子进程向系统要号（中继端口不再盲抽） ([6d9f4a8](https://github.com/Nyasers/DSHana/commit/6d9f4a87d5640d209a1c4cce9f29ccd95f42d447))
+
+### Bug Fixes
+
+* **api-remotes:** 摘掉指向 dsh-office-to-pdf 的模块级引用 ([05f4850](https://github.com/Nyasers/DSHana/commit/05f485074734db733208ca21dbf993afe0aa0aaf))
+* **deps:** 两条 override 抬掉 CI 卡住的 high 漏洞 ([4b77c8b](https://github.com/Nyasers/DSHana/commit/4b77c8b9b7a71237cb1eb90e652916b1d44a70f4)), references [#320](https://github.com/Nyasers/DSHana/issues/320)
+* **deps:** undici 抬到 8.12.2，解掉 CI 的 high 门槛 ([5879edd](https://github.com/Nyasers/DSHana/commit/5879edd885689cce1110b9dd9cb050e60e5be11a))
+* **deps:** undici 抬到 8.12.2，解掉 CI 的 high 门槛 ([0475016](https://github.com/Nyasers/DSHana/commit/047501698f23ca74e0a1d97ed75f5edbb78f9118))
+* **deps:** undici 抬到 8.12.2，解掉 CI 的 high 门槛 ([fc8475a](https://github.com/Nyasers/DSHana/commit/fc8475a0cffcb1c0075e2f3aef4e76c9cfb60bac))
+* **deps:** undici 抬到 8.12.2，解掉 CI 的 high 门槛 ([797269f](https://github.com/Nyasers/DSHana/commit/797269fdfc4d56b2d52863923ce38d4b14cfbdd9))
+* **dev:** overlay-deltas 四处与 diff 语义对齐（含 Windows 头部路径） ([235704d](https://github.com/Nyasers/DSHana/commit/235704dd84e13c5882652d7be6334eadca679c75)), references [#319](https://github.com/Nyasers/DSHana/issues/319)
+* **runtime:** DSH 内部端口改由系统分配，中继端口读系统动态段 ([6a49a7f](https://github.com/Nyasers/DSHana/commit/6a49a7fc4d32ada14fef632d7994145fcdea8a28))
+
 ## [1.2.3+dsh-0.2.1-rc.2](https://github.com/Nyasers/DSHana/compare/v1.2.2%2Bdsh-0.2.1-rc.2...v1.2.3%2Bdsh-0.2.1-rc.2) (2026-10-22)
 
 ## [1.2.2+dsh-0.2.1-rc.2](https://github.com/Nyasers/DSHana/compare/v1.2.1%2Bdsh-0.2.1-rc.2...v1.2.2%2Bdsh-0.2.1-rc.2) (2026-10-20)
