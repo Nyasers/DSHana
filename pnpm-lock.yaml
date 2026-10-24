@@ -2655,8 +2655,8 @@ packages:
     engines: {node: ^12.0.0 || ^14.0.0 || >=16.0.0}
 
   '@hana/app-sdk@file:vendor/hana-app-sdk/hana-app-sdk.tgz':
-    resolution: {integrity: sha512-r1p36nUgGGPB9yFZmiIC2fky26YFfH/D0phGZdM2PKncz3ezAl3zbkvMjdsh/ZF5TCkfMb1fA2J47yrhDLvccg==, tarball: file:vendor/hana-app-sdk/hana-app-sdk.tgz}
-    version: 1.1.35-beta
+    resolution: {integrity: sha512-SQtP0VozGH3cIVpFph/xGhGasXFtxupgoVYX8RvWnzzDgoKr9C4DSsm1cPJ+qU5zGhcFHtowsfJrKRD4l6fufQ==, tarball: file:vendor/hana-app-sdk/hana-app-sdk.tgz}
+    version: 1.1.111-beta
     peerDependencies:
       react: '>=19'
       react-dom: '>=19'
@@ -2667,18 +2667,18 @@ packages:
         optional: true
 
   '@hana/plugin-components@file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz':
-    resolution: {integrity: sha512-y8w7fAHaJXlX5dFi3rvSFMJXK7yv70deOxls9Oz3GBa8BC1QuhHotf4XHL6Q2bSevlMEPiSa/SLzXbAmboV1jA==, tarball: file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz}
+    resolution: {integrity: sha512-JML5dgHz6iSa6oq8QRoLCs87xzl4vNPrjImY7RUEVu3Cc3ECxzhYYXqPd9UDpS416xn6dgqaakqnAFNKnRVXAQ==, tarball: file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz}
     version: 0.0.0
     peerDependencies:
       react: '>=19'
       react-dom: '>=19'
 
   '@hana/plugin-protocol@file:vendor/hana-app-sdk/hana-plugin-protocol-0.0.0.tgz':
-    resolution: {integrity: sha512-xGyWG1dT+lMv+BvSAb2QEVib1JHGVGOrDEniRgnkBuMxhx0X8ogSqTd7u/jKoJ9IESxy4FQVldkWJz8cFebrHA==, tarball: file:vendor/hana-app-sdk/hana-plugin-protocol-0.0.0.tgz}
+    resolution: {integrity: sha512-B0guUbCjnbQmpSw7S1rtXiGqB9WMuYofvzmEZC3KfYbBEXbV0Ct+m0sVJ2eckLaLa8eRVmwyZBrGRefR4x9AbQ==, tarball: file:vendor/hana-app-sdk/hana-plugin-protocol-0.0.0.tgz}
     version: 0.0.0
 
   '@hana/plugin-sdk@file:vendor/hana-app-sdk/hana-plugin-sdk-0.0.0.tgz':
-    resolution: {integrity: sha512-fqkDkCBoVPWoSUptBVOd48jawlUxZ3R/iGHvP/qbZX+YH1UCOD9Dvn0pkBP4ftXvpTxs4zVVi7/OMjZllPc7VA==, tarball: file:vendor/hana-app-sdk/hana-plugin-sdk-0.0.0.tgz}
+    resolution: {integrity: sha512-9eyjLIuIFdyUTlnPFDbZzk+ECV/CyM/xcMcozMHQHOTkZYdBdOq5qx5YixlGl+KAOBXOgQ8ABSeGITa3JhucZw==, tarball: file:vendor/hana-app-sdk/hana-plugin-sdk-0.0.0.tgz}
     version: 0.0.0
     bundledDependencies:
       - '@hana/plugin-protocol'
