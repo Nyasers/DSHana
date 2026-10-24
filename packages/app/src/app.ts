@@ -32,8 +32,6 @@ import * as dshanaTool from "@dshana/tools/index.ts";
 import { registerDshanaRoutes, defaultDshanaRouteDeps } from "@dshana/tools/routes/dshana-routes.ts";
 // 宿主模型/提供商变更 → 受管 runtime 重拉目录（见 packages/models/src/model-sync.ts 的动因）
 import { installHostModelSync } from "@dshana/models/model-sync.ts";
-// 默认模型对账：DSH 缺省模型必须落在宿主目录里（见 packages/models/src/model-default-guard.ts 的动因）
-import { installModelDefaultGuard, runModelDefaultGuard } from "@dshana/models/model-default-guard.ts";
 
 // ---- 统一日志：只走宿主 ctx.logger ----
 // App 侧不写自己的文件日志；ctx.logger 缺失（旧 host）或宿主抛错时回落 stderr。
@@ -130,12 +128,6 @@ export function apply(ctx) {
     try {
       Promise.resolve()
         .then(() => ensureManagedRuntime({}))
-        .then(() => runModelDefaultGuard(ctx, log))
-        .then((r) => {
-          if (r && r.status === "repaired") {
-            log("info", "apply 自动链：默认模型已按宿主目录对账修正（" + ((r.next && (r.next.provider + "/" + r.next.model)) || "") + "）");
-          }
-        })
         .catch((e) => {
           log("warn", "apply 自动链启动 DSH runtime 失败（状态经 boot-state 展示，可手动重试）：" + ((e as any)?.message || e));
         });
@@ -153,23 +145,12 @@ export function apply(ctx) {
     log("warn", "模型变更订阅安装异常（忽略，改宿主提供商需重启 runtime 生效）：" + ((e as any)?.message || e));
   }
 
-  // ---- 默认模型对账（见 packages/models/src/model-default-guard.ts 的动因）：runtime 就绪那一次在自动链里跑，
-  //      此后跟随宿主的 models-changed。缺省模型不能写死在 roster patch 里（宿主配了哪些提供商
-  //      每台 Hana 不同），只能按运行时事实修：现值不在宿主目录里就换成目录里第一条可服务的。
-  let uninstallModelGuard: () => void = () => {};
-  try {
-    uninstallModelGuard = installModelDefaultGuard(ctx, log);
-  } catch (e) {
-    log("warn", "默认模型对账订阅安装异常（忽略）：" + ((e as any)?.message || e));
-  }
-
   // 返回 disposer：卸载/重载清理（停止受管 DSH runtime——若已启动；幂等）
   let disposed = false;
   return () => {
     if (disposed) return;
     disposed = true;
     try { if (typeof uninstallModelSync === "function") uninstallModelSync(); } catch { /* 忽略 */ }
-    try { if (typeof uninstallModelGuard === "function") uninstallModelGuard(); } catch { /* 忽略 */ }
     try { if (typeof unregisterTool === "function") unregisterTool(); } catch { /* 忽略 */ }
     try { if (typeof unregisterRoutes === "function") unregisterRoutes(); } catch { /* 忽略 */ }
     // 受管 runtime 收尾：停 runtime + 清单例（Windows 依赖更新/App 卸载前须先停，见
