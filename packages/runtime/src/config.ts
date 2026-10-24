@@ -8,11 +8,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-// 注意：本模块**不读 DSH 的默认模型**。那份值的正主是 DSH 的 settings 段 `agent-default-model`，
-// 读写都经 DSH 自己的 settings 服务（见 packages/models/src/model-settings.ts）；
-// 而 DSH_HOME/settings.yaml 在本版 DSH 里已不存在（settings 服务启动时把它整份迁进 profile，
-// 并把文档改名为 settings.yaml.imported，见上游 settings/settings 的 importLegacyDocument）。
-// 任何对该文件的读都不是那条路的事实源，也不该由本模块承担。
+// 注意：本模块**不读也不写 DSH 的默认模型**。那份值的正主是 DSH 自己（settings 段
+// `agent-default-model`），只对「在 DSH 界面里直接开出来的会话」有意义；本 App 的会话模型
+// 决策另有一套（见 packages/models/src/caller-model.ts），两边不交叉。
 
 // reasoningEffort 解析（没有全局配置，只接受工具显式参数，无配置回退；
 // 不传时由 dsh 默认处理）。返回显式值或 null。
