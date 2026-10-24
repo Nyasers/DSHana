@@ -23,16 +23,12 @@ overrides:
   "@hana/plugin-protocol": "file:vendor/hana-app-sdk/hana-plugin-protocol-0.0.0.tgz"
   "@hana/plugin-components": "file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz"
 
-  # 本形态不交付的产品面：包不进依赖图（`-` = 不下载、不解包，传递闭包一并消失）。
-  # 名单与 scripts/release/pack/exclude.mts 的 excludedPackages() 对应。
-  "@deepseek-ai/dsh-otel": "-"
-  "@deepseek-ai/dsh-session-telemetry": "-"
-  "@deepseek-ai/dsh-session-telemetry-otel": "-"
-  "@deepseek-ai/dsh-host-product-telemetry-otel": "-"
+  # 不使用的产品面
   "@deepseek-ai/dsh-acp-app": "-"
   "@deepseek-ai/dsh-api-account-controller": "-"
   "@deepseek-ai/dsh-client-product-analytics": "-"
   "@deepseek-ai/dsh-client-ui-deepseek-model-label-1017": "-"
+  "@deepseek-ai/dsh-client-ui-entry-customization": "-"
   "@deepseek-ai/dsh-client-ui-message-feedback": "-"
   "@deepseek-ai/dsh-client-ui-settings-account": "-"
   "@deepseek-ai/dsh-client-ui-settings-session-log": "-"
@@ -40,6 +36,28 @@ overrides:
   "@deepseek-ai/dsh-deepseek-account": "-"
   "@deepseek-ai/dsh-deepseek-account-platform": "-"
   "@deepseek-ai/dsh-deepseek-llm-api-extensions": "-"
+  "@deepseek-ai/dsh-headless": "-"
+  "@deepseek-ai/dsh-host-product-telemetry-otel": "-"
+  "@deepseek-ai/dsh-llm-deepseek": "-"
+  "@deepseek-ai/dsh-llm-deepseek-account": "-"
+  "@deepseek-ai/dsh-llm-deepseek-api-key": "-"
+  "@deepseek-ai/dsh-llm-pi-ai": "-"
+  "@deepseek-ai/dsh-message-feedback": "-"
+  "@deepseek-ai/dsh-otel": "-"
+  "@deepseek-ai/dsh-plugin-package-inventory-deepseek": "-"
+  "@deepseek-ai/dsh-sdk-app": "-"
+  "@deepseek-ai/dsh-sdk-minimal": "-"
+  "@deepseek-ai/dsh-session-log-deepseek": "-"
+  "@deepseek-ai/dsh-session-log-export": "-"
+  "@deepseek-ai/dsh-session-telemetry": "-"
+  "@deepseek-ai/dsh-session-telemetry-otel": "-"
+  "@deepseek-ai/dsh-skill-office": "-"
+  "@deepseek-ai/dsh-subagent-claude-code": "-"
+  "@deepseek-ai/dsh-subagent-codex": "-"
+  "@deepseek-ai/dsh-web-app": "-"
+
+  # 按需安装的包
+  # >>> excluded-on-demand
   "@deepseek-ai/dsh-experimental-agent-team-profile": "-"
   "@deepseek-ai/dsh-experimental-auto-review": "-"
   "@deepseek-ai/dsh-experimental-badge-skill-bundle": "-"
@@ -52,36 +70,15 @@ overrides:
   "@deepseek-ai/dsh-experimental-terminal-bundle": "-"
   "@deepseek-ai/dsh-experimental-tool-worktree": "-"
   "@deepseek-ai/dsh-experimental-voice-input-bundle": "-"
-  "@deepseek-ai/dsh-headless": "-"
-  "@deepseek-ai/dsh-llm-deepseek": "-"
-  "@deepseek-ai/dsh-llm-deepseek-account": "-"
-  "@deepseek-ai/dsh-llm-deepseek-api-key": "-"
-  "@deepseek-ai/dsh-llm-pi-ai": "-"
-  "@deepseek-ai/dsh-message-feedback": "-"
-  "@deepseek-ai/dsh-plugin-package-inventory-deepseek": "-"
-  "@deepseek-ai/dsh-sdk-app": "-"
-  "@deepseek-ai/dsh-sdk-minimal": "-"
-  "@deepseek-ai/dsh-session-log-deepseek": "-"
-  "@deepseek-ai/dsh-session-log-export": "-"
-  "@deepseek-ai/dsh-skill-office": "-"
-  "@deepseek-ai/dsh-subagent-claude-code": "-"
-  "@deepseek-ai/dsh-subagent-codex": "-"
-  "@deepseek-ai/dsh-web-app": "-"
+  # <<< excluded-on-demand
 
-  # 安全修复：dsh-mcp-client 把 @modelcontextprotocol/client 钉在 2.2.0（精确版，非范围），
-  # 而 2.2.0 落在 GHSA-6prh-2h8m-c8cw（>=2.0.0 <2.3.0）的受影响区间。抬到 2.3.1：同 major，
-  # 进线只有 eventsource-parser ^3.0.0 → ^3.0.8 与核心包跟随，无 peer 约束、无断代。
-  "@modelcontextprotocol/client": 2.3.1
-
-  # 安全修复：dsh-agent-loop / dsh-llm 把 zod 钉在 4.4.3（精确版，非范围），而 4.4.3 落在
-  # GHSA-mrhx-c7xc-m3w5（<4.6.6，数组校验无上限地累积 issue 可致内存耗尽）的受影响区间。
-  # 树里另有 4.6.7（dsh-acp 链路在用），同 major 内抬到补丁版；等上游改声明后可评估移除。
+  # 安全修复
+  ## CVE-2023-54404
   zod: 4.6.7
-
-  # 安全修复：dsh-http-proxy 把 undici 钉在 8.11.2（精确版，非范围），而 8.11.2 落在
-  # GHSA-xjj6-f33q-929c（>=8.0.0 <8.12.2，content-encoding 未处理错误可致 DoS）的区间。
-  # 同 major 内抬到 8.12.2；进线只有内部跟随，无 peer 约束。
+  ## CVE-2026-109869
   undici: 8.12.2
+  ## CVE-2026-111769
+  "@modelcontextprotocol/client": 2.3.1
 
 # 打包目标设置
 # >>> pack-targets

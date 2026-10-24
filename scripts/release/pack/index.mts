@@ -36,10 +36,11 @@ import { manifestPath } from "../../shared/contract-assets.mts";
 import { assertBundleArtifacts, assertCordisArtifacts, assertDeclarationTexts, assertNoProductPackage, assertSkillReferences, assertUiTree, assertBootBloom } from "./assert.mts";
 import { declareInstallationBundle, declareInstallationPlugins } from "./bundle-deps.mts";
 import { excludedPackages, requiredPackages } from "./exclude.mts";
-import { assertMatchesUpstreamOptional, assertNotDelivered, injectOnDemandCatalog, unshipFromAnchor, ON_DEMAND_BUNDLES } from "./on-demand.mts";
+import { assertMatchesUpstreamOptional, assertNotDelivered, injectOnDemandCatalog, onDemandBundles, unshipFromAnchor } from "./on-demand.mts";
 import { materializeProdDeps } from "./materialize.mts";
 import { minifyCordisStatics } from "./minify.mts";
 import { applyIntegrations } from "./overlays.mts";
+import { pruneDeliveredPatches } from "./prune-mirror.mts";
 import { applyBootBloom } from "./boot-bloom.mts";
 import { failUsage, targetSpec } from "./targets.mts";
 import { describeTrim, trimDeliveryTree } from "./trim.mts";
@@ -131,6 +132,9 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
     filter: (srcPath) => !/[\/\\]node_modules[\/\\]\./.test(srcPath),
   });
   applyIntegrations(join(pkgDir, "node_modules"));
+  // 剔除行：包已经被 overrides 的 "-" 挡在依赖图外，但上游 patch 里还挂着指向它们的行。
+  // 包不在树里而行还在，boot 期就是 ERR_MODULE_NOT_FOUND。必须在组装台拷贝之后、断言之前。
+  pruneDeliveredPatches(join(pkgDir, "node_modules"));
   applyBootBloom(join(pkgDir, "node_modules"));
   // 被排除的表层 bundle 与它们的私货：物化时已在 overrides 里写成 `"-"`，pnpm 直接把它们从依赖
   // 图里移除——真件没下载、没解包，传递闭包一并消失。这里只核实它们真的不在。
@@ -147,7 +151,7 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
   assertNotDelivered(join(pkgDir, "node_modules"));
   unshipFromAnchor(join(pkgDir, "node_modules"));
   injectOnDemandCatalog(join(pkgDir, "node_modules"));
-  console.log(`[pack] 按需面 ${ON_DEMAND_BUNDLES.length} 个 bundle 不在交付树（每个安装省下它们与整份传递闭包）`);
+  console.log(`[pack] 按需面 ${onDemandBundles().length} 个 bundle 不在交付树（每个安装省下它们与整份传递闭包）`);
   // 交付面裁剪：依赖树里运行时不读的东西（测试目录、包内源码与类型声明、构建元数据、文档与夹具）。
   // 规则与判据见 trim.mts 头注；只动 node_modules，跳过 @dshana。放在必需产物断言之前，
   // 断言因此检查的是裁完的树（裁过头会当场抛错）。
