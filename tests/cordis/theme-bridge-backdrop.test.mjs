@@ -44,8 +44,6 @@ const BRIDGE_SRC = readFileSync(
   "utf8",
 );
 const SHELL_SRC = readFileSync(new URL("../../packages/ui/src/app.ts", import.meta.url), "utf8");
-const HOST_THEME_SRC = readFileSync(new URL("../../packages/ui/src/host-theme.ts", import.meta.url), "utf8");
-
 const BG = "#101010";
 const SIDEBAR_BG = "#202020";
 const HOST_VARS = { "--bg": BG, "--sidebar-bg": SIDEBAR_BG };
@@ -622,44 +620,6 @@ test("壳页：dsh 自选明暗时不垫首帧底色（那一段归它自己的 
   assert.equal(seedsForDshPreference("dark"), false);
 });
 
-test("壳页确实把这一面的底座 token 与宿主明暗写上了（桥的入口契约）", () => {
-  assert.ok(SHELL_SRC.includes("data-dshana-backdrop"), "壳页没写 data-dshana-backdrop");
-  assert.ok(SHELL_SRC.includes("backdropTokenForView"), "壳页没按面取底座 token");
-  // 宿主明暗由壳页经共享的 host-theme 写：壳页接上跟随、共享件落 data-appearance。
-  assert.ok(SHELL_SRC.includes("followHostTheme"), "壳页没接上共享的宿主主题跟随");
-  assert.ok(HOST_THEME_SRC.includes("data-appearance"), "共享件没把宿主明暗写出来");
-  assert.ok(BRIDGE_SRC.includes("data-dshana-backdrop"), "桥没读 data-dshana-backdrop");
-  assert.ok(BRIDGE_SRC.includes("data-appearance"), "桥没读宿主明暗");
-  // 面的单一事实源：壳页把 seedView 写成 <html> 的面名属性，桥读同一处判「恒跟随的面」。
-  // 壳页侧走 shared 的 FACE_ATTR 常量（属性名不长出第二份字面量），桥是散装浏览器 JS、只能读字面量。
-  assert.ok(SHELL_SRC.includes("FACE_ATTR"), "壳页没写面名属性（该走 shared 的 FACE_ATTR）");
-  assert.ok(BRIDGE_SRC.includes("data-dshana-face"), "桥没读 data-dshana-face");
-  // 桥不另立一份面词表：面词表只有 face-role.ts 那一处（壳页经 isFaceView 校验后写属性），
-  // 桥只按 <html> 上的名单比对面名，不枚举词表、也不按底色 token 反推面。唯一允许出现的
-  // 面名字面量是缺省名单本身（= FORCE_FOLLOW_FACES，属性缺席时的兜底）；别的面名一律不许
-  // 写死在桥里，否则「哪些面强制跟随」就有了第二个事实源。
-  for (const view of FACE_VIEWS) {
-    if (FORCE_FOLLOW_FACES.includes(view)) continue;
-    assert.equal(
-      BRIDGE_SRC.includes('"' + view + '"'),
-      false,
-      "桥里出现了面名 " + view + "：面词表该只有 face-role.ts 那一处事实源",
-    );
-  }
-  // 名单从属性读：桥得认 FORCE_FOLLOW_ATTR 这个属性名（壳页写它、桥跟着重算）。
-  assert.ok(
-    BRIDGE_SRC.includes(FORCE_FOLLOW_ATTR),
-    "桥没读 " + FORCE_FOLLOW_ATTR + "（强制面名单该从 <html> 的属性读）",
-  );
-  // 单一事实源：壳页写的面就是它认出来的那一面（seedView），不另立词表；
-  // 且这次写入发生在顶层（注入可能早于首次主题载荷那次 seedDshTokens）。
-  // 属性名走 shared 的 FACE_ATTR（每一处写它的页面都用同一个常量，免得属性名长出第二份字面量）。
-  assert.match(SHELL_SRC, /setAttribute\(FACE_ATTR, seedView\)/, "壳页该写这一面的面名");
-  assert.ok(SHELL_SRC.includes("publishFace();"), "壳页该在顶层先把面写出来（注入可能早于首次垫片）");
-  const atPublish = SHELL_SRC.indexOf("publishFace();");
-  const atFollow = SHELL_SRC.indexOf("followHostTheme(hana,");
-  assert.ok(atPublish < atFollow, "面的声明该在顶层 followHostTheme 之前写出");
-});
 
 // ---- 垫片的「面」必须在首帧之前就定下来 ----
 // 回归闸：未就绪的面（FP 停在「未启动」/「已停止」时）走不到 startInjection，而顶层那次

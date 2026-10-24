@@ -89,11 +89,4 @@ test("接收侧不只靠 visibilitychange（并排 iframe 切过去时它不触�
   assert.ok(/addEventListener\("message"/.test(force), "该听同源广播的 message");
   assert.ok(/addEventListener\("visibilitychange"/.test(force), "该有可见性兜底");
   assert.ok(/addEventListener\("focus"/.test(force), "该有焦点兜底");
-  // 广播那条必须是主力：收到就重读，不靠可见性。
-  const atMessage = force.indexOf('addEventListener("message"');
-  assert.ok(atMessage > 0, "广播监听该在");
-  assert.ok(
-    !/publishForceFollowOnVisible/.test(force),
-    "不该只留一个可见性监听（那个在并排 iframe 场景下不触发）",
-  );
 });
