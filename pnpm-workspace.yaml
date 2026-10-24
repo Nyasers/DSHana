@@ -75,13 +75,10 @@ overrides:
   # 安全修复
   ## CVE-2023-54404
   zod: 4.6.7
+  ## CVE-2026-109869
+  undici: 8.12.2
   ## CVE-2026-111769
   "@modelcontextprotocol/client": 2.3.1
-
-  # 安全修复：dsh-http-proxy 把 undici 钉在 8.11.2（精确版，非范围），而 8.11.2 落在
-  # GHSA-xjj6-f33q-929c（>=8.0.0 <8.12.2，content-encoding 未处理错误可致 DoS）的区间。
-  # 同 major 内抬到 8.12.2；进线只有内部跟随，无 peer 约束。
-  undici: 8.12.2
 
 # 打包目标设置
 # >>> pack-targets
