@@ -32,6 +32,9 @@ import * as dshanaTool from "@dshana/tools/index.ts";
 import { registerDshanaRoutes, defaultDshanaRouteDeps } from "@dshana/tools/routes/dshana-routes.ts";
 // 宿主模型/提供商变更 → 受管 runtime 重拉目录（见 packages/models/src/model-sync.ts 的动因）
 import { installHostModelSync } from "@dshana/models/model-sync.ts";
+// 页面状态点：把「有没有 DSH 任务在跑」写成卡片当前视图的 activity（后台那一路，见
+// packages/runtime/src/activity-sync.ts）
+import { installHostActivitySync } from "@dshana/runtime/activity-sync.ts";
 
 // ---- 统一日志：只走宿主 ctx.logger ----
 // App 侧不写自己的文件日志；ctx.logger 缺失（旧 host）或宿主抛错时回落 stderr。
@@ -145,12 +148,25 @@ export function apply(ctx) {
     log("warn", "模型变更订阅安装异常（忽略，改宿主提供商需重启 runtime 生效）：" + ((e as any)?.message || e));
   }
 
+  // ---- 页面状态点：把本 App 的运行状态写成卡片当前视图的 activity ----
+  // 宿主给页面按钮画一个小圆点（running 金 / unread 青），取值来自卡片当前视图的 Chrome
+  // 描述。页面自己写要走 hana.chrome.set，但页面只在打开时活着；这一页有没有活在跑，是
+  // 后台随时知道的事——所以走 ctx.surfaces 的后台那一路（packages/runtime/src/activity-sync.ts）。
+  // 判据是宿主任务记录：还有一条本 App 的 DSH 任务没到终态就亮 running。
+  let uninstallActivitySync: () => void = () => {};
+  try {
+    uninstallActivitySync = installHostActivitySync(ctx, { log: (level, msg) => log(level, msg) });
+  } catch (e) {
+    log("warn", "页面状态点同步安装异常（忽略，页面仍可用）：" + ((e as any)?.message || e));
+  }
+
   // 返回 disposer：卸载/重载清理（停止受管 DSH runtime——若已启动；幂等）
   let disposed = false;
   return () => {
     if (disposed) return;
     disposed = true;
     try { if (typeof uninstallModelSync === "function") uninstallModelSync(); } catch { /* 忽略 */ }
+    try { if (typeof uninstallActivitySync === "function") uninstallActivitySync(); } catch { /* 忽略 */ }
     try { if (typeof unregisterTool === "function") unregisterTool(); } catch { /* 忽略 */ }
     try { if (typeof unregisterRoutes === "function") unregisterRoutes(); } catch { /* 忽略 */ }
     // 受管 runtime 收尾：停 runtime + 清单例（Windows 依赖更新/App 卸载前须先停，见
