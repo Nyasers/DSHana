@@ -83,7 +83,7 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
     log("info", "activity-sync: 宿主不提供卡片当前视图的读写面，不起同步");
     return () => {};
   }
-  log("info", "activity-sync: 已接管（状态走 runtime 的 SSE，视图每 " + refreshMs + "ms 刷一次）");
+  log("info", "activity-sync: 已接管（状态走 runtime 的会话活动通道，视图每 " + refreshMs + "ms 刷一次）");
 
   /** 每个视图上一次**已生效**的取值；用来跳过无变化的写入。键 = cardInstanceId。 */
   const applied = new Map<string, PageActivity | null>();
