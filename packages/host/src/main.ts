@@ -35,6 +35,7 @@ import http from "node:http";
 import { parseRuntimeConfig, UsageError } from "./options.ts";
 import { startDshBridge } from "./bridge.ts";
 import { checkCwd } from "./cwd-check.ts";
+import { createActivityFeed } from "./activity-feed.ts"; // DSH 会话状态 → bridge SSE（App 不必轮询）
 import { info, warn, err } from "./log.ts";
 import { runtimeErrorState } from "@dshana/shared/runtime-error.ts";
 // @hana/app-sdk 为 devDependencies（file:vendor/hana-app-sdk/hana-app-sdk.tgz，版本随宿主
@@ -346,8 +347,9 @@ export async function main(argv: string[]): Promise<number> {
     stopBridge: (() => void) | null;
     stopApproval: (() => void) | null;
     stopBindings: (() => void) | null;
+    detachActivity: (() => void) | null;
     bridge: BridgeHandle | null;
-  } = { hana: null, ctx: null, stopBridge: null, stopApproval: null, stopBindings: null, bridge: null };
+  } = { hana: null, ctx: null, stopBridge: null, stopApproval: null, stopBindings: null, detachActivity: null, bridge: null };
   const shutdown = makeShutdown(state, info);
 
   // ---- 1) 宿主 IPC（先于一切：非受管运行时立刻给出可操作报错，不输出 READY）----
@@ -504,12 +506,26 @@ export async function main(argv: string[]): Promise<number> {
   const bindings = createTaskBindingIndex(hana.tasks);
 
   try {
-    state.bridge = await startDshBridge({
+    // ---- 6.6) 会话活动事件源：订阅 DSH 自己的 api-session/status，经中继的 SSE 推给 App ----
+  // App 主进程拿不到这条事件（宿主只把受管服务代理给浏览器，fetch 有界、watch 只报宿主 runtime
+  // 生命周期），所以在源头订阅、由中继开一条长连接推出去。这是 App 不必轮询的唯一路。
+  const activityFeed = createActivityFeed();
+  let detachActivity = () => {};
+  try {
+    detachActivity = activityFeed.attach(boot.ctx);
+    state.detachActivity = detachActivity;
+    info("activity-feed: 已订阅 api-session/status（会话在跑状态经 /_control/activity 推送）");
+  } catch (e) {
+    // 订阅不上不影响其它功能：App 侧会读到空快照，状态点就是不亮。
+    warn("activity-feed: 订阅 api-session/status 失败：" + errText(e));
+  }
+  state.bridge = await startDshBridge({
       port: opts.bridgePort,
       bridgeKey: opts.bridgeKey,
       controlKey: opts.controlKey,
       upstreamOrigin,
       upstreamCookie: dshCookie,
+      activity: activityFeed,
       // 控制面：App 工具（controller.invoke）经宿主 ctx.runtime.fetch(runtimeId, "/_control") 到达
       // 这里，由本进程带 cookie 转发到 DSH /api（App 侧不直接摸 DSH HTTP，也不需 network 到中继）。
       // 参数 = 客户端信封本身（buildClientRequest 产物，含 rpcId/method/payload）。
