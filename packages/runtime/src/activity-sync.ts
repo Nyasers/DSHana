@@ -6,7 +6,8 @@
 // 宿主给页面按钮画一个状态点，取值来自卡的当前视图 Chrome 描述（APPS.md「当前视图 Chrome」）。
 // 页面侧写要走 hana.chrome.set，而后台（本 App 进程不在页面里）走 ctx.surfaces 的三个方法：
 //   listCardChromeViews() → getCardChromeView() → setCardChrome()
-// 本模块就是后台那一路：周期性读一眼宿主任务记录，算出「这一页该不该亮」，再只在变化时写一次。
+// 本模块就是后台那一路：周期性看一眼 **DSH 自己的会话状态**，算出「这一页该不该亮」，
+// 再只在变化时写一次。
 //
 // 三条纪律（照抄宿主契约，不自行简化）：
 //   · 描述是**整份替换**，所以写入前必须先 get，把页面自己的 title / tabs / actions 带上再提交；
@@ -15,10 +16,11 @@
 //   · 只在真正变化时写。每轮都写等于每轮都抢页面自己的写入机会。
 //
 // 视图从哪来：宿主只为自己注册过当前视图的卡提供这份能力（listCardChromeViews 只列本 App 的
-// 活视图）。本 App 的整页主卡走的是 page 槽位，宿主的页卡渲染路径不注册 chrome 视图，于是
-// 这一列表可能是空的——那种情况下本模块不报错、不空转，只把「没有可写的视图」记一次日志。
+// 活视图）。整页主卡的视图要等页面**真正挂载后**才注册，所以 App 刚启动时这张表是空的（实测）。
+// 本模块把空表当“暂时无写入面”处理，不报错、不空转。
 import { errText } from "@dshana/shared/err-text.ts";
-import { activityFromTasks, type PageActivity } from "./activity.ts";
+import { activityFromSessions, activityFromTasks, runningSessionIds, type PageActivity } from "./activity.ts";
+import { rpcViaControl } from "./controller.ts";
 
 /** 没有在跑的任务时多久看一次宿主记录（对齐一轮页面轮询的呼吸）。 */
 export const IDLE_POLL_MS = 15000;
@@ -70,16 +72,12 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
   const surfaces = ctx && ctx.surfaces;
   // 启动自检一律 info：宿主的 ctx.logger.debug 不落盘（实测日志里一行 DEBUG 都没有），
   // 用 debug 写等于“我看不到到底哪一步路没走通”。这两条各只打一次，不吵。
-  if (!tasks || typeof tasks.list !== "function") {
-    log("info", "activity-sync: 宿主任务面不可用（ctx.tasks.list 缺失），不起同步");
-    return () => {};
-  }
   if (!surfaces || typeof surfaces.listCardChromeViews !== "function"
     || typeof surfaces.getCardChromeView !== "function" || typeof surfaces.setCardChrome !== "function") {
     log("info", "activity-sync: 宿主不提供卡片当前视图的读写面，不起同步");
     return () => {};
   }
-  log("info", "activity-sync: 已接管（每 " + idleMs + "ms 空闹 / " + activeMs + "ms 在跑时各看一眼任务记录）");
+  log("info", "activity-sync: 已接管（每 " + idleMs + "ms 空闹 / " + activeMs + "ms 在跑时各看一眼会话状态）");
 
   /** 每个视图上一次**已生效**的取值；用来跳过无变化的写入。键 = cardInstanceId。 */
   const applied = new Map<string, PageActivity | null>();
@@ -90,6 +88,10 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
   let sawEmpty = false;
   /** 已报过"已落到卡片"的实例：每张卡只报一次，之后的增减不必重复。 */
   const announced = new Set<string>();
+  /** 会话状态读取是否处于“读不到”状态（只用于把日志从每轮刷降成翻转时报一次）。 */
+  let sessionReadFailed = false;
+  /** 上一轮是否有会话在跑（同上，只为日志去重）。 */
+  let wasRunning = false;
 
   function schedule(ms: number) {
     if (stopped) return;
@@ -112,13 +114,11 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
     const views: any[] = Array.isArray(listed.views) ? listed.views : [];
     const live = new Set<string>();
     // 视图表空了不是错，但必须看得见：这是“能不能亮灯”的唯一分叉点。
-    // 本 App 的整页主卡（realization: page）在宿主的页卡渲染路径上不注册当前视图，
-    // 这里报出来就等于把那个边界钉死在日志里，不必再去猜。
     if (views.length === 0) {
       if (!sawEmpty) {
         sawEmpty = true;
-        log("info", "activity-sync: 宿主没有为本 App 注册任何卡片当前视图（页面状态点这一路不可写）；"
-          + "目标状态 " + String(desired) + " 已算出但不落盘。若页卡一直出现在这里，说明宿主未覆盖该卡形态。");
+        log("info", "activity-sync: 宿主尚未为本 App 注册卡片当前视图（页面未挂载）；"
+          + "目标状态 " + String(desired) + " 已算出，等视图出现再落盘。");
       }
     } else if (sawEmpty) {
       sawEmpty = false;
@@ -166,19 +166,53 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
     for (const key of [...announced]) if (!live.has(key)) announced.delete(key);
   }
 
+  /**
+   * 看一眼当前状态。主判据是 DSH 的 `session/list`：它看得见所有会话，包括用户在 DSH 界面里
+   * 自己开的那些（宿主任务记录里根本没有它们）。控制面还没就绪或查询失败时回落到宿主任务记录，
+   * 这样至少本 App 自己起的任务仍能亮灯。
+   */
+  async function readDesired(): Promise<PageActivity | null> {
+    try {
+      const value = await rpcViaControl(ctx, { method: "session/list", payload: {}, timeoutMs: 8000 });
+      const items = value && Array.isArray((value as any).items) ? (value as any).items : null;
+      if (items) {
+        if (sessionReadFailed) {
+          sessionReadFailed = false;
+          log("info", "activity-sync: 会话状态恢复可用，改以 session/list 为准");
+        }
+        const ids = runningSessionIds(items);
+        if (ids.length > 0 && !wasRunning) {
+          wasRunning = true;
+          log("info", "activity-sync: 有会话在跑（" + ids.length + " 个）：" + ids.join(", "));
+        } else if (ids.length === 0) {
+          wasRunning = false;
+        }
+        return activityFromSessions(items);
+      }
+      log("warn", "activity-sync: session/list 回执里没有 items，回落到任务记录");
+    } catch (e) {
+      // 受管 runtime 还没起来时这里是常态，不是故障：只在状态翻转时报一行，不每轮刷。
+      if (!sessionReadFailed) {
+        sessionReadFailed = true;
+        log("info", "activity-sync: 暂时读不到会话状态（受管 runtime 未就绪或控制面不通），先用任务记录顶着：" + errText(e));
+      }
+    }
+    if (tasks && typeof tasks.list === "function") {
+      try {
+        return activityFromTasks(await tasks.list());
+      } catch (e) {
+        log("warn", "activity-sync: 读宿主任务记录失败：" + errText(e));
+      }
+    }
+    return null;
+  }
+
   async function tick(): Promise<void> {
     if (stopped || busy) return;
     busy = true;
     let desired: PageActivity | null = null;
     try {
-      let rows: unknown = null;
-      try {
-        rows = await tasks.list();
-      } catch (e) {
-        log("warn", "activity-sync: 读宿主任务记录失败：" + errText(e));
-        return;
-      }
-      desired = activityFromTasks(rows);
+      desired = await readDesired();
       await pushToViews(desired);
     } finally {
       busy = false;

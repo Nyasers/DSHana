@@ -5,7 +5,7 @@
 // activity-sync.ts 的纯函数面）
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { activityFromTasks } from "@dshana/runtime/activity.ts";
+import { activityFromSessions, activityFromTasks } from "@dshana/runtime/activity.ts";
 import { planChromeWrite, mergeDescription } from "@dshana/runtime/activity-sync.ts";
 
 const SID = "session-11111111-2222-3333-4444-555555555555";
@@ -14,6 +14,37 @@ const SID = "session-11111111-2222-3333-4444-555555555555";
 function task(status, over = {}) {
   return { taskId: "t1", status, metadata: { dsh: { sessionId: SID } }, ...over };
 }
+
+test("activityFromSessions：非数组 / 空表都不亮", () => {
+  assert.equal(activityFromSessions(null), null);
+  assert.equal(activityFromSessions(undefined), null);
+  assert.equal(activityFromSessions({}), null);
+  assert.equal(activityFromSessions([]), null);
+});
+
+test("activityFromSessions：任一会话 running 就亮", () => {
+  assert.equal(activityFromSessions([{ sessionId: "s1", running: true }]), "running");
+  assert.equal(activityFromSessions([{ sessionId: "s1", running: false }, { sessionId: "s2", running: true }]), "running");
+  assert.equal(activityFromSessions([{ sessionId: "s1", running: false }]), null);
+});
+
+test("activityFromSessions：blank 席位即使 running 也不算（刚创建的空会话不该闪一下）", () => {
+  assert.equal(activityFromSessions([{ sessionId: "s1", running: true, blank: true }]), null);
+  assert.equal(activityFromSessions([{ sessionId: "s1", running: true, blank: true }, { sessionId: "s2", running: true }]), "running");
+});
+
+test("activityFromSessions：running 不是 true 一律不算，畸形项跳过不炸", () => {
+  assert.equal(activityFromSessions([{ sessionId: "s1", running: "true" }]), null);
+  assert.equal(activityFromSessions([{ sessionId: "s1" }]), null);
+  assert.equal(activityFromSessions([null, 1, "x", { running: true }]), "running");
+});
+
+test("activityFromSessions 与 activityFromTasks 的差异：只有会话才能看见用户自己开的那些", () => {
+  // 用户在 DSH 界面里开的会话不会出现在宿主任务记录里
+  const userSessions = [{ sessionId: "s9", running: true }];
+  assert.equal(activityFromSessions(userSessions), "running");
+  assert.equal(activityFromTasks([]), null);
+});
 
 test("activityFromTasks：非数组 / 空表都不亮", () => {
   assert.equal(activityFromTasks(null), null);
