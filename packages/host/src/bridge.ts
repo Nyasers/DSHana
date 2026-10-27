@@ -191,20 +191,12 @@ function waitForDrain(response, signal) {
 
 /** startDshBridge 的选项。 */
 export interface DshBridgeOptions {
+  port: number;
   bridgeKey: string;
   controlKey?: string;
   upstreamOrigin: string;
   upstreamCookie?: string;
-  port: number;
   onControl?: (action: string, args: any) => Promise<any>;
-  /**
-   * 「哪些会话正在跑」的事件源（见 activity-feed.ts）。给了就在 /_control/activity
-   * 上开一条 SSE：App 后端保一条长连接，不必轮询。
-   */
-  activity?: {
-    snapshot(): unknown;
-    subscribe(listener: (snapshot: unknown) => void): () => void;
-  };
   log?: (s: string) => void;
 }
 
@@ -217,7 +209,7 @@ export interface DshBridgeHandle {
 /** 起中继（监听 127.0.0.1:port）。 */
 export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeHandle> {
   const {
-    port, bridgeKey, controlKey, upstreamOrigin, upstreamCookie = "", onControl, activity, log = () => {},
+    port, bridgeKey, controlKey, upstreamOrigin, upstreamCookie = "", onControl, log = () => {},
   } = opts || {};
   const upstream = new URL(upstreamOrigin);
   if (upstream.protocol !== "http:" || upstream.hostname !== "127.0.0.1") {
@@ -247,42 +239,6 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
   }
 
   const server = createServer(async (req, res) => {
-    const reqPath = new URL(req.url || "/", "http://bridge.invalid").pathname;
-    // 会话活动流（SSE）：给 App 后端一条长连接，事件由本进程内 activity-feed 直接推送。
-    // 鉴权用 controlKey：这是控制面数据（与 bridgeKey 分开，浏览器侧不拿）。
-    if (reqPath === "/_control/activity") {
-      if (!controlKey || !matchesKey(req.headers["x-hana-dsh-control"], controlKey)) {
-        rejectJson(res, 403, "DSH control authorization required");
-        return;
-      }
-      if (req.method !== "GET") {
-        rejectJson(res, 405, "DSH activity stream is GET only");
-        return;
-      }
-      if (!activity) {
-        rejectJson(res, 503, "DSH activity feed is unavailable");
-        return;
-      }
-      res.writeHead(200, {
-        "content-type": "text/event-stream; charset=utf-8",
-        "cache-control": "no-cache, no-transform",
-        connection: "keep-alive",
-        "x-accel-buffering": "no",
-      });
-      const send = (snapshot: unknown): void => {
-        res.write("data: " + JSON.stringify(snapshot) + "\n\n");
-      };
-      // subscribe 会立即回调一次当前快照，重连方不必再单独查一次。
-      const off = activity.subscribe(send);
-      const keepAlive = setInterval(() => res.write(": keep-alive\n\n"), 15000);
-      const cleanup = (): void => {
-        clearInterval(keepAlive);
-        off();
-      };
-      req.on("close", cleanup);
-      res.on("close", cleanup);
-      return;
-    }
     // 控制面（App 工具经 controller.invoke → ctx.runtime.fetch(runtimeId, "/_control")）：
     // controlKey 鉴权（与 bridgeKey 分离——浏览器侧不该拿到控制权），body {action,args}。
     if (new URL(req.url || "/", "http://bridge.invalid").pathname === "/_control") {

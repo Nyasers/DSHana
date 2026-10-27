@@ -24,7 +24,6 @@
 import { errText } from "@dshana/shared/err-text.ts";
 import { activityFromTasks, type PageActivity } from "./activity.ts";
 import { subscribeActivityStream } from "./activity-stream.ts";
-import { bridgeAccess } from "./managed-runtime.ts";
 import { rpcViaControl } from "./controller.ts";
 
 /** 视图枚举的刷新间隔：状态不靠它，它只负责发现「有卡挂载/卸载了」。 */
@@ -232,15 +231,13 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
     return null;
   }
 
-  /** 试着接上事件流；受管 runtime 还没起来时返回 false，下一轮再试。 */
+  /** 试着接上活动流；受管 runtime 还没起来时循环会自己退避重试，这里只负责起一次。 */
   function ensureStream(): boolean {
     if (streamReady) return true;
-    const access: any = typeof bridgeAccess === "function" ? bridgeAccess() : null;
-    if (!access || !access.controlKey || !access.base) return false;
-    stopStream = subscribeActivityStream({
-      base: access.base,
-      controlKey: access.controlKey,
+    if (stopStream) return false;
+    stopStream = subscribeActivityStream(ctx, {
       onSnapshot: (snapshot) => {
+        streamReady = true;
         const next: PageActivity | null = snapshot.running.length > 0 ? "running" : null;
         if (next === desired) return;
         desired = next;
@@ -251,16 +248,15 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
       },
       onStatus: (state, detail) => {
         if (state === "open") {
-          streamReady = true;
-          log("info", "activity-sync: 已接上会话活动流（事件驱动，不轮询）");
+          log("info", "activity-sync: 已接上会话活动（长轮询，不按节拍采样）");
           return;
         }
         // 断线：回到兜底采样，等重连成功再切回来。
         streamReady = false;
-        log("warn", "activity-sync: 会话活动流断开（" + String(detail || "") + "），期间用兜底采样");
+        log("warn", "activity-sync: 会话活动断开（" + String(detail || "") + "），期间用兜底采样");
       },
     });
-    return true;
+    return false;
   }
 
   async function tick(): Promise<void> {

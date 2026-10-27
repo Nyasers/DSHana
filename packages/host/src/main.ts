@@ -525,11 +525,19 @@ export async function main(argv: string[]): Promise<number> {
       controlKey: opts.controlKey,
       upstreamOrigin,
       upstreamCookie: dshCookie,
-      activity: activityFeed,
       // 控制面：App 工具（controller.invoke）经宿主 ctx.runtime.fetch(runtimeId, "/_control") 到达
       // 这里，由本进程带 cookie 转发到 DSH /api（App 侧不直接摸 DSH HTTP，也不需 network 到中继）。
       // 参数 = 客户端信封本身（buildClientRequest 产物，含 rpcId/method/payload）。
       onControl: async (action, args) => {
+        // activity-wait：会话活动长轮询。App 后端叫不动本进程的端口（宿主的权限模型禁了
+        // App 进程的网络 API，实测 ERR_ACCESS_DENIED），只能经宿主代理打控制面，而那条路的
+        // 响应体有界——所以推不了，但能「挂住一问」：有变化立刻回，没变化等到超时回当前快照。
+        // 空闲时只挂一个请求，不按固定节拍盲刷。
+        if (action === "activity-wait") {
+          const since = Number(args && args.since);
+          const timeoutMs = Number(args && args.timeoutMs);
+          return await activityFeed.wait(Number.isFinite(since) ? since : 0, timeoutMs);
+        }
         // prepare-switch：数据源切换前的忙判定守门（冻结标志由中继置位/解除）。0.1.2 下 DSH
         // 无稳定对外「忙」服务口，故按可用性尽力判定：agents 服务在则查运行中/排队中的
         // agent；不在则放行（会话忙判定的正式接入见数据源切换刀 T3）。
