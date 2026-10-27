@@ -68,21 +68,28 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
 
   const tasks = ctx && ctx.tasks;
   const surfaces = ctx && ctx.surfaces;
+  // 启动自检一律 info：宿主的 ctx.logger.debug 不落盘（实测日志里一行 DEBUG 都没有），
+  // 用 debug 写等于“我看不到到底哪一步路没走通”。这两条各只打一次，不吵。
   if (!tasks || typeof tasks.list !== "function") {
-    log("debug", "activity-sync: 宿主任务面不可用（ctx.tasks.list 缺失），不起同步");
+    log("info", "activity-sync: 宿主任务面不可用（ctx.tasks.list 缺失），不起同步");
     return () => {};
   }
   if (!surfaces || typeof surfaces.listCardChromeViews !== "function"
     || typeof surfaces.getCardChromeView !== "function" || typeof surfaces.setCardChrome !== "function") {
-    log("debug", "activity-sync: 宿主不提供卡片当前视图的读写面，不起同步");
+    log("info", "activity-sync: 宿主不提供卡片当前视图的读写面，不起同步");
     return () => {};
   }
+  log("info", "activity-sync: 已接管（每 " + idleMs + "ms 空闹 / " + activeMs + "ms 在跑时各看一眼任务记录）");
 
   /** 每个视图上一次**已生效**的取值；用来跳过无变化的写入。键 = cardInstanceId。 */
   const applied = new Map<string, PageActivity | null>();
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let busy = false;
+  /** 已报过的"视图表为空"状态：只在状态翻转时打一行，不每轮刷。 */
+  let sawEmpty = false;
+  /** 已报过"已落到卡片"的实例：每张卡只报一次，之后的增减不必重复。 */
+  const announced = new Set<string>();
 
   function schedule(ms: number) {
     if (stopped) return;
@@ -104,16 +111,33 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
     }
     const views: any[] = Array.isArray(listed.views) ? listed.views : [];
     const live = new Set<string>();
+    // 视图表空了不是错，但必须看得见：这是“能不能亮灯”的唯一分叉点。
+    // 本 App 的整页主卡（realization: page）在宿主的页卡渲染路径上不注册当前视图，
+    // 这里报出来就等于把那个边界钉死在日志里，不必再去猜。
+    if (views.length === 0) {
+      if (!sawEmpty) {
+        sawEmpty = true;
+        log("info", "activity-sync: 宿主没有为本 App 注册任何卡片当前视图（页面状态点这一路不可写）；"
+          + "目标状态 " + String(desired) + " 已算出但不落盘。若页卡一直出现在这里，说明宿主未覆盖该卡形态。");
+      }
+    } else if (sawEmpty) {
+      sawEmpty = false;
+      log("info", "activity-sync: 宿主开始提供卡片当前视图（" + views.length + " 个）");
+    }
     for (const view of views) {
       const cardInstanceId = typeof view?.cardInstanceId === "string" ? view.cardInstanceId : "";
       const viewHandle = typeof view?.viewHandle === "string" ? view.viewHandle : "";
       if (!cardInstanceId || !viewHandle) continue;
       live.add(cardInstanceId);
+      if (!announced.has(cardInstanceId)) {
+        announced.add(cardInstanceId);
+        log("info", "activity-sync: 拿到卡片视图 " + cardInstanceId + "（cardId " + String(view.cardId) + "）");
+      }
       if (applied.has(cardInstanceId) && applied.get(cardInstanceId) === desired) continue;
       try {
         const current = await surfaces.getCardChromeView({ viewHandle, cardInstanceId });
         if (!current || current.ok !== true) {
-          log("debug", "activity-sync: 读当前描述失败（" + String(current && current.code) + "），下一轮再试");
+          log("warn", "activity-sync: 读当前描述失败（" + String(current && current.code) + "），下一轮再试");
           applied.delete(cardInstanceId);
           continue;
         }
@@ -130,7 +154,7 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
         } else {
           // 被拒就是被拒：revision 竞争时下一轮重新读，绝不原样重试。
           applied.delete(cardInstanceId);
-          log("debug", "activity-sync: 写描述被拒（" + String(written && written.code) + "）：" + String(written && written.error));
+          log("warn", "activity-sync: 写描述被拒（" + String(written && written.code) + "）：" + String(written && written.error));
         }
       } catch (e) {
         applied.delete(cardInstanceId);
@@ -139,6 +163,7 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
     }
     // 视图关掉了就把它从记忆里去掉，重开时按新视图重新判一遍。
     for (const key of [...applied.keys()]) if (!live.has(key)) applied.delete(key);
+    for (const key of [...announced]) if (!live.has(key)) announced.delete(key);
   }
 
   async function tick(): Promise<void> {
