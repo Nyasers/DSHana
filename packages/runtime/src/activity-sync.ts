@@ -28,6 +28,8 @@ export const IDLE_POLL_MS = 15000;
 export const FAST_POLL_MS = 2000;
 /** 已经在跑时多久看一次：终态要尽早反映成"灭灯"。 */
 export const ACTIVE_POLL_MS = 2000;
+/** 一个视图连续失败几次就不再碰它（宿主列表里会留着已关闭卡的视图）。 */
+export const MAX_VIEW_STRIKES = 3;
 
 /** 一次写入的判定结果：null = 不必写（已经一致）；否则是要提交的完整描述。 */
 export function planChromeWrite(
@@ -92,6 +94,8 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
   let busySince = 0;
   /** 已报过的"视图表为空"状态：只在状态翻转时打一行，不每轮刷。 */
   let sawEmpty = false;
+  /** 每个视图已连续失败几次：失败到上限就不再碰它，直到下次列视图时重新出现。 */
+  const strikes = new Map<string, number>();
   /** 已报过"已落到卡片"的实例：每张卡只报一次，之后的增减不必重复。 */
   const announced = new Set<string>();
   /** 会话状态读取是否处于“读不到”状态（只用于把日志从每轮刷降成翻转时报一次）。 */
@@ -138,6 +142,9 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
       const viewHandle = typeof view?.viewHandle === "string" ? view.viewHandle : "";
       if (!cardInstanceId || !viewHandle) continue;
       live.add(cardInstanceId);
+      // 已经失败到上限的视图直接跳过：宿主列表里会留下已关闭卡的视图，逐个等超时
+      // 会拖慢整轮（实测 RESULT_TIMEOUT），而它们本来就不可能写成功。
+      if ((strikes.get(cardInstanceId) ?? 0) >= MAX_VIEW_STRIKES) continue;
       if (!announced.has(cardInstanceId)) {
         announced.add(cardInstanceId);
         log("info", "activity-sync: 拿到卡片视图 " + cardInstanceId + "（cardId " + String(view.cardId) + "）");
@@ -146,10 +153,13 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
       try {
         const current = await surfaces.getCardChromeView({ viewHandle, cardInstanceId });
         if (!current || current.ok !== true) {
-          log("warn", "activity-sync: 读当前描述失败（" + String(current && current.code) + "），下一轮再试");
+          const n = (strikes.get(cardInstanceId) ?? 0) + 1;
+          strikes.set(cardInstanceId, n);
+          log("warn", "activity-sync: 读当前描述失败（" + String(current && current.code) + "，第 " + n + " 次），下一轮再试");
           applied.delete(cardInstanceId);
           continue;
         }
+        strikes.delete(cardInstanceId);
         const plan = planChromeWrite(current.description, desired);
         if (!plan) { applied.set(cardInstanceId, desired); continue; }
         const written = await surfaces.setCardChrome({
@@ -162,8 +172,10 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
           log("info", "activity-sync: 页面状态点 → " + String(desired) + "（卡片 " + cardInstanceId + "）");
         } else {
           // 被拒就是被拒：revision 竞争时下一轮重新读，绝不原样重试。
+          const n = (strikes.get(cardInstanceId) ?? 0) + 1;
+          strikes.set(cardInstanceId, n);
           applied.delete(cardInstanceId);
-          log("warn", "activity-sync: 写描述被拒（" + String(written && written.code) + "）：" + String(written && written.error));
+          log("warn", "activity-sync: 写描述被拒（" + String(written && written.code) + "，第 " + n + " 次）：" + String(written && written.error));
         }
       } catch (e) {
         applied.delete(cardInstanceId);
@@ -173,6 +185,7 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
     // 视图关掉了就把它从记忆里去掉，重开时按新视图重新判一遍。
     for (const key of [...applied.keys()]) if (!live.has(key)) applied.delete(key);
     for (const key of [...announced]) if (!live.has(key)) announced.delete(key);
+    for (const key of [...strikes.keys()]) if (!live.has(key)) strikes.delete(key);
   }
 
   /**
