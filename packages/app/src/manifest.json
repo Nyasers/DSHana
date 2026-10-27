@@ -55,7 +55,8 @@
         "titlebar": "solid",
         "face": {
           "image": "face.png"
-        }
+        },
+        "pageIcon": "page-icon.svg"
       }
     ],
     "settings": {
