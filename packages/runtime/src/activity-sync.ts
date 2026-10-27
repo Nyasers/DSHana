@@ -22,10 +22,12 @@ import { errText } from "@dshana/shared/err-text.ts";
 import { activityFromSessions, activityFromTasks, runningSessionIds, type PageActivity } from "./activity.ts";
 import { rpcViaControl } from "./controller.ts";
 
-/** 没有在跑的任务时多久看一次宿主记录（对齐一轮页面轮询的呼吸）。 */
+/** 没有任何卡片视图时多久看一次：没人看得见这个点，快轮询没意义。 */
 export const IDLE_POLL_MS = 15000;
-/** 有任务在跑时多久看一次：终态要尽早反映成"灭灯"。 */
-export const ACTIVE_POLL_MS = 3000;
+/** 有视图时多久看一次：DSH 会话经常几秒就说完了，节拍粗了就会整个错过。 */
+export const FAST_POLL_MS = 2000;
+/** 已经在跑时多久看一次：终态要尽早反映成"灭灯"。 */
+export const ACTIVE_POLL_MS = 2000;
 
 /** 一次写入的判定结果：null = 不必写（已经一致）；否则是要提交的完整描述。 */
 export function planChromeWrite(
@@ -52,6 +54,7 @@ export function mergeDescription(
 
 export interface ActivitySyncOptions {
   idleMs?: number;
+  fastMs?: number;
   activeMs?: number;
   log?: (level: "info" | "warn" | "debug", message: string) => void;
 }
@@ -65,6 +68,7 @@ export interface ActivitySyncOptions {
  */
 export function installHostActivitySync(ctx: any, options: ActivitySyncOptions = {}): () => void {
   const idleMs = Number(options.idleMs) > 0 ? Number(options.idleMs) : IDLE_POLL_MS;
+  const fastMs = Number(options.fastMs) > 0 ? Number(options.fastMs) : FAST_POLL_MS;
   const activeMs = Number(options.activeMs) > 0 ? Number(options.activeMs) : ACTIVE_POLL_MS;
   const log = typeof options.log === "function" ? options.log : () => {};
 
@@ -77,13 +81,15 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
     log("info", "activity-sync: 宿主不提供卡片当前视图的读写面，不起同步");
     return () => {};
   }
-  log("info", "activity-sync: 已接管（每 " + idleMs + "ms 空闹 / " + activeMs + "ms 在跑时各看一眼会话状态）");
+  log("info", "activity-sync: 已接管（有视图时每 " + fastMs + "ms 看一次，无视图时 " + idleMs + "ms）");
 
   /** 每个视图上一次**已生效**的取值；用来跳过无变化的写入。键 = cardInstanceId。 */
   const applied = new Map<string, PageActivity | null>();
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let busy = false;
+  /** 本轮开始时刻：防止一次挂死的调用把循环永久锁在 busy=true。 */
+  let busySince = 0;
   /** 已报过的"视图表为空"状态：只在状态翻转时打一行，不每轮刷。 */
   let sawEmpty = false;
   /** 已报过"已落到卡片"的实例：每张卡只报一次，之后的增减不必重复。 */
@@ -92,6 +98,8 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
   let sessionReadFailed = false;
   /** 上一轮是否有会话在跑（同上，只为日志去重）。 */
   let wasRunning = false;
+  /** 上一轮是否有可写的卡片视图：决定下一轮的节拍。 */
+  let hasViews = false;
 
   function schedule(ms: number) {
     if (stopped) return;
@@ -112,6 +120,7 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
       return;
     }
     const views: any[] = Array.isArray(listed.views) ? listed.views : [];
+    hasViews = views.length > 0;
     const live = new Set<string>();
     // 视图表空了不是错，但必须看得见：这是“能不能亮灯”的唯一分叉点。
     if (views.length === 0) {
@@ -208,15 +217,20 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
   }
 
   async function tick(): Promise<void> {
-    if (stopped || busy) return;
+    if (stopped) return;
+    // 上一轮卡死（宿主/控制面一个调用不返回）时到这里就把锁收回来：
+    // 宁可多一个并发轮，也不能让状态点从此不再更新。
+    if (busy && Date.now() - busySince < 30000) return;
     busy = true;
+    busySince = Date.now();
     let desired: PageActivity | null = null;
     try {
       desired = await readDesired();
       await pushToViews(desired);
     } finally {
       busy = false;
-      schedule(desired === "running" ? activeMs : idleMs);
+      // 节拍：在跑或“有地方可写”时用快节拍，两者都没有时慢慢看。
+      schedule(desired === "running" || hasViews ? (desired === "running" ? activeMs : fastMs) : idleMs);
     }
   }
 
