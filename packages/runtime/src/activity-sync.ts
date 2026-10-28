@@ -7,29 +7,21 @@
 // 页面侧写要走 hana.chrome.set，而后台（本 App 进程不在页面里）走 ctx.surfaces 的三个方法：
 //   listCardChromeViews() → getCardChromeView() → setCardChrome()
 //
-// 状态从哪来（**事件驱动，不采样**）：DSH 的 `api-session/status` 在受管 runtime 子进程里发生，
-// 由那边的 activity-feed 订阅、经 bridge 的 `/_control/activity` 用 SSE 推过来
-// （packages/host/src/activity-feed.ts、bridge.ts；消费端见 activity-stream.ts）。
-// 轮询在这里是被证否过的方案：DSH 会话常常只有一两秒，采样周期再小也会把整个 running 窗口
-// 夹在两次采样之间。
+// 状态从哪来：**事件**。DSH 的 `api-session/status` 在受管 runtime 子进程里发生，由那边的
+// activity-feed 订阅、经控制面的 `activity-wait` 长轮询交给这里（activity-stream.ts）。空闲
+// 时只有一个请求挂着，有变化毫秒级返回；不按节拍采样。
 //
-// 但视图枚举没有事件面：宿主不告诉 App「有卡挂载了」。所以这里仍有一个轻量的周期任务，
-// 它只做「列视图 + 补写」，状态本身来自事件。两者分工明确：状态由事件推，视图靠周期刷新。
+// 这里没有「状态轮询」，也没有兜底采样：通道不通就不亮灯。采样在真机上被证否过两次——DSH
+// 会话常常只有一两秒，节拍再密也会把整个 running 窗口夹在两次采样之间。宁可不亮，也不假装。
 //
-// 三条纪律（照抄宿主契约，不自行简化）：
-//   · 描述是**整份替换**，所以写入前必须先 get，把页面自己的 title / tabs / actions 带上再提交；
-//     只交 activity 会把页面写过的其它字段一起抹掉。
-//   · revision 在同一视图内严格递增；被拒（竞争）就重新读一遍，不盲目重试同一个值。
-//   · 只在真正变化时写。每轮都写等于每轮都抢页面自己的写入机会。
+// 唯一还会定时做的事是**枚举卡片视图**（宿主不告诉 App「有卡挂载了」），而且只在有东西要写
+// 的时候扫：在跑时每几秒扫一次好补写上刚打开的卡；不跑时完全停表。
 import { errText } from "@dshana/shared/err-text.ts";
-import { activityFromTasks, type PageActivity } from "./activity.ts";
+import { type PageActivity } from "./activity.ts";
 import { subscribeActivityStream } from "./activity-stream.ts";
-import { rpcViaControl } from "./controller.ts";
 
-/** 视图枚举的刷新间隔：状态不靠它，它只负责发现「有卡挂载/卸载了」。 */
+/** 在跑时枚举视图的间隔：只为发现「刚挂载的卡」，不是为了取状态。 */
 export const VIEW_REFRESH_MS = 5000;
-/** 流不可用时的兜底采样间隔（老 runtime 或订阅失败时才会走到）。 */
-export const FALLBACK_POLL_MS = 2000;
 /** 一个视图连续失败几次就不再碰它（宿主列表里会留着已关闭卡的视图）。 */
 export const MAX_VIEW_STRIKES = 3;
 
@@ -40,10 +32,11 @@ export function planChromeWrite(
 ): { revision: number; activity: PageActivity | null } | null {
   const now = current && typeof current === "object" ? current.activity ?? null : null;
   if (now === desired) return null;
-  // 宿主的 revision 是**正整数**（严格递增）：读不到、读到 0 或负数都当从头算，
+  // 宿主的 revision 是**正整数**（严格递增）：读不到、非数字、读到 0 或负数都当从头算。
   // 不能拿一个非法值加一交上去——那会被拒，而且下一轮算出来的值还是同一个。
-  const raw = current && typeof current === "object" ? Number(current.revision) : 0;
-  const rev = Number.isSafeInteger(raw) && raw > 0 ? raw : 0;
+  // 类型也要卡住：字符串 "7" 不强转（不替宿主的数据做隐式修正）。
+  const raw = current && typeof current === "object" ? (current as { revision?: unknown }).revision : undefined;
+  const rev = typeof raw === "number" && Number.isSafeInteger(raw) && raw > 0 ? raw : 0;
   return { revision: rev + 1, activity: desired };
 }
 
@@ -57,22 +50,19 @@ export function mergeDescription(
 }
 
 export interface ActivitySyncOptions {
-  /** 视图枚举刷新间隔（默认 VIEW_REFRESH_MS）。 */
+  /** 在跑时枚举视图的间隔（默认 VIEW_REFRESH_MS）。 */
   refreshMs?: number;
-  /** 流不可用时的兜底采样间隔（默认 FALLBACK_POLL_MS）。 */
-  fallbackMs?: number;
   log?: (level: "info" | "warn" | "debug", message: string) => void;
 }
 
 /**
- * 装一次同步循环，返回卸载函数。
+ * 装一次同步，返回卸载函数。
  *
  * ctx 是宿主 App 上下文（apply 收到的那份）：用 ctx.surfaces.* 写卡片描述。状态来自受管
- * runtime 的 SSE（bridgeAccess 给的地址与钥匙）。任何一个面缺失都只记一条日志后安静退出。
+ * runtime 的活动通道。面缺失只记一条日志后安静退出。
  */
 export function installHostActivitySync(ctx: any, options: ActivitySyncOptions = {}): () => void {
   const refreshMs = Number(options.refreshMs) > 0 ? Number(options.refreshMs) : VIEW_REFRESH_MS;
-  const fallbackMs = Number(options.fallbackMs) > 0 ? Number(options.fallbackMs) : FALLBACK_POLL_MS;
   const log = typeof options.log === "function" ? options.log : () => {};
 
   const surfaces = ctx && ctx.surfaces;
@@ -83,34 +73,43 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
     log("info", "activity-sync: 宿主不提供卡片当前视图的读写面，不起同步");
     return () => {};
   }
-  log("info", "activity-sync: 已接管（状态走 runtime 的会话活动通道，视图每 " + refreshMs + "ms 刷一次）");
 
   /** 每个视图上一次**已生效**的取值；用来跳过无变化的写入。键 = cardInstanceId。 */
   const applied = new Map<string, PageActivity | null>();
   /** 每个视图已连续失败几次：失败到上限就不再碰它，直到下次列视图时重新出现。 */
   const strikes = new Map<string, number>();
-  /** 已报过「已落到卡片」的实例：每张卡只报一次，之后的增减不必重复。 */
+  /** 已报过「已落到卡片」的实例：每张卡只报一次。 */
   const announced = new Set<string>();
 
   let stopped = false;
-  /** 当前应有的状态：由 SSE 快照直接赋值，或由兜底采样算出。 */
+  /** 当前应有的状态：由活动通道的快照直接赋值。 */
   let desired: PageActivity | null = null;
   let busy = false;
   let busySince = 0;
   let sawEmpty = false;
-  let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  let sweepTimer: ReturnType<typeof setTimeout> | null = null;
   let stopStream: (() => void) | null = null;
-  let streamReady = false;
-  /** 兜底采样是否处于「读不到」状态（只用于把日志从每轮刷降成翻转时报一次）。 */
-  let fallbackFailed = false;
 
-  function scheduleRefresh(delay = refreshMs): void {
+  /** 停掉枚举定时器：不跑的时候这里不该有任何待办。 */
+  function stopSweep(): void {
+    if (sweepTimer !== null) clearTimeout(sweepTimer);
+    sweepTimer = null;
+  }
+
+  /** 排一次枚举。仅在 desired === "running" 期间使用。 */
+  function scheduleSweep(delay = refreshMs): void {
     if (stopped) return;
-    if (refreshTimer !== null) clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(() => {
-      refreshTimer = null;
-      void tick();
+    stopSweep();
+    sweepTimer = setTimeout(() => {
+      sweepTimer = null;
+      void runSweep();
     }, delay);
+  }
+
+  async function runSweep(): Promise<void> {
+    await flush();
+    // 还在跑就继续扫：可能有刚挂载的卡要补写。不跑就到此为止。
+    if (!stopped && desired === "running") scheduleSweep();
   }
 
   async function pushToViews(now: PageActivity | null): Promise<void> {
@@ -189,7 +188,7 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
     for (const key of [...strikes.keys()]) if (!live.has(key)) strikes.delete(key);
   }
 
-  /** 用当前状态推一次视图。并发保护 + 挂死看门狗（一个不返回的调用不能把循环锁死）。 */
+  /** 用当前状态推一次视图。并发保护 + 挂死看门狗（一个不返回的调用不能把同步锁死）。 */
   async function flush(): Promise<void> {
     if (busy && Date.now() - busySince < 30000) return;
     busy = true;
@@ -201,91 +200,40 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
     }
   }
 
-  /** 兜底采样：只在事件流不可用时使用（老 runtime、订阅失败）。 */
-  async function pollFallback(): Promise<PageActivity | null> {
-    try {
-      const value = await rpcViaControl(ctx, { method: "session/list", payload: {}, timeoutMs: 8000 });
-      const items = value && Array.isArray((value as any).items) ? (value as any).items : null;
-      if (items) {
-        if (fallbackFailed) {
-          fallbackFailed = false;
-          log("info", "activity-sync: 兜底采样恢复可用");
-        }
-        return (items as any[]).some((it) => it && typeof it === "object"
-          && (it as any).blank !== true && (it as any).running === true) ? "running" : null;
+  stopStream = subscribeActivityStream(ctx, {
+    onSnapshot: (snapshot) => {
+      const next: PageActivity | null = snapshot.running.length > 0 ? "running" : null;
+      if (next === desired) {
+        // 没变化：在跑就让既有的枚举继续，不跑就确保没有待办。
+        if (next === null) stopSweep();
+        return;
       }
-    } catch (e) {
-      if (!fallbackFailed) {
-        fallbackFailed = true;
-        log("info", "activity-sync: 兜底采样读不到会话状态（受管 runtime 未就绪或控制面不通）：" + errText(e));
-      }
-    }
-    const tasks = ctx && ctx.tasks;
-    if (tasks && typeof tasks.list === "function") {
-      try {
-        return activityFromTasks(await tasks.list());
-      } catch {
-        /* 读不到任务记录时维持不亮 */
-      }
-    }
-    return null;
-  }
-
-  /** 试着接上活动流；受管 runtime 还没起来时循环会自己退避重试，这里只负责起一次。 */
-  function ensureStream(): boolean {
-    if (streamReady) return true;
-    if (stopStream) return false;
-    stopStream = subscribeActivityStream(ctx, {
-      onSnapshot: (snapshot) => {
-        streamReady = true;
-        const next: PageActivity | null = snapshot.running.length > 0 ? "running" : null;
-        if (next === desired) return;
-        desired = next;
-        if (next === "running") log("info", "activity-sync: 会话在跑（" + snapshot.running.length + " 个），推状态点");
-        else log("info", "activity-sync: 没有会话在跑，撤状态点");
-        // 事件到了就立刻写，不等下一轮刷新。
+      desired = next;
+      if (next === "running") {
+        log("info", "activity-sync: 会话在跑（" + snapshot.running.length + " 个），推状态点");
+        // 事件到了立刻写；同时开一轮枚举，好补写上之后才挂载的卡。
         void flush();
-      },
-      onStatus: (state, detail) => {
-        if (state === "open") {
-          log("info", "activity-sync: 已接上会话活动（长轮询，不按节拍采样）");
-          return;
-        }
-        // 断线：回到兜底采样，等重连成功再切回来。
-        streamReady = false;
-        log("warn", "activity-sync: 会话活动断开（" + String(detail || "") + "），期间用兜底采样");
-      },
-    });
-    return false;
-  }
-
-  async function tick(): Promise<void> {
-    if (stopped) return;
-    try {
-      const streaming = ensureStream();
-      if (!streaming || !streamReady) {
-        const next = await pollFallback();
-        if (next !== desired) {
-          desired = next;
-          await flush();
-        } else {
-          await flush();
-        }
+        scheduleSweep();
       } else {
-        // 事件流在跑：本轮只刷新视图，状态不动。
-        await flush();
+        log("info", "activity-sync: 没有会话在跑，撤状态点");
+        stopSweep();
+        void flush();
       }
-    } finally {
-      // 事件流通着时可以慢一点（只刷新视图）；兜底采样期间用快节拍。
-      scheduleRefresh(streamReady ? refreshMs : fallbackMs);
-    }
-  }
+    },
+    onStatus: (state, detail) => {
+      if (state === "open") {
+        log("info", "activity-sync: 已接上会话活动（长轮询，不按节拍采样）");
+        return;
+      }
+      // 通道断了就不亮灯：这条路上没有采样可退，也不打算加。
+      log("warn", "activity-sync: 会话活动断开（" + String(detail || "") + "），期间不更新状态点");
+    },
+  });
+  log("info", "activity-sync: 已接管（空闲零唤醒；只在会话在跑时枚举视图）");
 
-  scheduleRefresh(0);
   return () => {
     stopped = true;
-    if (refreshTimer !== null) clearTimeout(refreshTimer);
-    refreshTimer = null;
+    stopSweep();
     if (typeof stopStream === "function") stopStream();
     stopStream = null;
     applied.clear();
