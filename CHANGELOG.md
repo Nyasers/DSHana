@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.5+dsh-0.2.1-rc.4](https://github.com/Nyasers/DSHana/compare/v1.2.4%2Bdsh-0.2.1-rc.3...v1.2.5%2Bdsh-0.2.1-rc.4) (2026-10-28)
+
+### Features
+
+* 给页面导航加图标 ([30110be](https://github.com/Nyasers/DSHana/commit/30110be7c5b9f77ea7f3d3372168584c37dab714))
+
 ## [1.2.4+dsh-0.2.1-rc.3](https://github.com/Nyasers/DSHana/compare/v1.2.3%2Bdsh-0.2.1-rc.2...v1.2.4%2Bdsh-0.2.1-rc.3) (2026-10-24)
 
 ### Features
