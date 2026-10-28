@@ -12,6 +12,8 @@
 // 一个任务 = 一类读者（再细就成"一个文件一个任务"，derive: 后面排长队反而难用）：
 //   version-metadata packages/host 声明的 dsh 依赖 → package.json#version 的 +dsh- 段（状态型；
 //                                             排第一，因为它改的是后面几个任务的源）
+//   dsh-peers    packages/host 声明的 dsh 依赖 → packages/dsh/app#peerDependencies（状态型；
+//                                             插件加载器拿 peer 做内核兼容校验，漏改时全绿到 boot 才炸）
 //   manifest     主 package.json#version + SDK 快照 packedVersion → packages/app/src/manifest.json（App 契约）
 //   cordis       主 package.json#version         → packages/dsh/*/package.json（profile loader 读的包）
 //   bundle       主 package.json#version         → packages/dsh/app/package.json（组合层包）
@@ -41,6 +43,7 @@ import { bundlePkgPaths, cordisPkgPaths, readPkg } from "../shared/version.mts";
 import { dshTask } from "../vendor/dsh.mts";
 import { packedVersion, thirdpartyTask } from "./thirdparty.mts";
 import { paramsDocTask } from "./params-doc.mts";
+import { dshPeersTask } from "./dsh-peers.mts";
 import { versionMetadataTask } from "./version-metadata.mts";
 
 export { ROOT };
@@ -170,7 +173,7 @@ const vendorTask: StateTask = dshTask;
 
 /** 全部任务（main 按名筛选用；执行顺序即数组顺序——version-metadata 必须在所有读主版本的
  * 任务之前）。 */
-export const TASKS: DeriveTask[] = [versionMetadataTask, manifestTask, cordisTask, bundleTask, pathsTask, vendorTask, thirdpartyTask, paramsDocTask];
+export const TASKS: DeriveTask[] = [versionMetadataTask, dshPeersTask, manifestTask, cordisTask, bundleTask, pathsTask, vendorTask, thirdpartyTask, paramsDocTask];
 
 /** 跑一个任务：比较期望内容与磁盘，写回或报漂。返回漂移文件数。 */
 export function runTask(task: DeriveTask, { checkOnly, log = console.log } = { checkOnly: false, log: console.log as (m: string) => void }): number {
