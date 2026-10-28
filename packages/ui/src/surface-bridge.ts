@@ -77,6 +77,61 @@ export function postAction(action: string): Promise<any> {
     .then((res) => res.json().catch(() => ({})));
 }
 
+// ---- 会话活动报到 App 后端 ----
+// 链路上游：中继的 /_control/activity（DSH 自己的 api-session/status，已在受管 runtime 里订阅）。
+// 为什么绕页面：App 进程没有网络权限（实测 ERR_ACCESS_DENIED），直连不了中继端口；而页面天生有
+// 中继的路径票据（prefix 里就带着），也能把请求发回本 App 的路由。所以页面只做搬运。
+export function postActivity(running: string[], at?: number): Promise<any> {
+  const body = at === undefined ? { running } : { running, at };
+  return apiFetch("dshana/activity", {
+    method: "POST",
+    cache: "no-store",
+    headers: { "content-type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
+  }).then((res) => res.json().catch(() => ({})));
+}
+
+/**
+ * 订阅中继的活动流（SSE），每次收到快照就报给 App 后端。返回停止函数。
+ *
+ * prefix 就是本面加载 DSH 用的那个前缀（已含 bridge 的路径票据），所以 `_control/activity`
+ * 对中继来说是已授权的控制面请求。EventSource 自带断线重连；连不上时这里什么也不做——
+ * 「没人报」本身就是信息，后端会自己判过期。
+ */
+export function startActivityRelay(prefix: string | null | undefined): () => void {
+  if (!prefix || typeof EventSource !== "function") return () => {};
+  let source: EventSource | null = null;
+  let stopped = false;
+  try {
+    source = new EventSource(prefix + "_control/activity");
+  } catch {
+    return () => {};
+  }
+  source.onmessage = (event) => {
+    if (stopped) return;
+    let payload: any = null;
+    try {
+      payload = JSON.parse(String(event.data || ""));
+    } catch {
+      return;
+    }
+    const running = Array.isArray(payload?.running) ? payload.running : [];
+    const at = typeof payload?.at === "number" ? payload.at : undefined;
+    void postActivity(running, at).catch(() => {
+      // 上报失败不重试：下一帧会再带一次当前快照，状态不会因此永久错下去。
+    });
+  };
+  return () => {
+    stopped = true;
+    try {
+      source?.close();
+    } catch {
+      /* 已关闭 */
+    }
+    source = null;
+  };
+}
+
 // 代理前缀 → 带路径票据的前缀（已带则不重复插）
 export function withSurfaceTicket(prefix: string, ss: string | null): string {
   if (!ss) return prefix;

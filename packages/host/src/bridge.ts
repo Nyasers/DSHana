@@ -197,6 +197,14 @@ export interface DshBridgeOptions {
   upstreamOrigin: string;
   upstreamCookie?: string;
   onControl?: (action: string, args: any) => Promise<any>;
+  /**
+   * 「哪些会话正在跑」的事件源（activity-feed.ts）。给了就在 `/_control/activity` 开一条 SSE：
+   * 页面持长连接，把变化转给 App 后端（App 进程没有网络权限，推不到它）。
+   */
+  activity?: {
+    snapshot(): unknown;
+    subscribe(listener: (snapshot: unknown) => void): () => void;
+  };
   log?: (s: string) => void;
 }
 
@@ -209,7 +217,7 @@ export interface DshBridgeHandle {
 /** 起中继（监听 127.0.0.1:port）。 */
 export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeHandle> {
   const {
-    port, bridgeKey, controlKey, upstreamOrigin, upstreamCookie = "", onControl, log = () => {},
+    port, bridgeKey, controlKey, upstreamOrigin, upstreamCookie = "", onControl, activity, log = () => {},
   } = opts || {};
   const upstream = new URL(upstreamOrigin);
   if (upstream.protocol !== "http:" || upstream.hostname !== "127.0.0.1") {
@@ -238,7 +246,60 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
     }
   }
 
+  /**
+   * 这条请求是不是活动流。两种凭据形态都算：header（controlKey，控制面）与
+   * 路径票据 `/_hana/<bridgeKey>/_control/activity`（浏览器 EventSource 带不了 header）。
+   */
+  function isActivityRequest(url: URL, headers: IncomingHttpHeaders): boolean {
+    if (url.pathname === "/_control/activity") {
+      return Boolean(controlKey) && matchesKey(headers["x-hana-dsh-control"], controlKey);
+    }
+    const parts = url.pathname.split("/");
+    if (parts[1] !== "_hana") return false;
+    let decoded = "";
+    try {
+      decoded = decodeURIComponent(parts[2] ?? "");
+    } catch {
+      return false;
+    }
+    if (!matchesKey(decoded, bridgeKey)) return false;
+    return "/" + parts.slice(3).join("/") === "/_control/activity";
+  }
+
   const server = createServer(async (req, res) => {
+    const reqUrl = new URL(req.url || "/", "http://bridge.invalid");
+    // 会话活动流（SSE）：页面侧持长连接，把「谁在跑」的变化转给 App 后端。
+    // 为什么在页面侧：App 进程没有网络权限（实测 ERR_ACCESS_DENIED），直连不了本端口；
+    // 而页面本来就有 bridge 的路径票据（它就是靠那条前缀加载 DSH 的）。
+    // 两种凭据都收：控制面用 header（controlKey），页面用路径票据（bridgeKey，EventSource 带不了 header）。
+    if (isActivityRequest(reqUrl, req.headers)) {
+      if (req.method !== "GET") {
+        rejectJson(res, 405, "DSH activity stream is GET only");
+        return;
+      }
+      if (!activity) {
+        rejectJson(res, 503, "DSH activity feed is unavailable");
+        return;
+      }
+      res.writeHead(200, {
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-cache, no-transform",
+        connection: "keep-alive",
+        "x-accel-buffering": "no",
+      });
+      // 连上先给当前快照：重连方不必再单独查一次。
+      const off = activity.subscribe((snapshot: unknown) => {
+        res.write("data: " + JSON.stringify(snapshot) + "\n\n");
+      });
+      const keepAlive = setInterval(() => res.write(": keep-alive\n\n"), 20000);
+      const cleanup = (): void => {
+        clearInterval(keepAlive);
+        off();
+      };
+      req.on("close", cleanup);
+      res.on("close", cleanup);
+      return;
+    }
     // 控制面（App 工具经 controller.invoke → ctx.runtime.fetch(runtimeId, "/_control")）：
     // controlKey 鉴权（与 bridgeKey 分离——浏览器侧不该拿到控制权），body {action,args}。
     if (new URL(req.url || "/", "http://bridge.invalid").pathname === "/_control") {

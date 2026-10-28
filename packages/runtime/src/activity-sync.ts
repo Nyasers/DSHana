@@ -18,7 +18,7 @@
 // 的时候扫：在跑时每几秒扫一次好补写上刚打开的卡；不跑时完全停表。
 import { errText } from "@dshana/shared/err-text.ts";
 import { type PageActivity } from "./activity.ts";
-import { subscribeActivityStream } from "./activity-stream.ts";
+import { currentActivity, subscribeActivity } from "./activity-store.ts";
 
 /** 在跑时枚举视图的间隔：只为发现「刚挂载的卡」，不是为了取状态。 */
 export const VIEW_REFRESH_MS = 5000;
@@ -88,7 +88,6 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
   let busySince = 0;
   let sawEmpty = false;
   let sweepTimer: ReturnType<typeof setTimeout> | null = null;
-  let stopStream: (() => void) | null = null;
 
   /** 停掉枚举定时器：不跑的时候这里不该有任何待办。 */
   function stopSweep(): void {
@@ -200,42 +199,36 @@ export function installHostActivitySync(ctx: any, options: ActivitySyncOptions =
     }
   }
 
-  stopStream = subscribeActivityStream(ctx, {
-    onSnapshot: (snapshot) => {
-      const next: PageActivity | null = snapshot.running.length > 0 ? "running" : null;
-      if (next === desired) {
-        // 没变化：在跑就让既有的枚举继续，不跑就确保没有待办。
-        if (next === null) stopSweep();
-        return;
-      }
-      desired = next;
-      if (next === "running") {
-        log("info", "activity-sync: 会话在跑（" + snapshot.running.length + " 个），推状态点");
-        // 事件到了立刻写；同时开一轮枚举，好补写上之后才挂载的卡。
-        void flush();
-        scheduleSweep();
-      } else {
-        log("info", "activity-sync: 没有会话在跑，撤状态点");
-        stopSweep();
-        void flush();
-      }
-    },
-    onStatus: (state, detail) => {
-      if (state === "open") {
-        log("info", "activity-sync: 已接上会话活动（长轮询，不按节拍采样）");
-        return;
-      }
-      // 通道断了就不亮灯：这条路上没有采样可退，也不打算加。
-      log("warn", "activity-sync: 会话活动断开（" + String(detail || "") + "），期间不更新状态点");
-    },
-  });
-  log("info", "activity-sync: 已接管（空闲零唤醒；只在会话在跑时枚举视图）");
+  /** 收到一次上报就更新状态；页面可能同时开多个面，谁报都一样。 */
+  function applyReport(reported: { running: string[] }): void {
+    const next: PageActivity | null = reported.running.length > 0 ? "running" : null;
+    if (next === desired) {
+      if (next === null) stopSweep();
+      return;
+    }
+    desired = next;
+    if (next === "running") {
+      log("info", "activity-sync: 会话在跑（" + reported.running.length + " 个，页面报来），推状态点");
+      // 上报到了立刻写；同时开一轮枚举，好补写上之后才挂载的卡。
+      void flush();
+      scheduleSweep();
+    } else {
+      log("info", "activity-sync: 没有会话在跑，撤状态点");
+      stopSweep();
+      void flush();
+    }
+  }
+
+  const offReport = subscribeActivity(applyReport);
+  // 启动时先看一次现值：页面可能在本模块装上之前就报过了。
+  const initial = currentActivity();
+  if (initial) applyReport(initial);
+  log("info", "activity-sync: 已接管（状态由页面报来；空闲零唤醒，只在会话在跑时枚举视图）");
 
   return () => {
     stopped = true;
     stopSweep();
-    if (typeof stopStream === "function") stopStream();
-    stopStream = null;
+    offReport();
     applied.clear();
     strikes.clear();
     announced.clear();

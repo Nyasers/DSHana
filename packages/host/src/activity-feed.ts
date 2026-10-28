@@ -26,11 +26,6 @@ export interface ActivityFeed {
   snapshot(): ActivitySnapshot;
   /** 订阅变化；返回退订函数。订阅即刻回调一次当前快照。 */
   subscribe(listener: (snapshot: ActivitySnapshot) => void): () => void;
-  /**
-   * 等到「版本 > sinceVersion」或超时（毫秒）。长轮询的落脚点：请求挂在这里，
-   * 有变化立刻回，超时回当前快照。不按固定节拍盲发请求，也不靠采样。
-   */
-  wait(sinceVersion: number, timeoutMs: number): Promise<ActivitySnapshot>;
   /** 接上 DSH 的事件源；返回解绑函数。未接上时快照恒为空。 */
   attach(ctx: any): () => void;
 }
@@ -63,23 +58,6 @@ export function createActivityFeed(): ActivityFeed {
 
   return {
     snapshot,
-    wait(sinceVersion, timeoutMs) {
-      if (version > sinceVersion) return Promise.resolve(snapshot());
-      const ms = Number(timeoutMs) > 0 ? Number(timeoutMs) : 20000;
-      return new Promise((resolve) => {
-        let settled = false;
-        const finish = (): void => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          listeners.delete(onChange);
-          resolve(snapshot());
-        };
-        const onChange = (): void => finish();
-        const timer = setTimeout(finish, Math.min(ms, 60000));
-        listeners.add(onChange);
-      });
-    },
     subscribe(listener) {
       listeners.add(listener);
       // 订阅即给一次当前状态：消费方重连时不必再单独查一次。

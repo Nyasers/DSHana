@@ -31,6 +31,7 @@ import {
   credMissingHtml,
   fetchBootState,
   postAction,
+  startActivityRelay,
   surfaceSession,
   withSurfaceTicket,
 } from "./surface-bridge.ts";
@@ -192,6 +193,9 @@ import {
     seedView = view;
     var privatePrefix = withSurfaceTicket(prefix, surfaceSession());
     var base = new URL(privatePrefix, location.origin);
+    // 会话活动：订阅中继的事件流，把「谁在跑」报给 App 后端（它自己没有网络权限）。
+    // 页面是唯一报告方；它没了后端就当作没新消息，旧状态自己过期。
+    startActivityRelay(base.pathname);
     injected.transport = installTransport(base, {
       // 面 → DSH 侧上游角色词：sidebar（FP）= navigation（只有侧栏）；
       // default（full / 拆窗）= standalone（整幅 DSH UI，可折叠）；main 与 settings = workspace

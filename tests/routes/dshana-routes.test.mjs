@@ -75,6 +75,7 @@ test("挂载清单：GET boot-state/health/settings/models/card-state/faces-poll
     "GET /dshana/models",
     "GET /dshana/settings",
       // faces 端点已拆（面间不再有 HTTP 面）
+    "POST /dshana/activity",
     "POST /dshana/settings",
     "POST /dshana/settings/restart",
     "POST /dshana/start",

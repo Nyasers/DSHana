@@ -33,6 +33,7 @@
 // 依赖注入（可测性）：deps = { appId, version, getSnapshot(), start(), stop(), log() }。
 // 默认实现经 packages/runtime/src/managed-runtime.ts 读取真实单例；测试注入 fake。
 import { managedRuntimeDetails, ensureManagedRuntime, stopManagedRuntime, bridgeAccess } from "@dshana/runtime/managed-runtime.ts";
+import { reportActivity } from "@dshana/runtime/activity-store.ts";
 import { buildBootSnapshot, APP_ID } from "@dshana/runtime/boot-state.ts";
 import { dataSources, sourceOf } from "@dshana/runtime/data-source.ts";
 // 数据源切换（packages/runtime/src/source-switch.ts）的入口暂时撤下：链未在真机验证过，见 POST /dshana/settings/restart。
@@ -299,6 +300,23 @@ export function registerDshanaRoutes(app, deps) {
     });
   }
 
+  // ---- POST /dshana/activity：页面把会话活动报上来 ----
+  // 链路：中继的 SSE → 页面 → 这里 → activity-store → activity-sync 写状态点。
+  // 为什么绕页面：App 进程没有网络权限（ERR_ACCESS_DENIED），直连不了中继；页面有票据。
+  if (typeof app?.post === "function") {
+    app.post(DASHANA_ROUTE_PREFIX + "/activity", async (c) => {
+      let body: unknown = null;
+      try {
+        body = typeof c?.req?.json === "function" ? await c.req.json() : null;
+      } catch {
+        return json(c, 400, { ok: false, error: "body 不是合法 JSON" });
+      }
+      // 只收形状：畸形上报当“没人跑”，不把垃圾当真。
+      const snapshot = reportActivity(body);
+      return json(c, 200, { ok: true, running: snapshot.running.length });
+    });
+  }
+
   // ---- POST /dshana/start：手动触发（v2 无自动链；幂等、不阻塞请求）----
   if (typeof app?.post === "function") {
     app.post(DASHANA_ROUTE_PREFIX + "/start", async (c) => {
@@ -385,6 +403,7 @@ export function dshanaRoutesTable() {
     ["GET", DASHANA_ROUTE_PREFIX + "/settings"],
     ["GET", DASHANA_ROUTE_PREFIX + "/models"],
     ["GET", DASHANA_ROUTE_PREFIX + "/card-state"],
+    ["POST", DASHANA_ROUTE_PREFIX + "/activity"],
     ["POST", DASHANA_ROUTE_PREFIX + "/start"],
     ["POST", DASHANA_ROUTE_PREFIX + "/stop"],
     ["POST", DASHANA_ROUTE_PREFIX + "/settings"],
