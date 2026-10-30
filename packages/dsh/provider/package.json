@@ -1,6 +1,6 @@
 {
   "name": "@dshana/dsh-provider",
-  "version": "1.2.5+dsh-0.2.1-rc.5",
+  "version": "1.2.6+dsh-0.2.1-rc.5",
   "description": "Model provider adapter: DSH inference runs through Hana inside the managed runtime.",
   "private": true,
   "type": "module",
