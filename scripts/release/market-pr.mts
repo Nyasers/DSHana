@@ -19,13 +19,15 @@
 //   （下载 + 哈希）留给市场 PR 的 CI 在远端做，本地不重复付那 153 MB。
 //
 // 正文形状对齐维护者（liliMozi）的更新型 PR：
-//   标题 `chore: approve <kind>/<id> <tag>`；
-//   正文 = Release / SHA-256（+ 有则 Changes）几行 + 一行本地核对说明 + Changelog 段。
-//   · Changes 只用于声明**权限变更等重要变更**，由 --changes 现给；其余「改了什么」下沉到 Changelog
-//     段——取自本仓 CHANGELOG.md 的**区间**（含各提交链接），不在这里另写一份，也就不会与它漂移。
-//     区间两端都取自外部事实：起点是市场当前登记的版本（上游 approvals.json），终点是仓库 Latest。
-//   · 图标预览、截图、自测报告几栏是作者按维护者要求补的审阅材料（见上游 CONTRIBUTING 第 3 节），
-//     不由脚本生成：脚本出的是可提交的骨，这几栏按 PR 当期情况手补。
+//   标题 `chore: approve <kind>/<id> <已登记 tag> -> <本次 tag>`（首次上架不带区间）；
+//   正文 = 「旧 tag → 新 tag」一节（Release / Package / SHA-256）+ Changes + Changelog 段。
+//   · Changes 段由作者手写（--changes / --changes-file）：权限面差异、minAppVersion 跳变、内嵌依赖
+//     变化这些判断不进脚本——脚本只摆事实，哪条值得写由发版的人定。没给就留一个隐藏占位提示。
+//   · 其余「改了什么」下沉到 Changelog 段——取自本仓 CHANGELOG.md 的**区间**（含各提交链接），
+//     不在这里另写一份，也就不会与它漂移。区间两端都取自外部事实：起点是市场当前登记的版本
+//     （上游 approvals.json），终点是仓库 Latest。
+//   · 读者是市场维护者：不写本地核对口径、不写分支怎么推、不写自测过程。图标与截图是首次收录
+//     （enroll）那次才交的审阅材料（见上游 CONTRIBUTING），更新 PR 不重复。
 //
 // 用法：
 //   node scripts/release/market-pr.mts                      # 打印标题与正文
@@ -75,7 +77,6 @@ function arg(name: string): string | null {
 
 const noWait = process.argv.includes("--no-wait");
 const outDir = arg("--out");
-const cliChanges = arg("--changes");
 const log = (m: string): void => console.error(`[market-pr] ${m}`);
 
 /** 无代理环境下跑 gh，并给 git 固定 HTTP/1.1。
@@ -114,12 +115,19 @@ function zipNameOf(url: string): string | null {
  *  条目与它所指的 ZIP 必须同属这个 Release：市场侧按 approvals 的记录去那个 Release 取件，只传了
  *  条目、漏传 ZIP 的话要等那边下载才炸；这里就地核对（存在 + 字节数与条目一致），fail-fast。
  *  `wait=false` 时连条目也只探一次。 */
+/** 入参与回参的形状见上面的说明。 */
 async function waitForRelease(
   tag: string,
   repo: string,
   entryName: string,
   wait: boolean,
-): Promise<{ sha256: string; size: number; publisher: string }> {
+): Promise<{
+  sha256: string;
+  size: number;
+  publisher: string;
+  /** 条目所指的通用包名，正文的 Package 行用它。 */
+  zipName: string;
+}> {
   const deadline = Date.now() + (wait ? WAIT_MS : 0);
   // 命中那次的资产清单：条目下载完要拿它核对条目所指的 ZIP（名称 + 字节数）。
   let assets: { name: string; size: number }[] = [];
@@ -175,7 +183,7 @@ async function waitForRelease(
     throw new Error(`${zipName} 的 sha256 与条目不符：资产 digest ${digest} ≠ 条目 archive.sha256 ${declared}`);
   }
   if (!digest) log(`注意：${zipName} 在 API 上没有 digest，只核了字节数（完整性留给市场侧核）`);
-  return { sha256: declared, size: entry.archive.size, publisher: String(entry.publisher || "") };
+  return { sha256: declared, size: entry.archive.size, publisher: String(entry.publisher || ""), zipName };
 }
 
 /** 版本主号（major.minor.patch）逐段比：只用来拦「明显往回打」，pre 段的细则交给市场侧。 */
@@ -259,7 +267,11 @@ function repoLatestTag(repo: string): string | null {
  *  返回**市场当前登记的版本**（首次上架、或该 kind 无版本号时为 null）：它同时是 Changelog 段
  *  的区间**起点**——上次登记到现在跳过的那几版要并进同一条 PR 的正文，见 changelogSection。
  *  台账读不到会直接抛（见 publishedApprovals），不静默退回单版本正文。 */
-async function preflightPublished(enr: Enrollment, version: string, entryPublisher: string): Promise<string | null> {
+async function preflightPublished(
+  enr: Enrollment,
+  version: string,
+  entryPublisher: string,
+): Promise<{ version: string; tag: string } | null> {
   if (entryPublisher && entryPublisher !== enr.publisher) {
     throw new Error(
       `条目里的 publisher（${entryPublisher}）与登记（${enr.publisher}）不一致，市场会拒：` +
@@ -280,13 +292,13 @@ async function preflightPublished(enr: Enrollment, version: string, entryPublish
   // skill / recipe 按内容哈希更新，`0.0.0` 不是版本语义，比版本没意义（市场侧 historyFor 同样跳过）。
   if (VERSIONLESS_KINDS.has(enr.kind)) {
     log(`${enr.kind} 没有版本号（按内容哈希），跳过版本比对`);
-    return pubVersion;
+    return { version: pubVersion, tag: String(pub.tag) };
   }
   if (coreDowngrade(version, pubVersion)) {
     throw new Error(`版本倒退：本次 ${version} < 已登记 ${pubVersion}，市场侧的 historyFor 会拒`);
   }
   log(`已登记 ${pubVersion} → 本次 ${version}（主号不降级）`);
-  return pubVersion;
+  return { version: pubVersion, tag: String(pub.tag) };
 }
 
 /** CHANGELOG.md 里的一个版本段：版本号、标题带的 compare 链接，以及标题行之后的原文。 */
@@ -406,8 +418,44 @@ function changelogSection(
   return buildChangelogSection(String(fs.readFileSync(file, "utf8")), currentVersion, sinceVersion, repo);
 }
 
+/** 登记 PR 标题：更新型带区间（市场当前 tag → 本次 tag），首次上架只有目标 tag。 */
+export function buildEnrollmentTitle(kind: string, id: string, tag: string, sinceTag: string | null): string {
+  return `chore: approve ${kind}/${id} ${sinceTag ? `${sinceTag} -> ${tag}` : tag}`;
+}
+
+/** 正文：「旧 tag → 新 tag」一节（Release / Package / SHA-256）+ Changes + Changelog。
+ *  Changes 的**内容**由作者给（--changes / --changes-file），脚本只出标题与占位——权限面差异、
+ *  minAppVersion 跳变这些判断不进脚本。没给就留一条 HTML 注释：渲染时看不见，粘贴时看得见。
+ *  刻意不放本地核对口径、分支操作与自测记录：读者是市场维护者，他们只关心**上一版到这一版变什么**。 */
+export function buildEnrollmentBody(input: {
+  tag: string;
+  sinceTag: string | null;
+  zipName: string;
+  releaseUrl: string;
+  sha256: string;
+  changes: string | null;
+  changelog: { url: string; body: string } | null;
+}): string {
+  const lines = [
+    input.sinceTag ? `## ${input.sinceTag} → ${input.tag}` : `## ${input.tag}`,
+    "",
+    `- Release: ${input.releaseUrl}`,
+    `- Package: \`${input.zipName}\``,
+    `- SHA-256: \`${input.sha256}\``,
+    "",
+    "## Changes",
+    "",
+    input.changes && input.changes.trim() ? input.changes.trim() : "<!-- 手写：权限面差异、minAppVersion 跳变、内嵌依赖变化 -->",
+  ];
+  if (input.changelog) lines.push("", `## [Changelog](${input.changelog.url})`, "", input.changelog.body);
+  return lines.join("\n");
+}
+
 async function main(): Promise<void> {
   const enr = fs.readJsonSync(join(ROOT, "market", "enrollment.json")) as Enrollment;
+  // Changes 段的内容由作者给：--changes 直给文本，--changes-file 读文件（多行 diff 块走后者方便）。
+  const changesFile = arg("--changes-file");
+  const changesText = changesFile ? String(fs.readFileSync(resolve(changesFile), "utf8")) : arg("--changes");
   const manifest = fs.readJsonSync(manifestPath(ROOT)) as { version: string };
   const versioned = !VERSIONLESS_KINDS.has(enr.kind);
   // 默认 tag 只有带版本的扩展推得出来（`v<manifest 版本>`）；skill / recipe 没有版本号，必须显式给 --tag。
@@ -429,11 +477,13 @@ async function main(): Promise<void> {
     : `${enr.kind}-${enr.id}.entry.json`;
 
   log(`登记 ${enr.kind}/${enr.id} · tag ${tag}${versioned ? "" : "（无版本号，按内容哈希）"}`);
-  const { sha256, publisher } = await waitForRelease(tag, enr.repository, entryName, !noWait);
+  const { sha256, publisher, zipName } = await waitForRelease(tag, enr.repository, entryName, !noWait);
   log(`条目 sha256 ${sha256}`);
-  const publishedVersion = await preflightPublished(enr, version, publisher);
+  const published = await preflightPublished(enr, version, publisher);
+  const publishedVersion = published?.version ?? null;
+  const sinceTag = published?.tag ?? null;
 
-  const title = `chore: approve ${enr.kind}/${enr.id} ${tag}`;
+  const title = buildEnrollmentTitle(enr.kind, enr.id, tag, sinceTag);
   const releaseUrl = `https://github.com/${enr.repository}/releases/tag/${tag.replace(/\+/g, "%2B")}`;
   // Changelog 段的终点取**仓库 Latest**（外部事实），而不是所选 tag：两者不同时（--tag 指旧版本）
   // 以 Latest 为准，因为那才是仓库当前发布到的地方。读不到 Latest 时退回所选 tag。
@@ -443,20 +493,10 @@ async function main(): Promise<void> {
     log(`注意：仓库 Latest 是 ${latest}，与所选 tag ${tag} 不同；Changelog 段按 Latest 取`);
   }
   const changelog = changelogSection(endVersion, publishedVersion, enr.repository);
-  // Release / SHA-256 是脚本能自证的事实；Changes 只放重要变更（--changes 现给）；其余改了什么归 Changelog 段。
-  const body = [
-    `Approve the new ${enr.id} ${enr.kind} release.`,
-    "",
-    `- Release: ${releaseUrl}`,
-    `- SHA-256: \`${sha256}\``,
-    ...(cliChanges ? [`- Changes: ${cliChanges}`] : []),
-    "",
-    "Local check: 条目与 Release 资产按 API 核对一致（sha256 digest + 字节数），未下载安装包。",
-    ...(changelog ? ["", `## [Changelog](${changelog.url})`, "", changelog.body] : []),
-  ].join("\n");
+  const body = buildEnrollmentBody({ tag, sinceTag, zipName, releaseUrl, sha256, changes: changesText, changelog });
 
-  if (cliChanges) log("Changes 行取自 --changes");
-  else log("未给 --changes：正文不带 Changes 行（它只用于权限变更等重要变更，其余见 Changelog 段）");
+  if (changesText) log(changesFile ? `Changes 段取自 ${changesFile}` : "Changes 段取自 --changes");
+  else log("未给 --changes / --changes-file：Changes 段先留占位注释，出正文后手写");
   if (!changelog) log(`注意：CHANGELOG 里没有 ${endVersion} 那一段，正文不带 Changelog 段`);
   log("本脚本只出文本：registry/approvals 的改动、推分支与开 PR 在 DSHana 侧完成");
 
