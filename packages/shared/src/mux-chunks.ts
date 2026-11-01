@@ -41,15 +41,17 @@ export const MUX_CHUNK_MAGIC = [0x48, 0x4e, 0x4b, 0x31] as const;
 
 /** 分片帧：magic(4) + kind(1)=CHUNK + last(1) + payload。 */
 export const MUX_CHUNK_KIND_CHUNK = 1;
+/** 回执帧：magic(4) + kind(1)=ACK + u32BE(本次确认的分片载荷字节数)。 */
+export const MUX_CHUNK_KIND_ACK = 2;
 /**
- * 压缩分片帧：同上，但整条消息的 payload 是 **raw deflate**。
+ * 压缩分片帧：同分片帧，但整条消息的 payload 是 **raw deflate**。
  *
  * 一条消息独立压（无上下文接管）：中继把超限文本压完再切，浏览器侧用内建
  * `DecompressionStream('deflate-raw')` 解。分片帧自带压缩标志，与 WS 扩展层无关。
+ *
+ * 编号只给已实装的帧类型，不预留空位：新增一种编码就是加一个 kind，未实装前不占号。
  */
 export const MUX_CHUNK_KIND_CHUNK_DEFLATE = 3;
-/** 回执帧：magic(4) + kind(1)=ACK + u32BE(本次确认的分片载荷字节数)。 */
-export const MUX_CHUNK_KIND_ACK = 2;
 
 /** 分片能力的开关（页面在 mux URL 上声明；中继只在看到它时才启用分片）。 */
 export const MUX_CHUNK_QUERY = "dshanaMuxChunks";
