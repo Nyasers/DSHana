@@ -41,6 +41,13 @@ export const MUX_CHUNK_MAGIC = [0x48, 0x4e, 0x4b, 0x31] as const;
 
 /** 分片帧：magic(4) + kind(1)=CHUNK + last(1) + payload。 */
 export const MUX_CHUNK_KIND_CHUNK = 1;
+/**
+ * 压缩分片帧：同上，但整条消息的 payload 是 **raw deflate**。
+ *
+ * 一条消息独立压（无上下文接管）：中继把超限文本压完再切，浏览器侧用内建
+ * `DecompressionStream('deflate-raw')` 解。分片帧自带压缩标志，与 WS 扩展层无关。
+ */
+export const MUX_CHUNK_KIND_CHUNK_DEFLATE = 3;
 /** 回执帧：magic(4) + kind(1)=ACK + u32BE(本次确认的分片载荷字节数)。 */
 export const MUX_CHUNK_KIND_ACK = 2;
 
@@ -59,11 +66,11 @@ export function isMuxControlFrame(bytes: Uint8Array): boolean {
   return true;
 }
 
-/** 分片帧（last=true 表示这条消息的最后一片）。 */
-export function encodeChunk(payload: Uint8Array, last: boolean): Uint8Array {
+/** 分片帧（last=true 表示这条消息的最后一片；deflated 表示载荷是 raw deflate）。 */
+export function encodeChunk(payload: Uint8Array, last: boolean, deflated = false): Uint8Array {
   const out = new Uint8Array(CHUNK_HEADER_LEN + payload.length);
   out.set(MUX_CHUNK_MAGIC, 0);
-  out[MAGIC_LEN] = MUX_CHUNK_KIND_CHUNK;
+  out[MAGIC_LEN] = deflated ? MUX_CHUNK_KIND_CHUNK_DEFLATE : MUX_CHUNK_KIND_CHUNK;
   out[MAGIC_LEN + 1] = last ? 1 : 0;
   out.set(payload, CHUNK_HEADER_LEN);
   return out;
@@ -81,12 +88,17 @@ export function encodeAck(bytes: number): Uint8Array {
 /** 解一帧我们造的控制帧；不是控制帧或长度不合返回 null。 */
 export function decodeMuxControlFrame(
   bytes: Uint8Array,
-): { kind: "chunk"; last: boolean; payload: Uint8Array } | { kind: "ack"; bytes: number } | null {
+): { kind: "chunk"; last: boolean; payload: Uint8Array; deflated: boolean } | { kind: "ack"; bytes: number } | null {
   if (!isMuxControlFrame(bytes)) return null;
   const kind = bytes[MAGIC_LEN];
-  if (kind === MUX_CHUNK_KIND_CHUNK) {
+  if (kind === MUX_CHUNK_KIND_CHUNK || kind === MUX_CHUNK_KIND_CHUNK_DEFLATE) {
     if (bytes.length < CHUNK_HEADER_LEN) return null;
-    return { kind: "chunk", last: bytes[MAGIC_LEN + 1] === 1, payload: bytes.subarray(CHUNK_HEADER_LEN) };
+    return {
+      kind: "chunk",
+      last: bytes[MAGIC_LEN + 1] === 1,
+      payload: bytes.subarray(CHUNK_HEADER_LEN),
+      deflated: kind === MUX_CHUNK_KIND_CHUNK_DEFLATE,
+    };
   }
   if (kind === MUX_CHUNK_KIND_ACK) {
     if (bytes.length < ACK_LEN) return null;

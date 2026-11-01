@@ -22,6 +22,8 @@
 // 首帧字节，按剩余量交给帧解析）。
 //
 // 上游侧不掩码（它是 ws 服务端）；本中继发给客户端的方向同样不掩码（我们对宿主是服务端）。
+import { deflateRaw } from "node:zlib";
+
 import { ChunkWindow, MUX_CHUNK_BYTES, decodeMuxControlFrame, encodeChunk, sliceBytes } from "@dshana/shared/mux-chunks.ts";
 import { OPCODE, framePayload, readFrameHeader, serializeFrame, type WsFrameHeader } from "./ws-frames.ts";
 
@@ -37,6 +39,23 @@ const CLIENT_FRAME_MAX = 4 * 1024 * 1024;
 const HANDSHAKE_MAX = 16 * 1024;
 /** 属于正常收尾的断开原因（不刷日志）。 */
 const NORMAL_END = new Set(["client close", "upstream close"]);
+/**
+ * 分片前的压缩：只对超限消息做（分片只在此时发生）。
+ *
+ * 每条消息独立 deflate（raw），不维持跨消息上下文——浏览器侧要用内建
+ * `DecompressionStream('deflate-raw')` 逐条解，上下文接管就解不了。等级取 1，与上游
+ * gateway 自己的选择一致：大 JSON 在 1 级已经能省到一小半，再高只是烧 CPU。
+ */
+const DEFLATE_LEVEL = 1;
+/** 压缩后省不到一成就不压：省下的字节不够多一轮解压的开销。 */
+const DEFLATE_MIN_SAVING = 0.9;
+
+/** zlib 回调式 → Promise（不用 promisify：zlib 那批重载在 TS 下推断不出返回类型）。 */
+function deflateRawAsync(buf: Buffer): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    deflateRaw(buf, { level: DEFLATE_LEVEL }, (error, out) => (error ? reject(error) : resolve(out)));
+  });
+}
 
 type FrameHeader = WsFrameHeader;
 
@@ -100,7 +119,7 @@ export function startFrameRelay(opts: MuxRelayOptions): { dispose(): void } {
     });
   };
 
-  /** 切分一条完整消息：小则单帧转发，大则按窗口分片。 */
+  /** 切分一条完整消息：小则单帧转发，大则先试压缩再按窗口分片。 */
   const emitMessage = async (message: CompleteMessage): Promise<void> => {
     if (disposed) return;
     if (message.bytes <= MUX_CHUNK_BYTES) {
@@ -108,15 +127,31 @@ export function startFrameRelay(opts: MuxRelayOptions): { dispose(): void } {
       return;
     }
     const body = Buffer.concat(message.parts);
-    const chunks = sliceBytes(new Uint8Array(body.buffer, body.byteOffset, body.length), MUX_CHUNK_BYTES);
-    log(`mux-relay: 上游消息 ${message.bytes} B → ${chunks.length} 片（单片上限 ${MUX_CHUNK_BYTES} B）`);
+    let payload = new Uint8Array(body.buffer, body.byteOffset, body.length);
+    let deflated = false;
+    // 只压文本消息：mux 帧都是 JSON 文本，二进制帧不属这个语义。
+    if (message.opcode === OPCODE.TEXT) {
+      try {
+        const packed = await deflateRawAsync(body);
+        if (packed.length < payload.length * DEFLATE_MIN_SAVING) {
+          payload = new Uint8Array(packed.buffer, packed.byteOffset, packed.length);
+          deflated = true;
+        }
+      } catch {
+        /* 压缩器出错就发明文：压缩是优化，不能变成投递的前置条件 */
+      }
+      if (disposed) return;
+    }
+    const chunks = sliceBytes(payload, MUX_CHUNK_BYTES);
+    const compressNote = deflated ? `deflate → ${payload.length} B → ` : "";
+    log(`mux-relay: 上游消息 ${message.bytes} B → ${compressNote}${chunks.length} 片（单片上限 ${MUX_CHUNK_BYTES} B）`);
     for (let i = 0; i < chunks.length; i += 1) {
       if (disposed) return;
       const chunk = chunks[i];
       await window.waitForRoom(chunk.length);
       if (disposed) return;
       window.reserve(chunk.length);
-      await writeClient(serializeFrame(OP_BINARY, encodeChunk(chunk, i === chunks.length - 1)));
+      await writeClient(serializeFrame(OP_BINARY, encodeChunk(chunk, i === chunks.length - 1, deflated)));
     }
   };
 

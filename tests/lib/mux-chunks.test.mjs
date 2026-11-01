@@ -71,6 +71,23 @@ test("mux-chunks: 线上布局（分片头 / 回执头）", () => {
   assert.deepEqual(decodeMuxControlFrame(ack), { kind: "ack", bytes: 123456 });
 });
 
+test("mux-chunks: 压缩分片帧带上 deflate 标志，kind 与普通分片不同", () => {
+  const payload = encodeUtf8("压缩过的字节");
+  const plain = decodeMuxControlFrame(encodeChunk(payload, true));
+  const packed = decodeMuxControlFrame(encodeChunk(payload, true, true));
+  assert.equal(plain.kind, "chunk");
+  assert.equal(plain.deflated, false, "普通分片不带压缩标志");
+  assert.equal(packed.kind, "chunk");
+  assert.equal(packed.deflated, true, "压缩分片带压缩标志");
+  assert.equal(packed.last, true);
+  assert.deepEqual([...packed.payload], [...payload], "标志位不侵占载荷");
+
+  // 线上布局：kind 字节是唯一区分处，帧长与普通分片一致。
+  const frame = encodeChunk(payload, false, true);
+  assert.equal(frame[4], 3, "kind=chunk-deflate");
+  assert.equal(frame.length, plain.payload.length + 6);
+});
+
 test("mux-chunks: 正常 mux 帧不会被误判为控制帧", () => {
   const json = encodeUtf8(JSON.stringify({ type: "open", streamId: "hana-1", endpoint: "session/follow" }));
   assert.equal(isMuxControlFrame(json), false);
