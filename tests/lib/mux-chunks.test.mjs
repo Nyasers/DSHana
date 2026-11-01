@@ -71,20 +71,20 @@ test("mux-chunks: 线上布局（分片头 / 回执头）", () => {
   assert.deepEqual(decodeMuxControlFrame(ack), { kind: "ack", bytes: 123456 });
 });
 
-test("mux-chunks: 压缩分片帧带上 deflate 标志，kind 与普通分片不同", () => {
+test("mux-chunks: 压缩分片帧带上 zstd 标志，kind 与普通分片不同", () => {
   const payload = encodeUtf8("压缩过的字节");
   const plain = decodeMuxControlFrame(encodeChunk(payload, true));
   const packed = decodeMuxControlFrame(encodeChunk(payload, true, true));
   assert.equal(plain.kind, "chunk");
-  assert.equal(plain.deflated, false, "普通分片不带压缩标志");
+  assert.equal(plain.compressed, false, "普通分片不带压缩标志");
   assert.equal(packed.kind, "chunk");
-  assert.equal(packed.deflated, true, "压缩分片带压缩标志");
+  assert.equal(packed.compressed, true, "压缩分片带压缩标志");
   assert.equal(packed.last, true);
   assert.deepEqual([...packed.payload], [...payload], "标志位不侵占载荷");
 
   // 线上布局：kind 字节是唯一区分处，帧长与普通分片一致。
   const frame = encodeChunk(payload, false, true);
-  assert.equal(frame[4], 3, "kind=chunk-deflate");
+  assert.equal(frame[4], 3, "kind=chunk-zstd");
   assert.equal(frame.length, plain.payload.length + 6);
 });
 
@@ -131,7 +131,7 @@ test("mux-chunks: 在途窗口只在额度内放行，回执唤醒等待者", as
 });
 
 test("mux-chunks: 默认上限离宿主的 1 MiB 守卫有余量（按线上字节核算）", () => {
-  assert.equal(MUX_CHUNK_BYTES, 128 * 1024);
+  assert.equal(MUX_CHUNK_BYTES, 384 * 1024);
   assert.ok(MUX_CHUNK_WINDOW >= MUX_CHUNK_BYTES, "窗口至少容得下一片");
   assert.ok(MUX_CHUNK_WINDOW % MUX_CHUNK_BYTES === 0, "窗口应为单片整数倍（避免多压半片）");
   // 宿主守卫：bufferedAmount > 1 MiB 就掐。一片的线上字节 = 载荷 + 帧头/信封开销。

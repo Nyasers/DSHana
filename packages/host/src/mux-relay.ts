@@ -22,7 +22,7 @@
 // 首帧字节，按剩余量交给帧解析）。
 //
 // 上游侧不掩码（它是 ws 服务端）；本中继发给客户端的方向同样不掩码（我们对宿主是服务端）。
-import { deflateRaw } from "node:zlib";
+import { constants as zlibConstants, zstdCompress } from "node:zlib";
 
 import { ChunkWindow, MUX_CHUNK_BYTES, decodeMuxControlFrame, encodeChunk, sliceBytes } from "@dshana/shared/mux-chunks.ts";
 import { OPCODE, framePayload, readFrameHeader, serializeFrame, type WsFrameHeader } from "./ws-frames.ts";
@@ -42,18 +42,28 @@ const NORMAL_END = new Set(["client close", "upstream close"]);
 /**
  * 分片前的压缩：只对超限消息做（分片只在此时发生）。
  *
- * 每条消息独立 deflate（raw），不维持跨消息上下文——浏览器侧要用内建
- * `DecompressionStream('deflate-raw')` 逐条解，上下文接管就解不了。等级取 1，与上游
- * gateway 自己的选择一致：大 JSON 在 1 级已经能省到一小半，再高只是烧 CPU。
+ * 每条消息独立压（zstd），不维护跨消息字典——浏览器侧用纯 JS 的 fzstd 逐条解，
+ * 跨消息字典就解不了。选 zstd 而非 brotli：客户端解码器 fzstd 约 9 KB（gzip），
+ * brotli 只能上 wasm（203 KB wasm）；而比率只差一成多。
+ *
+ * 档位取 9：实测 2 MB 样本 39 ms / 325 KB、10 MB 样本 151 ms / 1.27 MB，再到 19 档只能
+ * 再少一成体积、却要多花三秒——比率在 9 档就基本饱和了。
  */
-const DEFLATE_LEVEL = 1;
+const ZSTD_LEVEL = 9;
+/** zstd 参数的键名（zlib 常量表，避免在调用点写裸数字）。 */
+const ZSTD_C_LEVEL = zlibConstants.ZSTD_c_compressionLevel;
 /** 压缩后省不到一成就不压：省下的字节不够多一轮解压的开销。 */
-const DEFLATE_MIN_SAVING = 0.9;
+const COMPRESS_MIN_SAVING = 0.9;
 
-/** zlib 回调式 → Promise（不用 promisify：zlib 那批重载在 TS 下推断不出返回类型）。 */
-function deflateRawAsync(buf: Buffer): Promise<Buffer> {
+/**
+ * 异步压缩（zlib 的线程池）：9 档在 10 MB 上要 151 ms，同步跑会把中继的整个事件循环
+ * 连同其他会话与心跳一起停住。压缩本来就是 emitMessage 里的一个 await 点。
+ * @param buf - 待压字节。
+ * @returns 压缩结果。
+ */
+function zstdCompressAsync(buf: Buffer): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    deflateRaw(buf, { level: DEFLATE_LEVEL }, (error, out) => (error ? reject(error) : resolve(out)));
+    zstdCompress(buf, { params: { [ZSTD_C_LEVEL]: ZSTD_LEVEL } }, (error, out) => (error ? reject(error) : resolve(out)));
   });
 }
 
@@ -128,14 +138,14 @@ export function startFrameRelay(opts: MuxRelayOptions): { dispose(): void } {
     }
     const body = Buffer.concat(message.parts);
     let payload = new Uint8Array(body.buffer, body.byteOffset, body.length);
-    let deflated = false;
+    let compressed = false;
     // 只压文本消息：mux 帧都是 JSON 文本，二进制帧不属这个语义。
     if (message.opcode === OPCODE.TEXT) {
       try {
-        const packed = await deflateRawAsync(body);
-        if (packed.length < payload.length * DEFLATE_MIN_SAVING) {
+        const packed = await zstdCompressAsync(body);
+        if (packed.length < payload.length * COMPRESS_MIN_SAVING) {
           payload = new Uint8Array(packed.buffer, packed.byteOffset, packed.length);
-          deflated = true;
+          compressed = true;
         }
       } catch {
         /* 压缩器出错就发明文：压缩是优化，不能变成投递的前置条件 */
@@ -143,7 +153,7 @@ export function startFrameRelay(opts: MuxRelayOptions): { dispose(): void } {
       if (disposed) return;
     }
     const chunks = sliceBytes(payload, MUX_CHUNK_BYTES);
-    const compressNote = deflated ? `deflate → ${payload.length} B → ` : "";
+    const compressNote = compressed ? `zstd → ${payload.length} B → ` : "";
     log(`mux-relay: 上游消息 ${message.bytes} B → ${compressNote}${chunks.length} 片（单片上限 ${MUX_CHUNK_BYTES} B）`);
     for (let i = 0; i < chunks.length; i += 1) {
       if (disposed) return;
@@ -151,7 +161,7 @@ export function startFrameRelay(opts: MuxRelayOptions): { dispose(): void } {
       await window.waitForRoom(chunk.length);
       if (disposed) return;
       window.reserve(chunk.length);
-      await writeClient(serializeFrame(OP_BINARY, encodeChunk(chunk, i === chunks.length - 1, deflated)));
+      await writeClient(serializeFrame(OP_BINARY, encodeChunk(chunk, i === chunks.length - 1, compressed)));
     }
   };
 

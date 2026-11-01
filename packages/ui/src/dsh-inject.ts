@@ -23,6 +23,7 @@ import {
   decodeUtf8,
   encodeAck,
 } from "@dshana/shared/mux-chunks.ts";
+import { decompress as zstdDecompress } from "fzstd";
 
 const DSH_INTERNAL_ORIGIN = "http://dsh.internal";
 
@@ -328,16 +329,15 @@ export function carrierFailure(message, cause?) {
 }
 
 /**
- * 解开一条压缩信封消息（中继用 raw deflate 逐条压，见 lib/mux-chunks.ts 的 CHUNK_DEFLATE）。
+ * 解开一条压缩信封消息（中继用 zstd 逐条压，见 lib/mux-chunks.ts 的 CHUNK_ZSTD）。
  *
- * 用浏览器内建的 `DecompressionStream('deflate-raw')`：不引第三方包，也不需要 WS 扩展层的
- * 上下文接管——压缩以**消息**为单位自包含，拼回整条后一次解完就是明文 JSON。
- * @param bytes - 拼好的 deflate 字节。
+ * 用 fzstd：纯 JS 的 zstd 解码器，约 9 KB gzip，比 brotli 那套 wasm（203 KB）小一个数量级。
+ * 解压是**同步**的，所以派发不用排队——同一条 mux 流上的顺序天然是对的。
+ * @param bytes - 拼好的 zstd 字节。
  * @returns UTF-8 明文。
  */
-export async function inflateFrame(bytes) {
-  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
-  return new Response(stream).text();
+export function inflateFrame(bytes) {
+  return decodeUtf8(zstdDecompress(bytes));
 }
 
 /** 宿主交付的逻辑失败：kind:'remote' + 域码 + details，DSH 侧原样重建成带码的 RemoteError。 */
@@ -424,18 +424,6 @@ export function createStreamMux(
     failAll(error);
   };
 
-  /**
-   * 入站派发队列：压缩消息要先解压（异步）再派发，不排队的话后到的小帧会插队，
-   * 同一条 mux 流上的顺序就乱了。回执不走队列——它只是流控，与业务顺序无关。
-   */
-  let inbound = Promise.resolve();
-  const enqueue = (task) => {
-    inbound = inbound.then(task).catch((error) => {
-      // 解压失败与「帧不合协议」同等对待：载体上的后续内容已不可信，摘掉重开。
-      if (socket) lost(socket, carrierFailure("DSH stream carrier could not decode a frame", error));
-    });
-  };
-
   const receiveText = (raw, s) => {
     let frame;
     try { frame = JSON.parse(String(raw)); } catch {
@@ -466,7 +454,7 @@ export function createStreamMux(
    * 只把帧切小不够，发得快一样会被它掐掉。
    */
   const receive = (data, s) => {
-    if (typeof data === "string") { enqueue(() => { receiveText(data, s); }); return; }
+    if (typeof data === "string") { receiveText(data, s); return; }
     const bytes = data instanceof ArrayBuffer ? new Uint8Array(data)
       : ArrayBuffer.isView(data) ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
         : null;
@@ -476,11 +464,17 @@ export function createStreamMux(
     const done = assembler.push(control.payload, control.last);
     try { s.send(encodeAck(control.payload.length)); } catch { /* 载体已断：等 onclose 收场 */ }
     if (done === null) return;
-    const deflated = control.deflated;
-    enqueue(async () => {
-      if (s !== socket) return; // 排队期间载体已换代：这条属于旧代次，丢弃
-      receiveText(deflated ? await inflateFrame(done) : decodeUtf8(done), s);
-    });
+    if (!control.compressed) { receiveText(decodeUtf8(done), s); return; }
+    let text;
+    try {
+      text = inflateFrame(done);
+    } catch (error) {
+      // 解压失败与「帧不合协议」同等对待：载体上的后续内容已不可信，摘掉重开。
+      lost(s, carrierFailure("DSH stream carrier could not decode a frame", error));
+      try { s.close(4002, "undecodable compressed frame"); } catch { /* 忽略 */ }
+      return;
+    }
+    receiveText(text, s);
   };
 
   const connect = () => {

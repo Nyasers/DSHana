@@ -9,7 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { createHash } from "node:crypto";
-import { inflateRawSync } from "node:zlib";
+import { zstdDecompressSync } from "node:zlib";
 
 import { startDshBridge } from "@dshana/host/bridge.ts";
 import { OPCODE, framePayload, readFrameHeader, serializeFrame } from "../../packages/host/src/ws-frames.ts";
@@ -117,8 +117,8 @@ function startCarrier(url, { ack = true } = {}) {
     if (ack) ws.send(encodeAck(control.payload.length));
     const done = assembler.push(control.payload, control.last);
     if (done !== null) {
-      // 中继对超限文本做了 raw deflate（每条消息独立），这里按信封标志解开再比文本。
-      state.texts.push(control.deflated ? inflateRawSync(Buffer.from(done)).toString("utf8") : decodeUtf8(done));
+      // 中继对超限文本做了 zstd（每条消息独立），这里按信封标志解开再比文本。
+      state.texts.push(control.compressed ? zstdDecompressSync(Buffer.from(done)).toString("utf8") : decodeUtf8(done));
     }
     settle();
   });
@@ -150,10 +150,10 @@ test("mux-relay: 超限消息切成多片，客户端重组逐字相同", async 
   const carrier = startCarrier(chunkedUrl(bridge.port));
   try {
     await upstream.ready;
-    const message = randomText(600_000);
+    const message = randomText(1_500_000);
     upstream.send(OPCODE.TEXT, encodeUtf8(message));
     await carrier.waitFor((s) => s.texts.includes(message), "重组后的完整消息");
-    assert.ok(carrier.state.chunkFrames >= 3, "600 KB 高熵文本即使压过也要至少切成 3 片");
+    assert.ok(carrier.state.chunkFrames >= 3, "1.5 MB 高熵文本即使压过也要至少切成 3 片");
     assert.ok(carrier.state.bytes <= encodeUtf8(message).length, "分片载荷合计不应超过原文");
   } finally {
     carrier.close();
