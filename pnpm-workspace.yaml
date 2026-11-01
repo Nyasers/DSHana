@@ -57,11 +57,15 @@ overrides:
 
   # 按需安装的包
   # >>> excluded-on-demand
+  "@deepseek-ai/dsh-cua-bundle": "-"
+  "@deepseek-ai/dsh-personalized-recommendations": "-"
   "@deepseek-ai/dsh-experimental-agent-team-profile": "-"
   "@deepseek-ai/dsh-experimental-auto-review": "-"
   "@deepseek-ai/dsh-experimental-badge-skill-bundle": "-"
   "@deepseek-ai/dsh-experimental-cot-translation-bundle": "-"
+  "@deepseek-ai/dsh-experimental-forge-bundle": "-"
   "@deepseek-ai/dsh-experimental-inspector-profile": "-"
+  "@deepseek-ai/dsh-experimental-liveshare": "-"
   "@deepseek-ai/dsh-experimental-plugin-market-bundle": "-"
   "@deepseek-ai/dsh-experimental-ralph-bundle": "-"
   "@deepseek-ai/dsh-experimental-session-search": "-"

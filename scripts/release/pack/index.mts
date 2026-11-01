@@ -141,11 +141,12 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
   const leftover = excludedPackages().filter((n) => fs.pathExistsSync(join(pkgDir, "node_modules", n)));
   if (leftover.length > 0) throw new Error(`被排除的包仍在产物里（overrides 的 "-" 没生效？）：${leftover.join("、")}`);
   console.log(`[pack] 排除表层/私货包 ${excludedPackages().length} 个（物化阶段即不进树）：${excludedPackages().join(", ")}`);
-  // 按需面（上游 OPTIONAL_BUNDLES 那 12 个）：本形态一条都不用，但它们因为写在内核 dependencies 里
+  // 按需面（上游 OPTIONAL_BUNDLES 那 16 个）：本形态一条都不用，但它们因为写在内核 dependencies 里
   // 而被当作「内置」随每个安装揣着。改成按需安装，三处必须成对：
   //   ① 包不在树里 —— 作 exclude.mts 的 stub 通道完成（物化前就 override，真件不下载），这里只核实；
   //   ② 内核 dependencies 里没有它 —— shipped 判定只读那一处；
-  //   ③ 在 app-boot 的离线 catalog 里 —— 否则页面根本列不出来，用户再也装不回来。
+  //   ③ 在离线 catalog 里 —— 否则页面根本列不出来，用户再也装不回来（0.2.2-alpha.2 起该 catalog
+  //      住在 @deepseek-ai/dsh-official-bundles，不再在 app-boot）。
   // 缺一就是假活（装着不认 / 标内置却没件 / 消失），细节见 on-demand.mts 头注。
   assertMatchesUpstreamOptional();
   assertNotDelivered(join(pkgDir, "node_modules"));
