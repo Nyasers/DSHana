@@ -47,6 +47,9 @@ const IGNORED_UPSTREAM_FILES: (string | RegExp)[] = [
   /^README/,
   /^tests\//,
   /^lib\//,
+  // 上游 0.2.2-alpha.2 起随包发六种新语言；本包只交付中英两份（我们改过文案的那两份，
+  // 已在 provenance 里），其余语言在 DSH 里回退 en，属交付范围选择而非漏搬。
+  /^locale\/(?:startup\/)?(?:de|es|fr|ja|pt|ru)\.json$/,
 ];
 
 /** 只做行级解析所需的 !!js 标签（值是一段 JS 表达式，原样保留）。 */
