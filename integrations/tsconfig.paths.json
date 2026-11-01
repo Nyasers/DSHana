@@ -395,10 +395,12 @@
         "../vendor/deepseek-harness/packages/client/ui-entry-customization/src/client/index.ts"
       ],
       "@deepseek-ai/dsh-client-ui-file-drag": [
-        "../vendor/deepseek-harness/packages/client/ui-file-drag/src/index.ts"
+        "../vendor/deepseek-harness/packages/client/ui-file-drag/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-file-drag"
       ],
       "@deepseek-ai/dsh-client-ui-file-drag/client": [
-        "../vendor/deepseek-harness/packages/client/ui-file-drag/src/client/index.ts"
+        "../vendor/deepseek-harness/packages/client/ui-file-drag/src/client/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-file-drag"
       ],
       "@deepseek-ai/dsh-client-ui-goal": [
         "../vendor/deepseek-harness/packages/client/ui-goal/src/index.ts",
@@ -939,7 +941,8 @@
         "../vendor/deepseek-harness/packages/credentials/deepseek-account-platform/src/types.ts"
       ],
       "@deepseek-ai/dsh-deliverable-file-references": [
-        "../vendor/deepseek-harness/packages/deliverables/deliverable-file-references/src/index.ts"
+        "../vendor/deepseek-harness/packages/deliverables/deliverable-file-references/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-deliverable-file-references"
       ],
       "@deepseek-ai/dsh-tool-present": [
         "../vendor/deepseek-harness/packages/deliverables/tool-present/src/index.ts",
