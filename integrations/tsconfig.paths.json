@@ -785,12 +785,10 @@
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-compaction-tool-result-pruner"
       ],
       "@deepseek-ai/dsh-computer-use": [
-        "../vendor/deepseek-harness/packages/computer-use/computer-use/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-computer-use"
+        "../vendor/deepseek-harness/packages/computer-use/computer-use/src/index.ts"
       ],
       "@deepseek-ai/dsh-computer-use/brand": [
-        "../vendor/deepseek-harness/packages/computer-use/computer-use/src/brand.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-computer-use"
+        "../vendor/deepseek-harness/packages/computer-use/computer-use/src/brand.ts"
       ],
       "@deepseek-ai/dsh-agent-instructions": [
         "../vendor/deepseek-harness/packages/context/agent-instructions/src/index.ts",
@@ -967,12 +965,10 @@
         "../vendor/deepseek-harness/packages/document/office-to-pdf/src/types.ts"
       ],
       "@deepseek-ai/dsh-action-cards": [
-        "../vendor/deepseek-harness/packages/experimental/action-cards/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-action-cards"
+        "../vendor/deepseek-harness/packages/experimental/action-cards/src/index.ts"
       ],
       "@deepseek-ai/dsh-action-cards/types": [
-        "../vendor/deepseek-harness/packages/experimental/action-cards/src/types.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-action-cards"
+        "../vendor/deepseek-harness/packages/experimental/action-cards/src/types.ts"
       ],
       "@deepseek-ai/dsh-experimental-agent-team": [
         "../vendor/deepseek-harness/packages/experimental/agent-team/src/index.ts"
@@ -1026,12 +1022,10 @@
         "../vendor/deepseek-harness/packages/experimental/claude-code-mods/src/testing.ts"
       ],
       "@deepseek-ai/dsh-client-ui-action-cards": [
-        "../vendor/deepseek-harness/packages/experimental/client-ui-action-cards/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-action-cards"
+        "../vendor/deepseek-harness/packages/experimental/client-ui-action-cards/src/index.ts"
       ],
       "@deepseek-ai/dsh-client-ui-action-cards/client": [
-        "../vendor/deepseek-harness/packages/experimental/client-ui-action-cards/src/client/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-action-cards"
+        "../vendor/deepseek-harness/packages/experimental/client-ui-action-cards/src/client/index.ts"
       ],
       "@deepseek-ai/dsh-experimental-client-ui-agent-team": [
         "../vendor/deepseek-harness/packages/experimental/client-ui-agent-team/src/index.ts"
@@ -1055,32 +1049,25 @@
         "../vendor/deepseek-harness/packages/experimental/client-ui-cot-translation/src/types.ts"
       ],
       "@deepseek-ai/dsh-client-ui-creation-recommendations": [
-        "../vendor/deepseek-harness/packages/experimental/client-ui-creation-recommendations/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-creation-recommendations"
+        "../vendor/deepseek-harness/packages/experimental/client-ui-creation-recommendations/src/index.ts"
       ],
       "@deepseek-ai/dsh-client-ui-creation-recommendations/client": [
-        "../vendor/deepseek-harness/packages/experimental/client-ui-creation-recommendations/src/client/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-creation-recommendations"
+        "../vendor/deepseek-harness/packages/experimental/client-ui-creation-recommendations/src/client/index.ts"
       ],
       "@deepseek-ai/dsh-experimental-client-ui-forge": [
-        "../vendor/deepseek-harness/packages/experimental/client-ui-forge/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-experimental-client-ui-forge"
+        "../vendor/deepseek-harness/packages/experimental/client-ui-forge/src/index.ts"
       ],
       "@deepseek-ai/dsh-experimental-client-ui-forge/client": [
-        "../vendor/deepseek-harness/packages/experimental/client-ui-forge/src/client/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-experimental-client-ui-forge"
+        "../vendor/deepseek-harness/packages/experimental/client-ui-forge/src/client/index.ts"
       ],
       "@deepseek-ai/dsh-experimental-client-ui-forge/types": [
-        "../vendor/deepseek-harness/packages/experimental/client-ui-forge/src/types.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-experimental-client-ui-forge"
+        "../vendor/deepseek-harness/packages/experimental/client-ui-forge/src/types.ts"
       ],
       "@deepseek-ai/dsh-client-ui-plugin-recommendations": [
-        "../vendor/deepseek-harness/packages/experimental/client-ui-plugin-recommendations/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-plugin-recommendations"
+        "../vendor/deepseek-harness/packages/experimental/client-ui-plugin-recommendations/src/index.ts"
       ],
       "@deepseek-ai/dsh-client-ui-plugin-recommendations/client": [
-        "../vendor/deepseek-harness/packages/experimental/client-ui-plugin-recommendations/src/client/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-plugin-recommendations"
+        "../vendor/deepseek-harness/packages/experimental/client-ui-plugin-recommendations/src/client/index.ts"
       ],
       "@deepseek-ai/dsh-experimental-client-ui-stats": [
         "../vendor/deepseek-harness/packages/experimental/client-ui-stats/src/index.ts"
@@ -1104,72 +1091,55 @@
         "../vendor/deepseek-harness/packages/experimental/cot-translation-bundle/src/index.ts"
       ],
       "@deepseek-ai/dsh-creation-recommendations": [
-        "../vendor/deepseek-harness/packages/experimental/creation-recommendations/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-creation-recommendations"
+        "../vendor/deepseek-harness/packages/experimental/creation-recommendations/src/index.ts"
       ],
       "@deepseek-ai/dsh-creation-recommendations/types": [
-        "../vendor/deepseek-harness/packages/experimental/creation-recommendations/src/types.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-creation-recommendations"
+        "../vendor/deepseek-harness/packages/experimental/creation-recommendations/src/types.ts"
       ],
       "@deepseek-ai/dsh-cua": [
-        "../vendor/deepseek-harness/packages/experimental/cua/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-cua"
+        "../vendor/deepseek-harness/packages/experimental/cua/src/index.ts"
       ],
       "@deepseek-ai/dsh-cua/client": [
-        "../vendor/deepseek-harness/packages/experimental/cua/src/client/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-cua"
+        "../vendor/deepseek-harness/packages/experimental/cua/src/client/index.ts"
       ],
       "@deepseek-ai/dsh-cua/api": [
-        "../vendor/deepseek-harness/packages/experimental/cua/src/api.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-cua"
+        "../vendor/deepseek-harness/packages/experimental/cua/src/api.ts"
       ],
       "@deepseek-ai/dsh-cua/bridge": [
-        "../vendor/deepseek-harness/packages/experimental/cua/src/bridge.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-cua"
+        "../vendor/deepseek-harness/packages/experimental/cua/src/bridge.ts"
       ],
       "@deepseek-ai/dsh-cua/types": [
-        "../vendor/deepseek-harness/packages/experimental/cua/src/remote-types.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-cua"
+        "../vendor/deepseek-harness/packages/experimental/cua/src/remote-types.ts"
       ],
       "@deepseek-ai/dsh-cua/native-client": [
-        "../vendor/deepseek-harness/packages/experimental/cua/src/native-client.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-cua"
+        "../vendor/deepseek-harness/packages/experimental/cua/src/native-client.ts"
       ],
       "@deepseek-ai/dsh-cua/protocol": [
-        "../vendor/deepseek-harness/packages/experimental/cua/src/protocol.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-cua"
+        "../vendor/deepseek-harness/packages/experimental/cua/src/protocol.ts"
       ],
       "@deepseek-ai/dsh-cua-bundle": [
-        "../vendor/deepseek-harness/packages/experimental/cua-bundle/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-cua-bundle"
+        "../vendor/deepseek-harness/packages/experimental/cua-bundle/src/index.ts"
       ],
       "@deepseek-ai/dsh-experimental-cua-macos": [
-        "../vendor/deepseek-harness/packages/experimental/cua-macos/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-experimental-cua-macos"
+        "../vendor/deepseek-harness/packages/experimental/cua-macos/src/index.ts"
       ],
       "@deepseek-ai/dsh-experimental-forge": [
-        "../vendor/deepseek-harness/packages/experimental/forge/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-experimental-forge"
+        "../vendor/deepseek-harness/packages/experimental/forge/src/index.ts"
       ],
       "@deepseek-ai/dsh-experimental-forge/types": [
-        "../vendor/deepseek-harness/packages/experimental/forge/src/types.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-experimental-forge"
+        "../vendor/deepseek-harness/packages/experimental/forge/src/types.ts"
       ],
       "@deepseek-ai/dsh-experimental-forge-bundle": [
-        "../vendor/deepseek-harness/packages/experimental/forge-bundle/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-experimental-forge-bundle"
+        "../vendor/deepseek-harness/packages/experimental/forge-bundle/src/index.ts"
       ],
       "@deepseek-ai/dsh-experimental-forge-github": [
-        "../vendor/deepseek-harness/packages/experimental/forge-github/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-experimental-forge-github"
+        "../vendor/deepseek-harness/packages/experimental/forge-github/src/index.ts"
       ],
       "@deepseek-ai/dsh-experimental-forge-session": [
-        "../vendor/deepseek-harness/packages/experimental/forge-session/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-experimental-forge-session"
+        "../vendor/deepseek-harness/packages/experimental/forge-session/src/index.ts"
       ],
       "@deepseek-ai/dsh-experimental-forge-session/types": [
-        "../vendor/deepseek-harness/packages/experimental/forge-session/src/types.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-experimental-forge-session"
+        "../vendor/deepseek-harness/packages/experimental/forge-session/src/types.ts"
       ],
       "@deepseek-ai/dsh-hook-protocol": [
         "../vendor/deepseek-harness/packages/experimental/hook-protocol/src/index.ts"
@@ -1190,39 +1160,31 @@
         "../vendor/deepseek-harness/packages/experimental/inspector-profile/src/index.ts"
       ],
       "@deepseek-ai/dsh-experimental-liveshare": [
-        "../vendor/deepseek-harness/packages/experimental/liveshare/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-experimental-liveshare"
+        "../vendor/deepseek-harness/packages/experimental/liveshare/src/index.ts"
       ],
       "@deepseek-ai/dsh-experimental-liveshare/client": [
-        "../vendor/deepseek-harness/packages/experimental/liveshare/src/client/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-experimental-liveshare"
+        "../vendor/deepseek-harness/packages/experimental/liveshare/src/client/index.ts"
       ],
       "@deepseek-ai/dsh-experimental-liveshare/viewer-declarations": [
-        "../vendor/deepseek-harness/packages/experimental/liveshare/src/viewer-declarations.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-experimental-liveshare"
+        "../vendor/deepseek-harness/packages/experimental/liveshare/src/viewer-declarations.ts"
       ],
       "@deepseek-ai/dsh-experimental-liveshare/types": [
-        "../vendor/deepseek-harness/packages/experimental/liveshare/src/share-api-types.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-experimental-liveshare"
+        "../vendor/deepseek-harness/packages/experimental/liveshare/src/share-api-types.ts"
       ],
       "@deepseek-ai/dsh-experimental-liveshare-protocol": [
-        "../vendor/deepseek-harness/packages/experimental/liveshare-protocol/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-experimental-liveshare-protocol"
+        "../vendor/deepseek-harness/packages/experimental/liveshare-protocol/src/index.ts"
       ],
       "@deepseek-ai/dsh-personalized-recommendations": [
-        "../vendor/deepseek-harness/packages/experimental/personalized-recommendations/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-personalized-recommendations"
+        "../vendor/deepseek-harness/packages/experimental/personalized-recommendations/src/index.ts"
       ],
       "@deepseek-ai/dsh-experimental-plugin-market-bundle": [
         "../vendor/deepseek-harness/packages/experimental/plugin-market-bundle/src/index.ts"
       ],
       "@deepseek-ai/dsh-plugin-recommendations": [
-        "../vendor/deepseek-harness/packages/experimental/plugin-recommendations/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-plugin-recommendations"
+        "../vendor/deepseek-harness/packages/experimental/plugin-recommendations/src/index.ts"
       ],
       "@deepseek-ai/dsh-plugin-recommendations/types": [
-        "../vendor/deepseek-harness/packages/experimental/plugin-recommendations/src/types.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-plugin-recommendations"
+        "../vendor/deepseek-harness/packages/experimental/plugin-recommendations/src/types.ts"
       ],
       "@deepseek-ai/dsh-experimental-ptc-runtime-python": [
         "../vendor/deepseek-harness/packages/experimental/ptc-runtime-python/src/index.ts"
@@ -1321,8 +1283,7 @@
         "../vendor/deepseek-harness/packages/experimental/webworker-runtime/src/worker.ts"
       ],
       "@deepseek-ai/dsh-experimental-worktree": [
-        "../vendor/deepseek-harness/packages/experimental/worktree/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-experimental-worktree"
+        "../vendor/deepseek-harness/packages/experimental/worktree/src/index.ts"
       ],
       "@deepseek-ai/dsh-cordis-client-runner": [
         "../vendor/deepseek-harness/packages/extensions/cordis-client-runner/src/index.ts",
