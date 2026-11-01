@@ -133,6 +133,9 @@ export function startFrameRelay(opts: MuxRelayOptions): { dispose(): void } {
   const emitMessage = async (message: CompleteMessage): Promise<void> => {
     if (disposed) return;
     if (message.bytes <= MUX_CHUNK_BYTES) {
+      // 诊断用：只记真正会撞宿主上限的帧（> 1 MiB），小帧不刷日志。
+      // （分片阈值已提到 1 MiB，这行只剩一个作用：将来上限若再出现，日志里能看见。）
+      if (message.bytes > MUX_CHUNK_BYTES) log(`mux-relay: 原样转发 ${message.bytes} B`);
       await writeClient(message.raw ?? serializeFrame(message.opcode, Buffer.concat(message.parts)));
       return;
     }
