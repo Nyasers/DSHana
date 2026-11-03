@@ -9,6 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { createHash } from "node:crypto";
+import { zstdDecompressSync } from "node:zlib";
 
 import { startDshBridge } from "@dshana/host/bridge.ts";
 import { OPCODE, framePayload, readFrameHeader, serializeFrame } from "../../packages/host/src/ws-frames.ts";
@@ -27,6 +28,13 @@ import {
 const KEY = "bridge-key-0123456789abcdef";
 const GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/** 高熵文本：中继只对可压缩的文本有收益，验证分片本身时要用压不动的内容。 */
+function randomText(length) {
+  const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=";
+  let out = "";
+  while (out.length < length) out += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return out;
+}
 
 /** 极简上游：完成 WS 握手后把 socket 交给测试；记录它收到的帧（客户端帧带掩码，需解掩码）。 */
 async function startUpstream() {
@@ -108,7 +116,10 @@ function startCarrier(url, { ack = true } = {}) {
     state.bytes += control.payload.length;
     if (ack) ws.send(encodeAck(control.payload.length));
     const done = assembler.push(control.payload, control.last);
-    if (done !== null) state.texts.push(decodeUtf8(done));
+    if (done !== null) {
+      // 中继对超限文本做了 zstd（每条消息独立），这里按信封标志解开再比文本。
+      state.texts.push(control.compressed ? zstdDecompressSync(Buffer.from(done)).toString("utf8") : decodeUtf8(done));
+    }
     settle();
   });
   ws.addEventListener("close", (event) => { state.closed = event.code; settle(); });
@@ -126,8 +137,16 @@ function startCarrier(url, { ack = true } = {}) {
   };
 }
 
+// 分片路径的测试阈值。生产默认 64 MiB（等同不分片），端到端契约要覆盖分片就必须把
+// 阈值降下来，否则每条测试消息都是单帧直发。
+const TEST_CHUNK_BYTES = MUX_CHUNK_BYTES / 512; // 128 KiB
+const TEST_WINDOW_BYTES = TEST_CHUNK_BYTES * 2; // 两片在途
+
 function startBridge(upstream) {
-  return startDshBridge({ port: 0, bridgeKey: KEY, upstreamOrigin: upstream.origin, upstreamCookie: "dsh=1" });
+  return startDshBridge({
+    port: 0, bridgeKey: KEY, upstreamOrigin: upstream.origin, upstreamCookie: "dsh=1",
+    chunkBytes: TEST_CHUNK_BYTES, windowBytes: TEST_WINDOW_BYTES,
+  });
 }
 
 const chunkedUrl = (port, extra = "") =>
@@ -139,11 +158,29 @@ test("mux-relay: 超限消息切成多片，客户端重组逐字相同", async 
   const carrier = startCarrier(chunkedUrl(bridge.port));
   try {
     await upstream.ready;
-    const message = "历史 " + "x".repeat(300_000) + " 收尾";
+    const message = randomText(1_500_000);
     upstream.send(OPCODE.TEXT, encodeUtf8(message));
     await carrier.waitFor((s) => s.texts.includes(message), "重组后的完整消息");
-    assert.ok(carrier.state.chunkFrames >= 3, "300 KB 消息应至少切成 3 片");
+    assert.ok(carrier.state.chunkFrames >= 3, "1.5 MB 高熵文本即使压过也要至少切成 3 片");
     assert.ok(carrier.state.bytes <= encodeUtf8(message).length, "分片载荷合计不应超过原文");
+  } finally {
+    carrier.close();
+    await bridge.close();
+    await upstream.close();
+  }
+});
+
+test("mux-relay: 可压缩文本先压缩再切，片数明显少于原文所需", async () => {
+  const upstream = await startUpstream();
+  const bridge = await startBridge(upstream);
+  const carrier = startCarrier(chunkedUrl(bridge.port));
+  try {
+    await upstream.ready;
+    const message = "x".repeat(1_000_000);
+    upstream.send(OPCODE.TEXT, encodeUtf8(message));
+    await carrier.waitFor((s) => s.texts.includes(message), "解压后的完整消息");
+    assert.ok(carrier.state.chunkFrames <= 2, "重复文本压到 1–2 片就够（未压缩要 8 片）");
+    assert.ok(carrier.state.bytes < 100_000, "压缩后的线上字节应远少于 1 MB");
   } finally {
     carrier.close();
     await bridge.close();
@@ -157,11 +194,11 @@ test("mux-relay: 回执驱动窗口——1 MiB 消息（超过窗口）也能整
   const carrier = startCarrier(chunkedUrl(bridge.port));
   try {
     await upstream.ready;
-    const message = "w".repeat(1_000_000);
+    const message = randomText(2_000_000);
     upstream.send(OPCODE.TEXT, encodeUtf8(message));
-    await carrier.waitFor((s) => s.texts.includes(message), "整条 1 MiB 消息");
-    assert.ok(carrier.state.bytes > MUX_CHUNK_WINDOW, "总量应超过窗口，证明回执确实在放行后续分片");
-    assert.ok(carrier.state.chunkFrames > MUX_CHUNK_WINDOW / MUX_CHUNK_BYTES, "分片数应多于窗口内的片数");
+    await carrier.waitFor((s) => s.texts.includes(message), "整条 2 MiB 消息");
+    assert.ok(carrier.state.bytes > TEST_WINDOW_BYTES, "总量应超过窗口，证明回执确实在放行后续分片");
+    assert.ok(carrier.state.chunkFrames > TEST_WINDOW_BYTES / TEST_CHUNK_BYTES, "分片数应多于窗口内的片数");
   } finally {
     carrier.close();
     await bridge.close();
@@ -175,12 +212,12 @@ test("mux-relay: 客户端不回执时在窗口处停住（不把宿主 1 MiB �
   const carrier = startCarrier(chunkedUrl(bridge.port), { ack: false });
   try {
     await upstream.ready;
-    const payload = encodeUtf8("v".repeat(1_000_000));
+    const payload = encodeUtf8(randomText(2_000_000));
     upstream.send(OPCODE.TEXT, payload);
     await carrier.waitFor((s) => s.bytes > 0, "第一批分片");
     await sleep(200);
     assert.ok(carrier.state.bytes < payload.length, "不回执时不得把整条消息推完");
-    assert.ok(carrier.state.bytes <= MUX_CHUNK_WINDOW, "在途字节不得超过窗口");
+    assert.ok(carrier.state.bytes <= TEST_WINDOW_BYTES, "在途字节不得超过窗口");
     assert.equal(carrier.state.closed, null, "窗口用尽只是等待，不是断链");
   } finally {
     carrier.close();
@@ -195,7 +232,7 @@ test("mux-relay: 控制帧（ping）不被大消息吞掉，pong 原样回到上
   const carrier = startCarrier(chunkedUrl(bridge.port));
   try {
     await upstream.ready;
-    upstream.send(OPCODE.TEXT, encodeUtf8("y".repeat(300_000)));
+    upstream.send(OPCODE.TEXT, encodeUtf8(randomText(600_000)));
     upstream.send(OPCODE.PING, new Uint8Array([1, 2, 3]));
     const pong = await upstream.waitFrame((f) => f.opcode === OPCODE.PONG, "宿主回的 pong");
     assert.deepEqual([...pong.payload], [1, 2, 3], "pong 载荷应与 ping 一致");

@@ -40,6 +40,12 @@ interface InlinedComponent {
   license?: "Apache-2.0" | "MIT";
   /** 版本取法：缺省取随包 SDK 的 packedVersion；`installed` 取 node_modules 里装出来的版本。 */
   versionFrom?: "sdk" | "installed";
+  /**
+   * `installed` 版本的查找根（相对仓库根，缺省仓库根）。
+   * 依赖声在 workspace 包自己身上时（fzstd 属于 @dshana/ui），根 node_modules 里没有它，
+   * 它住在那个包的 node_modules 下。
+   */
+  resolveFrom?: string;
 }
 
 /**
@@ -88,6 +94,16 @@ const COMPONENTS: InlinedComponent[] = [
     versionFrom: "installed",
     copyright: "Copyright (c) 2025 Colin McDonnell",
   },
+  {
+    name: "fzstd",
+    purpose:
+      "Zstandard decoder for compressed mux frames: the relay packs oversized frames before they cross the host's 1 MiB WebSocket limit, and the in-page shim unpacks them.",
+    form: "dependency (`fzstd`), statically inlined by rspack into `ui/app.js` and `ui/stream.js`. The build keeps only Node built-ins external, so a bare specifier lands in the bundle.",
+    license: "MIT",
+    versionFrom: "installed",
+    resolveFrom: "packages/ui",
+    copyright: "Copyright (c) 2020 Arjun Barrett",
+  },
 ];
 
 /** 许可全文（从既有通知一次性提取的原文副本；不重打法律文本）。 */
@@ -113,8 +129,8 @@ const LICENSE_LABELS: Record<string, string> = {
  * 装出来的包版本：构建期内联进产物的就是这一版（安装走 `--frozen-lockfile`，与锁一致）。
  * 供不走随包 SDK 的组件使用。
  */
-function installedVersion(name: string): string {
-  const p = join("node_modules", name, "package.json");
+function installedVersion(name: string, from = ""): string {
+  const p = join(from, "node_modules", name, "package.json");
   if (!fs.existsSync(p)) throw new Error(`missing installed ${name}: ${path.relative(ROOT, p)}（先 pnpm install）`);
   const v = JSON.parse(fs.readFileSync(p, "utf8")).version;
   if (typeof v !== "string" || !v) throw new Error(`${p} has no version`);
@@ -152,7 +168,7 @@ function render(): string {
   ];
   for (const c of COMPONENTS) {
     const license = c.license ?? "Apache-2.0";
-    const version = c.versionFrom === "installed" ? installedVersion(c.name) : sdkVersion;
+    const version = c.versionFrom === "installed" ? installedVersion(c.name, c.resolveFrom ?? "") : sdkVersion;
     lines.push(`### ${c.name}`, "");
     lines.push(`- Version: ${version}`);
     lines.push(`- Purpose: ${c.purpose}`);

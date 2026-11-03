@@ -55,6 +55,14 @@ LICENSE and the entry is reproduced here for the inlined build-time use.
 - License: MIT License (full text below)
 - Copyright: Copyright (c) 2025 Colin McDonnell
 
+### fzstd
+
+- Version: 0.1.1
+- Purpose: Zstandard decoder for compressed mux frames: the relay packs oversized frames before they cross the host's 1 MiB WebSocket limit, and the in-page shim unpacks them.
+- Form: dependency (`fzstd`), statically inlined by rspack into `ui/app.js` and `ui/stream.js`. The build keeps only Node built-ins external, so a bare specifier lands in the bundle.
+- License: MIT License (full text below)
+- Copyright: Copyright (c) 2020 Arjun Barrett
+
 ## Components under the shipped `node_modules/`
 
 The materialized production dependency tree (`node_modules/`) ships with its own LICENSE and

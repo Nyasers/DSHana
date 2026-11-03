@@ -23,6 +23,7 @@ import {
   decodeUtf8,
   encodeAck,
 } from "@dshana/shared/mux-chunks.ts";
+import { decompress as zstdDecompress } from "fzstd";
 
 const DSH_INTERNAL_ORIGIN = "http://dsh.internal";
 
@@ -327,6 +328,18 @@ export function carrierFailure(message, cause?) {
   return error;
 }
 
+/**
+ * 解开一条压缩信封消息（中继用 zstd 逐条压，见 lib/mux-chunks.ts 的 CHUNK_ZSTD）。
+ *
+ * 用 fzstd：纯 JS 的 zstd 解码器，约 9 KB gzip，比 brotli 那套 wasm（203 KB）小一个数量级。
+ * 解压是**同步**的，所以派发不用排队——同一条 mux 流上的顺序天然是对的。
+ * @param bytes - 拼好的 zstd 字节。
+ * @returns UTF-8 明文。
+ */
+export function inflateFrame(bytes) {
+  return decodeUtf8(zstdDecompress(bytes));
+}
+
 /** 宿主交付的逻辑失败：kind:'remote' + 域码 + details，DSH 侧原样重建成带码的 RemoteError。 */
 export function remoteStreamFailure(message, code, details, cause?) {
   const error: any = cause === undefined ? new Error(message) : new Error(message, { cause });
@@ -451,7 +464,17 @@ export function createStreamMux(
     const done = assembler.push(control.payload, control.last);
     try { s.send(encodeAck(control.payload.length)); } catch { /* 载体已断：等 onclose 收场 */ }
     if (done === null) return;
-    receiveText(decodeUtf8(done), s);
+    if (!control.compressed) { receiveText(decodeUtf8(done), s); return; }
+    let text;
+    try {
+      text = inflateFrame(done);
+    } catch (error) {
+      // 解压失败与「帧不合协议」同等对待：载体上的后续内容已不可信，摘掉重开。
+      lost(s, carrierFailure("DSH stream carrier could not decode a frame", error));
+      try { s.close(4002, "undecodable compressed frame"); } catch { /* 忽略 */ }
+      return;
+    }
+    receiveText(text, s);
   };
 
   const connect = () => {

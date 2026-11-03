@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@dshana/bloom": "workspace:*",
-    "@dshana/shared": "workspace:*"
+    "@dshana/shared": "workspace:*",
+    "fzstd": "^0.1.1"
   }
 }

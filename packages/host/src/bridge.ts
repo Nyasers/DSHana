@@ -203,6 +203,9 @@ export interface DshBridgeOptions {
   upstreamOrigin: string;
   upstreamCookie?: string;
   onControl?: (action: string, args: any) => Promise<any>;
+  /** 分片参数透传给帧中继；生产不传用默认值，测试用小值覆盖分片路径。 */
+  chunkBytes?: number;
+  windowBytes?: number;
   log?: (s: string) => void;
 }
 
@@ -215,7 +218,7 @@ export interface DshBridgeHandle {
 /** 起中继（监听 127.0.0.1:port）。 */
 export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeHandle> {
   const {
-    port, bridgeKey, controlKey, upstreamOrigin, upstreamCookie = "", onControl, log = () => {},
+    port, bridgeKey, controlKey, upstreamOrigin, upstreamCookie = "", onControl, chunkBytes, windowBytes, log = () => {},
   } = opts || {};
   const upstream = new URL(upstreamOrigin);
   if (upstream.protocol !== "http:" || upstream.hostname !== "127.0.0.1") {
@@ -457,7 +460,7 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
     upstreamSockets.add(upstreamSocket);
     if (chunked) {
       // 帧搬运接管两个 socket 的读写（含握手响应头原样回写）。
-      startFrameRelay({ clientSocket, upstreamSocket, log });
+      startFrameRelay({ clientSocket, upstreamSocket, log, chunkBytes, windowBytes });
       const drop = () => {
         upstreamSockets.delete(upstreamSocket);
         clientSockets.delete(clientSocket);

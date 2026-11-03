@@ -71,6 +71,23 @@ test("mux-chunks: 线上布局（分片头 / 回执头）", () => {
   assert.deepEqual(decodeMuxControlFrame(ack), { kind: "ack", bytes: 123456 });
 });
 
+test("mux-chunks: 压缩分片帧带上 zstd 标志，kind 与普通分片不同", () => {
+  const payload = encodeUtf8("压缩过的字节");
+  const plain = decodeMuxControlFrame(encodeChunk(payload, true));
+  const packed = decodeMuxControlFrame(encodeChunk(payload, true, true));
+  assert.equal(plain.kind, "chunk");
+  assert.equal(plain.compressed, false, "普通分片不带压缩标志");
+  assert.equal(packed.kind, "chunk");
+  assert.equal(packed.compressed, true, "压缩分片带压缩标志");
+  assert.equal(packed.last, true);
+  assert.deepEqual([...packed.payload], [...payload], "标志位不侵占载荷");
+
+  // 线上布局：kind 字节是唯一区分处，帧长与普通分片一致。
+  const frame = encodeChunk(payload, false, true);
+  assert.equal(frame[4], 3, "kind=chunk-zstd");
+  assert.equal(frame.length, plain.payload.length + 6);
+});
+
 test("mux-chunks: 正常 mux 帧不会被误判为控制帧", () => {
   const json = encodeUtf8(JSON.stringify({ type: "open", streamId: "hana-1", endpoint: "session/follow" }));
   assert.equal(isMuxControlFrame(json), false);
@@ -113,13 +130,9 @@ test("mux-chunks: 在途窗口只在额度内放行，回执唤醒等待者", as
   assert.equal(window.outstanding, 0, "回执超出在途时按 0 收，不出现负数");
 });
 
-test("mux-chunks: 默认上限离宿主的 1 MiB 守卫有余量（按线上字节核算）", () => {
-  assert.equal(MUX_CHUNK_BYTES, 128 * 1024);
-  assert.ok(MUX_CHUNK_WINDOW >= MUX_CHUNK_BYTES, "窗口至少容得下一片");
+test("mux-chunks: 分片阈值实际等于不分片（结构保留作兜底）", () => {
+  // 宿主「1 MiB 单帧上限」是内测期限制；1.5.7-beta 实测 5,330,020 字节单帧直接通过。
+  assert.equal(MUX_CHUNK_BYTES, 64 * 1024 * 1024);
+  assert.equal(MUX_CHUNK_WINDOW, MUX_CHUNK_BYTES, "窗口与单片等值：不发并行片");
   assert.ok(MUX_CHUNK_WINDOW % MUX_CHUNK_BYTES === 0, "窗口应为单片整数倍（避免多压半片）");
-  // 宿主守卫：bufferedAmount > 1 MiB 就掐。一片的线上字节 = 载荷 + 帧头/信封开销。
-  const wirePerChunk = MUX_CHUNK_BYTES + MUX_CHUNK_FRAME_OVERHEAD;
-  const windowWire = (MUX_CHUNK_WINDOW / MUX_CHUNK_BYTES) * wirePerChunk;
-  assert.ok(windowWire < 1024 * 1024, `满窗口的线上字节 ${windowWire} 必须小于 1 MiB 守卫`);
-  assert.ok(1024 * 1024 - windowWire >= 128 * 1024, "至少要给 live 帧与 ping 留 128 KiB");
 });

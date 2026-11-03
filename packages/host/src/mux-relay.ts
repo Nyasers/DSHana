@@ -22,7 +22,9 @@
 // 首帧字节，按剩余量交给帧解析）。
 //
 // 上游侧不掩码（它是 ws 服务端）；本中继发给客户端的方向同样不掩码（我们对宿主是服务端）。
-import { ChunkWindow, MUX_CHUNK_BYTES, decodeMuxControlFrame, encodeChunk, sliceBytes } from "@dshana/shared/mux-chunks.ts";
+import { constants as zlibConstants, zstdCompress } from "node:zlib";
+
+import { ChunkWindow, MUX_CHUNK_BYTES, MUX_CHUNK_WINDOW, decodeMuxControlFrame, encodeChunk, sliceBytes } from "@dshana/shared/mux-chunks.ts";
 import { OPCODE, framePayload, readFrameHeader, serializeFrame, type WsFrameHeader } from "./ws-frames.ts";
 
 const OP_CONTINUATION = OPCODE.CONTINUATION;
@@ -37,6 +39,33 @@ const CLIENT_FRAME_MAX = 4 * 1024 * 1024;
 const HANDSHAKE_MAX = 16 * 1024;
 /** 属于正常收尾的断开原因（不刷日志）。 */
 const NORMAL_END = new Set(["client close", "upstream close"]);
+/**
+ * 分片前的压缩：只对超限消息做（分片只在此时发生）。
+ *
+ * 每条消息独立压（zstd），不维护跨消息字典——浏览器侧用纯 JS 的 fzstd 逐条解，
+ * 跨消息字典就解不了。选 zstd 而非 brotli：客户端解码器 fzstd 约 9 KB（gzip），
+ * brotli 只能上 wasm（203 KB wasm）；而比率只差一成多。
+ *
+ * 档位取 9：实测 2 MB 样本 39 ms / 325 KB、10 MB 样本 151 ms / 1.27 MB，再到 19 档只能
+ * 再少一成体积、却要多花三秒——比率在 9 档就基本饱和了。
+ */
+const ZSTD_LEVEL = 9;
+/** zstd 参数的键名（zlib 常量表，避免在调用点写裸数字）。 */
+const ZSTD_C_LEVEL = zlibConstants.ZSTD_c_compressionLevel;
+/** 压缩后省不到一成就不压：省下的字节不够多一轮解压的开销。 */
+const COMPRESS_MIN_SAVING = 0.9;
+
+/**
+ * 异步压缩（zlib 的线程池）：9 档在 10 MB 上要 151 ms，同步跑会把中继的整个事件循环
+ * 连同其他会话与心跳一起停住。压缩本来就是 emitMessage 里的一个 await 点。
+ * @param buf - 待压字节。
+ * @returns 压缩结果。
+ */
+function zstdCompressAsync(buf: Buffer): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    zstdCompress(buf, { params: { [ZSTD_C_LEVEL]: ZSTD_LEVEL } }, (error, out) => (error ? reject(error) : resolve(out)));
+  });
+}
 
 type FrameHeader = WsFrameHeader;
 
@@ -56,6 +85,10 @@ function unmaskPayload(frame: FrameHeader, raw: Buffer): Buffer {
 export interface MuxRelayOptions {
   clientSocket: any;
   upstreamSocket: any;
+  /** 单片载荷上限。默认 64 MiB（实际等同不分片），测试用小值覆盖分片路径。 */
+  chunkBytes?: number;
+  /** 在途窗口上限。默认与分片阈值等量级，保证一次只走一条消息。 */
+  windowBytes?: number;
   log?: (s: string) => void;
 }
 
@@ -65,8 +98,8 @@ export interface MuxRelayOptions {
  * 此后本对象独占两个 socket 的读写。
  */
 export function startFrameRelay(opts: MuxRelayOptions): { dispose(): void } {
-  const { clientSocket, upstreamSocket, log = () => {} } = opts;
-  const window = new ChunkWindow();
+  const { clientSocket, upstreamSocket, log = () => {}, chunkBytes = MUX_CHUNK_BYTES, windowBytes = MUX_CHUNK_WINDOW } = opts;
+  const window = new ChunkWindow(windowBytes);
   let disposed = false;
 
   let handshakeDone = false;
@@ -100,23 +133,39 @@ export function startFrameRelay(opts: MuxRelayOptions): { dispose(): void } {
     });
   };
 
-  /** 切分一条完整消息：小则单帧转发，大则按窗口分片。 */
+  /** 切分一条完整消息：小则单帧转发，大则先试压缩再按窗口分片。 */
   const emitMessage = async (message: CompleteMessage): Promise<void> => {
     if (disposed) return;
-    if (message.bytes <= MUX_CHUNK_BYTES) {
+    if (message.bytes <= chunkBytes) {
       await writeClient(message.raw ?? serializeFrame(message.opcode, Buffer.concat(message.parts)));
       return;
     }
     const body = Buffer.concat(message.parts);
-    const chunks = sliceBytes(new Uint8Array(body.buffer, body.byteOffset, body.length), MUX_CHUNK_BYTES);
-    log(`mux-relay: 上游消息 ${message.bytes} B → ${chunks.length} 片（单片上限 ${MUX_CHUNK_BYTES} B）`);
+    let payload = new Uint8Array(body.buffer, body.byteOffset, body.length);
+    let compressed = false;
+    // 只压文本消息：mux 帧都是 JSON 文本，二进制帧不属这个语义。
+    if (message.opcode === OPCODE.TEXT) {
+      try {
+        const packed = await zstdCompressAsync(body);
+        if (packed.length < payload.length * COMPRESS_MIN_SAVING) {
+          payload = new Uint8Array(packed.buffer, packed.byteOffset, packed.length);
+          compressed = true;
+        }
+      } catch {
+        /* 压缩器出错就发明文：压缩是优化，不能变成投递的前置条件 */
+      }
+      if (disposed) return;
+    }
+    const chunks = sliceBytes(payload, chunkBytes);
+    const compressNote = compressed ? `zstd → ${payload.length} B → ` : "";
+    log(`mux-relay: 上游消息 ${message.bytes} B → ${compressNote}${chunks.length} 片（单片上限 ${chunkBytes} B）`);
     for (let i = 0; i < chunks.length; i += 1) {
       if (disposed) return;
       const chunk = chunks[i];
       await window.waitForRoom(chunk.length);
       if (disposed) return;
       window.reserve(chunk.length);
-      await writeClient(serializeFrame(OP_BINARY, encodeChunk(chunk, i === chunks.length - 1)));
+      await writeClient(serializeFrame(OP_BINARY, encodeChunk(chunk, i === chunks.length - 1, compressed)));
     }
   };
 
