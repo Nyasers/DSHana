@@ -20,12 +20,11 @@
 //     把「工位」与「组装台」分开，就是不让构建输入混进安装包；组装出包后立即删。
 //
 // 分模块：目标表在 targets.mts，出包前断言在 assert.mts，依赖物化与精简在 materialize.mts，
-// 集成补丁覆盖在 overlays.mts，静态件压缩在 minify.mts，交付面裁剪在 trim.mts；
+// 集成补丁覆盖在 overlays.mts，静态件压缩在 minify.mts，交付面裁剪在 trim.mts，目录成 zip 在 zip-tree.mts；
 // 本文件是主流程（校验 → 组装 → 裁剪 → zip）。
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { ZipArchive } from "archiver";
 
 import fs from "fs-extra";
 
@@ -44,6 +43,7 @@ import { pruneDeliveredPatches } from "./prune-mirror.mts";
 import { applyBootBloom } from "./boot-bloom.mts";
 import { failUsage, targetSpec } from "./targets.mts";
 import { describeTrim, trimDeliveryTree } from "./trim.mts";
+import { writeDirZip } from "./zip-tree.mts";
 
 // 版本单一事实源：package.json（唯一来源；不支持命令行传版本，显式传的版本会与 manifest 不同步）。
 // 版本同步走 pnpm version 发版流程，由 scripts/release/version.mts 收口。
@@ -102,7 +102,7 @@ const spec = (() => {
 await minifyCordisStatics(CORDIS_DIR);
 
 // 3+4) 组装 → zip → SHA256（单目标；发布产物归档 releases/）
-//    archiver 纯 Node 跨平台 zip（对齐 hana-remote-dev）：不用 tar -a -cf——
+//    yazl 纯 Node 跨平台 zip（对齐 hana-remote-dev）：不用 tar -a -cf——
 //    GNU tar（Linux）不认 .zip 后缀会静默产出 tar 伪 zip
 const relDir = join(ROOT, "releases");
 fs.ensureDirSync(relDir);
@@ -191,23 +191,11 @@ for (const stale of [pkgRoot, STAGING_ROOT]) fs.removeSync(stale);
   const zipPath = join(relDir, `${base}.zip`);
   fs.removeSync(zipPath);
   const tmpZip = join(relDir, `.${base}.zip.tmp`); // 先写临时文件，rename 原子落位
-  const output = fs.createWriteStream(tmpZip);
-  const archive = new ZipArchive({ zlib: { level: 9 } });
-  // resolve 要包一层：它带 (value) 参数，而 'close' 的 listener 签名是 () => void，
-  // 直接传在 @types/node 26 下会被判「目标签名参数太少」。
-  const done = new Promise<void>((resolve, reject) => {
-    output.on("close", () => resolve());
-    output.on("error", reject);
-    archive.on("error", reject);
-  });
-  archive.pipe(output);
-  // 第二参数必须为 false：把 pkgDir 的**内容**放在 zip 根。传 base 会把整包套进一层 `<base>/`，
-  // 宿主安装时在包根读 manifest.json 读不到（落在 `<base>/manifest.json`），报 INVALID_MANIFEST 拒装：
-  // 宿主校验器 `validate-app.mjs --archive <zip>` 会判 "ENOENT ... '<app>\\manifest.json'"。
-  // 参照物：装得上的样例包 zip 根级就是 manifest.json / node_modules / ui / dist。
-  archive.directory(pkgDir, false);
-  await archive.finalize();
-  await done;
+  // zip 根 = pkgDir 的**内容**，不套一层 `<base>/`：宿主安装时在包根读 manifest.json，套了就读不到
+  // （落在 `<base>/manifest.json`），宿主校验器 `validate-app.mjs --archive <zip>` 会判
+  // "ENOENT ... '<app>\\manifest.json'" 拒装。参照物：装得上的样例包 zip 根级就是
+  // manifest.json / node_modules / ui / dist。
+  await writeDirZip(pkgDir, tmpZip);
   fs.moveSync(tmpZip, zipPath, { overwrite: true });
   const buf = fs.readFileSync(zipPath);
   const sha = createHash("sha256").update(buf).digest("hex").toUpperCase();
