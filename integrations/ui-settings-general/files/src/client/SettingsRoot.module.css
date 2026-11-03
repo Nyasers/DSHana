@@ -188,6 +188,7 @@
 }
 
 .navIcon {
+  display: flex;
   flex: none;
 }
 

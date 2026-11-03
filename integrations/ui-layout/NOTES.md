@@ -33,3 +33,14 @@ standalone（上游整幅 UI）。
 列表，属后续批次。
 
 发布侧：壳页 `packages/ui/src/app-shell.ts` 在注入 DSH 前写 `window.__DSHANA__`（当前只有 role）。
+
+## 0.2.2-alpha.3 的抽屉与折叠屏
+
+上游这一版给 AppFrame 加了 drawer（窄幅抽屉侧栏 + 遮罩）、折叠屏居中列（`foldedLandscape` 与
+`SIDEBAR_DRAWER_BREAKPOINT`）、`mainPanel` 包裹层与 `inert` 传导。它们全落在我们改过的那两个文件里，
+按「本面有侧栏轨」门控：
+
+- `drawer` / `centeredSidebar` 都以 `sidebarPresent`（只有 standalone 面）为前提——其余面本来就没有
+  侧栏轨，抽屉与居中都没有对象；
+- 遮罩、`inert`、拖手柄跟同一批变量走：抽屉开着时中列与右列不可交互，有抽屉或居中时不画拖手柄；
+- `data-sidebar-drawer` 的样式整段照搬，`settingsShell` / `settingsCol` / stream 面的规则保持原样。

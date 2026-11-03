@@ -353,6 +353,14 @@
         "../vendor/deepseek-harness/packages/client/ui-commands/src/client/index.ts",
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-commands"
       ],
+      "@deepseek-ai/dsh-client-ui-context-menu": [
+        "../vendor/deepseek-harness/packages/client/ui-context-menu/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-context-menu"
+      ],
+      "@deepseek-ai/dsh-client-ui-context-menu/client": [
+        "../vendor/deepseek-harness/packages/client/ui-context-menu/src/client/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-context-menu"
+      ],
       "@deepseek-ai/dsh-client-ui-conversation": [
         "../vendor/deepseek-harness/packages/client/ui-conversation/src/index.ts",
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-conversation"
@@ -393,6 +401,18 @@
       ],
       "@deepseek-ai/dsh-client-ui-entry-customization/client": [
         "../vendor/deepseek-harness/packages/client/ui-entry-customization/src/client/index.ts"
+      ],
+      "@deepseek-ai/dsh-client-ui-file-actions": [
+        "../vendor/deepseek-harness/packages/client/ui-file-actions/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-file-actions"
+      ],
+      "@deepseek-ai/dsh-client-ui-file-actions/client": [
+        "../vendor/deepseek-harness/packages/client/ui-file-actions/src/client/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-file-actions"
+      ],
+      "@deepseek-ai/dsh-client-ui-file-actions/types": [
+        "../vendor/deepseek-harness/packages/client/ui-file-actions/src/types.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-file-actions"
       ],
       "@deepseek-ai/dsh-client-ui-file-drag": [
         "../vendor/deepseek-harness/packages/client/ui-file-drag/src/index.ts",
@@ -1341,6 +1361,10 @@
         "../vendor/deepseek-harness/packages/fs/fs-observation-policy/src/index.ts",
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-fs-observation-policy"
       ],
+      "@deepseek-ai/dsh-fs-patch": [
+        "../vendor/deepseek-harness/packages/fs/fs-patch/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-fs-patch"
+      ],
       "@deepseek-ai/dsh-fs-sandbox": [
         "../vendor/deepseek-harness/packages/fs/fs-sandbox/src/index.ts",
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-fs-sandbox"
@@ -1451,6 +1475,10 @@
       ],
       "@deepseek-ai/dsh-commands/brand": [
         "../vendor/deepseek-harness/packages/interaction/commands/src/brand.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-commands"
+      ],
+      "@deepseek-ai/dsh-commands/builtin": [
+        "../vendor/deepseek-harness/packages/interaction/commands/src/builtin.ts",
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-commands"
       ],
       "@deepseek-ai/dsh-permission-presets": [

@@ -30,11 +30,16 @@
 `dsh.sessions.current` 写成空。做法：`navigation.ts` 整体贴进来，在接口上加 `clearSelection()`，实现
 转调同一份 `clearMain`。落点留在覆盖层，不改 vendor。
 
-## 贴 WorkspaceBrowser.tsx
+## 工作区框的落点（0.2.2-alpha.3 起）
 
-工作区重命名与删除的框原本在组件内部，而那个组件只住在 FP（窄文档），`Modal` 又 portal 到本文档
-body，于是框只铺满侧栏那一块。
+0.2.2-alpha.3 把工作区重命名 / 删除的框提到了 apply 层：`requestWorkspaceAction()` 写一份
+`workspaceActionRequest`，框组件 `WorkspaceDialogs` 由 `WorkspaceBrowser` 渲染，菜单项来自
+`ctx.contextMenus.register({ id: 'workspace.rename' | 'workspace.delete' })`。
 
-改法与设置页同路：FP 只发射意图（在打开框那一步分叉），整幅面把框注册到 `shell.overlay`。两个框组件
-写在同一份 `WorkspaceBrowser.tsx` 里导出——覆盖层清单只收「上游文件 + delta」，没有位置放本仓自写的
-文件（每项都要上游哈希）；上游自己也把确认框和行放在一个文件里。
+我们的 delta 因此只剩一处：`requestWorkspaceAction()` 在 FP（`emitsOnly`）改为发意图
+（`workspace-rename` / `workspace-delete`），由整幅面的 `registerIntentLanding` 收回并写进同一份
+`workspaceActionRequest`。框仍由那个组件渲染，但 FP 里这份 store 永不为非空，框只出现在整幅面——
+这正是原来要修的那条：`Modal` portal 到本文档 body，在 FP 里只会铺满侧栏。
+
+菜单项、框组件与 `rows/WorkspaceBrowser.tsx` 全部走上游原版，那一份 overlay 已从清单移除
+（delta 归零）。以后这个文件的上游改动不再需要跟进，除非有人把框逻辑再搬回来。

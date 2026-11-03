@@ -11,12 +11,12 @@
   "files": [
     {
       "path": "src/index.ts",
-      "upstreamSha256": "53417a4865ad58c8f1cd1db42dbda64313d97fedd6afe3151cf09cb616f5b0a8",
+      "upstreamSha256": "5c6590ca7922fc76ce316a800b91c88560a706f76126422d9e0c3eeb5e4898fd",
       "deltaSha256": "7fa8bff99e627c5e039027bde64924c335043ac939263c6474f8a5929d1b1874"
     },
     {
       "path": "src/types.ts",
-      "upstreamSha256": "fd2870c788167e80687464a0f7ec7732e4063c7c18f5ba5021c6c29acf4fc38b",
+      "upstreamSha256": "30db5e6b66f0bd74180f1cf62bd28c25e1b073b9a2a7aa5621d6e4955aaa90ef",
       "deltaSha256": "1973509a4425bed14cf68df5ee581b17b4b71219ad5a39f621c5e712716372c0"
     },
     {

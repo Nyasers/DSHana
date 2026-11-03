@@ -1,6 +1,6 @@
 {
   "name": "@dshana/dsh-session",
-  "version": "1.2.6+dsh-0.2.2-alpha.2",
+  "version": "1.2.6+dsh-0.2.2-alpha.3",
   "description": "Session operations for DSHana: task create and settle, session reuse, prompt, cancel and approval.",
   "private": true,
   "type": "module",
