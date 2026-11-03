@@ -24,7 +24,7 @@
 // 上游侧不掩码（它是 ws 服务端）；本中继发给客户端的方向同样不掩码（我们对宿主是服务端）。
 import { constants as zlibConstants, zstdCompress } from "node:zlib";
 
-import { ChunkWindow, MUX_CHUNK_BYTES, decodeMuxControlFrame, encodeChunk, sliceBytes } from "@dshana/shared/mux-chunks.ts";
+import { ChunkWindow, MUX_CHUNK_BYTES, MUX_CHUNK_WINDOW, decodeMuxControlFrame, encodeChunk, sliceBytes } from "@dshana/shared/mux-chunks.ts";
 import { OPCODE, framePayload, readFrameHeader, serializeFrame, type WsFrameHeader } from "./ws-frames.ts";
 
 const OP_CONTINUATION = OPCODE.CONTINUATION;
@@ -85,6 +85,10 @@ function unmaskPayload(frame: FrameHeader, raw: Buffer): Buffer {
 export interface MuxRelayOptions {
   clientSocket: any;
   upstreamSocket: any;
+  /** 单片载荷上限。默认 64 MiB（实际等同不分片），测试用小值覆盖分片路径。 */
+  chunkBytes?: number;
+  /** 在途窗口上限。默认与分片阈值等量级，保证一次只走一条消息。 */
+  windowBytes?: number;
   log?: (s: string) => void;
 }
 
@@ -94,8 +98,8 @@ export interface MuxRelayOptions {
  * 此后本对象独占两个 socket 的读写。
  */
 export function startFrameRelay(opts: MuxRelayOptions): { dispose(): void } {
-  const { clientSocket, upstreamSocket, log = () => {} } = opts;
-  const window = new ChunkWindow();
+  const { clientSocket, upstreamSocket, log = () => {}, chunkBytes = MUX_CHUNK_BYTES, windowBytes = MUX_CHUNK_WINDOW } = opts;
+  const window = new ChunkWindow(windowBytes);
   let disposed = false;
 
   let handshakeDone = false;
@@ -132,10 +136,7 @@ export function startFrameRelay(opts: MuxRelayOptions): { dispose(): void } {
   /** 切分一条完整消息：小则单帧转发，大则先试压缩再按窗口分片。 */
   const emitMessage = async (message: CompleteMessage): Promise<void> => {
     if (disposed) return;
-    if (message.bytes <= MUX_CHUNK_BYTES) {
-      // 诊断用：只记真正会撞宿主上限的帧（> 1 MiB），小帧不刷日志。
-      // （分片阈值已提到 1 MiB，这行只剩一个作用：将来上限若再出现，日志里能看见。）
-      if (message.bytes > MUX_CHUNK_BYTES) log(`mux-relay: 原样转发 ${message.bytes} B`);
+    if (message.bytes <= chunkBytes) {
       await writeClient(message.raw ?? serializeFrame(message.opcode, Buffer.concat(message.parts)));
       return;
     }
@@ -155,9 +156,9 @@ export function startFrameRelay(opts: MuxRelayOptions): { dispose(): void } {
       }
       if (disposed) return;
     }
-    const chunks = sliceBytes(payload, MUX_CHUNK_BYTES);
+    const chunks = sliceBytes(payload, chunkBytes);
     const compressNote = compressed ? `zstd → ${payload.length} B → ` : "";
-    log(`mux-relay: 上游消息 ${message.bytes} B → ${compressNote}${chunks.length} 片（单片上限 ${MUX_CHUNK_BYTES} B）`);
+    log(`mux-relay: 上游消息 ${message.bytes} B → ${compressNote}${chunks.length} 片（单片上限 ${chunkBytes} B）`);
     for (let i = 0; i < chunks.length; i += 1) {
       if (disposed) return;
       const chunk = chunks[i];

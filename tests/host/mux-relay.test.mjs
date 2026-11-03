@@ -137,8 +137,16 @@ function startCarrier(url, { ack = true } = {}) {
   };
 }
 
+// 分片路径的测试阈值。生产默认 64 MiB（等同不分片），端到端契约要覆盖分片就必须把
+// 阈值降下来，否则每条测试消息都是单帧直发。
+const TEST_CHUNK_BYTES = MUX_CHUNK_BYTES / 512; // 128 KiB
+const TEST_WINDOW_BYTES = TEST_CHUNK_BYTES * 2; // 两片在途
+
 function startBridge(upstream) {
-  return startDshBridge({ port: 0, bridgeKey: KEY, upstreamOrigin: upstream.origin, upstreamCookie: "dsh=1" });
+  return startDshBridge({
+    port: 0, bridgeKey: KEY, upstreamOrigin: upstream.origin, upstreamCookie: "dsh=1",
+    chunkBytes: TEST_CHUNK_BYTES, windowBytes: TEST_WINDOW_BYTES,
+  });
 }
 
 const chunkedUrl = (port, extra = "") =>
@@ -189,8 +197,8 @@ test("mux-relay: 回执驱动窗口——1 MiB 消息（超过窗口）也能整
     const message = randomText(2_000_000);
     upstream.send(OPCODE.TEXT, encodeUtf8(message));
     await carrier.waitFor((s) => s.texts.includes(message), "整条 2 MiB 消息");
-    assert.ok(carrier.state.bytes > MUX_CHUNK_WINDOW, "总量应超过窗口，证明回执确实在放行后续分片");
-    assert.ok(carrier.state.chunkFrames > MUX_CHUNK_WINDOW / MUX_CHUNK_BYTES, "分片数应多于窗口内的片数");
+    assert.ok(carrier.state.bytes > TEST_WINDOW_BYTES, "总量应超过窗口，证明回执确实在放行后续分片");
+    assert.ok(carrier.state.chunkFrames > TEST_WINDOW_BYTES / TEST_CHUNK_BYTES, "分片数应多于窗口内的片数");
   } finally {
     carrier.close();
     await bridge.close();
@@ -209,7 +217,7 @@ test("mux-relay: 客户端不回执时在窗口处停住（不把宿主 1 MiB �
     await carrier.waitFor((s) => s.bytes > 0, "第一批分片");
     await sleep(200);
     assert.ok(carrier.state.bytes < payload.length, "不回执时不得把整条消息推完");
-    assert.ok(carrier.state.bytes <= MUX_CHUNK_WINDOW, "在途字节不得超过窗口");
+    assert.ok(carrier.state.bytes <= TEST_WINDOW_BYTES, "在途字节不得超过窗口");
     assert.equal(carrier.state.closed, null, "窗口用尽只是等待，不是断链");
   } finally {
     carrier.close();
