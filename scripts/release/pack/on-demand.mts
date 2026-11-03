@@ -8,7 +8,10 @@
 //   · 按需（on-demand）：不在内核 dependencies 里，但在 OFFICIAL_ON_DEMAND_CATALOG 里
 //     → 页面标「未安装」，给一个安装按钮，点了从 registry 装（与 claude-code / codex 同一条路）。
 //
-// 本文件把上游 OPTIONAL_BUNDLES 那 12 个实验 bundle 从第一条挪到第二条。
+// 本文件把上游 OPTIONAL_BUNDLES 那 15 个实验 bundle 从第一条挪到第二条。
+//
+// cua-bundle 不在此列：0.2.2-alpha.3 起上游把它（连同 claude-code / codex 两个子代理包）放进了
+// ON_DEMAND_BUNDLES——内核 deps 不再包含它，catalog 也自带入口，我们那条 override 已无活可干。
 //
 // 为什么值得挪：上游给这 12 个的语义是「随安装走、默认关，由插件管理页打开」，但它们的包全在
 // 内核 dependencies 里，于是**每一个安装都揣着这 46 MB 从不加载的代码**（语音输入 24 MB，其中
