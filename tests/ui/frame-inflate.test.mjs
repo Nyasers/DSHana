@@ -71,11 +71,13 @@ test("非 zstd 帧直接抛错", () => {
 test("窗口在预算内、解压输出超预算时由流式累加拦下", async () => {
   // 非 single-segment 帧的帧头只声明窗口：内容可以比窗口大，于是帧头预检过得去，
   // 超限只能在逐块累加那一步发现。
-  const frame = await packStreamed("x".repeat(512 * 1024), 8);
+  const chunk = "x".repeat(512 * 1024);
+  const frame = await packStreamed(chunk, 8);
   const budget = declaredFrameBytes(frame);
   assert.ok(budget < 4 * 1024 * 1024, "帧头声明的窗口应小于实际解压内容");
   assert.throws(() => inflateFrame(frame, budget), /inflates past/);
-  // 同一个帧在预算够大时正常解开：差别的只有上限。
+  // 同一个帧在预算够大时正常解开：差别的只有上限，内容得逐字对得上。
   const text = inflateFrame(frame, 4 * 1024 * 1024);
   assert.equal(text.length, 4 * 1024 * 1024);
+  assert.equal(text, chunk.repeat(8));
 });
