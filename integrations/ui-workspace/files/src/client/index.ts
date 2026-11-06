@@ -297,7 +297,16 @@ export function apply(ctx: Context): void {
    */
   const WORKSPACE_ACTION_RETRY_MS = 60_000
   const WORKSPACE_ACTION_RETRY_STEP_MS = 100
+  let pendingWorkspaceAction: ReturnType<typeof setTimeout> | undefined
+  /** 一次只留一个在等的动作：更晚会顶掉旧的，否则旧动作会顶掉用户刚打开的框。 */
+  const cancelPendingWorkspaceAction = (): void => {
+    if (pendingWorkspaceAction === undefined) return
+    clearTimeout(pendingWorkspaceAction)
+    pendingWorkspaceAction = undefined
+  }
+  ctx.effect(() => cancelPendingWorkspaceAction, 'ui-workspace: 撤掉在等的工作区动作')
   const requestWorkspaceAction = (workspaceId: WorkspaceId, displayTitle: string, action: 'rename' | 'delete'): void => {
+    cancelPendingWorkspaceAction()
     const apply = (): boolean => {
       const workspace = workspaces.list.getSnapshot().items.find(row => row.workspaceId === workspaceId)
       if (workspace === undefined || !ctx.remoteAccess.source('workspace', workspaceId, `workspace/${action}`).getSnapshot()) return false
@@ -312,10 +321,11 @@ export function apply(ctx: Context): void {
     if (apply()) return
     const deadline = Date.now() + WORKSPACE_ACTION_RETRY_MS
     const retry = (): void => {
+      pendingWorkspaceAction = undefined
       if (apply() || Date.now() >= deadline) return
-      setTimeout(retry, WORKSPACE_ACTION_RETRY_STEP_MS)
+      pendingWorkspaceAction = setTimeout(retry, WORKSPACE_ACTION_RETRY_STEP_MS)
     }
-    setTimeout(retry, WORKSPACE_ACTION_RETRY_STEP_MS)
+    pendingWorkspaceAction = setTimeout(retry, WORKSPACE_ACTION_RETRY_STEP_MS)
   }
 
   // 落地端：帧到了就落（直投通道的落地面），用自己的 store 重建那条面。

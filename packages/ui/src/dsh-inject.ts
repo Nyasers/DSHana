@@ -335,19 +335,58 @@ export function carrierFailure(message, cause?) {
  */
 export const MAX_INFLATED_BYTES = MUX_CHUNK_BYTES;
 
+/** zstd 帧魔数（小端读出的值）。 */
+const ZSTD_FRAME_MAGIC = 0xfd2fb528;
+
+/** 读小端无符号整数（本文件只用到 4 字节以内）。 */
+function readLE(bytes, at, count) {
+  let value = 0;
+  for (let i = 0; i < count; i += 1) value += bytes[at + i] * 2 ** (8 * i);
+  return value;
+}
+
+/**
+ * 读帧头声明的缓冲需求。
+ *
+ * fzstd 在回调之前就按帧头分配窗口（single-segment 帧按声明的解压尺寸），而 zstd 允许声明到
+ * 2 GB 级——那个分配发生在我们的输出上限生效**之前**，所以预算必须在这里先核。
+ * @param bytes - zstd 帧字节。
+ * @returns 帧头声明的字节数（窗口或整帧解压尺寸）。
+ */
+export function declaredFrameBytes(bytes) {
+  if (bytes.length < 6) throw new Error("DSH frame is too short to be a zstd frame");
+  if (readLE(bytes, 0, 4) !== ZSTD_FRAME_MAGIC) throw new Error("DSH frame is not a zstd frame");
+  const descriptor = bytes[4];
+  const singleSegment = (descriptor >> 5) & 1;
+  const sizeFlag = descriptor >> 6;
+  const dictionaryBytes = (descriptor & 3) === 3 ? 4 : descriptor & 3;
+  // 尺寸字段宽度：single-segment 且未声明时为 1，否则按标志位取 1 / 2 / 4 / 8。
+  const sizeBytes = sizeFlag === 0 ? singleSegment : 1 << sizeFlag;
+  if (sizeBytes > 4) return Number.MAX_SAFE_INTEGER; // 8 字节声明：任何上限都拦，不必读完
+  if (!singleSegment) {
+    const base = 2 ** (10 + (bytes[5] >> 3));
+    return base + (base / 8) * (bytes[5] & 7);
+  }
+  const at = 5 + dictionaryBytes;
+  if (bytes.length < at + sizeBytes) throw new Error("DSH frame header is truncated");
+  return sizeBytes === 0 ? 0 : readLE(bytes, at, sizeBytes) + (sizeFlag === 1 ? 256 : 0);
+}
+
 /**
  * 解开一条压缩信封消息（中继用 zstd 逐条压，见 lib/mux-chunks.ts 的 CHUNK_ZSTD）。
  *
  * 用 fzstd：纯 JS 的 zstd 解码器，约 9 KB gzip，比 brotli 那套 wasm（203 KB）小一个数量级。
  * 解压是**同步**的，所以派发不用排队——同一条 mux 流上的顺序天然是对的。
  *
- * 上限在解压**过程**里守，不是解完再看：一条几十 MB 的帧先全解出来再判断，主线程与页面内存
- * 已经吃完了。所以走流式解码器逐块累加，超限当场抛错（调用方按解压失败收场）。
+ * 上限分两道守：帧头声明的缓冲需求（fzstd 在回调之前就分配它，那里拦不住）先核一遍；
+ * 真正的解压在流式解码器里逐块累加，同样超限即抛错。两道都由调用方按解压失败收场。
  * @param bytes - 拼好的 zstd 字节。
  * @param limit - 解压输出的字节上限（默认 MAX_INFLATED_BYTES）。
  * @returns UTF-8 明文。
  */
 export function inflateFrame(bytes, limit = MAX_INFLATED_BYTES) {
+  const declared = declaredFrameBytes(bytes);
+  if (declared > limit) throw new Error("DSH frame declares " + declared + " bytes, over " + limit);
   const parts = [];
   let total = 0;
   const stream = new ZstdDecompress((chunk) => {
