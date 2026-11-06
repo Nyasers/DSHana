@@ -12,6 +12,8 @@
 * **host:** 中继不透传 Sec-WebSocket-Extensions，避开 DSH 的默认压缩 ([e28e125](https://github.com/Nyasers/DSHana/commit/e28e125b7db554b559541a8b1668ea55c69fe941))
 * **pack:** 按需面跟着上游搬家（OPTIONAL_BUNDLES → official-bundles） ([1e46db7](https://github.com/Nyasers/DSHana/commit/1e46db79d739f190f1e8c6d4869b6e2b35fb6528))
 
+## [1.2.7+dsh-0.2.1-rc.5](https://github.com/Nyasers/DSHana/compare/v1.2.6%2Bdsh-0.2.1-rc.5...v1.2.7%2Bdsh-0.2.1-rc.5) (2026-11-03)
+
 ## [1.2.6+dsh-0.2.1-rc.5](https://github.com/Nyasers/DSHana/compare/v1.2.5%2Bdsh-0.2.1-rc.4...v1.2.6%2Bdsh-0.2.1-rc.5) (2026-10-30)
 
 ## [1.2.5+dsh-0.2.1-rc.4](https://github.com/Nyasers/DSHana/compare/v1.2.4%2Bdsh-0.2.1-rc.3...v1.2.5%2Bdsh-0.2.1-rc.4) (2026-10-28)
