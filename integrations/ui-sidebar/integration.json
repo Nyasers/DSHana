@@ -5,7 +5,7 @@
     {
       "path": "src/client/SidebarRoot.tsx",
       "upstreamSha256": "6748bec95bdd6ecc4507fa93a8e7b95128f676ef5967987d666102372ea961e5",
-      "deltaSha256": "954f00ad3783de414ca21ae08a520361e47f5a69155e439d3cea908de37d868a"
+      "deltaSha256": "84021df40cb0a3da76c37c50dd99cc2be55575bbddff031d1c1e31c6143236eb"
     },
     {
       "path": "src/client/SidebarRoot.module.css",

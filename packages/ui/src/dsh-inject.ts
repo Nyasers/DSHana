@@ -17,13 +17,14 @@
 
 import {
   ChunkAssembler,
+  MUX_CHUNK_BYTES,
   MUX_CHUNK_QUERY,
   MUX_CHUNK_QUERY_VALUE,
   decodeMuxControlFrame,
   decodeUtf8,
   encodeAck,
 } from "@dshana/shared/mux-chunks.ts";
-import { decompress as zstdDecompress } from "fzstd";
+import { Decompress as ZstdDecompress } from "fzstd";
 
 const DSH_INTERNAL_ORIGIN = "http://dsh.internal";
 
@@ -329,15 +330,38 @@ export function carrierFailure(message, cause?) {
 }
 
 /**
+ * 一条压缩帧解压后的字节上限：与分片协议的单片上限同源（见 lib/mux-chunks.ts）。
+ * 超过它的帧按「解不出来」收场——载体上的后续内容已不可信，摘掉重开。
+ */
+export const MAX_INFLATED_BYTES = MUX_CHUNK_BYTES;
+
+/**
  * 解开一条压缩信封消息（中继用 zstd 逐条压，见 lib/mux-chunks.ts 的 CHUNK_ZSTD）。
  *
  * 用 fzstd：纯 JS 的 zstd 解码器，约 9 KB gzip，比 brotli 那套 wasm（203 KB）小一个数量级。
  * 解压是**同步**的，所以派发不用排队——同一条 mux 流上的顺序天然是对的。
+ *
+ * 上限在解压**过程**里守，不是解完再看：一条几十 MB 的帧先全解出来再判断，主线程与页面内存
+ * 已经吃完了。所以走流式解码器逐块累加，超限当场抛错（调用方按解压失败收场）。
  * @param bytes - 拼好的 zstd 字节。
+ * @param limit - 解压输出的字节上限（默认 MAX_INFLATED_BYTES）。
  * @returns UTF-8 明文。
  */
-export function inflateFrame(bytes) {
-  return decodeUtf8(zstdDecompress(bytes));
+export function inflateFrame(bytes, limit = MAX_INFLATED_BYTES) {
+  const parts = [];
+  let total = 0;
+  const stream = new ZstdDecompress((chunk) => {
+    if (!chunk.length) return;
+    total += chunk.length;
+    if (total > limit) throw new Error("DSH frame inflates past " + limit + " bytes");
+    parts.push(chunk);
+  });
+  stream.push(bytes, true);
+  if (parts.length === 1) return decodeUtf8(parts[0]);
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const part of parts) { out.set(part, at); at += part.length; }
+  return decodeUtf8(out);
 }
 
 /** 宿主交付的逻辑失败：kind:'remote' + 域码 + details，DSH 侧原样重建成带码的 RemoteError。 */

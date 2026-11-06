@@ -369,7 +369,7 @@ export const pt = {
   'connection.reconnect': 'Desconectado, reconecte agora',
   'connection.restart': 'Reconectando, reconecte agora',
   'hostRelease.title': 'Versão do serviço alterada',
-  'hostRelease.description': 'A versão do serviço mudou. Esta página pausou as atualizações ao vivo; reload para carregar a nova versão.',
+  'hostRelease.description': 'A versão do serviço mudou. Esta página pausou as atualizações ao vivo; recarregue para carregar a nova versão.',
   'hostRelease.service': 'Serviço',
   'hostRelease.page': 'Página',
   'hostRelease.unknown': 'Desconhecido',

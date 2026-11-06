@@ -206,11 +206,17 @@ export function SidebarRoot({
   // && wide): the sliding column then clips it instead of reflowing it. The
   // rail layout (.collapsed styles) only applies once the fade settles.
   const lastWideWidth = useRef(width)
-  if (drawer || !collapsed) lastWideWidth.current = width
 
   // A closed drawer returns to the static rail; only a live collapse fades it in.
   const animateRail = useRef(!collapsed)
-  if (drawer || !collapsed) animateRail.current = !collapsed
+
+  // Both refs describe the **committed** frame, so they move in a layout effect: writing them during
+  // render lets a discarded or replayed render leak a width / rail decision that never reached the DOM.
+  useLayoutEffect(() => {
+    if (!drawer && collapsed) return
+    lastWideWidth.current = width
+    animateRail.current = !collapsed
+  }, [drawer, collapsed, width])
 
   // Scrollbars in the column follow the pointer (.quietBars rebinds them
   // away): drawn while it is inside, and for SCROLLBAR_LINGER_MS after it

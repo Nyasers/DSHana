@@ -291,15 +291,31 @@ export function apply(ctx: Context): void {
     dismissToast: () => { rowToast.set(null) },
   })
   const workspaceActionRequest = createSnapshotStore<WorkspaceActionRequest | null>(null)
+  /**
+   * 落地端可能比发射端晚就绪（整幅面的 store 还在填）：列表里找不到就一直等到它出现。
+   * 一次性动作不会重放（BroadcastChannel 不存历史），所以重试只能自己来。
+   */
+  const WORKSPACE_ACTION_RETRY_MS = 60_000
+  const WORKSPACE_ACTION_RETRY_STEP_MS = 100
   const requestWorkspaceAction = (workspaceId: WorkspaceId, displayTitle: string, action: 'rename' | 'delete'): void => {
-    const workspace = workspaces.list.getSnapshot().items.find(row => row.workspaceId === workspaceId)
-    if (workspace === undefined || !ctx.remoteAccess.source('workspace', workspaceId, `workspace/${action}`).getSnapshot()) return
-    // FP 是主卡派生的窄文档：框在那里开只会铺满侧栏，改发意图由整幅面接管。
-    if (emitsOnly) {
-      emitIntent(action === 'rename' ? 'workspace-rename' : 'workspace-delete', { workspaceId: String(workspaceId), title: displayTitle })
-      return
+    const apply = (): boolean => {
+      const workspace = workspaces.list.getSnapshot().items.find(row => row.workspaceId === workspaceId)
+      if (workspace === undefined || !ctx.remoteAccess.source('workspace', workspaceId, `workspace/${action}`).getSnapshot()) return false
+      // FP 是主卡派生的窄文档：框在那里开只会铺满侧栏，改发意图由整幅面接管。
+      if (emitsOnly) {
+        emitIntent(action === 'rename' ? 'workspace-rename' : 'workspace-delete', { workspaceId: String(workspaceId), title: displayTitle })
+        return true
+      }
+      workspaceActionRequest.set({ action, workspaceId, displayTitle, storedTitle: workspace.title })
+      return true
     }
-    workspaceActionRequest.set({ action, workspaceId, displayTitle, storedTitle: workspace.title })
+    if (apply()) return
+    const deadline = Date.now() + WORKSPACE_ACTION_RETRY_MS
+    const retry = (): void => {
+      if (apply() || Date.now() >= deadline) return
+      setTimeout(retry, WORKSPACE_ACTION_RETRY_STEP_MS)
+    }
+    setTimeout(retry, WORKSPACE_ACTION_RETRY_STEP_MS)
   }
 
   // 落地端：帧到了就落（直投通道的落地面），用自己的 store 重建那条面。
