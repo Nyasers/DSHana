@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0+dsh-0.2.2-rc.1](https://github.com/Nyasers/DSHana/compare/v1.3.0-rc.1%2Bdsh-0.2.2-alpha.3...v1.3.0%2Bdsh-0.2.2-rc.1) (2026-11-07)
+
+### Bug Fixes
+
+* **ui:** 处理 [#358](https://github.com/Nyasers/DSHana/issues/358) 的审查意见（解压上限、工作区动作重试、渲染期写 ref） ([502a969](https://github.com/Nyasers/DSHana/commit/502a969b9e3b86752f1af61a76f5c7016e7948dd)), references [#348](https://github.com/Nyasers/DSHana/issues/348)
+* **ui:** 收第二轮审查意见（帧头预算、动作重试作废旧请求） ([bafe8cf](https://github.com/Nyasers/DSHana/commit/bafe8cf05ac8348660da25c596b405a43964dbb6))
+
 ## [1.3.0-rc.1+dsh-0.2.2-alpha.3](https://github.com/Nyasers/DSHana/compare/v1.2.6%2Bdsh-0.2.1-rc.5...v1.3.0-rc.1%2Bdsh-0.2.2-alpha.3) (2026-11-03)
 
 ### Features
