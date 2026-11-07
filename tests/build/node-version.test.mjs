@@ -54,8 +54,8 @@ test("satisfiesNodeRange：本仓范围的边界", () => {
     );
   }
 
-  // 三条线之外的 major 一律拒绝（20 / 23 / 25 / 27）
-  for (const bad of ["20.19.0", "23.0.0", "25.0.0", "27.0.0"]) {
+  // 下界之外的 major 一律拒绝（20 / 22 / 23 / 24 / 25 / 27）
+  for (const bad of ["20.19.0", "22.23.4", "23.0.0", "24.22.1", "25.0.0", "27.0.0"]) {
     assert.equal(satisfiesNodeRange(range, bad), false, `应拒绝：${bad}`);
   }
 });

@@ -4,7 +4,7 @@
   "files": [
     {
       "path": "src/client/chat/use-chat-scroll.ts",
-      "upstreamSha256": "354db43391194a64b5a24bb8537ff0d3e219246789bb84b200b32d10931cd92b",
+      "upstreamSha256": "c424fc36af07a00fabfc1384d3e467137f0f1321361a952f4ad1d4294465e58f",
       "deltaSha256": "3f0101dd83ddc30224b338c4e7cbc1e21b43ebed2bf2342ff7a03d77e83bf675"
     }
   ]

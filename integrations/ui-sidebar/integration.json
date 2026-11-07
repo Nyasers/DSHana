@@ -4,12 +4,12 @@
   "files": [
     {
       "path": "src/client/SidebarRoot.tsx",
-      "upstreamSha256": "1b05537848b033a5fc9e9aa2d77297b5d1196a14bf97ea2dcbaf2917446b7712",
-      "deltaSha256": "954f00ad3783de414ca21ae08a520361e47f5a69155e439d3cea908de37d868a"
+      "upstreamSha256": "6748bec95bdd6ecc4507fa93a8e7b95128f676ef5967987d666102372ea961e5",
+      "deltaSha256": "84021df40cb0a3da76c37c50dd99cc2be55575bbddff031d1c1e31c6143236eb"
     },
     {
       "path": "src/client/SidebarRoot.module.css",
-      "upstreamSha256": "28ced089f6a9f4f48b164b8cb28f3ec8bf18d34c3a8a889a034c9dae3b21c9f0",
+      "upstreamSha256": "9477109f9d5561710a672756b91ed4986521d27374b8a05f3dccb4fcc4075583",
       "deltaSha256": "7b81c10a8763a4695d366f4cc803941b019d27aaf0d04cccd99b721167c062b5"
     }
   ]

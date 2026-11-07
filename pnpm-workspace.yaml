@@ -27,7 +27,6 @@ overrides:
   "@deepseek-ai/dsh-acp-app": "-"
   "@deepseek-ai/dsh-api-account-controller": "-"
   "@deepseek-ai/dsh-client-product-analytics": "-"
-  "@deepseek-ai/dsh-client-ui-deepseek-model-label-1017": "-"
   "@deepseek-ai/dsh-client-ui-entry-customization": "-"
   "@deepseek-ai/dsh-client-ui-message-feedback": "-"
   "@deepseek-ai/dsh-client-ui-settings-account": "-"
@@ -58,11 +57,14 @@ overrides:
 
   # 按需安装的包
   # >>> excluded-on-demand
+  "@deepseek-ai/dsh-personalized-recommendations": "-"
   "@deepseek-ai/dsh-experimental-agent-team-profile": "-"
   "@deepseek-ai/dsh-experimental-auto-review": "-"
   "@deepseek-ai/dsh-experimental-badge-skill-bundle": "-"
   "@deepseek-ai/dsh-experimental-cot-translation-bundle": "-"
+  "@deepseek-ai/dsh-experimental-forge-bundle": "-"
   "@deepseek-ai/dsh-experimental-inspector-profile": "-"
+  "@deepseek-ai/dsh-experimental-liveshare": "-"
   "@deepseek-ai/dsh-experimental-plugin-market-bundle": "-"
   "@deepseek-ai/dsh-experimental-ralph-bundle": "-"
   "@deepseek-ai/dsh-experimental-session-search": "-"
@@ -76,7 +78,7 @@ overrides:
   ## CVE-2023-54404
   zod: 4.6.7
   ## CVE-2026-109869
-  undici: 8.12.2
+  undici: 8.12.4
   ## CVE-2026-111769
   "@modelcontextprotocol/client": 2.3.1
 

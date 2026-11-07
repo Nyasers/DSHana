@@ -104,6 +104,12 @@ export function upgradeRequestHeaders(headers: IncomingHttpHeaders, upstream, co
     const lower = name.toLowerCase();
     if (lower === "authorization" || lower === "cookie" || lower === "host" || lower === "origin") continue;
     if (lower === "x-hana-dsh-bridge") continue;
+    // `Sec-WebSocket-Extensions` 不能透传。DSH 0.2.2 起 `websocketCompression` 默认 `deflate`，
+    // 两端一旦谈成 permessage-deflate，下行大帧就是**压缩后的字节**；而本中继为了绕开宿主的
+    // 1 MiB 帧上限会拆帧重组，重组出来的消息不携带 RSV1，客户端拿到的压缩字节只能当普通文本解，
+    // 结果是 JSON 解析失败、整条载体被关（卡上表现为 stream carrier closed → gateway/internal）。
+    // 这是 loopback 部署，压缩换不到带宽，上游 README 自己也建议这类部署设 `none`。
+    if (lower === "sec-websocket-extensions") continue;
     // 同上：请求头值为字符串；数组形态属响应头范畴。
     result[name] = value as string;
   }
@@ -197,6 +203,9 @@ export interface DshBridgeOptions {
   upstreamOrigin: string;
   upstreamCookie?: string;
   onControl?: (action: string, args: any) => Promise<any>;
+  /** 分片参数透传给帧中继；生产不传用默认值，测试用小值覆盖分片路径。 */
+  chunkBytes?: number;
+  windowBytes?: number;
   log?: (s: string) => void;
 }
 
@@ -209,7 +218,7 @@ export interface DshBridgeHandle {
 /** 起中继（监听 127.0.0.1:port）。 */
 export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeHandle> {
   const {
-    port, bridgeKey, controlKey, upstreamOrigin, upstreamCookie = "", onControl, log = () => {},
+    port, bridgeKey, controlKey, upstreamOrigin, upstreamCookie = "", onControl, chunkBytes, windowBytes, log = () => {},
   } = opts || {};
   const upstream = new URL(upstreamOrigin);
   if (upstream.protocol !== "http:" || upstream.hostname !== "127.0.0.1") {
@@ -451,7 +460,7 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
     upstreamSockets.add(upstreamSocket);
     if (chunked) {
       // 帧搬运接管两个 socket 的读写（含握手响应头原样回写）。
-      startFrameRelay({ clientSocket, upstreamSocket, log });
+      startFrameRelay({ clientSocket, upstreamSocket, log, chunkBytes, windowBytes });
       const drop = () => {
         upstreamSockets.delete(upstreamSocket);
         clientSockets.delete(clientSocket);

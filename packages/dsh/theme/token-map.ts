@@ -291,4 +291,12 @@ export const PASSTHROUGH: ReadonlyArray<{ match: RegExp; why: string }> = [
     match: /^--dsw-alias-switch-thumb$/,
     why: "开关旋钮：本表未接管开关整族，thumb 与 track 是对比配对，单接一头会破坏开关开合的辨识。",
   },
+  {
+    match: /^--dsw-alias-illustration-[a-z]+$/,
+    why: "空态插画内部的六层中性层次（浅 55/90/310、深 700/750/850）：它们描的是插画自身的结构，宿主没有“插画面”这一层语义位；接成宿主灰阶会把插画压成同一色块，接成面则与卡片底贴死。",
+  },
+  {
+    match: /^--dsw-alias-state-done-primary$/,
+    why: "“已完成”标记色（浅 violet-600 / 深 violet-400）：上游特意与 success（绿）分开——接成 --green 就与“成功”同读，接成 --accent 就与品牌色混同，宿主调色板里没有紫色语义位，保持原生。",
+  },
 ];

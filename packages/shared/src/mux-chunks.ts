@@ -21,17 +21,19 @@
 //
 // 本模块零依赖、只认 Uint8Array（浏览器与 Node 同构）：中继与载体共用同一份编解码。
 
-/** 单片的载荷上限。宿主的上限是 1 MiB，取 128 KiB 留足余量。 */
-export const MUX_CHUNK_BYTES = 128 * 1024;
+/**
+ * 单片载荷上限。
+ *
+ * 取 64 MiB：实际等于不分片。宿主那条「1 MiB 单帧上限」是内测期的限制，
+ * 1.5.7-beta 上实测关闭分片后 5,330,020 字节的单帧直接通过，已不存在。
+ * 保留分片结构与这个上限只为防极端单条消息（几十 MB）把下游缓冲与浏览器吞掉。
+ */
+export const MUX_CHUNK_BYTES = 64 * 1024 * 1024;
 
 /**
- * 在途未确认字节的上限（载荷口径）。宿主的下游缓冲守卫判的是**线上字节**且门槛是
- * `bufferedAmount > 1 MiB`，而一片 128 KiB 载荷在线上是 131,088 字节（10 字节帧头 +
- * 6 字节信封 + 载荷）：窗口拉满 1 MiB 就是 8 片 = 1,048,704 字节，光分片就越线，
- * 再叠一个 live 帧或一次 ping 当场 1011。故取 768 KiB（6 片 = 线上 786,528），
- * 给 live 帧与 ping 留 256 KiB。
+ * 在途未确认字节的上限（载荷口径）。与单片等值：一次只走一条消息，不发并行片。
  */
-export const MUX_CHUNK_WINDOW = 768 * 1024;
+export const MUX_CHUNK_WINDOW = 64 * 1024 * 1024;
 
 /** 一片分片帧的固定开销（帧头 + 信封）——窗口按线上字节核算时用得上。 */
 export const MUX_CHUNK_FRAME_OVERHEAD = 16;
@@ -43,6 +45,16 @@ export const MUX_CHUNK_MAGIC = [0x48, 0x4e, 0x4b, 0x31] as const;
 export const MUX_CHUNK_KIND_CHUNK = 1;
 /** 回执帧：magic(4) + kind(1)=ACK + u32BE(本次确认的分片载荷字节数)。 */
 export const MUX_CHUNK_KIND_ACK = 2;
+/**
+ * 压缩分片帧：同分片帧，但整条消息的 payload 是 **zstd**。
+ *
+ * 一条消息独立压（无跨消息字典）：中继用 Node 内建 `zstdCompressSync` 压完再切，浏览器侧用
+ * 纯 JS 的 fzstd 解（约 9 KB gzip，比 brotli 的 wasm 小一个数量级）。分片帧自带压缩标志，
+ * 与 WS 扩展层无关。
+ *
+ * 编号只给已实装的帧类型，不预留空位：新增一种编码就是加一个 kind，未实装前不占号。
+ */
+export const MUX_CHUNK_KIND_CHUNK_ZSTD = 3;
 
 /** 分片能力的开关（页面在 mux URL 上声明；中继只在看到它时才启用分片）。 */
 export const MUX_CHUNK_QUERY = "dshanaMuxChunks";
@@ -59,11 +71,11 @@ export function isMuxControlFrame(bytes: Uint8Array): boolean {
   return true;
 }
 
-/** 分片帧（last=true 表示这条消息的最后一片）。 */
-export function encodeChunk(payload: Uint8Array, last: boolean): Uint8Array {
+/** 分片帧（last=true 表示这条消息的最后一片；compressed 表示载荷是 zstd）。 */
+export function encodeChunk(payload: Uint8Array, last: boolean, compressed = false): Uint8Array {
   const out = new Uint8Array(CHUNK_HEADER_LEN + payload.length);
   out.set(MUX_CHUNK_MAGIC, 0);
-  out[MAGIC_LEN] = MUX_CHUNK_KIND_CHUNK;
+  out[MAGIC_LEN] = compressed ? MUX_CHUNK_KIND_CHUNK_ZSTD : MUX_CHUNK_KIND_CHUNK;
   out[MAGIC_LEN + 1] = last ? 1 : 0;
   out.set(payload, CHUNK_HEADER_LEN);
   return out;
@@ -81,12 +93,17 @@ export function encodeAck(bytes: number): Uint8Array {
 /** 解一帧我们造的控制帧；不是控制帧或长度不合返回 null。 */
 export function decodeMuxControlFrame(
   bytes: Uint8Array,
-): { kind: "chunk"; last: boolean; payload: Uint8Array } | { kind: "ack"; bytes: number } | null {
+): { kind: "chunk"; last: boolean; payload: Uint8Array; compressed: boolean } | { kind: "ack"; bytes: number } | null {
   if (!isMuxControlFrame(bytes)) return null;
   const kind = bytes[MAGIC_LEN];
-  if (kind === MUX_CHUNK_KIND_CHUNK) {
+  if (kind === MUX_CHUNK_KIND_CHUNK || kind === MUX_CHUNK_KIND_CHUNK_ZSTD) {
     if (bytes.length < CHUNK_HEADER_LEN) return null;
-    return { kind: "chunk", last: bytes[MAGIC_LEN + 1] === 1, payload: bytes.subarray(CHUNK_HEADER_LEN) };
+    return {
+      kind: "chunk",
+      last: bytes[MAGIC_LEN + 1] === 1,
+      payload: bytes.subarray(CHUNK_HEADER_LEN),
+      compressed: kind === MUX_CHUNK_KIND_CHUNK_ZSTD,
+    };
   }
   if (kind === MUX_CHUNK_KIND_ACK) {
     if (bytes.length < ACK_LEN) return null;

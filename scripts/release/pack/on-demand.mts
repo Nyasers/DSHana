@@ -8,7 +8,10 @@
 //   · 按需（on-demand）：不在内核 dependencies 里，但在 OFFICIAL_ON_DEMAND_CATALOG 里
 //     → 页面标「未安装」，给一个安装按钮，点了从 registry 装（与 claude-code / codex 同一条路）。
 //
-// 本文件把上游 OPTIONAL_BUNDLES 那 12 个实验 bundle 从第一条挪到第二条。
+// 本文件把上游 OPTIONAL_BUNDLES 那 15 个实验 bundle 从第一条挪到第二条。
+//
+// cua-bundle 不在此列：0.2.2-alpha.3 起上游把它（连同 claude-code / codex 两个子代理包）放进了
+// ON_DEMAND_BUNDLES——内核 deps 不再包含它，catalog 也自带入口，我们那条 override 已无活可干。
 //
 // 为什么值得挪：上游给这 12 个的语义是「随安装走、默认关，由插件管理页打开」，但它们的包全在
 // 内核 dependencies 里，于是**每一个安装都揣着这 46 MB 从不加载的代码**（语音输入 24 MB，其中
@@ -36,8 +39,14 @@ import { dshPin } from "../../shared/version.mts";
 
 /** 安装锚点（内核包）：交付面依赖与 shipped 判定都读它。 */
 const ANCHOR_PACKAGE = "@deepseek-ai/dsh";
-/** 浏览器插件的 loader 装配面（上游发布时打包成单文件，catalog 常量就在那里面）。 */
-const APP_BOOT_PACKAGE = "@deepseek-ai/dsh-app-boot";
+/**
+ * 可选 bundle 名单与离线 catalog 的所属包。
+ *
+ * 0.2.2-alpha.2 起这两样从 app-boot 挪了出来：app-boot 只负责装配，名单与 catalog
+ * 同住 `@deepseek-ai/dsh-official-bundles`，产物是**单个** lib/index.js（全打包）。
+ * 注入点跟常量走，不跟包名走。
+ */
+const OFFICIAL_BUNDLES_PACKAGE = "@deepseek-ai/dsh-official-bundles";
 
 /**
  * 改成按需安装的实验性 bundle：从根 `pnpm-workspace.yaml` 的 `excluded-on-demand`
@@ -67,16 +76,20 @@ export function onDemandBundles(rootDir = ROOT): readonly string[] {
 }
 
 /**
- * 上游 app-boot 源码里那份 OPTIONAL_BUNDLES（判据来源，不另维护第二份名单）。
+ * 上游那份 OPTIONAL_BUNDLES（判据来源，不另维护第二份名单）。
  *
  * 从**镜像 tag** 读，不读 checkout 工作树：工作树会被人改、被分支切走，而同一个文件在
  * `pnpm run package` 与直接跑 index.mts 两种姿势下可能读出不同答案。更要紧的是
  * injectOnDemandCatalog 按同一 tag 读 meta——两边必须同源，否则“名单里有、catalog 里没有”
  * （或反之）的拼美会静默发生。
+ *
+ * 位置随上游变过：0.2.2-alpha.2 起这份名单从 `packages/boot/app-boot/src/profile.ts`
+ * 挪到了 `@deepseek-ai/dsh-official-bundles`（`packages/util/official-bundles/src/bundles.ts`），
+ * 与 PROFILE_TEMPLATES / RETIRED_BUNDLES 同处。找不到就是上游又挪了，不能静默当空。
  * @param tag 镜像 tag（默认取内核 pin）
  */
 export function upstreamOptionalBundles(tag = `dsh-v${dshPin()}`): string[] {
-  const rel = "packages/boot/app-boot/src/profile.ts";
+  const rel = "packages/util/official-bundles/src/bundles.ts";
   const buf = readUpstreamFromMirror(rel, tag);
   if (buf === null) throw new Error(`镜像 ${tag} 里没有 ${rel}（pin 与镜像对不上？）`);
   const text = buf.toString("utf8");
@@ -239,26 +252,27 @@ function findArrayEnd(text: string, openIndex: number): number {
 }
 
 /**
- * 把按需面注入 app-boot 的离线 catalog（③ 那一步）。
+ * 把按需面注入离线 catalog（③ 那一步）。
  *
- * 为什么改产物而不是改源码：app-boot 的 lib/index.js 是上游**发布时**打好的单文件（23 个源文件
- * 的打包结果），从源码重打要先摊整棵树、再对齐装饰器与 externals，代价远大于这一步的风险。
+ * 为什么改产物而不是改源码：`@deepseek-ai/dsh-official-bundles` 的 lib/index.js 是上游**发布时**
+ * 打好的单文件（bundles / catalog / plugin-manager 三份源文件都烘在里面），从源码重打要先摊整棵树、
+ * 再对齐装饰器与 externals，代价远大于这一步的风险。
  * 判据与 integrations 的 generatedPatches 同一条：按锚点定位，找不到就抛，绝不静默跳过——静默
- * 跳过的后果是「页面里根本没有这 12 个」而包已经不在树里，用户再也装不回来。
+ * 跳过的后果是「页面里根本没有这些 bundle」而包已经不在树里，用户再也装不回来。
  * @param nodeModulesDir 交付树的 node_modules
  * @param tag 镜像 tag（默认取内核 pin）
  * @returns 注入的条目数
  */
 export function injectOnDemandCatalog(nodeModulesDir: string, tag = `dsh-v${dshPin()}`): number {
-  const target = join(nodeModulesDir, APP_BOOT_PACKAGE, "lib", "index.js");
-  if (!fs.existsSync(target)) throw new Error(`${APP_BOOT_PACKAGE} 的产物不在交付树里：${target}`);
+  const target = join(nodeModulesDir, OFFICIAL_BUNDLES_PACKAGE, "lib", "index.js");
+  if (!fs.existsSync(target)) throw new Error(`${OFFICIAL_BUNDLES_PACKAGE} 的产物不在交付树里：${target}`);
   const text = fs.readFileSync(target, "utf8");
   const marker = "const OFFICIAL_ON_DEMAND_CATALOG = ";
   const at = text.indexOf(marker);
   if (at < 0) {
     throw new Error(
-      `${APP_BOOT_PACKAGE} 产物里找不到 ${marker.trim()} 锚点——上游换了常量名或不再是数组字面量。`
-        + "按需面注入要重新对账；找不到就注入不了，页面里那 12 个会整个消失。",
+      `${OFFICIAL_BUNDLES_PACKAGE} 产物里找不到 ${marker.trim()} 锚点——上游换了常量名或不再是数组字面量。`
+        + "按需面注入要重新对账；找不到就注入不了，页面里这些 bundle 会整个消失。",
     );
   }
   const openIndex = text.indexOf("[", at + marker.length);

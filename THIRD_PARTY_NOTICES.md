@@ -16,7 +16,7 @@ LICENSE and the entry is reproduced here for the inlined build-time use.
 
 ### @hana/plugin-protocol
 
-- Version: 1.5.70-beta
+- Version: 1.5.98-beta
 - Purpose: Message-protocol constants and types exchanged between the host and plugins (for example the theme-change notification `THEME_CHANGED`).
 - Form: devDependency (`file:vendor/hana-app-sdk/hana-plugin-protocol-0.0.0.tgz`); inlined together with @hana/plugin-sdk — it has no entry point of its own in the distribution.
 - Source: Hana App Creator SDK shipped with the host (snapshot under `vendor/hana-app-sdk`; see `source-manifest.json` in the same directory)
@@ -24,7 +24,7 @@ LICENSE and the entry is reproduced here for the inlined build-time use.
 
 ### @hana/plugin-sdk
 
-- Version: 1.5.70-beta
+- Version: 1.5.98-beta
 - Purpose: Browser-side App shell surface: `hana.api.fetch` and `hana.api.url` (App-surface session credential injection and runtime proxy path tickets), plus the surface / theme / clipboard / storage faces.
 - Form: devDependency (`file:vendor/hana-app-sdk/hana-plugin-sdk-0.0.0.tgz`), inlined at build time by rspack into `ui/app.js` and `ui/settings.js`; no vendored copy is shipped separately.
 - Source: Hana App Creator SDK shipped with the host (snapshot under `vendor/hana-app-sdk`; see `source-manifest.json` in the same directory)
@@ -32,7 +32,7 @@ LICENSE and the entry is reproduced here for the inlined build-time use.
 
 ### @hana/plugin-components
 
-- Version: 1.5.70-beta
+- Version: 1.5.98-beta
 - Purpose: Host settings components (`@hana/plugin-components/settings` and its `settings.css`), so the settings surface matches the host.
 - Form: devDependency (`file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz`), inlined by rspack into `ui/settings.js`.
 - Source: Hana App Creator SDK shipped with the host (snapshot under `vendor/hana-app-sdk`; see `source-manifest.json` in the same directory)
@@ -40,7 +40,7 @@ LICENSE and the entry is reproduced here for the inlined build-time use.
 
 ### @hana/app-sdk
 
-- Version: 1.5.70-beta
+- Version: 1.5.98-beta
 - Purpose: The `connectAppRuntime()` client runtime for the managed runtime's private IPC (tasks / models / network.fetch / close).
 - Form: devDependency (`file:vendor/hana-app-sdk/hana-app-sdk.tgz`), statically inlined by rspack into `bin/dsh.mjs`.
 - Source: Hana App Creator SDK shipped with the host (snapshot under `vendor/hana-app-sdk`; see `source-manifest.json` in the same directory)
@@ -54,6 +54,14 @@ LICENSE and the entry is reproduced here for the inlined build-time use.
 - Form: devDependency (`zod`), statically inlined by rspack into `bin/app.mjs` for the tool argument surface. A separate copy also ships under `node_modules/` as part of the DSH dependency tree, carrying its own LICENSE.
 - License: MIT License (full text below)
 - Copyright: Copyright (c) 2025 Colin McDonnell
+
+### fzstd
+
+- Version: 0.1.1
+- Purpose: Zstandard decoder for compressed mux frames: the relay packs oversized frames before they cross the host's 1 MiB WebSocket limit, and the in-page shim unpacks them.
+- Form: dependency (`fzstd`), statically inlined by rspack into `ui/app.js` and `ui/stream.js`. The build keeps only Node built-ins external, so a bare specifier lands in the bundle.
+- License: MIT License (full text below)
+- Copyright: Copyright (c) 2020 Arjun Barrett
 
 ## Components under the shipped `node_modules/`
 
