@@ -127,6 +127,49 @@ test("bridge: 控制请求体超过 256 KiB 被拒（不缓冲成无界内存）
   }
 });
 
+test("bridge: 请求体边发边超限 → 仍收到 409（不因中途中断迭代而断连）", async () => {
+  const upstream = await startUpstream();
+  const bridge = await startBridge(upstream);
+  try {
+    const total = 2 * 1024 * 1024;
+    const result = await new Promise((resolve, reject) => {
+      const req = http.request({
+        host: "127.0.0.1",
+        port: bridge.port,
+        path: "/_control",
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-hana-dsh-control": CONTROL,
+          "content-length": String(total),
+        },
+      }, (res) => {
+        let text = "";
+        res.setEncoding("utf8");
+        res.on("data", (c) => { text += c; });
+        res.on("end", () => resolve({ status: res.statusCode, text }));
+      });
+      req.on("error", reject);
+      // 分块写：让服务端在请求尚未结束时就越过上限（一次性灌完测不出这个时序）
+      const chunk = "x".repeat(64 * 1024);
+      let written = 0;
+      const pump = () => {
+        while (written < total) {
+          written += chunk.length;
+          if (!req.write(chunk)) { req.once("drain", pump); return; }
+        }
+        req.end();
+      };
+      pump();
+    });
+    assert.equal(result.status, 409, "超限应回可读的 409，而不是连接重置");
+    assert.match(result.text, /too large/);
+  } finally {
+    await bridge.close();
+    await upstream.close();
+  }
+});
+
 test("bridge: WS 升级握手头不被剥离（101）", async () => {
   const upstream = await startUpstream({ ws: true });
   const bridge = await startBridge(upstream);

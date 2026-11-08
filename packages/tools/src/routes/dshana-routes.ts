@@ -326,9 +326,9 @@ export function registerDshanaRoutes(app, deps) {
       }
     });
 
-    // ---- POST /dshana/settings：只改常规项（两个超时、会话模型）；数据来源只读 ----
-    // 形状：{ settings: {...}, expectedRevision }。带来源字段一律 400：数据来源固定为 App 私有目录，
-    // 换源要停旧起新，没有这条通道。
+    // ---- POST /dshana/settings：只改常规项（两个超时、会话模型）；数据来源固定 ----
+    // 形状：{ settings: {...}, expectedRevision }。带来源字段一律 400：数据来源恒为 App 私有目录，
+    // 换源没有通道（它会停掉正在跑的 runtime）。
     // revision 不匹配回 409（不静默覆盖）；设置值非法回 400（存储侧校验的话原样上抬）。
     app.post(DASHANA_ROUTE_PREFIX + "/settings", async (c) => {
       try {
@@ -339,7 +339,7 @@ export function registerDshanaRoutes(app, deps) {
         if (sourceKeys.length) {
           return json(c, 400, {
             ok: false,
-            error: "数据来源只读（固定为 App 私有目录）：" + sourceKeys.join("/"),
+            error: "数据来源固定为 App 私有目录，不可修改：" + sourceKeys.join("/"),
           });
         }
         const expectedRevision = typeof body.expectedRevision === "number" ? body.expectedRevision : undefined;

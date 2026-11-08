@@ -146,7 +146,7 @@ test("POST /dshana/settings: revision 落后 → 409 + code（不静默覆盖）
   assert.equal(ctx.body.revision, 9, "把当前 revision 一并给回，页面好刷新");
 });
 
-test("POST /dshana/settings: 带来源字段 → 400（数据来源只读）", async () => {
+test("POST /dshana/settings: 带来源字段 → 400（数据来源固定，不可改）", async () => {
   const { app, routes } = makeFakeApp();
   let called = 0;
   registerDshanaRoutes(app, makeFakeDeps({
@@ -157,7 +157,7 @@ test("POST /dshana/settings: 带来源字段 → 400（数据来源只读）", a
   ctx.req = { json: async () => ({ settings: { mode: "shared", path: "D:/dsh" }, expectedRevision: 1 }) };
   await handler(ctx);
   assert.equal(ctx.status, 400);
-  assert.match(ctx.body.error, /数据来源只读/);
+  assert.match(ctx.body.error, /数据来源固定为 App 私有目录/);
   assert.equal(called, 0, "来源变更不得当普通设置写");
 });
 

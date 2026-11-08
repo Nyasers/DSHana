@@ -32,6 +32,8 @@ import { MUX_CHUNK_QUERY, MUX_CHUNK_QUERY_VALUE } from "@dshana/shared/mux-chunk
 import { startFrameRelay } from "./mux-relay.ts";
 
 const MAX_WS_BUFFER = 1024 * 1024;
+/** 控制面请求体上限：够装一个客户端信封，超出即拒。 */
+const CONTROL_BODY_MAX_BYTES = 256 * 1024;
 
 const HOP_BY_HOP = new Set([
   "connection", "upgrade", "keep-alive", "proxy-authenticate", "proxy-authorization",
@@ -233,11 +235,16 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
       try {
         const chunks: any[] = [];
         let bytes = 0;
+        let oversized = false;
+        // 超限后只丢弃、不中断迭代：在 for await 里抛错会让 Node 销毁请求 socket，
+        // 409 就发不出去（客户端看到的会是 fetch 失败，而不是可读原因）。
         for await (const chunk of req) {
+          if (oversized) continue;
           bytes += chunk.length;
-          if (bytes > 256 * 1024) throw new Error("DSH control request is too large");
+          if (bytes > CONTROL_BODY_MAX_BYTES) { oversized = true; chunks.length = 0; continue; }
           chunks.push(chunk);
         }
+        if (oversized) throw new Error("DSH control request is too large");
         const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
         const action = body && body.action;
         const controlArgs = (body && body.args) || {};
