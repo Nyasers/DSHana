@@ -29,7 +29,7 @@ import { mkdirSync, writeFileSync, chmodSync, rmSync, readFileSync, existsSync }
 import { randomInt, randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { appDataDir, appLogger, getAppRuntime } from "./app-runtime.ts";
-import { currentSource } from "./data-source.ts";
+import { privateSource } from "./data-source.ts";
 import { parseRuntimeFatal, fatalReportText } from "@dshana/shared/runtime-error.ts";
 import type { HanaPluginContextV2 } from "@dshana/shared/host.ts";
 // 依赖随包物化在安装目录 <installRoot>/node_modules，
@@ -575,11 +575,8 @@ async function doStartManaged(opts, attempt = 1) {
   const ctx = app.ctx;
   const dataDir = appDataDir();
   if (!dataDir) throw new Error("managed-runtime: ctx.dataDir missing");
-  // 数据源：DSH_HOME 由当前源决定（private = <dataDir>/.dsh；shared = 外部目录）。
-  // 读设置失败即抛错（不得默认切错源）；设置文件不存在时回落 private 默认。
-  // 源默认取当前自持设置；带 dshHome 覆盖时用它（切换链要能在落盘之前先按新源启动）
-  const base = await currentSource();
-  const source = typeof opts.dshHome === "string" && opts.dshHome ? { ...base, home: opts.dshHome } : base;
+  // 数据目录固定为 <dataDir>/.dsh（不读 App ctx.storage，也没有运行中换源的通道）。
+  const source = privateSource(dataDir);
   // 中继端口：先让探针子进程向系统要一个「此刻确实可绑」的号（它有 --allow-net）；
   // 探针不成再回落区间盲抽，由 MAX_START_ATTEMPTS 兼底。
   const bridgePort = probeBridgePort(appInstallRoot()) ?? chooseBridgePort(randomInt, FALLBACK_PORT_RANGE);

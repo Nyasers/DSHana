@@ -1,25 +1,23 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/lib/data-source.test.mjs — packages/runtime/src/data-source.ts 数据来源解析与自持设置存储单测
-// 覆盖：设置校验（未知键/模式/shared 绝对路径/profile）、路径归一与 sourceId 稳定性、
-// 存储读默认/往返/原子写/lastShared/损坏与版本拒绝、shared 目录校验（含 canonical 回写）。
+// tests/lib/data-source.test.mjs — packages/runtime/src/data-source.ts 设置校验与自持存储单测
+// 覆盖：设置校验（未知键 / 超时 / 会话模型 / 主题面）、数据目录身份、存储读默认与原子写、
+// 损坏与版本拒绝、退役键（会话流卡档位 + 换源时代的 mode/path/profile）的读侧丢弃。
 // 注：期望值一律经 path.normalize 生成，测试在 win32/darwin/linux 下同义。
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, normalize } from "node:path";
+import { join } from "node:path";
 import {
   DEFAULT_SETTINGS,
   PRIVATE_HOME_NAME,
   PRIVATE_PROFILE,
   SETTINGS_VERSION,
   createDataSourceStore,
-  defaultDshHome,
-  normalizeHomeForId,
   privateHomeOf,
-  sourceOf,
+  privateSource,
   validateSettings,
 } from "@dshana/runtime/data-source.ts";
 
@@ -33,7 +31,6 @@ const withTempDir = async (fn) => {
   }
 };
 
-const P = (p) => normalize(p);
 // 两个超时的默认值（钉住数字：与 config.ts 的 APP_SETTING_DEFAULTS 一致，也是存储的缺省）
 const TIMEOUT_DEFAULTS = { approvalTimeoutSec: 30, defaultTimeoutSec: 1800 };
 // 会话模型缺省：复用调用方（caller），自定义那条留空
@@ -45,58 +42,38 @@ const SESSION_DEFAULTS = {
 };
 // 强制跟随宿主主题的面缺省：只有侧栏面（与 shared/face-theme.ts 的 FORCE_FOLLOW_FACES 同源）
 const FACE_FOLLOW_DEFAULTS = { forceFollowFaces: ["sidebar"] };
-test("validateSettings: private 默认落位，profile 被强制为内置名", () => {
-  assert.deepEqual(validateSettings({ mode: "private", path: null, profile: "whatever" }), {
-    mode: "private",
-    path: null,
-    profile: PRIVATE_PROFILE,
-    ...TIMEOUT_DEFAULTS,
-    ...SESSION_DEFAULTS,
-    ...FACE_FOLLOW_DEFAULTS,
-  });
-  assert.deepEqual(validateSettings({ mode: "private" }), {
-    mode: "private",
-    path: null,
-    profile: PRIVATE_PROFILE,
-    ...TIMEOUT_DEFAULTS,
-    ...SESSION_DEFAULTS,
-    ...FACE_FOLLOW_DEFAULTS,
-  });
+
+test("validateSettings: 空设置落全部缺省", () => {
+  const expected = { ...TIMEOUT_DEFAULTS, ...SESSION_DEFAULTS, ...FACE_FOLLOW_DEFAULTS };
+  assert.deepEqual(validateSettings({}), expected);
+  assert.deepEqual({ ...DEFAULT_SETTINGS }, expected, "DEFAULT_SETTINGS 与校验产物同形");
 });
 
-test("validateSettings: 拒绝未知键 / 非法模式 / 非绝对 shared 路径 / NUL / 畸形 profile", () => {
-  assert.throws(() => validateSettings({ mode: "private", extra: 1 }), /未知键/);
-  assert.throws(() => validateSettings({ mode: "cloud" }), /private 或 shared/);
+test("validateSettings: 拒绝未知键与非对象（换源时代的 mode/path/profile 也属未知）", () => {
+  assert.throws(() => validateSettings({ extra: 1 }), /未知键/);
+  assert.throws(() => validateSettings({ mode: "private" }), /未知键/);
   assert.throws(() => validateSettings(null), /必须是对象/);
   assert.throws(() => validateSettings([]), /必须是对象/);
-  const shared = (path, profile = "dshana") => () => validateSettings({ mode: "shared", path, profile });
-  assert.throws(shared("relative/dir"), /绝对路径/);
-  assert.throws(shared(""), /必须给出/);
-  assert.throws(shared("C:/x\0y"), /NUL/);
-  assert.throws(shared("/abs", "with space"), /简单名/);
-  assert.throws(shared("/abs", "-lead"), /简单名/);
-  assert.throws(shared("/abs", "a".repeat(65)), /简单名/);
-  assert.throws(shared("/abs", ".."), /简单名/);
 });
 
-test("validateSettings: shared 路径做 normalize，profile 原样保留", () => {
-  const s = validateSettings({ mode: "shared", path: "/data/dsh/", profile: "web-2" });
-  assert.equal(s.mode, "shared");
-  assert.equal(s.profile, "web-2");
-  assert.equal(s.path, P("/data/dsh/"));
+test("validateSettings: 两个超时是非负整数秒", () => {
+  assert.equal(validateSettings({ approvalTimeoutSec: 0 }).approvalTimeoutSec, 0);
+  assert.equal(validateSettings({ defaultTimeoutSec: 600 }).defaultTimeoutSec, 600);
+  for (const bad of [-1, 1.5, "30", Number.NaN]) {
+    assert.throws(() => validateSettings({ approvalTimeoutSec: bad }), /不小于 0 的整数秒/);
+  }
 });
 
 test("validateSettings: 会话模型模式限定两种，custom 要求 provider/model 都填", () => {
-  const caller = validateSettings({ mode: "private" });
+  const caller = validateSettings({});
   assert.equal(caller.sessionModelMode, "caller");
   assert.equal(caller.sessionModelProvider, "");
   assert.equal(caller.sessionModelModel, "");
   // caller 模式下那两个值原样保留（来回切不丢用户选过的那条）
-  const kept = validateSettings({ mode: "private", sessionModelMode: "caller", sessionModelProvider: "deepseek", sessionModelModel: "deepseek-flash" });
+  const kept = validateSettings({ sessionModelMode: "caller", sessionModelProvider: "deepseek", sessionModelModel: "deepseek-flash" });
   assert.equal(kept.sessionModelMode, "caller");
   assert.equal(kept.sessionModelProvider, "deepseek");
   const custom = validateSettings({
-    mode: "private",
     sessionModelMode: "custom",
     sessionModelProvider: " agnes ",
     sessionModelModel: " agnes-3.0-flash ",
@@ -112,89 +89,51 @@ test("validateSettings: 会话模型模式限定两种，custom 要求 provider/
     { mode: "custom", provider: "agnes", model: "agnes-3.0-flash", effort: "high" },
   );
   // 推理强度是可选一侧：不填不报错，落空串（= 不指定，由 DSH 决定）
-  assert.equal(
-    validateSettings({ mode: "private", sessionModelMode: "custom", sessionModelProvider: "a", sessionModelModel: "b" })
-      .sessionModelReasoningEffort,
-    "",
-  );
-  assert.throws(() => validateSettings({ mode: "private", sessionModelMode: "fixed" }), /caller 或 custom/);
-  assert.throws(() => validateSettings({ mode: "private", sessionModelMode: "custom" }), /provider 与 model/);
-  assert.throws(() => validateSettings({ mode: "private", sessionModelMode: "custom", sessionModelProvider: "deepseek" }), /provider 与 model/);
-  assert.throws(() => validateSettings({ mode: "private", sessionModelProvider: 7 }), /sessionModelProvider/);
+  assert.equal(validateSettings({ sessionModelMode: "custom", sessionModelProvider: "a", sessionModelModel: "b" }).sessionModelReasoningEffort, "");
+  assert.throws(() => validateSettings({ sessionModelMode: "fixed" }), /caller 或 custom/);
+  assert.throws(() => validateSettings({ sessionModelMode: "custom" }), /provider 与 model/);
+  assert.throws(() => validateSettings({ sessionModelMode: "custom", sessionModelProvider: "deepseek" }), /provider 与 model/);
+  assert.throws(() => validateSettings({ sessionModelProvider: 7 }), /sessionModelProvider/);
 });
 
-test("normalizeHomeForId: 斜杠与尾斜杠归一；win32 额外小写", () => {
-  assert.equal(normalizeHomeForId("C:\\Users\\A\\.dsH\\", "win32"), "c:/users/a/.dsh");
-  assert.equal(normalizeHomeForId("/Users/A/.dsh/", "darwin"), "/Users/A/.dsh");
-  assert.equal(normalizeHomeForId("C:\\Users\\A\\.dsh", "win32"), "c:/users/a/.dsh");
-});
-
-test("sourceOf: private 恒为内置目录 + 常量 sourceId；shared 由 home+profile 决定", () => {
+test("privateSource: DSH_HOME 恒为 <dataDir>/.dsh，profile 与 sourceId 固定", () => {
   const dataDir = "/app-data/dshana";
-  const priv = sourceOf({ mode: "private" }, dataDir);
-  assert.equal(priv.sourceId, "private");
-  assert.equal(priv.home, privateHomeOf(dataDir));
-  assert.equal(priv.home, join(dataDir, PRIVATE_HOME_NAME));
-  assert.equal(priv.profileName, PRIVATE_PROFILE);
-  assert.equal(priv.shared, false);
-
-  const idOf = (home, profile = "web") => sourceOf({ mode: "shared", path: home, profile }, dataDir).sourceId;
-  const a = sourceOf({ mode: "shared", path: "/ds h/", profile: "web" }, dataDir);
-  assert.equal(a.home, P("/ds h/"));
-  assert.equal(a.shared, true);
-  assert.equal(a.profileName, "web");
-  assert.equal(idOf("/ds h"), idOf("/ds h/"), "尾斜杠不产生伪 source 变更");
-  // 反斜杠同义只在 Windows 路径语义下成立：Linux 上 "\ds h\" 不是绝对路径，会被校验拒掉。
-  if (process.platform === "win32") {
-    assert.equal(idOf("/ds h"), idOf("\\ds h\\"), "反斜杠与正斜杠同义");
-  }
-  assert.notEqual(idOf("/ds h"), idOf("/ds h", "other"), "profile 不同即不同源");
-  assert.match(a.sourceId, /^[0-9a-f]{24}$/);
+  const src = privateSource(dataDir);
+  assert.equal(src.sourceId, "private");
+  assert.equal(src.home, privateHomeOf(dataDir));
+  assert.equal(src.home, join(dataDir, PRIVATE_HOME_NAME));
+  assert.equal(src.profileName, PRIVATE_PROFILE);
 });
 
-test("sourceOf: Windows 路径比较归一（\\ → /、小写、去尾斜杠）", () => {
-  assert.equal(normalizeHomeForId("D:\\DSH\\HOME\\", "win32"), "d:/dsh/home");
-  assert.equal(normalizeHomeForId("D:\\DSH\\HOME", "win32"), normalizeHomeForId("d:/dsh/home/", "win32"));
-});
-
-test("defaultDshHome: ~/.dsh", () => {
-  assert.ok(defaultDshHome().endsWith(".dsh"));
-});
-
-test("store.read: 文件不存在回落 private 默认（revision 0）", async () => {
+test("store.read: 文件不存在回落默认（revision 0）", async () => {
   await withTempDir(async (dir) => {
     const st = await createDataSourceStore({ dataDir: dir }).read();
     assert.equal(st.version, SETTINGS_VERSION);
     assert.equal(st.revision, 0);
     assert.deepEqual(st.settings, { ...DEFAULT_SETTINGS });
-    assert.equal(st.lastShared, undefined);
   });
 });
 
-test("store.write: 原子落盘 + revision 递增 + lastShared 记录（不留 .pending）", async () => {
+test("store.write: 原子落盘 + revision 递增（不留 .pending）", async () => {
   await withTempDir(async (dir) => {
     const store = createDataSourceStore({ dataDir: dir });
-    const first = await store.write({ mode: "shared", path: dir, profile: "web" });
+    const first = await store.write({ approvalTimeoutSec: 45 });
     assert.equal(first.revision, 1);
-    assert.deepEqual(first.lastShared, { path: P(dir), profile: "web" });
+    assert.equal(first.settings.approvalTimeoutSec, 45);
 
     const onDisk = JSON.parse(readFileSync(join(dir, "settings.json"), "utf8"));
     assert.equal(onDisk.revision, 1);
     assert.equal(onDisk.version, SETTINGS_VERSION);
     assert.deepEqual(readdirSync(dir), ["settings.json"], "原子写不留 .pending 残片");
 
-    const second = await store.write({ mode: "private" });
+    const second = await store.write({ ...first.settings, defaultTimeoutSec: 600 });
     assert.equal(second.revision, 2);
-    assert.equal(second.settings.mode, "private");
-    assert.deepEqual(second.lastShared, { path: P(dir), profile: "web" }, "切回 private 仍记 lastShared 供预填");
 
     const reread = await createDataSourceStore({ dataDir: dir }).read();
     assert.equal(reread.revision, 2);
     assert.deepEqual(reread.settings, {
-      mode: "private",
-      path: null,
-      profile: PRIVATE_PROFILE,
-      ...TIMEOUT_DEFAULTS,
+      approvalTimeoutSec: 45,
+      defaultTimeoutSec: 600,
       ...SESSION_DEFAULTS,
       ...FACE_FOLLOW_DEFAULTS,
     });
@@ -210,59 +149,24 @@ test("store.read: 损坏 JSON / 版本不符 / revision 非法都明确抛错（
     await assert.rejects(() => createDataSourceStore({ dataDir: dir }).read(), /版本不受支持/);
     writeFileSync(file, JSON.stringify({ version: SETTINGS_VERSION, revision: -1, settings: DEFAULT_SETTINGS }));
     await assert.rejects(() => createDataSourceStore({ dataDir: dir }).read(), /revision 非法/);
-    writeFileSync(file, JSON.stringify({ version: SETTINGS_VERSION, revision: 1, settings: { mode: "cloud" } }));
-    await assert.rejects(() => createDataSourceStore({ dataDir: dir }).read(), /private 或 shared/);
+    writeFileSync(file, JSON.stringify({ version: SETTINGS_VERSION, revision: 1, settings: { unknownKey: 1 } }));
+    await assert.rejects(() => createDataSourceStore({ dataDir: dir }).read(), /未知键/);
   });
 });
 
-test("store.read: 存量设置里的退役键（会话流卡档位）被丢弃，不撞未知键拒绝", async () => {
+test("store.read: 退役键（卡档位 + mode/path/profile）在读侧丢弃，不撞未知键拒绝", async () => {
   await withTempDir(async (dir) => {
     writeFileSync(join(dir, "settings.json"), JSON.stringify({
       version: SETTINGS_VERSION,
       revision: 3,
-      settings: { ...DEFAULT_SETTINGS, sessionCardDisplay: "open-only" },
+      lastShared: { path: "D:/dsh", profile: "web" },
+      settings: { ...DEFAULT_SETTINGS, sessionCardDisplay: "open-only", mode: "shared", path: "D:/dsh", profile: "web" },
     }));
     const snap = await createDataSourceStore({ dataDir: dir }).read();
-    assert.equal("sessionCardDisplay" in snap.settings, false, "退役键在读侧丢掉，不留在快照里");
+    for (const key of ["sessionCardDisplay", "mode", "path", "profile", "lastShared"]) {
+      assert.equal(key in snap.settings, false, key + " 应在读侧丢掉");
+    }
+    assert.equal("lastShared" in snap, false, "快照不再带 lastShared");
     assert.equal(snap.revision, 3, "丢键不改 revision");
-  });
-});
-
-test("store.validate: shared 目录须存在且是目录；采纳宿主 canonical 路径", async () => {
-  await withTempDir(async (dir) => {
-    const calls = [];
-    const canonical = (p) => p.replace(/[\\/]+$/, "") + "/canonical";
-    const ctx = {
-      dataDir: dir,
-      resources: {
-        stat: async (ref) => {
-          calls.push(ref);
-          if (ref.path.includes("missing")) return { exists: false };
-          if (ref.path.includes("afile")) return { exists: true, isDirectory: false };
-          return { exists: true, isDirectory: true, filePath: canonical(ref.path) };
-        },
-      },
-    };
-    const store = createDataSourceStore(ctx);
-    const ok = await store.validate({ mode: "shared", path: "/some/dir/", profile: "web" });
-    assert.equal(ok.path, canonical(P("/some/dir/")));
-    assert.deepEqual(calls[0], { kind: "local-file", path: P("/some/dir/") });
-
-    await assert.rejects(() => store.validate({ mode: "shared", path: "/x/missing", profile: "web" }), /目录不存在/);
-    await assert.rejects(() => store.validate({ mode: "shared", path: "/x/afile", profile: "web" }), /不是目录/);
-    const before = calls.length;
-    const priv = await store.validate({ mode: "private" });
-    assert.equal(priv.mode, "private");
-    assert.equal(calls.length, before, "private 不触 resources.stat");
-  });
-});
-
-test("store.validate: 宿主不支持 resources.stat 时给可操作报错", async () => {
-  await withTempDir(async (dir) => {
-    const store = createDataSourceStore({ dataDir: dir });
-    await assert.rejects(
-      () => store.validate({ mode: "shared", path: dir, profile: "web" }),
-      /不支持 ctx\.resources\.stat/,
-    );
   });
 });

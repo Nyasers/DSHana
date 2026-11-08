@@ -32,7 +32,7 @@
 // 默认实现经 packages/runtime/src/managed-runtime.ts 读取真实单例；测试注入 fake。
 import { managedRuntimeDetails, ensureManagedRuntime, stopManagedRuntime, bridgeAccess } from "@dshana/runtime/managed-runtime.ts";
 import { buildBootSnapshot, APP_ID } from "@dshana/runtime/boot-state.ts";
-import { dataSources, sourceOf } from "@dshana/runtime/data-source.ts";
+import { dataSources, privateSource } from "@dshana/runtime/data-source.ts";
 import { groupHostCatalog } from "@dshana/models/model-catalog-view.ts";
 // 面间通道不存在了：跨面只走同页广播（BroadcastChannel），没有 hub、也没有通道协议要引入。
 import {
@@ -54,16 +54,15 @@ export const DASHANA_ROUTE_PREFIX = "/dshana";
 const errText = (e: unknown): string => ((e as any)?.message as string) || String(e);
 
 /**
- * App 级设置的视图：两个超时与数据模式在同一份设置、同一个 revision（W2）。
- * source 由设置推出（home/sourceId 供页面回显与运行时接线），lastShared 供“切回共享”预填。
+ * App 级设置的视图：两个超时、会话模型与主题面在同一份设置、同一个 revision（W2）。
+ * source 是数据目录回显（home/sourceId 供页面显示与诊断；DSH_HOME 恒为 App 私有目录）。
  */
 async function readSettingsView(ctx, dataDir) {
   const st = await dataSources(ctx).read();
   return {
     revision: st.revision,
     settings: st.settings,
-    source: sourceOf(st.settings, dataDir),
-    lastShared: st.lastShared || null,
+    source: privateSource(dataDir),
   };
 }
 
@@ -181,8 +180,7 @@ export function defaultDshanaRouteDeps(ctx) {
       return {
         revision: st.revision,
         settings: st.settings,
-        source: sourceOf(st.settings, dataDir),
-        lastShared: st.lastShared || null,
+        source: privateSource(dataDir),
       };
     },
     getSnapshot: () => {

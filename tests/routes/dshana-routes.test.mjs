@@ -81,14 +81,13 @@ test("挂载清单：GET boot-state/health/settings/models/card-state/faces-poll
   assert.deepEqual(dshanaRoutesTable().map(([m, p]) => m + " " + p).sort(), paths);
 });
 
-test("GET /dshana/settings: 200 返回设置视图（两个超时 + 数据模式 + revision）", async () => {
+test("GET /dshana/settings: 200 返回设置视图（超时 + 数据目录回显 + revision）", async () => {
   const { app, routes } = makeFakeApp();
   registerDshanaRoutes(app, makeFakeDeps({
     readSettings: async () => ({
       revision: 7,
-      settings: { mode: "private", path: null, profile: "dshana", approvalTimeoutSec: 30, defaultTimeoutSec: 1800 },
-      source: { sourceId: "private", home: "C:/data/.dsh", profileName: "dshana", shared: false, mode: "private" },
-      lastShared: null,
+      settings: { approvalTimeoutSec: 30, defaultTimeoutSec: 1800 },
+      source: { sourceId: "private", home: "C:/data/.dsh", profileName: "dshana" },
     }),
   }));
   const [,, handler] = routes.find(([m, p]) => m === "GET" && p === "/dshana/settings");
@@ -98,8 +97,8 @@ test("GET /dshana/settings: 200 返回设置视图（两个超时 + 数据模式
   assert.equal(ctx.body.ok, true);
   assert.equal(ctx.body.revision, 7);
   assert.equal(ctx.body.settings.approvalTimeoutSec, 30);
-  assert.equal(ctx.body.settings.mode, "private");
   assert.equal(ctx.body.source.sourceId, "private");
+  assert.equal(ctx.body.source.home, "C:/data/.dsh");
 });
 
 test("POST /dshana/settings: 带 expectedRevision 写入并回新视图", async () => {
@@ -110,9 +109,8 @@ test("POST /dshana/settings: 带 expectedRevision 写入并回新视图", async 
       seen = { patch, expectedRevision };
       return {
         revision: 8,
-        settings: { mode: "private", path: null, profile: "dshana", approvalTimeoutSec: 45, defaultTimeoutSec: 1800 },
-        source: { sourceId: "private", home: "C:/data/.dsh", profileName: "dshana", shared: false, mode: "private" },
-        lastShared: null,
+        settings: { approvalTimeoutSec: 45, defaultTimeoutSec: 1800 },
+        source: { sourceId: "private", home: "C:/data/.dsh", profileName: "dshana" },
       };
     },
   }));
@@ -308,9 +306,8 @@ test("GET /dshana/settings: 只回设置与 revision（不带无关字段）", a
   registerDshanaRoutes(app, makeFakeDeps({
     readSettings: async () => ({
       revision: 1,
-      settings: { mode: "private", path: null, profile: "dshana", approvalTimeoutSec: 30, defaultTimeoutSec: 1800 },
+      settings: { approvalTimeoutSec: 30, defaultTimeoutSec: 1800 },
       source: { sourceId: "private" },
-      lastShared: null,
     }),
   }));
   const [,, handler] = routes.find(([m, p]) => m === "GET" && p === "/dshana/settings");
