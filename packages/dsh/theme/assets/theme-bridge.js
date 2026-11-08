@@ -2,19 +2,20 @@
 // Copyright (c) 2026 Nyasers
 //
 // @dshana/dsh-theme 的注入桥脚本（独立文件，纯浏览器 JS）。
-// 经 tapIndex 注入每个 index 响应的 <head>：运行时由 index.js 读取本文件正文并包
-// <script id="@dshana/dsh-theme-bridge"> 后注入。
+// 构建期由 index.ts 经 rspack asset/source 内联成字符串，随本包 bundle 压进
+// .cache/cordis/dsh-theme/index.js——部署产物里没有这个文件，改它要重新构建。
+// 运行时 index.ts 把正文里的占位符换成规则表序列化结果，再包成
+// <script id="@dshana/dsh-theme-bridge"> 经 tapIndex 注入每个 index 响应的 <head>。
 //
 // 插值约定：正文唯一动态点是数据表注入行
 //     var m = __DSH_THEME_TOKENS__;
-// 服务端读取本文件后，把占位符 __DSH_THEME_TOKENS__ 替换为 compileRules(TOKEN_MAP) 的
-// 序列化结果——每个条目是 [token, cssValue, hostVars] 三元组（见
-// packages/dsh/theme/adapter.ts）。取值规则在服务端编译成 CSS 值串（var(…) /
-// color-mix(…) / 字面量），桥只按 hostVars 判空后原样写进覆盖，不重复一份编译逻辑。
+// 模块初始化时把占位符 __DSH_THEME_TOKENS__ 替换为 compileRules(TOKEN_MAP) 的序列化结果
+// ——每个条目是 [token, cssValue, hostVars] 三元组（见 packages/dsh/theme/adapter.ts）。
+// 取值规则在 App 进程侧编译成 CSS 值串（var(…) / color-mix(…) / 字面量），桥只按 hostVars
+// 判空后原样写进覆盖，不重复一份编译逻辑。
 // 其余正文无插值，保持纯浏览器 JS（var/ES5 风格，无 import）。
-// cordis 子插件散装分发（不经 rspack，文件随包复制进
-// .cache/cordis/theme/），pack 的静态压缩步（scripts/release/pack/minify.mts）按 script 语义
-// terser（module=false）。语义与配套见 index.js 头注释（主题注入/明暗/preference）。
+// bundle 内按 script 语义压缩（module=false）；pack 阶段（scripts/release/pack/minify.mts）
+// 对交付文件再压一次，同样是 script 语义。语义与配套见 index.ts 头注释（主题注入/明暗/preference）。
 (function () {
   // 适配层规则（全文件唯一插值点：服务端把本行占位符换成 compileRules(TOKEN_MAP) 的序列化
   // 结果）。每项 = [token, cssValue, hostVars]。

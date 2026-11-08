@@ -419,7 +419,7 @@ import {
       setStateView("error", (err && err.message) || String(err));
     });
   }
-  /** 非终态期间每个面自己取；终态由 fetchOwnState 停表（不再问）。 */
+  /** 自取一次。排轮询的是主卡：侧栏只在 begin() 里取这一次，之后跟广播；ready / stopped 的自取快照会停表。 */
   function poll() {
     fetchOwnState();
   }
