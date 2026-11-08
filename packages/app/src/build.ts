@@ -5,21 +5,21 @@
 // 布局：领域专用脚本随各自源码——rspack.config.mts（本目录，配置源）与本入口放 packages/app/src/，
 // 共享工具（collect/walk/terser/assert + minify/template loader）在 scripts/build/。
 // 产物（dist = App 安装目录形态；宿主读该根 manifest.json + entry）：根下只放宿主读的契约件与
-// 目录（manifest.json / icon.png / skills / ui / node_modules / 声明文本），代码全在 bin/。
+// 目录（manifest.json / icon.webp / skills / ui / node_modules / 声明文本），代码全在 bin/。
 // 源码侧：App 契约件（manifest.json 与身份图标）在 packages/app/src/，随包 skills/ 在仓库根，
 // 主体也在 packages/app/src/。manifest 里的路径是包根相对路径，源的落位按
 // scripts/shared/contract-assets.mts 的映射取——两边不逐字同形，由下面的静态件组装负责摆位。
-//   manifest.json       App v2 manifest（entry "bin/app.mjs" / icon "icon.png"；源在 packages/app/src/manifest.json）
+//   manifest.json       App v2 manifest（entry "bin/app.mjs" / icon "icon.webp"；源在 packages/app/src/manifest.json）
 //   bin/app.mjs          App 主体（entry 直接指它；含它自己切出的 chunk）
 //                       入口用 .mjs：Node 按扩展名就判 ESM，安装树不必再带一份 package.json 定 type
 //   bin/dsh.mjs          受管 Node runtime 入口（宿主以 node 执行；与主体同一次构建、共享 chunk）
-//   icon.png            App 身份图标（manifest.icon 指向的包内真实图片；源在 packages/app/src/icon.png）
+//   icon.webp           App 身份图标（manifest.icon 指向的包内真实图片；源在 packages/app/src/icon.webp）
 //   skills/             App skills（dshana，SKILL.md 随包分发）
 //   NOTICE              项目自身许可（MPL-2.0）；与 THIRD_PARTY_NOTICES.md 同批
 //                         由本入口直写进 dist（落位规则见 paths.mts 的 DECLARATION_TEXTS）
 //   ui/                   壳的文档侧（cards route 指向壳页，见 packages/ui/src/——相对资源路径，
 //                         宿主以 /api/apps/<id>/ui<route> 服务；由 @dshana/ui 构建产出，本入口只拷贝，
-//                         卡面图 face.png 也随该整树落位）
+//                         卡面图 face.webp 也随该整树落位）
 // 路由：v2 走 ctx.routes.register（单个 route app），不生成 dist/routes/ 目录——宿主只认注册
 // 的 route app，不扫 dist。
 // 用法：node packages/app/src/build.ts [RSPACK_ENV=<构建环境目录>]
@@ -129,8 +129,8 @@ fs.copySync(uiSrc, join(DIST_DIR, "ui"));
 console.log("ui/ -> dist/ui（壳的文档侧整树，来自 .cache/ui）");
 
 // 契约件的落位（源 → 产物）：两个字段的基址不同，靠这里对齐，不靠人肉推导。
-//   packages/app/src/icon.png -> 产物根 icon.png   （manifest.icon，包根相对；本入口拷）
-//   packages/ui/src/face.png  -> 产物 ui/face.png  （contributes.cards[].face.image，ui/ 相对；
+//   packages/app/src/icon.webp -> 产物根 icon.webp   （manifest.icon，包根相对；本入口拷）
+//   packages/ui/src/face.webp  -> 产物 ui/face.webp  （contributes.cards[].face.image，ui/ 相对；
 //                                                  随 @dshana/ui 的 ui 整树落位，本入口只断言）
 // 源的取法统一在 scripts/shared/contract-assets.mts（投稿条目取图标走同一套映射，不各写一份）。
 const pkgManifest = fs.readJsonSync(manifestPath(ROOT));
