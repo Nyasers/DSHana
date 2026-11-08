@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.1+dsh-0.2.2-rc.1](https://github.com/Nyasers/DSHana/compare/v1.3.0%2Bdsh-0.2.2-rc.1...v1.3.1%2Bdsh-0.2.2-rc.1) (2026-11-08)
+
+### Bug Fixes
+
+* **bridge:** 控制面超限 body 读完再拒；来源文案回到事实 ([90a2e27](https://github.com/Nyasers/DSHana/commit/90a2e277125c58f3fe5af13e89dda52a0f2e54e0))
+
 ## [1.3.0+dsh-0.2.2-rc.1](https://github.com/Nyasers/DSHana/compare/v1.3.0-rc.1%2Bdsh-0.2.2-alpha.3...v1.3.0%2Bdsh-0.2.2-rc.1) (2026-11-07)
 
 ### Bug Fixes
