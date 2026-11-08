@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// @dshana/dsh-theme 的注入桥脚本（独立文件，review 修订：内容文件化）。
-// 本文件 = 原内嵌于 index.js 的 BRIDGE 字符串正文（逐字节搬移，仅一处插值改造）：
-// 经 tapIndex 注入每个 index 响应的 <head>，运行时由 index.js 读取并包
+// @dshana/dsh-theme 的注入桥脚本（独立文件，纯浏览器 JS）。
+// 经 tapIndex 注入每个 index 响应的 <head>：运行时由 index.js 读取本文件正文并包
 // <script id="@dshana/dsh-theme-bridge"> 后注入。
 //
 // 插值约定：正文唯一动态点是数据表注入行
@@ -316,7 +315,6 @@
   }
   // 已无静态 fallback 可撤：拿不到宿主主题时就保持 dsh 内置 token（官方明暗）——
   // 不从宿主搬固定值充数。
-  // 
   function ask() {
     // 旧拓扑（iframe 套 iframe）里壳页是本页的 parent；同文档注入后本页的 parent 是**宿主**，
     // 投过去没人答。两个目标都投一份：自身（现壳页的 message 监听就在同文档里）与 parent（兼容）。
@@ -350,7 +348,7 @@
   // 加上首次 ask() 的应答与下面的 MutationObserver——三条都是事件，不轮询。
   // 主题切换（壳页写 documentElement 的 data-theme / data-appearance）即时感知，不等 1s 轮询。
   // 另两处也听，因为它们的写入者是 dsh 的 ThemePresenter（ui-layout/theme-presenter.ts），它的
-  // apply() 晚于本桥（插件树激活在注入之后），而我们早先对齐的那两格会被它按**自己的解析**
+  // apply() 晚于本桥（插件树激活在注入之后），而我们写的那两格会被它按**自己的解析**
   // （preference=system 时用浏览器系统的 prefers-color-scheme）重新写上：
   //   · html 的 inline color-scheme；
   //   · body[data-ds-dark-theme]——JsonTree 与 shiki 的语法色按这个标记翻明暗，浅底上就是浅字。

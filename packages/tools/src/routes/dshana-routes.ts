@@ -2,7 +2,6 @@
 // Copyright (c) 2026 Nyasers
 //
 // packages/tools/src/routes/dshana-routes.ts — dshana App v2 ctx.routes.register 单 registrar
-// 
 //
 // 宿主契约（ctx.routes，实证于 server 0.930.1 bundle / @hana/app-sdk）：
 //   · 单 bundle App 只能 register 一次；registrar 收到宿主创建的 Hono sub-app（本模块
@@ -27,8 +26,7 @@
 //   GET  /dshana/card-state  会话流卡页的状态面（按需取数：读宿主任务记录的绑定；回卡页
 //                            可直接换进 DOM 的状态行 HTML。卡页在非终态期间慢轮询，终态即停）
 //
-// 面间的直投通道（faces/*）已拆：同页的两方（FP ↔ main）走 BroadcastChannel，
-// 面间不再有 HTTP 面。
+// 同页的两方（FP ↔ main）走 BroadcastChannel；面间没有 HTTP 面。
 //
 // 依赖注入（可测性）：deps = { appId, version, getSnapshot(), start(), stop(), log() }。
 // 默认实现经 packages/runtime/src/managed-runtime.ts 读取真实单例；测试注入 fake。
@@ -178,7 +176,7 @@ export function defaultDshanaRouteDeps(ctx) {
         throw Object.assign(err, { code: "SETTINGS_CONFLICT", revision: cur.revision });
       }
       await store.write({ ...cur.settings, ...patch });
-      // 变更广播已退场：宿主 App 存储只有 get/set、没有订阅口，已开页在重新可见时自己重读；
+      // 宿主 App 存储只有 get/set、没有订阅口：没有变更广播，已开页在重新可见时自己重读；
       // 并发写仍由上面的 revision 把关。
       const st = await store.read();
       return {
@@ -194,7 +192,6 @@ export function defaultDshanaRouteDeps(ctx) {
     },
     start: () => ensureManagedRuntime({}),
     stop: () => stopManagedRuntime(),
-    // 面间通道不存在了：deps 里不再有 facesHub（跨面由同页广播承担）。
   };
 }
 
@@ -217,7 +214,6 @@ export function registerDshanaRoutes(app, deps) {
   const listHostModels = typeof d.listHostModels === "function" ? d.listHostModels : async () => {
     throw new Error("模型候选不可用：deps.listHostModels 未注入");
   };
-  // 面间通道不存在了：不再有 hub 解析（跨面由同页广播承担）。
 
   const json = (c, status, body) => {
     if (typeof c?.json !== "function") {
@@ -299,7 +295,7 @@ export function registerDshanaRoutes(app, deps) {
     });
   }
 
-  // ---- POST /dshana/start：手动触发（v2 无自动链；幂等、不阻塞请求）----
+  // ---- POST /dshana/start：手动触发（App 自动链之外的兜底入口；幂等、不阻塞请求）----
   if (typeof app?.post === "function") {
     app.post(DASHANA_ROUTE_PREFIX + "/start", async (c) => {
       const before = getSnapshot();

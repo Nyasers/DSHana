@@ -208,7 +208,7 @@ test("deltaOf：指纹只跟内容走，上游其他行改动不影响同一份 
   assert.notEqual(a.sha256, c.sha256);
 });
 
-test("仓库真实清单：能解析、字段齐（当前为批次①两枚、尚无 overlay）", () => {
+test("仓库真实清单：能解析、字段齐", () => {
   const list = loadIntegrations(REPO_ROOT);
   assert.ok(list.length >= 2, "至少登记 ui-layout / ui-sidebar");
   for (const it of list) {

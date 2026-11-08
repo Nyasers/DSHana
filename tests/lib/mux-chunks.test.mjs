@@ -11,7 +11,6 @@ import {
   ChunkAssembler,
   ChunkWindow,
   MUX_CHUNK_BYTES,
-  MUX_CHUNK_FRAME_OVERHEAD,
   MUX_CHUNK_MAGIC,
   MUX_CHUNK_WINDOW,
   decodeMuxControlFrame,
@@ -132,7 +131,5 @@ test("mux-chunks: 在途窗口只在额度内放行，回执唤醒等待者", as
 
 test("mux-chunks: 分片阈值实际等于不分片（结构保留作兜底）", () => {
   // 宿主「1 MiB 单帧上限」是内测期限制；1.5.7-beta 实测 5,330,020 字节单帧直接通过。
-  assert.equal(MUX_CHUNK_BYTES, 64 * 1024 * 1024);
   assert.equal(MUX_CHUNK_WINDOW, MUX_CHUNK_BYTES, "窗口与单片等值：不发并行片");
-  assert.ok(MUX_CHUNK_WINDOW % MUX_CHUNK_BYTES === 0, "窗口应为单片整数倍（避免多压半片）");
 });

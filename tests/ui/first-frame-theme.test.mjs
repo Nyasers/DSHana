@@ -39,7 +39,6 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const SRC = join(here, "..", "..", "packages", "ui", "src");
 const page = (name) => readFileSync(join(SRC, name), "utf8");
-const HOST_THEME_SRC = readFileSync(join(SRC, "host-theme.ts"), "utf8");
 
 /** 五个面各自的页面（壳页三态 + 会话卡 + 设置页）。新增页面就得进这张表。 */
 const PAGES = ["main.html", "default.html", "sidebar.html", "settings.html", "stream.html"];
@@ -123,36 +122,7 @@ test("静态样式表确实排在片段之前（正面例：壳页引了 face-st
   assert.ok(sidebar.indexOf("<style>") < sidebar.indexOf(MARKER), "sidebar.html：自带 <style> 必须排在片段之前");
 });
 
-test("片段读三个宿主参数并写主题身份；URL 规则不再裸回退", () => {
-  const snippet = snippetOf(page("main.html"));
-  assert.ok(snippet.includes("hana-css"), "片段没读 hana-css");
-  assert.ok(snippet.includes("hana-theme"), "片段没读 hana-theme");
-  assert.ok(snippet.includes("hana-theme-appearance"), "片段没读 hana-theme-appearance");
-  assert.ok(snippet.includes('setAttribute("data-theme"'), "片段没写 data-theme");
-  assert.ok(snippet.includes('setAttribute("data-appearance"'), "片段没写 data-appearance");
-  // 明暗只认 light|dark（别的值不写，免得把非法值当主题身份）。
-  assert.match(snippet, /appearance === "light" \|\| appearance === "dark"/, "data-appearance 应收窄到 light|dark");
-  // 同步贴 <link>：这是「首帧」的全部依据。
-  assert.match(snippet, /createElement\("link"\)/, "片段没贴 <link>");
-  assert.match(snippet, /rel = "stylesheet"/, "那张 <link> 不是样式表");
-  // 畸形 URL 不阻断页面。
-  assert.ok(snippet.includes("URLSearchParams"), "片段没读 URL 参数");
-  // 旧的裸回退必须消失：不带 theme 的 /api/apps/theme.css 返回默认主题（暖纸），不是用户当前主题。
-  assert.ok(
-    !/get\("hana-css"\)\s*\|\|\s*"\/api\/apps\/theme\.css"/.test(snippet),
-    "片段还在裸回退 /api/apps/theme.css（那是默认主题暖纸，FP 首帧会错色）",
-  );
-  // 只有 hana-theme 时按主题拼 URL：必须带 ?theme= 且经 encodeURIComponent。
-  assert.match(
-    snippet,
-    /if \(!css && theme\) css = "\/api\/apps\/theme\.css\?theme=" \+ encodeURIComponent\(theme\);/,
-    "片段没有「只有 hana-theme 时按主题拼 URL」这一档",
-  );
-  // 两者都无时不贴：css 为空就跳过（不贴一张概率上是错的主题表）。
-  assert.match(snippet, /if \(css\) \{/, "片段应在 css 为空时不贴 <link>");
-});
-
-// ---- 三档 URL 规则：真跑片段（vm + 最小 DOM），看它到底贴了什么 ----
+// ---- 三档 URL 规则与各自的边界：真跑片段（vm + 最小 DOM），看它到底贴了什么 ----
 /**
  * 跑一遍页面的首帧片段，返回它落下的结果。
  * @param search 页面 URL 的查询串（含 ?，如 "?hana-theme=midnight&hana-theme-appearance=dark"）
@@ -200,6 +170,8 @@ function runSnippet(search) {
     appearance: attrs.get("data-appearance") ?? null,
     recorded: attrs.get("data-hana-theme-css") ?? null,
     links: links.map((el) => el.getAttribute("href")),
+    htmlAttrs: [...attrs.keys()],
+    linkEls: links,
   };
 }
 
@@ -239,6 +211,12 @@ test("片段③b：只有明暗、没有主题 id 时同样不贴", () => {
   assert.equal(out.appearance, "dark", "明暗拿到了照写（不贴表不影响身份属性）");
 });
 
+test("片段④：appearance 不是 light|dark 时不写身份（不把非法值当主题）", () => {
+  const out = runSnippet("?hana-theme=midnight&hana-theme-appearance=system");
+  assert.equal(out.appearance, null, "非法明暗值不该写进 data-appearance");
+  assert.deepEqual(out.links, ["/api/apps/theme.css?theme=midnight"], "主题照贴：明暗只是身份属性");
+});
+
 test("片段与模块同源：三档拼出的 URL 与 themeCssUrlFor 逐条一致", () => {
   // ① 有 cssUrl
   const given = "http://h/api/apps/theme.css?theme=grass-aroma";
@@ -256,25 +234,15 @@ test("片段与模块同源：三档拼出的 URL 与 themeCssUrlFor 逐条一�
   assert.deepEqual(runSnippet("?x=1").links, []);
 });
 
-test("去重契约：片段记下贴过的 URL，host-theme.ts 按同一个属性名跳过重复 fetch", () => {
-  const snippet = snippetOf(page("main.html"));
-  // 两半契约的落点：片段写、模块读。
-  assert.ok(snippet.includes('setAttribute("data-hana-theme-css", css)'), "片段没把贴过的 URL 记在 <html>");
-  assert.match(
-    HOST_THEME_SRC,
-    /THEME_CSS_ATTR\s*=\s*"data-hana-theme-css"/,
-    "host-theme.ts 的 THEME_CSS_ATTR 与片段记的属性名对不上",
-  );
-  // 内联那张 <link> 的标记属性同理：模块靠它确认「那张 <link> 还在、href 还是这条」才敢跳过 fetch。
-  assert.ok(snippet.includes('setAttribute("data-hana-theme-inline", "")'), "片段没给那张 <link> 打标记");
-  assert.match(
-    HOST_THEME_SRC,
-    /THEME_INLINE_LINK_ATTR\s*=\s*"data-hana-theme-inline"/,
-    "host-theme.ts 的 THEME_INLINE_LINK_ATTR 与片段打的标记对不上",
-  );
-  assert.ok(
-    HOST_THEME_SRC.includes("inlineThemeCssUrl()") && HOST_THEME_SRC.includes("inlineThemeLinkMatches("),
-    "host-theme.ts 没按这份契约去重（应读属性 + 核对那张 <link> 仍在）",
+test("去重契约：片段把贴过的 URL 与内联标记写在 DOM 上，模块按同一对常量去重", () => {
+  const out = runSnippet("?hana-theme=midnight");
+  // 两半契约的落点：片段写、模块读，属性名各自由自己的常量给。
+  assert.ok(out.htmlAttrs.includes(THEME_CSS_ATTR), "片段没把贴过的 URL 记在 <html>：模块靠这一格去重");
+  assert.ok(out.linkEls.length > 0, "片段没贴 <link>");
+  assert.equal(
+    out.linkEls[0].getAttribute(THEME_INLINE_LINK_ATTR),
+    "",
+    "片段没给那张 <link> 打标记：模块靠它确认那张表还在、href 还是这条",
   );
 });
 

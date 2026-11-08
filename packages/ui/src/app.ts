@@ -99,7 +99,7 @@ import {
     kickedOnLoad = true;
     var st = $("#dsh-status");
     if (st && phase === "error") st.textContent = "启动失败，正在重试…";
-    postAction("start").then(function () { poll(true); }).catch(function () { /* 忽略：状态面会显示 */ });
+    postAction("start").then(function () { poll(); }).catch(function () { /* 忽略：状态面会显示 */ });
   }
 
   // 免交互：DSH 的拉起由 App 的自动链负责（apply 即 ensureManagedRuntime +
@@ -259,7 +259,7 @@ import {
     if (btnStop && !btnStop.dataset.bound) {
       btnStop.dataset.bound = "1";
       btnStop.addEventListener("click", function () {
-        postAction("stop").then(function () { poll(true); }).catch(function (e) {
+        postAction("stop").then(function () { poll(); }).catch(function (e) {
           setStateView("error", "停止请求失败：" + ((e && e.message) || e));
         });
       });
@@ -327,7 +327,7 @@ import {
     }
     bindSidebarActions();
     // FP 不自己轮询：主卡取到快照就播（见 fetchOwnState），这里只跟广播；首屏那次自取在 begin()。
-    // 自己再排一路就与广播重复，等于把刚拆掉的双取装回来。
+    // 自己再排一路就与广播重复。
   }
   function bindSidebarActions() {
     var main = $("[data-dshana-shell]");
@@ -336,7 +336,7 @@ import {
     if (btnStop && !btnStop.dataset.bound) {
       btnStop.dataset.bound = "1";
       btnStop.addEventListener("click", function () {
-        postAction("stop").then(function () { poll(true); }).catch(function (e) {
+        postAction("stop").then(function () { poll(); }).catch(function (e) {
           setStateView("error", "停止请求失败：" + ((e && e.message) || e));
         });
       });
@@ -419,9 +419,8 @@ import {
       setStateView("error", (err && err.message) || String(err));
     });
   }
-  /** 非终态期间每个面自己取；终态由 fetchOwnState 停表（不再问）。force 参数保留形参，语义已无用。 */
-  function poll(_force = false) {
-    void _force;
+  /** 非终态期间每个面自己取；终态由 fetchOwnState 停表（不再问）。 */
+  function poll() {
     fetchOwnState();
   }
 

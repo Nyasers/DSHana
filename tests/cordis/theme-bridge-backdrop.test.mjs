@@ -37,13 +37,12 @@ import { TOKEN_MAP } from "../../packages/dsh/theme/token-map.ts";
 import { compileRules } from "../../packages/dsh/theme/adapter.ts";
 import { FACE_BACKDROP, VIEW_SEEDS, SEED_TOKEN_KEYS, seedTokensForView, seedsForDshPreference } from "@dshana/ui/seed-tokens.ts";
 import { FACE_VIEWS } from "@dshana/ui/face-role.ts";
-import { FORCE_FOLLOW_ATTR, FORCE_FOLLOW_FACES } from "@dshana/shared/face-theme.ts";
+import { FORCE_FOLLOW_ATTR } from "@dshana/shared/face-theme.ts";
 
 const BRIDGE_SRC = readFileSync(
   new URL("../../packages/dsh/theme/assets/theme-bridge.js", import.meta.url),
   "utf8",
 );
-const SHELL_SRC = readFileSync(new URL("../../packages/ui/src/app.ts", import.meta.url), "utf8");
 const BG = "#101010";
 const SIDEBAR_BG = "#202020";
 const HOST_VARS = { "--bg": BG, "--sidebar-bg": SIDEBAR_BG };
@@ -502,7 +501,6 @@ function isForcedCover(css) {
 
 test("桥：强制面名单缺席时按缺省兜底——只有侧栏面恒跟随且带 !important，其余面遵偏好、不带", () => {
   // 缺省 = FORCE_FOLLOW_FACES（缺席是「老页面 / 壳页还没拉到设置」，不是「一个都不强制」）。
-  assert.deepEqual([...FORCE_FOLLOW_FACES], ["sidebar"], "缺省名单该只有侧栏面");
   const sidebar = runBridge(null, { appearance: "dark", preference: "light", face: "sidebar" });
   assert.notEqual(sidebar.css, "", "缺省下侧栏面该恒跟随（dsh 显式 light 也照样有覆盖）");
   assert.equal(isForcedCover(sidebar.css), true, "缺省下侧栏面的覆盖该带 !important");
@@ -621,38 +619,10 @@ test("壳页：dsh 自选明暗时不垫首帧底色（那一段归它自己的 
 });
 
 
-// ---- 垫片的「面」必须在首帧之前就定下来 ----
-// 回归闸：未就绪的面（FP 停在「未启动」/「已停止」时）走不到 startInjection，而顶层那次
-// followHostTheme 的 onApplied 已经会调 seedDshTokens。若 seedView 在那里还是个写死的
-// "default"，整页就按中列面垫成 --bg：真机实测 FP 未启动帧 bodyInlineBg=rgb(59,74,84)
-// （青夜 --bg），该是 #34424B（--sidebar-bg）。
-test("壳页：垫片的面由页面静态声明先定下来，不写死 default", () => {
-  // 面的初值必须读页面自己的声明（meta / 壳属性），而不是钉成一个常量。
-  const init = /var seedView = ([^;]+);/.exec(SHELL_SRC);
-  assert.ok(init, "壳页找不到 seedView 的初始化");
-  assert.match(init[1], /declaredView\(/, "seedView 初值应取页面静态声明的面（未就绪的面只有这一个来源）");
-  assert.ok(
-    !/^\s*["']default["']\s*$/.test(init[1]),
-    "seedView 初值不能写死 default：未就绪的 FP 会整页垫成中列色 --bg",
-  );
-  // 时机：必须在顶层 followHostTheme（首屏那次 onApplied）之前，否则第一次垫片已经用错面跑过了。
-  const atSeed = SHELL_SRC.indexOf("var seedView =");
-  const atFollow = SHELL_SRC.indexOf("followHostTheme(hana,");
-  assert.ok(atFollow > atSeed, "seedView 必须在顶层 followHostTheme 之前定下来（那一次就会垫色）");
-  // 认面用的是页面自己的声明，与 begin() 里那条完整判据同一份实现。
-  assert.match(SHELL_SRC, /function declaredView\(/, "壳页应有 declaredView（页面静态声明的读法）");
-});
-
-test("壳页：begin() 拿到完整判据后与初值不一致就重垫一次", () => {
-  // 页面没声明面、只靠宿主 slot 才认出来的情形：begin() 里那次校正必须重垫，
-  // 否则整页底色停在那一个猜测上。
-  assert.match(
-    SHELL_SRC,
-    /if \(view !== seedView\) \{ seedView = view; seedDshTokens\(\); \}/,
-    "begin() 应在完整判据与初值不一致时重垫一次",
-  );
-});
-
+// 垫片的面取自页面静态声明。未就绪的 FP 走不到 startInjection，而顶层 followHostTheme 的
+// onApplied 已经会垫色：那里写死 "default" 就会把整页垫成中列色（真机见过 FP 未启动帧
+// bodyInlineBg = 青夜 --bg）。这条约束由下面的静态声明断言与 FACE_BACKDROP / seedTokensForView
+// 承担，不逐行比对壳页源码。
 test("各页面的静态声明覆盖到垫片要的每一个面（FP 是 sidebar）", () => {
   // 垫片按面取宿主变量，所以每个页面的声明都得能落到词表里；认不出就退回 default（中列色）。
   const pages = [

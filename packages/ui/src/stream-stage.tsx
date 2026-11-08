@@ -21,7 +21,6 @@ import { backdropTokenForView, seedTokensForView, SEED_TOKEN_KEYS, seedsForDshPr
 import { followHostTheme } from "./host-theme.ts";
 import {
   SURFACE_API,
-  dropShared,
   fetchBootState,
   postAction,
   surfaceSession,
@@ -328,10 +327,9 @@ function App() {
       });
   }, [snap]);
 
-  // 页面下线：释放注入的 transport（WS 载体等）并删掉本页写过的共享键。
+  // 页面下线：释放注入的 transport（WS 载体等）。
   useEffect(() => () => {
     if (injected.transport) { try { injected.transport.dispose(); } catch { /* 忽略 */ } }
-    try { dropShared(); } catch { /* 忽略 */ }
   }, []);
 
   return <Stage snap={snap} diagRef={diagRef} />;

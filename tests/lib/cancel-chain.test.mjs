@@ -59,13 +59,11 @@ test("requestCancel: 发请求即返回，终态结算丢后台（不占工具�
       return { settled: "escalated" };
     },
   };
-  const t0 = Date.now();
   const out = await requestCancel({ sessionId: SID, reason: "user", deps, confirmMs: 15000 });
-  const ms = Date.now() - t0;
   assert.equal(out.status, "cancelling");
   assert.equal(out.taskId, "task-9");
+  // order 就是「没等确认窗口」的证据：结算还没落（settled 未 push）就已经返回了。
   assert.deepEqual(order, ["execute", "settle:task-9"], "返回应发生在结算完成之前");
-  assert.ok(ms < 50, "不该等确认窗口（实测 " + ms + "ms）");
   releaseSettle();
   await new Promise((r) => setTimeout(r, 10));
   assert.deepEqual(order, ["execute", "settle:task-9", "settled"], "结算仍在后台跑完");

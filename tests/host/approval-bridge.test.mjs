@@ -84,7 +84,8 @@ test("ToolCallCache：有界 + 按会话隔离 + 取不到返回 null", () => {
 });
 
 test("常量：默认审批超时是 App 侧策略值，不是宿主默认（宿主默认 0 = 不超时）", () => {
-  assert.equal(DEFAULT_APPROVAL_TIMEOUT_MS, 30000);
+  // 0 是宿主的「永不超时」；抄错成 0 等于审批闸门失效，所以钉住“必须是正值”而不钉具体秒数。
+  assert.ok(DEFAULT_APPROVAL_TIMEOUT_MS > 0, "App 侧必须自己给正值：0 是宿主的永不超时");
 });
 
 // —— 审批载荷的"具体操作" ——
