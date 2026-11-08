@@ -33,7 +33,6 @@
 import { managedRuntimeDetails, ensureManagedRuntime, stopManagedRuntime, bridgeAccess } from "@dshana/runtime/managed-runtime.ts";
 import { buildBootSnapshot, APP_ID } from "@dshana/runtime/boot-state.ts";
 import { dataSources, sourceOf } from "@dshana/runtime/data-source.ts";
-// 数据源切换（packages/runtime/src/source-switch.ts）的入口暂时撤下：链未在真机验证过，见 POST /dshana/settings/restart。
 import { groupHostCatalog } from "@dshana/models/model-catalog-view.ts";
 // 面间通道不存在了：跨面只走同页广播（BroadcastChannel），没有 hub、也没有通道协议要引入。
 import {
@@ -327,9 +326,9 @@ export function registerDshanaRoutes(app, deps) {
       }
     });
 
-    // ---- POST /dshana/settings：只改常规项（两个超时）；数据来源走切换链 ----
-    // 形状：{ settings: {...}, expectedRevision }。带来源字段一律 400：改来源必须先起新源、
-    // 成功才落盘（见 spec D-m），所以那条路归 /settings/restart。
+    // ---- POST /dshana/settings：只改常规项（两个超时、会话模型）；数据来源只读 ----
+    // 形状：{ settings: {...}, expectedRevision }。带来源字段一律 400：数据来源固定为 App 私有目录，
+    // 换源要停旧起新，没有这条通道。
     // revision 不匹配回 409（不静默覆盖）；设置值非法回 400（存储侧校验的话原样上抬）。
     app.post(DASHANA_ROUTE_PREFIX + "/settings", async (c) => {
       try {
@@ -340,7 +339,7 @@ export function registerDshanaRoutes(app, deps) {
         if (sourceKeys.length) {
           return json(c, 400, {
             ok: false,
-            error: "数据来源不在本端点改（必须先是新源再落盘）：" + sourceKeys.join("/") + " —— 用 POST " + DASHANA_ROUTE_PREFIX + "/settings/restart",
+            error: "数据来源只读（固定为 App 私有目录）：" + sourceKeys.join("/"),
           });
         }
         const expectedRevision = typeof body.expectedRevision === "number" ? body.expectedRevision : undefined;
@@ -356,18 +355,6 @@ export function registerDshanaRoutes(app, deps) {
         return json(c, 500, { ok: false, error: msg });
       }
     });
-
-    // ---- POST /dshana/settings/restart：数据源切换（入口暂撤）----
-    // 切换链（packages/runtime/src/source-switch.ts）还没跑通：停旧、起新、失败回滚这条链没有在真机上验证过，
-    // 而它第一步就会停掉正在跑的 runtime。为避免半成品被误触发，这里先只回一句明确的
-    // 「未启用」，不碰任何状态。实现原地保留，等切换做完把这层闸去掉即可恢复原状。
-    app.post(DASHANA_ROUTE_PREFIX + "/settings/restart", (c) =>
-      json(c, 503, {
-        ok: false,
-        code: "SWITCH_DISABLED",
-        error: "数据源切换尚未启用（功能未完成，入口暂时撤下）",
-      }),
-    );
   }
 
   return app;
@@ -384,6 +371,5 @@ export function dshanaRoutesTable() {
     ["POST", DASHANA_ROUTE_PREFIX + "/start"],
     ["POST", DASHANA_ROUTE_PREFIX + "/stop"],
     ["POST", DASHANA_ROUTE_PREFIX + "/settings"],
-    ["POST", DASHANA_ROUTE_PREFIX + "/settings/restart"],
   ];
 }

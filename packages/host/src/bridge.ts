@@ -20,10 +20,6 @@
 //     `<base>` 都拦不住（见 shared/html-relay.ts 的说明），而文档 URL 就在中继前缀下 ——
 //     相对化后同一前缀自然约掉，于是引用仍落在卡这条河道里，不再打到宿主源。
 //   · WS 升级：`/api/remote.mux` 等事件流按原始 socket 双向透传（不解析帧，握手响应原样回写）。
-//   · 数据源切换冻结：控制面 `prepare-switch` 置冻结（有在途调用则拒绝），冻结期间普通请求
-//     503、已升级 WS 收到 1013 关闭帧、新 WS 升级直接断开；`resume` 或守门失败时解除。
-//     语义面（DSH 是否真忙）由 onControl 守门；中继只管冻结标志与在途调用计数（对齐样例
-//     hana-dsh bridge.mjs 的 frozen/activeCalls 形态）。
 //
 // 上游恒为 127.0.0.1 回环 HTTP。
 
@@ -36,8 +32,6 @@ import { MUX_CHUNK_QUERY, MUX_CHUNK_QUERY_VALUE } from "@dshana/shared/mux-chunk
 import { startFrameRelay } from "./mux-relay.ts";
 
 const MAX_WS_BUFFER = 1024 * 1024;
-const FREEZE_CLOSE_CODE = 1013; // 数据源切换中：请稍后重连
-const FREEZE_CLOSE_REASON = "DSH data source is changing";
 
 const HOP_BY_HOP = new Set([
   "connection", "upgrade", "keep-alive", "proxy-authenticate", "proxy-authorization",
@@ -169,18 +163,6 @@ function serializeHeaders(headers) {  const lines: string[] = [];
   return lines.join("\r\n");
 }
 
-/**
- * WS 关闭帧（服务端→客户端不掩码）：opcode 0x8 + 2 字节 code + reason（≤123 字节）。
- * 自持中继不引入 ws 库（约束：零运行时依赖），冻结时自己造帧给客户端一个可解读的关闭码。
- */
-export function wsCloseFrame(code, reason = "") {
-  const reasonBuf = Buffer.from(String(reason), "utf8").subarray(0, 123); // 2 字节 code + ≤123 → 载荷 ≤125
-  const payload = Buffer.alloc(2 + reasonBuf.length);
-  payload.writeUInt16BE(code & 0xffff, 0);
-  reasonBuf.copy(payload, 2);
-  return Buffer.concat([Buffer.from([0x88, payload.length]), payload]);
-}
-
 /** 等待 drain 或中止（背压）。 */
 function waitForDrain(response, signal) {
   if (signal.aborted) return Promise.resolve();
@@ -228,23 +210,12 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
 
   const activeRequests = new Set<AbortController>();
   const upstreamSockets = new Set<ReturnType<typeof netConnect>>();
-  const clientSockets = new Set<any>(); // 已升级的浏览器 WS 客户端（冻结时发 1013 关闭帧）
-  let frozen = false; // 数据源切换冻结态（prepare-switch 置位，resume/守门失败解除）
-  let activeCalls = 0; // 在途普通调用数（冻结前须归零；控制面调用不计）
+  const clientSockets = new Set<any>(); // 已升级的浏览器 WS 客户端（关闭时逐条断开）
 
   function rejectJson(res, status, message) {
     if (res.headersSent) return;
     res.writeHead(status, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: message }));
-  }
-
-  /** 冻结时对已升级的 WS 客户端发 1013 关闭帧并断开（让它知道该重连，而非莫名断流）。 */
-  function closeClientsForSwitch() {
-    const frame = wsCloseFrame(FREEZE_CLOSE_CODE, FREEZE_CLOSE_REASON);
-    for (const socket of clientSockets) {
-      try { socket.write(frame); } catch { /* 已断 */ }
-      socket.end();
-    }
   }
 
   const server = createServer(async (req, res) => {
@@ -259,7 +230,6 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
         rejectJson(res, 405, "DSH control method unavailable");
         return;
       }
-      let counted = false;
       try {
         const chunks: any[] = [];
         let bytes = 0;
@@ -271,40 +241,12 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
         const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
         const action = body && body.action;
         const controlArgs = (body && body.args) || {};
-        if (action === "resume") {
-          frozen = false;
-          res.writeHead(200, { "content-type": "application/json" });
-          res.end(JSON.stringify({ resumed: true }));
-          return;
-        }
-        if (action === "prepare-switch") {
-          if (frozen) {
-            rejectJson(res, 409, "DSH data source switch is already pending");
-            return;
-          }
-          frozen = true;
-          if (activeCalls > 0) {
-            throw new Error("DSH 正在处理在途请求（" + activeCalls + "）——等它结束后再切换数据源。");
-          }
-        } else {
-          if (frozen) {
-            rejectJson(res, 409, "DSH data source is changing; retry after the update");
-            return;
-          }
-          activeCalls++;
-          counted = true;
-        }
         const result = await onControl(action, controlArgs);
-        if (action === "prepare-switch") closeClientsForSwitch();
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify(result === undefined ? {} : result));
       } catch (e) {
-        // 守门失败 → 不半冻（冻结标志回退，切换方读到 409）
-        frozen = false;
+        // 动作失败（含未知动作）：409 + 可读原因，不吞成 200
         rejectJson(res, 409, errText(e));
-      } finally {
-        // 控制面调用计数在 try 内配平（成功/失败路径一致）
-        if (counted) activeCalls--;
       }
       return;
     }
@@ -313,12 +255,6 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
       rejectJson(res, 403, "DSH bridge authorization required");
       return;
     }
-    if (frozen) {
-      rejectJson(res, 503, "DSH data source is changing; reconnect after the update");
-      return;
-    }
-    const isCall = req.method !== "GET" && req.method !== "HEAD";
-    if (isCall) activeCalls++;
     const controller = new AbortController();
     activeRequests.add(controller);
     const abort = () => controller.abort();
@@ -418,7 +354,6 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
         res.destroy(error instanceof Error ? error : undefined);
       }
     } finally {
-      if (isCall) activeCalls--;
       activeRequests.delete(controller);
       req.off("aborted", abort);
       res.off("close", abort);
@@ -436,7 +371,7 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
     const chunked = requested.searchParams.get(MUX_CHUNK_QUERY) === MUX_CHUNK_QUERY_VALUE;
     requested.searchParams.delete(MUX_CHUNK_QUERY);
     const authorized = authorizeBridgeRequest(`${requested.pathname}${requested.search}`, queryKey, bridgeKey);
-    if (!authorized || frozen) {
+    if (!authorized) {
       clientSocket.destroy();
       return;
     }
@@ -510,4 +445,4 @@ export async function startDshBridge(opts: DshBridgeOptions): Promise<DshBridgeH
   };
 }
 
-export { MAX_WS_BUFFER, FREEZE_CLOSE_CODE };
+export { MAX_WS_BUFFER };
