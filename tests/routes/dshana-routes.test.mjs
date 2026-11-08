@@ -75,21 +75,19 @@ test("挂载清单：GET boot-state/health/settings/models/card-state/faces-poll
     "GET /dshana/settings",
       // faces 端点已拆（面间不再有 HTTP 面）
     "POST /dshana/settings",
-    "POST /dshana/settings/restart",
     "POST /dshana/start",
     "POST /dshana/stop",
   ]);
   assert.deepEqual(dshanaRoutesTable().map(([m, p]) => m + " " + p).sort(), paths);
 });
 
-test("GET /dshana/settings: 200 返回设置视图（两个超时 + 数据模式 + revision）", async () => {
+test("GET /dshana/settings: 200 返回设置视图（超时 + 数据目录回显 + revision）", async () => {
   const { app, routes } = makeFakeApp();
   registerDshanaRoutes(app, makeFakeDeps({
     readSettings: async () => ({
       revision: 7,
-      settings: { mode: "private", path: null, profile: "dshana", approvalTimeoutSec: 30, defaultTimeoutSec: 1800 },
-      source: { sourceId: "private", home: "C:/data/.dsh", profileName: "dshana", shared: false, mode: "private" },
-      lastShared: null,
+      settings: { approvalTimeoutSec: 30, defaultTimeoutSec: 1800 },
+      source: { sourceId: "private", home: "C:/data/.dsh", profileName: "dshana" },
     }),
   }));
   const [,, handler] = routes.find(([m, p]) => m === "GET" && p === "/dshana/settings");
@@ -99,8 +97,8 @@ test("GET /dshana/settings: 200 返回设置视图（两个超时 + 数据模式
   assert.equal(ctx.body.ok, true);
   assert.equal(ctx.body.revision, 7);
   assert.equal(ctx.body.settings.approvalTimeoutSec, 30);
-  assert.equal(ctx.body.settings.mode, "private");
   assert.equal(ctx.body.source.sourceId, "private");
+  assert.equal(ctx.body.source.home, "C:/data/.dsh");
 });
 
 test("POST /dshana/settings: 带 expectedRevision 写入并回新视图", async () => {
@@ -111,9 +109,8 @@ test("POST /dshana/settings: 带 expectedRevision 写入并回新视图", async 
       seen = { patch, expectedRevision };
       return {
         revision: 8,
-        settings: { mode: "private", path: null, profile: "dshana", approvalTimeoutSec: 45, defaultTimeoutSec: 1800 },
-        source: { sourceId: "private", home: "C:/data/.dsh", profileName: "dshana", shared: false, mode: "private" },
-        lastShared: null,
+        settings: { approvalTimeoutSec: 45, defaultTimeoutSec: 1800 },
+        source: { sourceId: "private", home: "C:/data/.dsh", profileName: "dshana" },
       };
     },
   }));
@@ -147,7 +144,7 @@ test("POST /dshana/settings: revision 落后 → 409 + code（不静默覆盖）
   assert.equal(ctx.body.revision, 9, "把当前 revision 一并给回，页面好刷新");
 });
 
-test("POST /dshana/settings: 带来源字段 → 400（改来源必须走切换链）", async () => {
+test("POST /dshana/settings: 带来源字段 → 400（数据来源固定，不可改）", async () => {
   const { app, routes } = makeFakeApp();
   let called = 0;
   registerDshanaRoutes(app, makeFakeDeps({
@@ -158,7 +155,7 @@ test("POST /dshana/settings: 带来源字段 → 400（改来源必须走切换�
   ctx.req = { json: async () => ({ settings: { mode: "shared", path: "D:/dsh" }, expectedRevision: 1 }) };
   await handler(ctx);
   assert.equal(ctx.status, 400);
-  assert.match(ctx.body.error, /数据来源不在本端点改/);
+  assert.match(ctx.body.error, /数据来源固定为 App 私有目录/);
   assert.equal(called, 0, "来源变更不得当普通设置写");
 });
 
@@ -304,39 +301,14 @@ test("GET /dshana/models: 宿主目录读取失败 → ok=false + error（不假
   assert.match(ctx.body.error, /app\/models\.infer/);
 });
 
-// ---- 数据源切换：入口暂时撤下（实现留在 packages/runtime/src/source-switch.ts 与其单测里）----
-
-test("POST /dshana/settings/restart: 入口暂撤 → 一律 503 SWITCH_DISABLED，不碰切换链", async () => {
-  const { app, routes } = makeFakeApp();
-  let called = 0;
-  registerDshanaRoutes(app, makeFakeDeps({
-    switchSource: async () => { called += 1; return { ok: true, operation: { id: "switch-1" } }; },
-  }));
-  const [,, handler] = routes.find(([m, p]) => m === "POST" && p === "/dshana/settings/restart");
-  for (const body of [
-    { settings: { mode: "shared", path: "D:/dsh" }, expectedRevision: 3 },
-    { mode: "shared" },
-    null,
-  ]) {
-    const ctx = makeFakeCtx();
-    ctx.req = { json: async () => body };
-    await handler(ctx);
-    assert.equal(ctx.status, 503, "形状对不对都只回 503：入口撤下，不做形状判定");
-    assert.equal(ctx.body.code, "SWITCH_DISABLED");
-  }
-  assert.equal(called, 0, "撤下的入口不得触发切换链（它会停掉正在跑的 runtime）");
-});
-
-test("GET /dshana/settings: 只回设置与 revision（不带切换面字段）", async () => {
+test("GET /dshana/settings: 只回设置与 revision（不带无关字段）", async () => {
   const { app, routes } = makeFakeApp();
   registerDshanaRoutes(app, makeFakeDeps({
     readSettings: async () => ({
       revision: 1,
-      settings: { mode: "private", path: null, profile: "dshana", approvalTimeoutSec: 30, defaultTimeoutSec: 1800 },
+      settings: { approvalTimeoutSec: 30, defaultTimeoutSec: 1800 },
       source: { sourceId: "private" },
-      lastShared: null,
     }),
-    switchOperation: () => ({ id: "switch-1", state: "failed", error: "预检未通过" }),
   }));
   const [,, handler] = routes.find(([m, p]) => m === "GET" && p === "/dshana/settings");
   const ctx = makeFakeCtx();

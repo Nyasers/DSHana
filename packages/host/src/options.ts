@@ -10,7 +10,7 @@
 //
 // 配置文件 schema（JSON）：
 //   { dataDir, dshHome?, dshPort, bridgePort, bridgeKey, controlKey, readyMarker, depsRoot?, fatalPath? }
-//   或预检形态（数据源切换探针）：
+//   或预检形态：
 //   { dataDir, dshHome, preflight:true, resultPath }
 //   · dataDir       App ctx.dataDir 绝对路径（App 数据根；.dsh / .runtime-tmp 等均在其下）
 //   · dshHome       本源的 DSH_HOME 绝对路径（当前数据源决定；缺省回落 dataDir/.dsh）
@@ -83,7 +83,7 @@ export function normalizeRuntimeConfig(input) {
     throw new UsageError("配置项 fatalPath 必须是绝对路径且不含 NUL（收到 " + JSON.stringify(input.fatalPath) + "）");
   }
   if (input.preflight === true) {
-    // 预检模式（数据源切换的可用性探针）：不起服务、不拿凭据，只要目标 home + 结果文件
+    // 预检模式（环境可用性探针）：不起服务、不拿凭据，只要目标 home + 结果文件
     if (!dshHome) throw new UsageError("预检配置必须携带 dshHome（目标数据源的 DSH_HOME 绝对路径）");
     if (!resultPath) throw new UsageError("预检配置必须携带 resultPath（预检结果写入的绝对路径）");
     return {
