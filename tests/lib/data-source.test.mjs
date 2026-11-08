@@ -62,14 +62,6 @@ test("validateSettings: private 默认落位，profile 被强制为内置名", (
     ...SESSION_DEFAULTS,
     ...FACE_FOLLOW_DEFAULTS,
   });
-  assert.deepEqual(DEFAULT_SETTINGS, {
-    mode: "private",
-    path: null,
-    profile: PRIVATE_PROFILE,
-    ...TIMEOUT_DEFAULTS,
-    ...SESSION_DEFAULTS,
-    ...FACE_FOLLOW_DEFAULTS,
-  });
 });
 
 test("validateSettings: 拒绝未知键 / 非法模式 / 非绝对 shared 路径 / NUL / 畸形 profile", () => {

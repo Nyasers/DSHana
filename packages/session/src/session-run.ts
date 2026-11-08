@@ -112,10 +112,9 @@ export function requestedEffort(parsed): string {
 /**
  * 只给了一半路由（provider 或 model 其一）时的拒绝理由；成对给或都不给返回 null。
  *
- * 旧实现遇到半个路由会去 DSH_HOME/settings.yaml 补另一半。那份文件在 DSH 现版里已不存在：
- * settings 服务启动时把它整份迁进 profile，并改名成 settings.yaml.imported（见上游
- * settings/settings 的 importLegacyDocument）。于是「补不出来」在真机上是一条谁都读不懂的
- * 硬失败（provider/model required）——而真正的原因只是路由被拆成了两半。
+ * settings.yaml 在 DSH 启动时被整份迁走并改名成 settings.yaml.imported（上游 settings/settings 的
+ * importLegacyDocument），所以「另一半」无处可补：半个路由只能显式拒掉，否则在真机上是一条谁都
+ * 读不懂的硬失败（provider/model required）——而真正的原因只是路由被拆成了两半。
  */
 export function halfModelSelectionError(parsed): Error | null {
   const provider = String((parsed && parsed.provider) || "").trim();

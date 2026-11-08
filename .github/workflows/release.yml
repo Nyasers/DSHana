@@ -271,6 +271,5 @@ jobs:
 # tag 里一个 " 加 ; 就能越出引号执行命令（CWE-78）。约定：凡进 shell 的 github 上下文字段
 # 一律先经步骤级 env 落成 shell 变量（TAG/REPO/OWNER 等）再引用。
 #
-# 遗留（未随本 PR 处理）：package 作业的 `pnpm run package --target=${{ matrix.target }}`
-# 与 upload-artifact 的 name 仍在裸插值。它们的取值来自本仓库自己的 matrix 定义、不是外部输入，
-# 风险面不同（tag 是外部可触发的那一类），故单独留待统一处理。
+# package 作业的 `pnpm run package --target=${{ matrix.target }}` 与 upload-artifact 的 name
+# 是这条约定的例外：取值来自本仓库自己的 matrix 定义、不是外部输入，风险面与 tag 不同。

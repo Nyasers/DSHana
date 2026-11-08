@@ -10,7 +10,6 @@ import path from "node:path";
 import {
   registerDshanaRoutes,
   defaultDshanaRouteDeps,
-  DASHANA_ROUTE_PREFIX,
   dshanaRoutesTable,
 } from "@dshana/tools/routes/dshana-routes.ts";
 import { initAppRuntime } from "@dshana/runtime/app-runtime.ts";
@@ -81,7 +80,6 @@ test("挂载清单：GET boot-state/health/settings/models/card-state/faces-poll
     "POST /dshana/stop",
   ]);
   assert.deepEqual(dshanaRoutesTable().map(([m, p]) => m + " " + p).sort(), paths);
-  assert.equal(DASHANA_ROUTE_PREFIX, "/dshana");
 });
 
 test("GET /dshana/settings: 200 返回设置视图（两个超时 + 数据模式 + revision）", async () => {

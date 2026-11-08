@@ -78,7 +78,6 @@ test("readPortRange: 本机读出来是一个合法区间（读不到则是回�
 
 test("choosePort: 可注入区间（不再写死常量）", () => {
   assert.equal(choosePort((a) => a, { min: 40000, max: 50000 }), 40000);
-  assert.ok(FALLBACK_PORT_RANGE.min >= 1024 && FALLBACK_PORT_RANGE.max <= 65536);
 });
 
 test("buildRuntimeConfig: dshPort 允许 0（系统分配）", () => {

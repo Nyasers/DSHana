@@ -13,7 +13,7 @@
 //   5. 后加的键（forceFollowFaces）：存量 settings.json 里没有它，读侧必须补缺省而不是撞未知键拒绝。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDataSourceStore, validateSettings } from "@dshana/runtime/data-source.ts";

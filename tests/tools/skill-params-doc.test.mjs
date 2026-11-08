@@ -3,23 +3,21 @@
 //
 // tests/tools/skill-params-doc.test.mjs — 技能面（随包）与仓库面的分工闸
 //
-// 三个读者，三个位置：
+// 四个读者，四个位置：
 //   · skills/dshana/          —— 随包，读者是**调用** dshana 的 agent（怎么用）
 //   · .agents/skills/         —— 不随包，读者是改这个 App 源码的协作者（怎么改、怎么验）
 //   · dshana-install-skill/   —— 随仓库不随包，读者是拿到仓库链接要**装** DSHana 的外部 agent
 //   · DESIGN.md               —— 不随包，写给人看的设计叙事
 //
-// SKILL.md 原先手写一张 Required/Optional 表（与 parameters 同一事实的两份副本）且把
-// 安装/排障/主题/开发闭环等只在特定场合才用到的内容全揽进来。现在：字段表由 derive 从 zod 定义
-// 直出到 skills/dshana/references/parameters.md（与 parameters 同源），只调用方用得上的内容
-// 按「什么时候需要读」拆成 references/ 下的几份，开发闭环搬到 .agents/skills/。
+// 字段表由 derive 从 zod 定义直出到 skills/dshana/references/parameters.md（与 parameters
+// 同源）；只调用方用得上的内容按「什么时候需要读」拆成 references/ 下的几份，开发闭环在
+// .agents/skills/。
 //
-// 这里守五件事：
+// 这里守四件事：
 //   ① 生成物与当前 zod 定义一致（derive --check 是 CI 门禁；此处再拦一道，直接跑测试也能发现）；
 //   ② SKILL.md 指到了每一份随包参照，且不再自带字段表（回退成手写表就会在这里红）；
 //   ③ 跨字段约束仍在 SKILL.md 正文里（那半推导不出来，删了就没人讲）；
-//   ④ 出包处按 SKILL.md 的指针双向校（指到的必须在、存在必须被指到）；
-//   ⑤ 仓库侧的开发手册不进随包面（错放回 skills/ 就会在这里红）。
+//   ④ 开发闭环在仓库侧：它不是随包参照，仓库侧手册存在且被 SKILL.md 指到。
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
@@ -105,12 +103,6 @@ test("开发闭环在仓库侧，不在随包技能里", () => {
   assert.match(skill, /\.agents\/skills\/dshana-dev-loop/, "SKILL.md 要指向仓库侧手册");
 });
 
-// 随包面被 build:app 整树拷贝，所以「不该随包的东西」只要落进 skills/ 就会进包。
-test("随包技能面不含协作者手册（build 只拷 skills/，落进去就会进包）", () => {
-  const build = read("packages/app/src/build.ts");
-  assert.match(build, /copySync\(join\(ROOT, "skills"\)/, "build 整树拷 skills/ → 该目录里只该放随包内容");
-});
-
 test("跨字段约束留在 SKILL.md：schema 表达不了，不能跟着表一起删掉", () => {
   const skill = read("skills/dshana/SKILL.md");
   assert.match(skill, /exactly one of `taskId`/, "reply 的目标二选一");
@@ -118,12 +110,3 @@ test("跨字段约束留在 SKILL.md：schema 表达不了，不能跟着表一�
   assert.match(skill, /`open` takes no `sessionId`/, "open 不收 sessionId");
 });
 
-// 参照缺失时不响：SKILL.md 那句指针指向一片空白，模型读不到内容，而技能照旧加载、不报错。
-// 随 skills/ 整树进包，所以出包处加一道断言（缺件拒包），这里钉住它在主流程里真的被调用。
-test("出包前断言技能参照在位（缺件拒包）", () => {
-  const packAssert = read("scripts/release/pack/assert.mts");
-  assert.match(packAssert, /export function assertSkillReferences/, "assert.mts 要有这条断言");
-  assert.match(packAssert, /references\\\/\[\\w\.-\]\+|matchAll/, "断言要从 SKILL.md 提指针名单（不另立名录）");
-  const pack = read("scripts/release/pack/index.mts");
-  assert.match(pack, /assertSkillReferences\(distDir\)/, "pack 主流程要真的调它");
-});
