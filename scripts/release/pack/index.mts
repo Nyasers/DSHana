@@ -57,7 +57,7 @@ if (version !== manifestVersion)
     `版本不一致：package.json ${version} ≠ manifest.json ${manifestVersion}（manifest 未同步，跑 node scripts/derive/index.mts 同步后再打包）`,
   );
 
-// 1. 交付目录已由 build 组装完整（安装态骨架：bin/ + manifest.json / icon.png / skills/ / ui/ +
+// 1. 交付目录已由 build 组装完整（安装态骨架：bin/ + manifest.json / icon.webp / skills/ / ui/ +
 //    声明文本）；本步不做任何补充，只断言交付目录真的齐备。包根即 App 安装目录，不套 dist 这层目录。
 //    不在交付面里的东西各有其宿主：
 //    · routes/ —— v2 走 ctx.routes.register，route 在入口（bin/app.mjs）里注册，无目录产物；
