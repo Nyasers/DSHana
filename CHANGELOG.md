@@ -1,5 +1,7 @@
 # Changelog
 
+## [1.3.2+dsh-0.2.2-rc.1](https://github.com/Nyasers/DSHana/compare/v1.3.1%2Bdsh-0.2.2-rc.1...v1.3.2%2Bdsh-0.2.2-rc.1) (2026-11-11)
+
 ## [1.3.1+dsh-0.2.2-rc.1](https://github.com/Nyasers/DSHana/compare/v1.3.0%2Bdsh-0.2.2-rc.1...v1.3.1%2Bdsh-0.2.2-rc.1) (2026-11-08)
 
 ### Bug Fixes
