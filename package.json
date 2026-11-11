@@ -38,6 +38,9 @@
     "postpackage": "node scripts/release/clean-cache.mts",
     "install:local": "node scripts/dev/install-local.mts",
     "dsh:sync-probe": "node scripts/dev/dsh-sync-probe.mts",
+    "dsh:release-watch": "node scripts/dev/dsh-release-watch.mts",
+    "dsh:bump": "node scripts/dev/dsh-bump.mts",
+    "dsh:overlay-rebase": "node scripts/dev/dsh-overlay-rebase.mts",
     "dsh:overlay-deltas": "node scripts/dev/overlay-deltas.mts",
     "probe:host": "node scripts/probe/host-surface.mts",
     "smoke:packed": "node tests/e2e/runtime-boot.smoke.mjs --packed",
@@ -59,7 +62,7 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.1.0",
     "@deepseek-ai/cordis-plugin-group": "^1.1.0",
-    "@deepseek-ai/dsh": "0.2.2-rc.1",
+    "@deepseek-ai/dsh": "0.2.2-rc.2",
     "@deepseek-ai/dsh-host-open-in-app": "0.2.2-rc.1",
     "@dshana/app": "workspace:*",
     "@dshana/host": "workspace:*",

@@ -46,7 +46,7 @@ const MIRROR = "vendor/deepseek-harness";
 const ROOT_PACKAGE = "@deepseek-ai/dsh";
 
 /** npm 精简 packument（install-v1 格式，约 200 KB；完整格式大好几倍）。 */
-async function packument(name: string): Promise<any> {
+export async function packument(name: string): Promise<any> {
   const url = REGISTRY + name.replace("/", "%2f");
   const res = await fetch(url, { headers: { Accept: "application/vnd.npm.install-v1+json" } });
   if (!res.ok) throw new Error(`${name} packument 取不到：HTTP ${res.status}`);
@@ -54,7 +54,7 @@ async function packument(name: string): Promise<any> {
 }
 
 /** npm 的 dist-tags（next / latest / alpha 各自指向哪个版本）。 */
-async function distTags(): Promise<Record<string, string>> {
+export async function distTags(): Promise<Record<string, string>> {
   const root = await packument(ROOT_PACKAGE);
   return root["dist-tags"] ?? {};
 }
