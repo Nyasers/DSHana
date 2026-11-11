@@ -15,7 +15,7 @@ jobs:
           submodules: recursive
           fetch-depth: 0
       # 显式装 pnpm（读 package.json packageManager 字段钉版本），不依赖 runner 预装 corepack
-      - uses: pnpm/action-setup@v6.1.0
+      - uses: pnpm/action-setup@v6.1.1
       - uses: actions/setup-node@v7.1.0
         with:
           node-version-file: ".nvmrc"
