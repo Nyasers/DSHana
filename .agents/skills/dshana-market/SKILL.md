@@ -23,6 +23,19 @@ The market never picks the latest Release; it fetches the tag recorded in `appro
 
 The enrolled identity (`kind`, `id`, `repository`, `publisher`, upstream repo) lives in `market/enrollment.json` and is what the scripts below read; it is not duplicated here.
 
+## Order of operations
+
+Promotion is what makes the version visible to the market, so it comes **before** the enrollment PR, not after it. The order is fixed:
+
+1. Bump PR merged as a merge commit (the `version` hook writes the commit; tagging is not its job).
+2. Tag that merge commit and push the tag alone.
+3. The Release workflow leaves a draft pre-release; `publish` un-drafts it and keeps the pre-release flag.
+4. Install and verify on a real machine before the catalog can see the version: `pnpm run install:local -- --zip releases/<asset>` then `pnpm run smoke:packed` (what those two prove is in `dshana-dev-loop`).
+5. Promote: `gh release edit <tag> --repo Nyasers/DSHana --prerelease=false --latest`.
+6. Only now open or refresh the enrollment PR, and wait for its `validate-pr` to pass.
+
+Step 4 uses the asset for the machine being tested (`-win32-x64.zip` on the author's box); the entry records the **universal** package from the same Release, and its `sha256` is copied from that package's entry, never recomputed from the platform asset.
+
 ## When to enroll
 
 | Act | Trigger | Catalog files touched |
@@ -93,6 +106,18 @@ Two lines in two upstream files; copy values, never compute them:
 - **Never replace the archive of a published version.** Users install against the approved SHA-256, so a swapped asset simply fails to install. Ship a higher version instead.
 - **Never edit `index.v2.json` or the upstream workflows.** The index is a product of their publish workflow; editing it fabricates market state.
 - **The store blurb (`readme`) is decoupled from the package.** Changing it needs a PR but no Release. Without the field the store shows "no reviewed introduction" — it does not fall back to this repository's README, so a README change here does not propagate.
+
+## When `validate-pr` fails
+
+The failure seen in practice is the ordering mistake above:
+
+```
+app/dshana (Nyasers/DSHana): release v1.3.2+dsh-0.2.2-rc.1 is a prerelease
+```
+
+It means step 5 was skipped, or run after the PR was opened. Promote the Release first, then get a fresh run.
+
+Getting that fresh run has one snag: the check executes on the upstream repository, so the author cannot rerun it — `gh run rerun` answers `Must have admin rights to Repository`. Close and reopen **the same PR** instead; that is a re-trigger, not the abandonment the Branch rules forbid, because the branch, the commits and the review record all stay put. `pull_request` defaults to the `opened`, `synchronize` and `reopened` activities, so reopening starts a new run and the branch stays free of noise commits. Do not push an empty commit to re-trigger.
 
 ## Pre-submit checklist
 
