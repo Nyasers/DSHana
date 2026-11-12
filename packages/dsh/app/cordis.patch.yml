@@ -32,6 +32,17 @@
     path: ':memory:'
     openAt: never
 
+# ── Web 搜索/取回的 provider 选择 ───────────────────────────────────────────────
+#
+# base 那一行把 `searchProvider` 指成 `deepseek-search-api`——那是 web-deepseek-api 注册的 provider。
+# 本形态不交付那个包（rc.2 起它 import 两个被剔的 LLM 适配器），所以改指 legacy Messages 搜索
+# provider（web-search-deepseek 的 `deepseek-official`）；取回仍走 `http`（web-fetch-http）。
+# 行不带 name：这是对 base 那条 `web` 行的 config 重写，包仍由 base 自己声明。
+- id: web
+  config:
+    searchProvider: deepseek-official
+    fetchProvider: http
+
 # ── web-only host rows, the transport layer, and the browser roster ─────────
 
 # `dsh.client` rows are the browser roster the modules node half scans into
