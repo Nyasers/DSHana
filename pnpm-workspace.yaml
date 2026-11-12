@@ -25,15 +25,18 @@ overrides:
 
   # 不使用的产品面
   "@deepseek-ai/dsh-acp-app": "-"
-  "@deepseek-ai/dsh-api-account-controller": "-"
+  # 账号面：rc.2 把 api-account-controller 换成了 deepseek-account（下面那几条）。
+  # 改名前的名字已从上游消失，留着只会让人以为还挂着一条。
+  "@deepseek-ai/dsh-agent-team": "-"
   "@deepseek-ai/dsh-client-product-analytics": "-"
+  "@deepseek-ai/dsh-client-ui-account-notifications": "-"
+  "@deepseek-ai/dsh-client-ui-agent-team": "-"
   "@deepseek-ai/dsh-client-ui-entry-customization": "-"
   "@deepseek-ai/dsh-client-ui-message-feedback": "-"
   "@deepseek-ai/dsh-client-ui-settings-account": "-"
   "@deepseek-ai/dsh-client-ui-settings-session-log": "-"
   "@deepseek-ai/dsh-command-feedback": "-"
   "@deepseek-ai/dsh-deepseek-account": "-"
-  "@deepseek-ai/dsh-deepseek-account-platform": "-"
   "@deepseek-ai/dsh-deepseek-llm-api-extensions": "-"
   "@deepseek-ai/dsh-headless": "-"
   "@deepseek-ai/dsh-host-product-telemetry-otel": "-"
@@ -41,7 +44,10 @@ overrides:
   "@deepseek-ai/dsh-llm-deepseek-account": "-"
   "@deepseek-ai/dsh-llm-deepseek-api-key": "-"
   "@deepseek-ai/dsh-llm-pi-ai": "-"
+  "@deepseek-ai/dsh-mcp-manager": "-"
   "@deepseek-ai/dsh-message-feedback": "-"
+  # Office 面：rc.2 把 office-to-pdf 换成了 office-kit，并拆出 tool-office 与 skill-office 三件。
+  "@deepseek-ai/dsh-office-kit": "-"
   "@deepseek-ai/dsh-otel": "-"
   "@deepseek-ai/dsh-plugin-package-inventory-deepseek": "-"
   "@deepseek-ai/dsh-sdk-app": "-"
@@ -53,12 +59,16 @@ overrides:
   "@deepseek-ai/dsh-skill-office": "-"
   "@deepseek-ai/dsh-subagent-claude-code": "-"
   "@deepseek-ai/dsh-subagent-codex": "-"
+  "@deepseek-ai/dsh-tool-agent-team": "-"
+  "@deepseek-ai/dsh-tool-office": "-"
   "@deepseek-ai/dsh-web-app": "-"
 
   # 按需安装的包
   # >>> excluded-on-demand
   "@deepseek-ai/dsh-personalized-recommendations": "-"
-  "@deepseek-ai/dsh-experimental-agent-team-profile": "-"
+  # rc.2 把 agent-team-profile 从可选名单里拿走（agent-team 改为 base 默认带，见上面剔除面），
+  # 同时把 cua-bundle 从 ON_DEMAND 提成可选 bundle；两个名单都是打包时的硬校验对象。
+  "@deepseek-ai/dsh-cua-bundle": "-"
   "@deepseek-ai/dsh-experimental-auto-review": "-"
   "@deepseek-ai/dsh-experimental-badge-skill-bundle": "-"
   "@deepseek-ai/dsh-experimental-cot-translation-bundle": "-"

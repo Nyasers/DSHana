@@ -418,7 +418,8 @@
     - id: ui-skill
       name: '@deepseek-ai/dsh-client-ui-skill'
 
-    # 本形态不带 Agent Team（多人协作面板，包不进 dependencies），注释保留供上游对账：
+    # 本形态不带 Agent Team（多人协作面板）：ui 这一行注释保留供上游对账，包在根 yaml 的
+    # 剔除名单里，base 自己那对 agent-team / tool-agent-team 行由 prune-mirror 按名单剔掉。
     # - id: ui-agent-team
     #   name: '@deepseek-ai/dsh-client-ui-agent-team'
 

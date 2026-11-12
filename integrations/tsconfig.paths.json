@@ -811,12 +811,10 @@
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-compaction-tool-result-pruner"
       ],
       "@deepseek-ai/dsh-computer-use": [
-        "../vendor/deepseek-harness/packages/computer-use/computer-use/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-computer-use"
+        "../vendor/deepseek-harness/packages/computer-use/computer-use/src/index.ts"
       ],
       "@deepseek-ai/dsh-computer-use/brand": [
-        "../vendor/deepseek-harness/packages/computer-use/computer-use/src/brand.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-computer-use"
+        "../vendor/deepseek-harness/packages/computer-use/computer-use/src/brand.ts"
       ],
       "@deepseek-ai/dsh-agent-instructions": [
         "../vendor/deepseek-harness/packages/context/agent-instructions/src/index.ts",
@@ -1107,56 +1105,43 @@
         "../vendor/deepseek-harness/packages/experimental/creation-recommendations/src/types.ts"
       ],
       "@deepseek-ai/dsh-cua": [
-        "../vendor/deepseek-harness/packages/experimental/cua/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-cua"
+        "../vendor/deepseek-harness/packages/experimental/cua/src/index.ts"
       ],
       "@deepseek-ai/dsh-cua/client": [
-        "../vendor/deepseek-harness/packages/experimental/cua/src/client/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-cua"
+        "../vendor/deepseek-harness/packages/experimental/cua/src/client/index.ts"
       ],
       "@deepseek-ai/dsh-cua/api": [
-        "../vendor/deepseek-harness/packages/experimental/cua/src/api.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-cua"
+        "../vendor/deepseek-harness/packages/experimental/cua/src/api.ts"
       ],
       "@deepseek-ai/dsh-cua/bridge": [
-        "../vendor/deepseek-harness/packages/experimental/cua/src/bridge.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-cua"
+        "../vendor/deepseek-harness/packages/experimental/cua/src/bridge.ts"
       ],
       "@deepseek-ai/dsh-cua/types": [
-        "../vendor/deepseek-harness/packages/experimental/cua/src/remote-types.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-cua"
+        "../vendor/deepseek-harness/packages/experimental/cua/src/remote-types.ts"
       ],
       "@deepseek-ai/dsh-cua/native-client": [
-        "../vendor/deepseek-harness/packages/experimental/cua/src/native-client.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-cua"
+        "../vendor/deepseek-harness/packages/experimental/cua/src/native-client.ts"
       ],
       "@deepseek-ai/dsh-cua/protocol": [
-        "../vendor/deepseek-harness/packages/experimental/cua/src/protocol.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-cua"
+        "../vendor/deepseek-harness/packages/experimental/cua/src/protocol.ts"
       ],
       "@deepseek-ai/dsh-cua/config": [
-        "../vendor/deepseek-harness/packages/experimental/cua/src/config.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-cua"
+        "../vendor/deepseek-harness/packages/experimental/cua/src/config.ts"
       ],
       "@deepseek-ai/dsh-cua/native-schema": [
-        "../vendor/deepseek-harness/packages/experimental/cua/src/native-schema.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-cua"
+        "../vendor/deepseek-harness/packages/experimental/cua/src/native-schema.ts"
       ],
       "@deepseek-ai/dsh-cua/native-build": [
-        "../vendor/deepseek-harness/packages/experimental/cua/src/native-build.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-cua"
+        "../vendor/deepseek-harness/packages/experimental/cua/src/native-build.ts"
       ],
       "@deepseek-ai/dsh-cua/guidance": [
-        "../vendor/deepseek-harness/packages/experimental/cua/src/guidance.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-cua"
+        "../vendor/deepseek-harness/packages/experimental/cua/src/guidance.ts"
       ],
       "@deepseek-ai/dsh-cua-bundle": [
-        "../vendor/deepseek-harness/packages/experimental/cua-bundle/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-cua-bundle"
+        "../vendor/deepseek-harness/packages/experimental/cua-bundle/src/index.ts"
       ],
       "@deepseek-ai/dsh-experimental-cua-macos": [
-        "../vendor/deepseek-harness/packages/experimental/cua-macos/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-experimental-cua-macos"
+        "../vendor/deepseek-harness/packages/experimental/cua-macos/src/index.ts"
       ],
       "@deepseek-ai/dsh-experimental-forge": [
         "../vendor/deepseek-harness/packages/experimental/forge/src/index.ts"
@@ -2053,20 +2038,16 @@
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-win32-process"
       ],
       "@deepseek-ai/dsh-agent-team": [
-        "../vendor/deepseek-harness/packages/team/agent-team/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-agent-team"
+        "../vendor/deepseek-harness/packages/team/agent-team/src/index.ts"
       ],
       "@deepseek-ai/dsh-agent-team/client": [
-        "../vendor/deepseek-harness/packages/team/agent-team/src/client.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-agent-team"
+        "../vendor/deepseek-harness/packages/team/agent-team/src/client.ts"
       ],
       "@deepseek-ai/dsh-agent-team/types": [
-        "../vendor/deepseek-harness/packages/team/agent-team/src/types.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-agent-team"
+        "../vendor/deepseek-harness/packages/team/agent-team/src/types.ts"
       ],
       "@deepseek-ai/dsh-tool-agent-team": [
-        "../vendor/deepseek-harness/packages/team/tool-agent-team/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-tool-agent-team"
+        "../vendor/deepseek-harness/packages/team/tool-agent-team/src/index.ts"
       ],
       "@deepseek-ai/dsh-otel": [
         "../vendor/deepseek-harness/packages/telemetry/otel/src/index.ts"
