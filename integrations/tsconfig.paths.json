@@ -314,10 +314,12 @@
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-agent-preset"
       ],
       "@deepseek-ai/dsh-client-ui-agent-team": [
-        "../vendor/deepseek-harness/packages/client/ui-agent-team/src/index.ts"
+        "../vendor/deepseek-harness/packages/client/ui-agent-team/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-agent-team"
       ],
       "@deepseek-ai/dsh-client-ui-agent-team/client": [
-        "../vendor/deepseek-harness/packages/client/ui-agent-team/src/client/index.ts"
+        "../vendor/deepseek-harness/packages/client/ui-agent-team/src/client/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-agent-team"
       ],
       "@deepseek-ai/dsh-client-ui-approval": [
         "../vendor/deepseek-harness/packages/client/ui-approval/src/index.ts",
@@ -2038,16 +2040,20 @@
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-win32-process"
       ],
       "@deepseek-ai/dsh-agent-team": [
-        "../vendor/deepseek-harness/packages/team/agent-team/src/index.ts"
+        "../vendor/deepseek-harness/packages/team/agent-team/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-agent-team"
       ],
       "@deepseek-ai/dsh-agent-team/client": [
-        "../vendor/deepseek-harness/packages/team/agent-team/src/client.ts"
+        "../vendor/deepseek-harness/packages/team/agent-team/src/client.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-agent-team"
       ],
       "@deepseek-ai/dsh-agent-team/types": [
-        "../vendor/deepseek-harness/packages/team/agent-team/src/types.ts"
+        "../vendor/deepseek-harness/packages/team/agent-team/src/types.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-agent-team"
       ],
       "@deepseek-ai/dsh-tool-agent-team": [
-        "../vendor/deepseek-harness/packages/team/tool-agent-team/src/index.ts"
+        "../vendor/deepseek-harness/packages/team/tool-agent-team/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-tool-agent-team"
       ],
       "@deepseek-ai/dsh-otel": [
         "../vendor/deepseek-harness/packages/telemetry/otel/src/index.ts"

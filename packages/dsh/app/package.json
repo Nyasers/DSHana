@@ -54,6 +54,7 @@
     "@deepseek-ai/dsh-client-resources": "0.2.2-rc.2",
     "@deepseek-ai/dsh-client-shortcuts": "0.2.2-rc.2",
     "@deepseek-ai/dsh-client-ui-agent-preset": "0.2.2-rc.2",
+    "@deepseek-ai/dsh-client-ui-agent-team": "0.2.2-rc.2",
     "@deepseek-ai/dsh-client-ui-approval": "0.2.2-rc.2",
     "@deepseek-ai/dsh-client-ui-attachment": "0.2.2-rc.2",
     "@deepseek-ai/dsh-client-ui-brand-official": "0.2.2-rc.2",
