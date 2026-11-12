@@ -1465,7 +1465,8 @@
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-host-webserver"
       ],
       "@deepseek-ai/dsh-anonymous-user-id": [
-        "../vendor/deepseek-harness/packages/identity/anonymous-user-id/src/index.ts"
+        "../vendor/deepseek-harness/packages/identity/anonymous-user-id/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-anonymous-user-id"
       ],
       "@deepseek-ai/dsh-commands": [
         "../vendor/deepseek-harness/packages/interaction/commands/src/index.ts",
@@ -1562,7 +1563,8 @@
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-llm"
       ],
       "@deepseek-ai/dsh-llm-deepseek": [
-        "../vendor/deepseek-harness/packages/llm/llm-deepseek/src/index.ts"
+        "../vendor/deepseek-harness/packages/llm/llm-deepseek/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-llm-deepseek"
       ],
       "@deepseek-ai/dsh-llm-deepseek-account": [
         "../vendor/deepseek-harness/packages/llm/llm-deepseek-account/src/index.ts"
@@ -2244,8 +2246,7 @@
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-web"
       ],
       "@deepseek-ai/dsh-web-deepseek-api": [
-        "../vendor/deepseek-harness/packages/web/web-deepseek-api/src/index.ts",
-        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-web-deepseek-api"
+        "../vendor/deepseek-harness/packages/web/web-deepseek-api/src/index.ts"
       ],
       "@deepseek-ai/dsh-web-fetch-http": [
         "../vendor/deepseek-harness/packages/web/web-fetch-http/src/index.ts",
