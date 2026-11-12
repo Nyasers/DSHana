@@ -4,7 +4,7 @@
   "files": [
     {
       "path": "src/client/index.ts",
-      "upstreamSha256": "0ceec848fa1ba6f07f2ea94096cc57075d40965ef964924e23514b369ff291b8",
+      "upstreamSha256": "177105bb5970c27db085581067f9cd6e43ae46775988db58e723531744ba3a9b",
       "deltaSha256": "f5653ebdc3e4c63fe94940a3d71bd24a072c53ee454986c9b40a8f085dfb4935"
     },
     {

@@ -77,9 +77,9 @@
     # - id: session-log-download
     #   name: '@deepseek-ai/dsh-session-log-export'
 
-    # Session-header "Open In..." split button over the host application
-    # resolution (macOS/Windows/Linux; a host with no resolved application
-    # renders no button). Two halves: the host routes and the browser surface.
+    # Session-menu application choices over Host resolution on macOS, Windows,
+    # and Linux. An empty catalog hides the action. The Host routes and browser
+    # controls also serve the file-tree directory opener.
     - id: open-in-app
       name: '@deepseek-ai/dsh-host-open-in-app'
       config:
@@ -146,17 +146,26 @@
       name: '@deepseek-ai/dsh-schedule'
 
     # 本形态不带账号面：登录、余额、赠金通知、退出登录这一整套（ui-settings-account /
-    # account-controller，以及 base 里给它们供 token 的 deepseek-account 与 llm-deepseek-account）
+    # ui-account-notifications，以及 base 里给它们供 token 的 deepseek-account 与 llm-deepseek-account）
     # 都不进 dependencies。settings.launcher 槽位因此回落到通用齿轮按钮——设置按钮旁不再有
     # 「登录 / 意见反馈」那一列。注释保留供上游对账：
     # - id: ui-settings-account
     #   name: '@deepseek-ai/dsh-client-ui-settings-account'
     #
-    # - id: account-controller
-    #   name: '@deepseek-ai/dsh-api-account-controller'
+    # - id: ui-account-notifications
+    #   name: '@deepseek-ai/dsh-client-ui-account-notifications'
 
     - id: settings-controller
       name: '@deepseek-ai/dsh-api-settings-controller'
+
+    # One shared MCP server fleet: Settings-configured servers plus servers
+    # that installed plugins register, with status and recovery over Remote.
+    # Credential templates and OAuth grants resolve through the credentials
+    # provider, so the manager starts after it.
+    # 本形态不带 MCP 管理器（包不进 dependencies，宿主侧也不开 MCP），注释保留供上游对账：
+    # - id: mcp-manager
+    #   name: '@deepseek-ai/dsh-mcp-manager'
+    #   inject: [credentials]
 
     # Workspace commands and reconnect-safe projection over Typert Remote.
     - id: workspace-controller
@@ -296,9 +305,16 @@
     - id: ui-sidebar-right
       name: '@deepseek-ai/dsh-client-ui-sidebar-right'
 
-    # 本层不带这条行（Office→PDF 转换交给宿主侧，包一并不进 dependencies）；注释保留供上游对账：
-    # - id: office-to-pdf
-    #   name: '@deepseek-ai/dsh-office-to-pdf'
+    # 本层不带 Office 一整套（office-kit、office 技能与 desktop 侧 Python 环境），包一并不进
+    # dependencies；注释保留供上游对账：
+    # - id: office-kit
+    #   name: '@deepseek-ai/dsh-office-kit'
+    #
+    # - id: workspace-dependencies
+    #   name: '@deepseek-ai/dsh-tool-workspace-dependencies'
+    #
+    # - id: skill-office
+    #   name: '@deepseek-ai/dsh-skill-office'
 
     # The right Sidebar's document tab: bounded file reads with selectable
     # Markdown, code, HTML, PDF, Office, and plain-text renderers.
@@ -351,7 +367,7 @@
     - id: ui-chat
       name: '@deepseek-ai/dsh-client-ui-chat'
 
-    # Official occupants for the generic sidebar and conversation brand slots.
+    # Official occupants for the sidebar brand slots and the home whale frame layer.
     - id: ui-brand-official
       name: '@deepseek-ai/dsh-client-ui-brand-official'
 
@@ -401,6 +417,10 @@
 
     - id: ui-skill
       name: '@deepseek-ai/dsh-client-ui-skill'
+
+    # 本形态不带 Agent Team（多人协作面板，包不进 dependencies），注释保留供上游对账：
+    # - id: ui-agent-team
+    #   name: '@deepseek-ai/dsh-client-ui-agent-team'
 
     - id: ui-subagent
       name: '@deepseek-ai/dsh-client-ui-subagent'
@@ -589,12 +609,9 @@
 - id: tool-result-pruner
   disabled: true
 
-# The subagent registry and its backends STAY in the host plane. `subagents` is
-# a process singleton with a cross-session query surface (`listChildren`,
-# `followup`) that the host api-proxy serves to the browser, and a provider
-# registers under a globally unique name, so a per-session copy would both
-# starve that host row and collide on the second session. What a preset
-# chooses is which delegation TOOLS its agent sees, below.
+# The subagent registry and its backends belong in the host composition: browser
+# prompt and interrupt requests share its runtime, and provider names are unique
+# within the registry. Presets select the delegation tools visible to each Agent.
 
 - id: tool-subagent-control
   disabled: true

@@ -17,7 +17,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type * as NodePty from 'node-pty'
 import type { IPtyForkOptions, IWindowsPtyForkOptions } from 'node-pty'
 import { createLazyRequire } from '@deepseek-ai/dsh-lazy-require'
-import { SubprocessRuntime, SubprocessExecutableNotFoundError } from '@deepseek-ai/dsh-subprocess'
+import { SubprocessRuntime, SubprocessError, SubprocessExecutableNotFoundError } from '@deepseek-ai/dsh-subprocess'
 import type {
   SubprocessHandle,
   SubprocessSpawnSpec,
@@ -53,6 +53,19 @@ import { LocalTerminalHandle } from './terminal.ts'
 import { prepareShellActivity } from './shell-activity.ts'
 
 const requireNodePty = createLazyRequire<typeof NodePty>('node-pty', import.meta.url)
+
+/** Load node-pty, reporting a missing or unloadable native module as `SUBPROCESS_PTY_UNAVAILABLE`. */
+function loadNodePty(): typeof NodePty {
+  try {
+    return requireNodePty()
+  } catch (error) {
+    throw new SubprocessError(
+      `subprocess-local: terminals are unavailable because node-pty cannot be loaded: ${String(error)}`,
+      'SUBPROCESS_PTY_UNAVAILABLE',
+      { cause: error },
+    )
+  }
+}
 
 /**
  * Refuse a working directory that no process can start in.
@@ -323,7 +336,7 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
   async spawnTerminal(spec: SubprocessTerminalSpawnSpec): Promise<SubprocessTerminalHandle> {
     const file = spec.argv[0]
     if (file === undefined || file.length === 0) {
-      throw new Error('subprocess-local: terminal argv must contain a program')
+      throw new SubprocessError('subprocess-local: terminal argv must contain a program', 'SUBPROCESS_INVALID_ARGV')
     }
     spec.signal?.throwIfAborted()
     requireUsableWorkingDirectory(spec.cwd)
@@ -353,7 +366,7 @@ export class LocalSubprocessRuntime extends SubprocessRuntime {
         ? undefined
         : prepareLinuxTerminalScope(launch, { ...activity?.env ?? env, PWD: spec.cwd, TERM: spec.terminalType }, linuxScope.literalArgv)
       if (scope !== undefined) { options.cwd = scope.cwd; options.env = scope.env }
-      terminal = requireNodePty().spawn(
+      terminal = loadNodePty().spawn(
         scope?.command ?? file,
         scope?.args ?? [...launch.argv.slice(1)],
         options,
