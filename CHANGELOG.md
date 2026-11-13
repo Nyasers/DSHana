@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.3+dsh-0.2.2-rc.2](https://github.com/Nyasers/DSHana/compare/v1.3.2%2Bdsh-0.2.2-rc.1...v1.3.3%2Bdsh-0.2.2-rc.2) (2026-11-13)
+
+### Features
+
+* **dev:** 补三个跟进上游版本的工具脚本与一份操作 skill ([2e04e08](https://github.com/Nyasers/DSHana/commit/2e04e08666a3052575e9ffd0903981c4f8be28b9))
+* **dsh:** 收下 agent-team，它已经不再是实验面 ([19bef34](https://github.com/Nyasers/DSHana/commit/19bef346ef4e229be753044c72e92ca89e7e5bf8))
+
+### Bug Fixes
+
+* **dev:** 根 package.json 的 dsh pin 还原为 0.2.2-rc.1 ([4d86709](https://github.com/Nyasers/DSHana/commit/4d86709da32c0d05403a6f2c26179bb77ab0d23a))
+* **dsh:** 打包链跟上 rc.2 —— 启动页锚点认形状、web 检索的凭据库入树 ([61b834a](https://github.com/Nyasers/DSHana/commit/61b834ada3ec517d5b95f2b5b6a9588ce338eb8c))
+* **dsh:** 恢复 webRemote，并把 web 行的搜索 provider 改成还在树里那一个 ([a1c4348](https://github.com/Nyasers/DSHana/commit/a1c4348753991fd0e20be619500f156a2c08a156))
+
 ## [1.3.2+dsh-0.2.2-rc.1](https://github.com/Nyasers/DSHana/compare/v1.3.1%2Bdsh-0.2.2-rc.1...v1.3.2%2Bdsh-0.2.2-rc.1) (2026-11-11)
 
 ## [1.3.1+dsh-0.2.2-rc.1](https://github.com/Nyasers/DSHana/compare/v1.3.0%2Bdsh-0.2.2-rc.1...v1.3.1%2Bdsh-0.2.2-rc.1) (2026-11-08)
