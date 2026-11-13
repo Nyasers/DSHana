@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "src/index.ts",
-      "upstreamSha256": "0839baefcbc7562ac73562cc7c5c3f1f983a8693bf3b76e0c956a5f93b4548ce",
+      "upstreamSha256": "0d8450805c78d79b6a08932c4c8fb22846296d0e4c54fb3f29d26ae3958eb2b1",
       "deltaSha256": "517d66b9b36fc197c73ee70e3366ad5d08d91b2baf6e395b22d19a7a976c6add"
     }
   ]

@@ -51,6 +51,16 @@ pnpm run verify:integrations
 - `dsh-overlay-rebase` 对每份 overlay 做三方合并：`base` 是旧 tag 的上游文件，`ours` 是当前
   overlay，`theirs` 是新 tag 的上游文件。干净合并的直接写回并更新 `upstreamSha256`。
 
+⚠ **base 侧取自当前 pin**（脚本用 `dshPin()` 当旧版本），而前三步已经把 pin 换成目标版本。照上面
+的字面顺序跑会得到「`0.2.2-rc.2 → 0.2.2-rc.2`、上游变了 0 份」——看着像干净的 0 冲突，实际一份
+都没重放。正确做法是让 base 侧看到旧 pin：
+
+```
+git checkout HEAD -- packages/host/package.json       # 只回退 host 这一处 pin
+node scripts/dev/dsh-overlay-rebase.mts --to <版本>
+node scripts/dev/dsh-bump.mts --to <版本>             # 把 pin 写回目标版本（会报「已写回 1 条」）
+```
+
 机械部分完成后 `verify:integrations` 应当只剩冲突项。
 
 ## 4. 冲突
@@ -67,11 +77,31 @@ pnpm run verify:integrations
 `deltaSha256` 只由 +/- 行内容算出、不含行号，所以干净的 rebase 不需要改它，这是判断「delta 有没有
 在 rebase 里被弄丢」的唯一信号。
 
-## 5. 验收
+## 5. 组合层（bundle）
+
+`packages/dsh/app` 派生自上游 `packages/bundle/web-app`，`provenance.json` 逐份记上游 sha256，
+`pnpm run verify:bundle` 会报出哪几份漂移。跟 overlay 一样做三方合并：
+
+```
+git -C vendor/deepseek-harness show dsh-v<旧>:packages/bundle/web-app/<文件> > base
+git -C vendor/deepseek-harness show dsh-v<新>:packages/bundle/web-app/<文件> > theirs
+git merge-file -p --diff3 packages/dsh/app/<文件> base theirs
+```
+
+重放完把 `provenance.json` 的 `upstreamSha256` 换成新上游文件的哈希（顺手把 `upstreamVersion` /
+`mirrorTag` 也改成目标版本）。
+
+上游会在 patch 里新增行，而组合层只装了交付面那 133 个包：新行引用了不进的包（MCP 管理器、
+Agent Team、Office 一整套、账号通知面板，以及预置里的 `tool-office`），本地 `verify:bundle`
+会报「带 name 的行引用了…但本包 dependencies 里没有它」。按现有惯例把这几行**注释掉**并留一句
+与上游对账的说明，不要直接删（下次跟进对不上号）。
+
+## 6. 验收
 
 ```
 pnpm run verify:integrations   # 23 份 overlay 全部对得上
-pnpm run derive:check          # 派生文件没有漂移
+pnpm run verify:bundle          # 组合层 12 份派生面对得上、行→包自洽
+pnpm run derive:check           # 派生文件没有漂移（gitlink 一项要等 commit 后才绿）
 pnpm run check:type
 node --test tests/
 pnpm run build
@@ -80,7 +110,7 @@ pnpm run build
 真机环节（`package:win:x64` → `install:local` → `smoke:packed`）会把当前宿主里的运行时换掉，
 属于要人点头的动作，不放在自动流程里。
 
-## 6. PR
+## 7. PR
 
 分支从基线分支开，PR 面向同一个基线分支，先开 draft。正文写清：
 
@@ -90,12 +120,20 @@ pnpm run build
 - 未完成项：还没处理的代码适配、upstream-guide 里相关但本次没动的变更
 - 验收结果：上一步每条命令的实际输出，不要只写「通过」
 
-## 坑
+## 8. 坑
 
 - pin 在三份清单里必须一致（`packages/host`、根 `package.json` 的 devDependencies、组合层）。
   不一致时 `verify:integrations` 第一条就拒，报「DSH pin 不一致」。
 - 不要用 `pnpm run verify:integrations` 代替 `node scripts/integrations/index.mts verify` 做预演：
   pnpm 会先跑 install，目标版本还没发时失败点会落在安装上，看不到镜像与 overlay 的真实状态。
 - 镜像的 tag 没 fetch 时 `dsh-overlay-rebase` 与 derive 的 vendor 任务都会红，先跑 `sync:vendor:dsh`。
+- 新开的工作树里 `vendor/deepseek-harness` 是个**空目录**（子模块不会跟着 worktree 初始化），
+  于是 `git -C vendor/deepseek-harness` 默默落到外层仓，`sync:vendor:dsh` 报「取不到该 tag」。
+  别去 fetch 外层仓：从主仓已 clone 的子模块对象库里现拉一份，再把 origin 指回上游。
+  ```
+  rm -rf vendor/deepseek-harness
+  git clone <主仓>/.git/modules/vendor/deepseek-harness vendor/deepseek-harness
+  git -C vendor/deepseek-harness remote set-url origin https://github.com/deepseek-ai/deepseek-harness.git
+  ```
 - overlay 是整文件拷贝，`.ts` 里大部分是上游原文。审 PR 时用 `integrations delta` 打出来的区间定位
   我们的改动，不要整份读。

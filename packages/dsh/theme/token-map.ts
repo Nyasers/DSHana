@@ -173,6 +173,9 @@ export const TOKEN_MAP: ReadonlyArray<AdapterRule> = [
   ["--dsw-alias-border-inverted", "--text"],
   ["--dsw-alias-border-inverted2", "--border"],
   ["--dsw-alias-separator-primary", "--border"],
+  // border-selected：选中态描边（上游两套主题同一支 bluish-400）。"选中"在本站就是品牌色那条边，
+  // 与 ghost-active-border / settings-card-stroke 同属语义明确的线 → --accent。
+  ["--dsw-alias-border-selected", "--accent"],
   ["--dsw-alias-bg-layer-4", "--bg-card"],
   ["--dsw-alias-bg-skeleton", { of: "--bg", shift: 8 }],
   ["--dsw-alias-bg-mask-photo", "--overlay-strong"],
@@ -188,7 +191,16 @@ export const TOKEN_MAP: ReadonlyArray<AdapterRule> = [
   // 那一下会串成另一个色。shimmer 的 shift 30 方向与上游的配对一致（浅色主题压深、深色提亮）。
   ["--dsw-alias-label-deep-diving", "--accent"],
   ["--dsw-alias-label-deep-diving-shimmer", { of: "--accent", shift: 30 }],
+  // hovercard（悬浮预览卡）：rc.2 起上游把它从一支固定深色（#2C2C2E）改成 alias 层的一对
+  // 深浅值，并把卡内的标签色单列成 hovercard-label-*。本表一直把它当**随主题走的内容面**
+  // （旧的 --dsw-hovercard-bg 就接 --bg-card），标签色就必须跟着换气：接成上游那支近白，
+  // 浅色主题上就是白字压白卡。三档标签按 label-primary / secondary / tertiary 的读法走。
   ["--dsw-hovercard-bg", "--bg-card"],
+  ["--dsw-alias-hovercard-bg", "--bg-card"],
+  ["--dsw-alias-hovercard-label-primary", "--text"],
+  ["--dsw-alias-hovercard-label-secondary", "--text-light"],
+  ["--dsw-alias-hovercard-label-tertiary", "--text-muted"],
+  ["--dsw-alias-hovercard-state-error", "--danger"],
 
   // ---- 卡片填充色：调色板值被当成随主题走的层次位 ----
   // ChangedFiles / Deliverables / PlanPreview 三组把填充色存在组件私有变量里（--changes-fill
@@ -220,6 +232,21 @@ export const TOKEN_MAP: ReadonlyArray<AdapterRule> = [
   ["--dsw-specific-sidebar-nav-item-active-accent", "--accent-light"],
   ["--dsw-specific-sidebar-nav-item-active", "--accent-light"],
   ["--dsw-specific-sidebar-nav-item-hover", "--accent-light"],
+  // 侧栏玻璃层（macOS vibrancy 下「新建会话」那颗纽的底）：上游是中性白洗（浅 55% / 深 15%）
+  // 叠在系统毛玻璃上。宿主没有毛玻璃，侧栏已经是实色的 --sidebar-bg，所以这里的洗色按本站
+  // 悬停语的读法接 —— accent 透明遮罩，与 nav-item-hover / button-floating-hover 同一格。
+  // collapsed-fill 上游就是 transparent（折叠时不要底），照旧给透明。
+  ["--dsw-specific-sidebar-glass-fill", "--accent-light"],
+  ["--dsw-specific-sidebar-glass-hover", "--accent-light"],
+  ["--dsw-specific-sidebar-glass-collapsed-hover", "--accent-light"],
+  // tint / wash：侧栏顶上的一层染色与上下两端的渐变洗（上游固定蓝/紫透明色）。两格一色 + 两格
+  // 到全透明，拼出来的就是从 accent 洗色淡到无的渐变；不跟随上游的蓝紫双色相，否则侧栏里
+  // 会多出一支与主题无关的紫。
+  ["--dsw-specific-sidebar-tint", "--accent-light"],
+  ["--dsw-specific-sidebar-wash-top", "--accent-light"],
+  ["--dsw-specific-sidebar-wash-bottom", "--accent-light"],
+  // 侧栏右缘的高光闪：浅色取品牌蓝、深色取纯白，要的是「一道强调光」而不是某个面 → --accent。
+  ["--dsw-specific-sidebar-right-flash", "--accent"],
   ["--dsw-specific-tip", "--accent-light"],
 
   // ---- 设置卡片 / 引导面 / 菜单面 ----
@@ -243,6 +270,16 @@ export const TOKEN_MAP: ReadonlyArray<AdapterRule> = [
   // 一档（0.94 对菜单底的 0.58），要的正是「遮住底下滚过去的内容」。本表的菜单面本来就是实色，
   // 两格落同一处即可，也恰好满足吸顶要不透明的本意。
   ["--dsw-alias-menu-group-header-fill", "--sidebar-bg"],
+
+  // ---- rc.2 新增：卡片 / 轨迹 / 引导条 / 上传槽 ----
+  // card-fill 与 bg-layer-1/2 同值（浅 neutral-50 / 深 850），是内容与面板面 → --bg-card，
+  // 与 settings-card-fill 同一格；card-fill-hover 是它深一档的悬停态 → 本站悬停语 --accent-light。
+  ["--dsw-alias-card-fill", "--bg-card"],
+  ["--dsw-alias-card-fill-hover", "--accent-light"],
+  // trajectory-accent 是轨迹里那支强调蓝（两套主题都是 blue-500），与 brand 同读法。
+  ["--dsw-alias-trajectory-accent", "--accent"],
+  // guide-hero 是引导页顶图条的中性面（浅 200 / 深 700，随明暗翻转）→ 层次偏移。
+  ["--dsw-specific-guide-hero", { of: "--bg", shift: 8 }],
 ];
 
 /**
@@ -260,8 +297,8 @@ export const PASSTHROUGH: ReadonlyArray<{ match: RegExp; why: string }> = [
     why: "调色板：固定色值本身不随主题走。上面单列的四个 neutral 值是例外——它们被组件当层次位用。",
   },
   {
-    match: /^--dsw-alias-(tooltip-bg|tooltip-key-bg|toast-bg|toast-label)$/,
-    why: "深色浮层 + 硬编码反白字的功能性配对：接成宿主卡片色会白底白字（key-bg 是 tooltip 底色掺白的按键底，同属这一层）。",
+    match: /^--dsw-alias-(tooltip-bg|tooltip-key-bg|tooltip-label|toast-bg|toast-label|toast-action)$/,
+    why: "深色浮层 + 硬编码反白字的功能性配对：接成宿主卡片色会白底白字（key-bg 是 tooltip 底色掺白的按键底，tooltip-label 是那层上的字，toast-action 是深底上的链接色，同属这一层）。",
   },
   {
     match: /^--dsw-focus-ring-/,
@@ -296,7 +333,31 @@ export const PASSTHROUGH: ReadonlyArray<{ match: RegExp; why: string }> = [
     why: "空态插画内部的六层中性层次（浅 55/90/310、深 700/750/850）：它们描的是插画自身的结构，宿主没有“插画面”这一层语义位；接成宿主灰阶会把插画压成同一色块，接成面则与卡片底贴死。",
   },
   {
-    match: /^--dsw-alias-state-done-primary$/,
-    why: "“已完成”标记色（浅 violet-600 / 深 violet-400）：上游特意与 success（绿）分开——接成 --green 就与“成功”同读，接成 --accent 就与品牌色混同，宿主调色板里没有紫色语义位，保持原生。",
+    match: /^--dsw-alias-(state-done-primary|hovercard-state-done)$/,
+    why: "“已完成”标记色（浅 violet-600 / 深 violet-400）：上游特意与 success（绿）分开——接成 --green 就与“成功”同读，接成 --accent 就与品牌色混同，宿主调色板里没有紫色语义位，保持原生。悬浮预览卡里的 hovercard-state-done 是同一支 violet 的标记色，同一个判法。",
+  },
+  {
+    match: /^--dsw-alias-chart-(messages|system|tools)$/,
+    why: "统计图的三支分类色（蓝 / 中性灰蓝 / 紫）：它们是**一组**要被看成不同东西的语汇，不是“底色深一档”。宿主调色板里只有一两个可用的语义色（--accent / --text-light），接过去会把三分类压成一种颜色，反而不如上游自己的调色板。",
+  },
+  {
+    match: /^--dsw-alias-json-tree-[a-z]+$/,
+    why: "JSON 树的语法着色（关键词蓝 / 字符红 / 数字 / 属性 / 标点 / 图标 / 悬停底）：这是代码着色语汇，与编辑器、shiki 同族，本身不随主题色相走；接成宿主色会把语法层拆开（字符串与错误同色）。",
+  },
+  {
+    match: /^--dsw-alias-label-on-color$/,
+    why: "彩色面上的反白字（两套主题都是近白）：宿主没有“坐在彩色面上”这个语义位。接 --bg-card 在浅色主题碰巧对（近白），深色主题就变成暗字压蓝底；保持原生。",
+  },
+  {
+    match: /^--dsw-alias-card-tile-fill$/,
+    why: "卡片内的瓦片用一层中性白（浅 50% / 深 5%）：它是一个**半透明叠加**，不是层次位——靠上游自己的明暗两套 alpha 随着底算，接偏移会把它变成实色、跟卡片底贴死。",
+  },
+  {
+    match: /^--dsw-specific-file-upload-track$/,
+    why: "上传进度槽：上游两套主题都用同一支 8% 黑叠底（槽总是比面深），是最接近系统原生槽的画法；宿主没有“叠加加深”这种变量，shift 会在深色主题反向提亮，所以保持原生。",
+  },
+  {
+    match: /^--dsw-specific-sidebar-(glass-collapsed-fill|wash-(top|bottom)-clear)$/,
+    why: "上游给的就是 transparent（折叠时不要底、渐变的两个透明端点）：它们要的就是“没有颜色”，本表能给的也只有透明，保持原生最直白。",
   },
 ];
