@@ -63,6 +63,11 @@ node scripts/dev/dsh-bump.mts --to <版本>             # 把 pin 写回目标�
 
 机械部分完成后 `verify:integrations` 应当只剩冲突项。
 
+⚠ 上游若往 `OPTIONAL_BUNDLES` 里加了新 bundle（rc.3 的 `@deepseek-ai/dsh-deepseek-chat-import`
+就是这样），根 `pnpm-workspace.yaml` 的 `excluded-on-demand` 段要跟着加一行：stub 通道、内核依赖
+摘除、离线 catalog 注入三处都从那一段读，加一行三处同时生效。对账闸是 `pnpm run verify:on-demand`
+（挂在 `build` 链上，CI 每次 PR 都跑），不跟就在构建阶段红，而不是等到出包。
+
 ## 4. 冲突
 
 冲突的 overlay 不写回，脚本会列出集成名与文件。用 `--diff3` 标记看三方：中间那段是 base（旧上游），
@@ -101,6 +106,7 @@ Agent Team、Office 一整套、账号通知面板，以及预置里的 `tool-of
 ```
 pnpm run verify:integrations   # 23 份 overlay 全部对得上
 pnpm run verify:bundle          # 组合层 12 份派生面对得上、行→包自洽
+pnpm run verify:on-demand       # 按需名单与上游 OPTIONAL_BUNDLES 一一对应（build 链已含）
 pnpm run derive:check           # 派生文件没有漂移（gitlink 一项要等 commit 后才绿）
 pnpm run check:type
 node --test tests/
