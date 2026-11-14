@@ -25,8 +25,6 @@ overrides:
 
   # 不使用的产品面
   "@deepseek-ai/dsh-acp-app": "-"
-  # 账号面：rc.2 把 api-account-controller 换成了 deepseek-account（下面那几条）。
-  # 改名前的名字已从上游消失，留着只会让人以为还挂着一条。
   "@deepseek-ai/dsh-client-product-analytics": "-"
   "@deepseek-ai/dsh-client-ui-account-notifications": "-"
   "@deepseek-ai/dsh-client-ui-entry-customization": "-"
@@ -38,16 +36,11 @@ overrides:
   "@deepseek-ai/dsh-deepseek-llm-api-extensions": "-"
   "@deepseek-ai/dsh-headless": "-"
   "@deepseek-ai/dsh-host-product-telemetry-otel": "-"
-  # rc.2 把 DeepSeek 搜索/取回的凭据解析挪进了 dsh-llm-deepseek 这个库（web 两个 provider 直接 import 它的
-  # resolveDeepSeekApiKey 一族），所以它不能再当“官方 LLM adapter”剔——它只是一库，不注册路由。
-  # 真正注册路由的两个（-account / -api-key）继续不交付；web-deepseek-api 同时 import 那两个，
-  # 一并剔掉（搜索仍由 web-search-deepseek + web-fetch-http 提供）。
   "@deepseek-ai/dsh-llm-deepseek-account": "-"
   "@deepseek-ai/dsh-llm-deepseek-api-key": "-"
   "@deepseek-ai/dsh-llm-pi-ai": "-"
   "@deepseek-ai/dsh-mcp-manager": "-"
   "@deepseek-ai/dsh-message-feedback": "-"
-  # Office 面：rc.2 把 office-to-pdf 换成了 office-kit，并拆出 tool-office 与 skill-office 三件。
   "@deepseek-ai/dsh-office-kit": "-"
   "@deepseek-ai/dsh-otel": "-"
   "@deepseek-ai/dsh-plugin-package-inventory-deepseek": "-"
@@ -62,16 +55,12 @@ overrides:
   "@deepseek-ai/dsh-subagent-codex": "-"
   "@deepseek-ai/dsh-tool-office": "-"
   "@deepseek-ai/dsh-web-app": "-"
-  # web-deepseek-api：rc.2 起它同时 import -account / -api-key 两个适配器（本形态不装），
-  # 行由 prune-mirror 随包一起剃；搜索走 web-search-deepseek，取回走 web-fetch-http。
   "@deepseek-ai/dsh-web-deepseek-api": "-"
 
   # 按需安装的包
   # >>> excluded-on-demand
-  "@deepseek-ai/dsh-personalized-recommendations": "-"
-  # rc.2 把 agent-team-profile 从可选名单里拿走（agent-team 改为 base 默认带，见上面剔除面），
-  # 同时把 cua-bundle 从 ON_DEMAND 提成可选 bundle；两个名单都是打包时的硬校验对象。
   "@deepseek-ai/dsh-cua-bundle": "-"
+  "@deepseek-ai/dsh-deepseek-chat-import": "-"
   "@deepseek-ai/dsh-experimental-auto-review": "-"
   "@deepseek-ai/dsh-experimental-badge-skill-bundle": "-"
   "@deepseek-ai/dsh-experimental-cot-translation-bundle": "-"
@@ -85,17 +74,13 @@ overrides:
   "@deepseek-ai/dsh-experimental-terminal-bundle": "-"
   "@deepseek-ai/dsh-experimental-tool-worktree": "-"
   "@deepseek-ai/dsh-experimental-voice-input-bundle": "-"
-  # rc.3 把它新加进上游 OPTIONAL_BUNDLES（实验面，默认关）：这份名单必须与上游一一对应，
-  # 少了打包时 assertMatchesUpstreamOptional 当场报「上游有而我们没改按需」。
-  "@deepseek-ai/dsh-deepseek-chat-import": "-"
+  "@deepseek-ai/dsh-personalized-recommendations": "-"
   # <<< excluded-on-demand
 
   # 安全修复
-  ## CVE-2023-54404
-  zod: 4.6.7
-  ## CVE-2026-109869
+  ## GHSA-xjj6-f33q-929c
   undici: 8.12.4
-  ## CVE-2026-111769
+  ## GHSA-6prh-2h8m-c8cw
   "@modelcontextprotocol/client": 2.3.1
 
 # 打包目标设置
