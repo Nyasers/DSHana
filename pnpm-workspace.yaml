@@ -85,6 +85,9 @@ overrides:
   "@deepseek-ai/dsh-experimental-terminal-bundle": "-"
   "@deepseek-ai/dsh-experimental-tool-worktree": "-"
   "@deepseek-ai/dsh-experimental-voice-input-bundle": "-"
+  # rc.3 把它新加进上游 OPTIONAL_BUNDLES（实验面，默认关）：这份名单必须与上游一一对应，
+  # 少了打包时 assertMatchesUpstreamOptional 当场报「上游有而我们没改按需」。
+  "@deepseek-ai/dsh-deepseek-chat-import": "-"
   # <<< excluded-on-demand
 
   # 安全修复

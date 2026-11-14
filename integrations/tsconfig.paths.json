@@ -1145,6 +1145,15 @@
       "@deepseek-ai/dsh-experimental-cua-macos": [
         "../vendor/deepseek-harness/packages/experimental/cua-macos/src/index.ts"
       ],
+      "@deepseek-ai/dsh-deepseek-chat-import": [
+        "../vendor/deepseek-harness/packages/experimental/deepseek-chat-import/src/index.ts"
+      ],
+      "@deepseek-ai/dsh-deepseek-chat-import/client": [
+        "../vendor/deepseek-harness/packages/experimental/deepseek-chat-import/src/client/index.ts"
+      ],
+      "@deepseek-ai/dsh-deepseek-chat-import/types": [
+        "../vendor/deepseek-harness/packages/experimental/deepseek-chat-import/src/types.ts"
+      ],
       "@deepseek-ai/dsh-experimental-forge": [
         "../vendor/deepseek-harness/packages/experimental/forge/src/index.ts"
       ],
