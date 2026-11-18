@@ -16,6 +16,16 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - "@deepseek-ai/*"
 
+# 安全审计白名单
+# picomatch 4.0.7 命中 GHSA-fc5q-39xc-vjpf（ReDoS via analyzeRepeatedExtglob）：
+# npm latest 与上游最后 release 都是 4.0.7，没有可升的 patched 版本。
+# 跟踪入口 micromatch/picomatch#247：advisory 在争议中，已向 CNA 提交撤回请求，
+# 触发需要外部控制 glob 模式；本仓只在 dsh-hmr 里匹配自己的 ignored 配置，够不到。
+# advisory 被撤销或上游发修复版，任一发生就删掉这条；后者按 overrides 的「安全修复」惯例钉版本。
+auditConfig:
+  ignoreGhsas:
+    - GHSA-fc5q-39xc-vjpf
+
 overrides:
   # HanaApp SDK
   "@hana/app-sdk": "file:vendor/hana-app-sdk/hana-app-sdk.tgz"
