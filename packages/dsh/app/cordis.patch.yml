@@ -34,9 +34,13 @@
 
 # ── Web 搜索/取回的 provider 选择 ───────────────────────────────────────────────
 #
-# base 那一行把 `searchProvider` 指成 `deepseek-search-api`——那是 web-deepseek-api 注册的 provider。
-# 本形态不交付那个包（rc.2 起它 import 两个被剔的 LLM 适配器），所以改指 legacy Messages 搜索
-# provider（web-search-deepseek 的 `deepseek-official`）；取回仍走 `http`（web-fetch-http）。
+# 本形态把推理留在宿主（hana）里，dsh 侧只做适配器透传，不持有 DeepSeek 的模型路由凭据。上游
+# rc.5 起 base 不再固定 `searchProvider`，改为由 dsh-web 按会话模型的 provider 路由在
+# `deepseek-official` 与 `deepseek-search-api` 之间选；那套「按路由决定计费口径」在本形态不成立，
+# 搜索只认自己那份 key。所以这里显式钉住 legacy Messages 搜索 provider（web-search-deepseek 的
+# `deepseek-official`），取回仍走 `http`（web-fetch-http）。
+# `deepseek-search-api` 由 web-deepseek-api 注册，本形态不交付那个包（rc.2 起它 import 两个被剔的
+# LLM 适配器），自动选择的另一半本来也落不到。
 # 行不带 name：这是对 base 那条 `web` 行的 config 重写，包仍由 base 自己声明。
 - id: web
   config:
