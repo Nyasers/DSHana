@@ -9,7 +9,7 @@
     "./*": "./src/*"
   },
   "dependencies": {
-    "@deepseek-ai/dsh": "0.2.2-rc.5",
+    "@deepseek-ai/dsh": "0.2.3-alpha.2",
     "@dshana/shared": "workspace:*"
   }
 }

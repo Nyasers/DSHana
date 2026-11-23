@@ -125,6 +125,8 @@
             config:
               fetch: true
               searchTimeoutMs: 60000
+          - id: tool-cordis
+            name: '@deepseek-ai/dsh-tool-cordis'
           - id: present
             name: '@deepseek-ai/dsh-tool-present'
           # 本层不带 Office 工具（包不进 dependencies），注释保留供上游对账：
