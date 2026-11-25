@@ -49,7 +49,6 @@ overrides:
   "@deepseek-ai/dsh-llm-deepseek-account": "-"
   "@deepseek-ai/dsh-llm-deepseek-api-key": "-"
   "@deepseek-ai/dsh-llm-pi-ai": "-"
-  "@deepseek-ai/dsh-mcp-manager": "-"
   "@deepseek-ai/dsh-message-feedback": "-"
   "@deepseek-ai/dsh-office-kit": "-"
   "@deepseek-ai/dsh-otel": "-"

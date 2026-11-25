@@ -24,7 +24,6 @@ overrides:
   '@deepseek-ai/dsh-llm-deepseek-account': '-'
   '@deepseek-ai/dsh-llm-deepseek-api-key': '-'
   '@deepseek-ai/dsh-llm-pi-ai': '-'
-  '@deepseek-ai/dsh-mcp-manager': '-'
   '@deepseek-ai/dsh-message-feedback': '-'
   '@deepseek-ai/dsh-office-kit': '-'
   '@deepseek-ai/dsh-otel': '-'
@@ -529,6 +528,9 @@ importers:
       '@deepseek-ai/dsh-mcp-client':
         specifier: 0.2.3-alpha.1
         version: 0.2.3-alpha.1(885261b035fa6982a4d128baaed6bafe)
+      '@deepseek-ai/dsh-mcp-manager':
+        specifier: 0.2.3-alpha.1
+        version: 0.2.3-alpha.1(@deepseek-ai/cordis-plugin-loader@1.1.0)(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-credentials@0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-launch-environment@0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0)))(@deepseek-ai/dsh-mcp-client@0.2.3-alpha.1(885261b035fa6982a4d128baaed6bafe))(@deepseek-ai/dsh-tools@0.2.3-alpha.1(1e4a795609acd76b320ec5e194af14e8))(@deepseek-ai/dsh-typert-protocol@0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-error@0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0)))(@deepseek-ai/dsh-util-values@0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0))
       '@deepseek-ai/dsh-message-quotes':
         specifier: 0.2.3-alpha.1
         version: 0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0)
@@ -1776,6 +1778,17 @@ packages:
         optional: true
       '@deepseek-ai/dsh-system-prompt':
         optional: true
+
+  '@deepseek-ai/dsh-mcp-manager@0.2.3-alpha.1':
+    resolution: {integrity: sha512-NNio0CZDEuZmo3En/42QKRfnlZB/2WGHkVVbS09Z4fWxQUif8oANvaV9+bTtJGHFzlbbOHmR4bn2+I7Kh61whQ==}
+    peerDependencies:
+      '@deepseek-ai/cordis': ~4.1.0
+      '@deepseek-ai/cordis-plugin-loader': ~1.1.0
+      '@deepseek-ai/dsh-credentials': 0.2.3-alpha.1
+      '@deepseek-ai/dsh-mcp-client': 0.2.3-alpha.1
+      '@deepseek-ai/dsh-tools': 0.2.3-alpha.1
+      '@deepseek-ai/dsh-typert-protocol': 0.2.3-alpha.1
+      '@deepseek-ai/dsh-util-values': 0.2.3-alpha.1
 
   '@deepseek-ai/dsh-mcp-resources@0.2.3-alpha.1':
     resolution: {integrity: sha512-lKGXNr4ddOom/ZuunNTuC0A2AWWIH93XeLRVhqR32o77moXP/jHE9VIx7+9WJTY9VN41fMtjmZ7SIju1X3x4XQ==}
@@ -5879,6 +5892,19 @@ snapshots:
       '@deepseek-ai/dsh-host-webserver': 0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0)
       '@deepseek-ai/dsh-mcp-resources': 0.2.3-alpha.1(e33735ef402987078d180d2de1fded09)
       '@deepseek-ai/dsh-system-prompt': 0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-llm@0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-error@0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0)))(@deepseek-ai/dsh-scope@0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0))(@deepseek-ai/dsh-session-projection@0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-session@0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-error@0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0))(@deepseek-ai/dsh-scope@0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0))))(@deepseek-ai/dsh-session@0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-error@0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0))(@deepseek-ai/dsh-scope@0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0)))
+
+  '@deepseek-ai/dsh-mcp-manager@0.2.3-alpha.1(@deepseek-ai/cordis-plugin-loader@1.1.0)(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-credentials@0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-launch-environment@0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0)))(@deepseek-ai/dsh-mcp-client@0.2.3-alpha.1(885261b035fa6982a4d128baaed6bafe))(@deepseek-ai/dsh-tools@0.2.3-alpha.1(1e4a795609acd76b320ec5e194af14e8))(@deepseek-ai/dsh-typert-protocol@0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-error@0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0)))(@deepseek-ai/dsh-util-values@0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0))':
+    dependencies:
+      '@deepseek-ai/cordis': 4.1.0(@deepseek-ai/cordis-plugin-include@1.1.0)(@deepseek-ai/cordis-plugin-loader@1.1.0)
+      '@deepseek-ai/cordis-plugin-loader': 1.1.0(@deepseek-ai/cordis@4.1.0)(node-addon-require-builtin@0.1.9)
+      '@deepseek-ai/dsh-credentials': 0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-launch-environment@0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0))
+      '@deepseek-ai/dsh-mcp-client': 0.2.3-alpha.1(885261b035fa6982a4d128baaed6bafe)
+      '@deepseek-ai/dsh-timeout': 0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0)
+      '@deepseek-ai/dsh-tools': 0.2.3-alpha.1(1e4a795609acd76b320ec5e194af14e8)
+      '@deepseek-ai/dsh-typert-protocol': 0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0)(@deepseek-ai/dsh-error@0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0))
+      '@deepseek-ai/dsh-util-values': 0.2.3-alpha.1(@deepseek-ai/cordis@4.1.0)
+      '@deepseek-ai/schemastery': 3.19.0
+      zod: 4.6.6
 
   '@deepseek-ai/dsh-mcp-resources@0.2.3-alpha.1(e33735ef402987078d180d2de1fded09)':
     dependencies:

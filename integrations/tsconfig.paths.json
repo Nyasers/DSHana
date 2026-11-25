@@ -1756,10 +1756,12 @@
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-mcp-client"
       ],
       "@deepseek-ai/dsh-mcp-manager": [
-        "../vendor/deepseek-harness/packages/mcp/mcp-manager/src/index.ts"
+        "../vendor/deepseek-harness/packages/mcp/mcp-manager/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-mcp-manager"
       ],
       "@deepseek-ai/dsh-mcp-manager/types": [
-        "../vendor/deepseek-harness/packages/mcp/mcp-manager/src/types.ts"
+        "../vendor/deepseek-harness/packages/mcp/mcp-manager/src/types.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-mcp-manager"
       ],
       "@deepseek-ai/dsh-mcp-resources": [
         "../vendor/deepseek-harness/packages/mcp/mcp-resources/src/index.ts",
