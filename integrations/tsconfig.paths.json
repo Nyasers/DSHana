@@ -369,10 +369,12 @@
         "../vendor/deepseek-harness/packages/client/ui-account-notifications/src/client/index.ts"
       ],
       "@deepseek-ai/dsh-client-ui-action-cards": [
-        "../vendor/deepseek-harness/packages/client/ui-action-cards/src/index.ts"
+        "../vendor/deepseek-harness/packages/client/ui-action-cards/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-action-cards"
       ],
       "@deepseek-ai/dsh-client-ui-action-cards/client": [
-        "../vendor/deepseek-harness/packages/client/ui-action-cards/src/client/index.ts"
+        "../vendor/deepseek-harness/packages/client/ui-action-cards/src/client/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-action-cards"
       ],
       "@deepseek-ai/dsh-client-ui-agent-preset": [
         "../vendor/deepseek-harness/packages/client/ui-agent-preset/src/index.ts",
@@ -459,10 +461,12 @@
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-conversation"
       ],
       "@deepseek-ai/dsh-client-ui-creation-recommendations": [
-        "../vendor/deepseek-harness/packages/client/ui-creation-recommendations/src/index.ts"
+        "../vendor/deepseek-harness/packages/client/ui-creation-recommendations/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-creation-recommendations"
       ],
       "@deepseek-ai/dsh-client-ui-creation-recommendations/client": [
-        "../vendor/deepseek-harness/packages/client/ui-creation-recommendations/src/client/index.ts"
+        "../vendor/deepseek-harness/packages/client/ui-creation-recommendations/src/client/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-creation-recommendations"
       ],
       "@deepseek-ai/dsh-client-ui-deliverables": [
         "../vendor/deepseek-harness/packages/client/ui-deliverables/src/index.ts",
@@ -602,10 +606,12 @@
         "../vendor/deepseek-harness/packages/client/ui-plugin-market/src/client/index.ts"
       ],
       "@deepseek-ai/dsh-client-ui-plugin-recommendations": [
-        "../vendor/deepseek-harness/packages/client/ui-plugin-recommendations/src/index.ts"
+        "../vendor/deepseek-harness/packages/client/ui-plugin-recommendations/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-plugin-recommendations"
       ],
       "@deepseek-ai/dsh-client-ui-plugin-recommendations/client": [
-        "../vendor/deepseek-harness/packages/client/ui-plugin-recommendations/src/client/index.ts"
+        "../vendor/deepseek-harness/packages/client/ui-plugin-recommendations/src/client/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-plugin-recommendations"
       ],
       "@deepseek-ai/dsh-client-ui-primitives": [
         "../vendor/deepseek-harness/packages/client/ui-primitives/src/index.ts"
@@ -651,19 +657,24 @@
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-session"
       ],
       "@deepseek-ai/dsh-client-ui-session-panel": [
-        "../vendor/deepseek-harness/packages/client/ui-session-panel/src/index.ts"
+        "../vendor/deepseek-harness/packages/client/ui-session-panel/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-session-panel"
       ],
       "@deepseek-ai/dsh-client-ui-session-panel/client": [
-        "../vendor/deepseek-harness/packages/client/ui-session-panel/src/client/index.ts"
+        "../vendor/deepseek-harness/packages/client/ui-session-panel/src/client/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-session-panel"
       ],
       "@deepseek-ai/dsh-client-ui-session-status": [
-        "../vendor/deepseek-harness/packages/client/ui-session-status/src/index.ts"
+        "../vendor/deepseek-harness/packages/client/ui-session-status/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-session-status"
       ],
       "@deepseek-ai/dsh-client-ui-session-status/client": [
-        "../vendor/deepseek-harness/packages/client/ui-session-status/src/client/index.ts"
+        "../vendor/deepseek-harness/packages/client/ui-session-status/src/client/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-session-status"
       ],
       "@deepseek-ai/dsh-client-ui-session-status/types": [
-        "../vendor/deepseek-harness/packages/client/ui-session-status/src/types.ts"
+        "../vendor/deepseek-harness/packages/client/ui-session-status/src/types.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-session-status"
       ],
       "@deepseek-ai/dsh-client-ui-settings": [
         "../vendor/deepseek-harness/packages/client/ui-settings/src/index.ts",
@@ -1422,16 +1433,20 @@
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-cordis-host-runner"
       ],
       "@deepseek-ai/dsh-creation-recommendations": [
-        "../vendor/deepseek-harness/packages/extensions/creation-recommendations/src/index.ts"
+        "../vendor/deepseek-harness/packages/extensions/creation-recommendations/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-creation-recommendations"
       ],
       "@deepseek-ai/dsh-creation-recommendations/types": [
-        "../vendor/deepseek-harness/packages/extensions/creation-recommendations/src/types.ts"
+        "../vendor/deepseek-harness/packages/extensions/creation-recommendations/src/types.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-creation-recommendations"
       ],
       "@deepseek-ai/dsh-plugin-recommendations": [
-        "../vendor/deepseek-harness/packages/extensions/plugin-recommendations/src/index.ts"
+        "../vendor/deepseek-harness/packages/extensions/plugin-recommendations/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-plugin-recommendations"
       ],
       "@deepseek-ai/dsh-plugin-recommendations/types": [
-        "../vendor/deepseek-harness/packages/extensions/plugin-recommendations/src/types.ts"
+        "../vendor/deepseek-harness/packages/extensions/plugin-recommendations/src/types.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-plugin-recommendations"
       ],
       "@deepseek-ai/dsh-tool-cordis": [
         "../vendor/deepseek-harness/packages/extensions/tool-cordis/src/index.ts",
@@ -1584,10 +1599,12 @@
         "../vendor/deepseek-harness/packages/identity/anonymous-user-id/src/index.ts"
       ],
       "@deepseek-ai/dsh-action-cards": [
-        "../vendor/deepseek-harness/packages/interaction/action-cards/src/index.ts"
+        "../vendor/deepseek-harness/packages/interaction/action-cards/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-action-cards"
       ],
       "@deepseek-ai/dsh-action-cards/types": [
-        "../vendor/deepseek-harness/packages/interaction/action-cards/src/types.ts"
+        "../vendor/deepseek-harness/packages/interaction/action-cards/src/types.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-action-cards"
       ],
       "@deepseek-ai/dsh-commands": [
         "../vendor/deepseek-harness/packages/interaction/commands/src/index.ts",
@@ -1958,7 +1975,8 @@
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-session-turn-outline"
       ],
       "@deepseek-ai/dsh-tool-session-control": [
-        "../vendor/deepseek-harness/packages/session/tool-session-control/src/index.ts"
+        "../vendor/deepseek-harness/packages/session/tool-session-control/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-tool-session-control"
       ],
       "@deepseek-ai/dsh-working-directory": [
         "../vendor/deepseek-harness/packages/session/working-directory/src/index.ts",
