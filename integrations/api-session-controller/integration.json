@@ -11,17 +11,17 @@
   "files": [
     {
       "path": "src/index.ts",
-      "upstreamSha256": "595a02cfeca055a498aa70cce949c648d0ce840a8bcdce01eb4bc65d692a79e8",
+      "upstreamSha256": "ecf8400ff3564a6f1cbfb9b38c1e4b8b5a7f05d2c4d68b490aa11efed0785c8f",
       "deltaSha256": "7fa8bff99e627c5e039027bde64924c335043ac939263c6474f8a5929d1b1874"
     },
     {
       "path": "src/types.ts",
-      "upstreamSha256": "9cd609ff9b0f2afe8452a428eed72993959403c9bdf1584ff232d5b13288e29e",
+      "upstreamSha256": "b5d707877367e7447ca22a67c2a0f1af7aa01a9402c5cb2799874ccae3c5c6c3",
       "deltaSha256": "1973509a4425bed14cf68df5ee581b17b4b71219ad5a39f621c5e712716372c0"
     },
     {
       "path": "src/commands.ts",
-      "upstreamSha256": "d387517e345d444e2ebf15c1af0c74e0ac59b55774cbebfba03f4037946b185a",
+      "upstreamSha256": "1369a1cda3a0c8b66b9dd8c0258175afe2ea7ad8a4dbca8bb8cb69ac68c5b43a",
       "deltaSha256": "2bc8a761ee44523bdcf71976f4418cc4dbebbd3c7e420124119dc4192118968e"
     }
   ],

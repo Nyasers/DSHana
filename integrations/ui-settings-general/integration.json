@@ -4,12 +4,12 @@
   "files": [
     {
       "path": "src/client/SettingsRoot.tsx",
-      "upstreamSha256": "1ac64bf90078d632f97bbfccd3aa6b9aba49435558b8b17dd77491cfacbbafb5",
-      "deltaSha256": "7c97daf83691ce70bcb7530071d597a50939aaa134d519c43474cd949ca32129"
+      "upstreamSha256": "847477d12b67c0332fbd0b4c7a24451644a6d09c891fa07839ceaf74f9da464d",
+      "deltaSha256": "5547b4c78c82882059a3a73c4bca796bffc9a1d4761640be60cab2a0f20c7940"
     },
     {
       "path": "src/client/SettingsRoot.module.css",
-      "upstreamSha256": "c61ed2371dd6e86c0e850658f84edc9cc45c5662e61b5340d2235ba4a2ec1d9f",
+      "upstreamSha256": "e730d4c5cf754a3ba466886c61c91eaee4a17b7dca4aed0ded995e4b6ab53251",
       "deltaSha256": "a090bb81208e483858c7b78fd15720feca3f960a0064ae1d8fb67d1df2b74f3f"
     },
     {
