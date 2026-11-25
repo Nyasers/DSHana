@@ -431,13 +431,16 @@
         "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-commands"
       ],
       "@deepseek-ai/dsh-client-ui-connector-account": [
-        "../vendor/deepseek-harness/packages/client/ui-connector-account/src/index.ts"
+        "../vendor/deepseek-harness/packages/client/ui-connector-account/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-connector-account"
       ],
       "@deepseek-ai/dsh-client-ui-connector-account/client": [
-        "../vendor/deepseek-harness/packages/client/ui-connector-account/src/client/index.ts"
+        "../vendor/deepseek-harness/packages/client/ui-connector-account/src/client/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-connector-account"
       ],
       "@deepseek-ai/dsh-client-ui-connector-account/types": [
-        "../vendor/deepseek-harness/packages/client/ui-connector-account/src/types.ts"
+        "../vendor/deepseek-harness/packages/client/ui-connector-account/src/types.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-client-ui-connector-account"
       ],
       "@deepseek-ai/dsh-client-ui-context-menu": [
         "../vendor/deepseek-harness/packages/client/ui-context-menu/src/index.ts",
@@ -1720,10 +1723,12 @@
         "../vendor/deepseek-harness/packages/lsp/tool-lsp/src/index.ts"
       ],
       "@deepseek-ai/dsh-mcp-account": [
-        "../vendor/deepseek-harness/packages/mcp/mcp-account/src/index.ts"
+        "../vendor/deepseek-harness/packages/mcp/mcp-account/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-mcp-account"
       ],
       "@deepseek-ai/dsh-mcp-account/types": [
-        "../vendor/deepseek-harness/packages/mcp/mcp-account/src/types.ts"
+        "../vendor/deepseek-harness/packages/mcp/mcp-account/src/types.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-mcp-account"
       ],
       "@deepseek-ai/dsh-mcp-client": [
         "../vendor/deepseek-harness/packages/mcp/mcp-client/src/index.ts",

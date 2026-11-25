@@ -184,20 +184,21 @@
     # that installed plugins register, with status and recovery over Remote.
     # Credential templates and OAuth grants resolve through the credentials
     # provider, so the manager starts after it.
-    # 本形态不带 MCP 管理器（包不进 dependencies，宿主侧也不开 MCP），注释保留供上游对账：
-    # - id: mcp-manager
-    #   name: '@deepseek-ai/dsh-mcp-manager'
-    #   inject: [credentials]
+    # dshana：MCP 这层宿主不提供（宿主只兜模型推理与凭据），所以由本层自带：管理器起 mcp-client
+    # 实例、管启停与重连；服务器条目来自本包 config.servers 与插件注册；凭据模板与 OAuth 授权
+    # 走 base 层的 credentials 服务（dsh-credentials-local，托管在 $DSH_HOME/.credentials.yaml），
+    # 与宿主侧那套凭据闸分账。
+    - id: mcp-manager
+      name: '@deepseek-ai/dsh-mcp-manager'
+      inject: [credentials]
 
-    # dshana：MCP 连接器账号面。它读的是 mcp-manager 的服务器视图，写的是连接器账号注册表；
-    # 而 MCP 这层能力宿主不提供也不代劳（宿主只兜模型推理与凭据，见 @dshana/dsh-provider），
-    # 所以 App 不带 mcp-manager 与连接器插件，这里就没有东西可映射。不是「宿主已经覆盖」。
-    # 顺带说清：它与 provider 账号（登录、余额、赠金，ui-settings-account 那套）是两回事，
-    # 后者早前已按「不带账号面」单独摘掉。注释供上游对账。
+    # dshana：连接器账号面与 mcp-manager 同进。它读的是管理器的服务器视图，写的是连接器账号
+    # 注册表；没有它，插件页上看不到 MCP 服务器的授权状态，也没地方发起授权。
+    # 它与 provider 账号（登录、余额、赠金，ui-settings-account 那套，未带）不是一回事。
     # MCP connector accounts on the Plugins page; connectors register their
     # OAuth server with `ctx.mcpAccounts`.
-    # - id: mcp-account
-    #   name: '@deepseek-ai/dsh-mcp-account'
+    - id: mcp-account
+      name: '@deepseek-ai/dsh-mcp-account'
 
     # Workspace commands and reconnect-safe projection over Typert Remote.
     - id: workspace-controller
@@ -400,12 +401,11 @@
       name: '@deepseek-ai/dsh-client-ui-plugin-manager'
 
     # dshana：连接器账号注册表的插件页分区，CLI app plugins 与 MCP connectors 共用这一张表。
-    # 这两类在宿主侧都没有对应能力（宿主只供模型推理），App 不带就是没有，挂上去只会是空壳。
-    # 与 provider 账号无关。注释供上游对账。
+    # 本层带它是因为 MCP 那套已带：mcp-account 把服务器授权状态写进这张表，它负责把表画出来。
     # Connector account sections on the Plugins page; CLI app plugins and MCP
     # connectors register their accounts with `ctx.connectorAccounts`.
-    # - id: ui-connector-account
-    #   name: '@deepseek-ai/dsh-client-ui-connector-account'
+    - id: ui-connector-account
+      name: '@deepseek-ai/dsh-client-ui-connector-account'
 
     - id: ui-conversation
       name: '@deepseek-ai/dsh-client-ui-conversation'
