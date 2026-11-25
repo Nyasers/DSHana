@@ -294,11 +294,11 @@
         # The listener's bind IP is accepted separately from this list.
         trustedHosts: !!js ctx.webStartup.trustedHosts
 
-    # dshana：浏览器远端接入用的 token 签发与 HTTP cookie 交换（让另一个浏览器登同一个 Host）。
-    # 本形态是宿主页面里的嵌入式 App，页面访问由宿主那层负责，不在 App 内再开一套凭据闸。
-    # 与模型供应商凭据无关。注释供上游对账。
-    # - id: authentication-token
-    #   name: '@deepseek-ai/dsh-host-authentication-token'
+    # dshana：0.2.3 把 BrowserAuth 凭据面收到了这一行（host 侧 `connection` 服务连
+    # `authenticatedUrl()` 都由它提供），宿主那层的凭据交换与中继靠它才能建起来；
+    # 它不是给「另一个浏览器登录」才需要的东西。
+    - id: authentication-token
+      name: '@deepseek-ai/dsh-host-authentication-token'
 
     # Raw Blob and ReadableStream uploads run independently of Connection's
     # RPC and generation service.

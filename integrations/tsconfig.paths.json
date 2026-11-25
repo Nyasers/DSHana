@@ -1544,7 +1544,8 @@
         "../vendor/deepseek-harness/packages/host/authentication-desktop/src/index.ts"
       ],
       "@deepseek-ai/dsh-host-authentication-token": [
-        "../vendor/deepseek-harness/packages/host/authentication-token/src/index.ts"
+        "../vendor/deepseek-harness/packages/host/authentication-token/src/index.ts",
+        "../node_modules/.pnpm/node_modules/@deepseek-ai/dsh-host-authentication-token"
       ],
       "@deepseek-ai/dsh-host-directory-picker": [
         "../vendor/deepseek-harness/packages/host/directory-picker/src/index.ts",

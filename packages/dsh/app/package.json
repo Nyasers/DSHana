@@ -27,13 +27,13 @@
     }
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "~4.1.0",
-    "@deepseek-ai/cordis-plugin-loader": "~1.1.0",
+    "@deepseek-ai/cordis": "~4.2.0-alpha.1",
+    "@deepseek-ai/cordis-plugin-loader": "~1.2.0-alpha.1",
     "@deepseek-ai/dsh-shell-env": "0.2.3-alpha.1"
   },
   "dependencies": {
-    "@deepseek-ai/cordis": "~4.1.0",
-    "@deepseek-ai/cordis-plugin-loader": "~1.1.0",
+    "@deepseek-ai/cordis": "~4.2.0-alpha.1",
+    "@deepseek-ai/cordis-plugin-loader": "~1.2.0-alpha.1",
     "@deepseek-ai/dsh-action-cards": "0.2.3-alpha.1",
     "@deepseek-ai/dsh-agent-instructions": "0.2.3-alpha.1",
     "@deepseek-ai/dsh-agent-preset": "0.2.3-alpha.1",
@@ -122,6 +122,7 @@
     "@deepseek-ai/dsh-file-reference": "0.2.3-alpha.1",
     "@deepseek-ai/dsh-file-reference-local": "0.2.3-alpha.1",
     "@deepseek-ai/dsh-harness-dev-context": "0.2.3-alpha.1",
+    "@deepseek-ai/dsh-host-authentication-token": "0.2.3-alpha.1",
     "@deepseek-ai/dsh-host-directory-picker-auto": "0.2.3-alpha.1",
     "@deepseek-ai/dsh-host-directory-picker-browse": "0.2.3-alpha.1",
     "@deepseek-ai/dsh-host-directory-picker-native": "0.2.3-alpha.1",
@@ -171,7 +172,7 @@
     "@deepseek-ai/dsh-workflow-ptc": "0.2.3-alpha.1",
     "@deepseek-ai/dsh-workspace": "0.2.3-alpha.1",
     "@deepseek-ai/dsh-workspace-changes": "0.2.3-alpha.1",
-    "@deepseek-ai/schemastery": "~3.19.0",
+    "@deepseek-ai/schemastery": "~3.20.0-alpha.1",
     "@dshana/dsh-provider": "workspace:*",
     "@dshana/dsh-session": "workspace:*",
     "@dshana/dsh-theme": "workspace:*",
