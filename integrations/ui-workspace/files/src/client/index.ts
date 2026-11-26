@@ -1,14 +1,15 @@
-import { IconEditOutlineRegular, IconTrashOutlineRegular, IconPinFillRegular, IconPinOutlineRegular, IconUnarchiveOutlineRegular, IconArchiveOutlineRegular, IconBranchOutlineRegular, IconCopyOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconEditOutlineRegular, IconTrashOutlineRegular, IconPinFillRegular, IconPinOutlineRegular, IconUnarchiveOutlineRegular, IconArchiveOutlineRegular, IconBranchOutlineRegular, IconCopyOutlineRegular, IconMailReadOutlineRegular, IconMailUnreadOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { SessionMenu } from './session-actions/SessionMenu.tsx'
 import type {} from '@deepseek-ai/dsh-client-ui-context-menu/client'
 /**
  * Workspace plugin, browser half. Two registrations: WorkspaceBrowser fills
  * the sidebar shell's `sidebar.workspaces` hole (the whole browsing region),
  * and WorkspacePicker fills the conversation hero's picker hole
- * (`conversation.hero.workspace` — both hero forms). Both read real Host
- * Workspaces through the global useWorkspaces hook, and each declares its
- * own `single` directory-flow child hole for the composed picker package's
- * client half. WorkspaceBrowser additionally declares the two Session row
+ * (`conversation.hero.workspace` — both hero forms). The `workspace.picker`
+ * Component Factory renders the same picker for other plugins. All three read
+ * real Host Workspaces through the global useWorkspaces hook, and each
+ * declares its own `single` directory-flow child hole for the composed picker
+ * package's client half. WorkspaceBrowser additionally declares the two Session row
  * action lists. Built-in Session menu actions contribute structured data to
  * ctx.contextMenus, while external React entries retain the legacy Slot. Dialogs and
  * the row-action notice register in `shell.overlay` (see the contract module doc). It also declares two
@@ -19,6 +20,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-context-menu/client'
  */
 import type {} from '@deepseek-ai/dsh-client-product-analytics/client'
 import type { Context } from '@deepseek-ai/cordis'
+import type { SyncedConfig } from '@deepseek-ai/dsh-client-config/types'
+import type { WorkspaceNavigationConfig } from '../types.ts'
 import type { RemoteHostFacts } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ISessions, SessionForkError } from '@deepseek-ai/dsh-api-session-controller/client'
 import type {
@@ -39,8 +42,10 @@ import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 // Type-only: pulls the Session root standard-hook merge.
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
+// Type-only: pulls the useSessionStatus root standard-hook merge.
+import type {} from '@deepseek-ai/dsh-client-ui-session-status/client'
 import {
-  type ArchiveSessionInjected, type ForkSessionInjected, menuOpenStateFactory, type PinSessionInjected,
+  type ArchiveSessionInjected, type DirectoryFlowSlotName, type ForkSessionInjected, menuOpenStateFactory, type PinSessionInjected,
   type SessionArchiveConfirmInjected, type SessionArchiveConfirmRequest,
   type RenameSessionInjected, type RowToast, type RowToastInjected, type RowToastState, type SessionRenameDialogInjected,
   type WorkspaceActionRequest, type SessionIdInjected, type WorkspaceBrowserInjected, type WorkspacePickerInjected,
@@ -56,18 +61,49 @@ import { PinSessionRowButton } from './session-actions/PinSession.tsx'
 import { SessionRenameDialog } from './session-actions/RenameSession.tsx'
 import { RowActionToast } from './session-actions/RowActionToast.tsx'
 import { registerToasts } from './toast/register.ts'
-import { WorkspacePicker } from './WorkspacePicker.tsx'
+import { WorkspacePicker, WorkspacePickerFactory } from './WorkspacePicker.tsx'
 import { en, ja, es, fr, de, ru, pt, zh, type WorkspaceKey } from './locales.ts'
 
 export type { StartSessionOptions, UiWorkspace } from './navigation.ts'
 export type {
   DirectoryFlowOwnerProps, DirectoryFlowSlotName, DirectoryPickingHooks, DirectoryPickingInjected,
-  MenuOpenState, RowToast, SessionRenameTarget, SessionRowOwnerProps, UseMenuOpenState, WorkspaceBrowserInjected,
+  MenuOpenState, RowToast, SessionDragType, SessionRenameTarget, SessionRowOwnerProps, UseMenuOpenState, WorkspaceBrowserInjected,
   SessionRowScheduleOwnerProps,
   WorkspaceBrowserProps,
-  WorkspacePickerInjected, WorkspacePickerProps,
+  WorkspacePickerInjected, WorkspacePickerInput, WorkspacePickerProps,
 } from './contract/slots.ts'
 export type { WorkspaceKey } from './locales.ts'
+
+/** Localized follow-up text for the existing archive notice. */
+export interface ArchiveNotice {
+  readonly text: string
+  readonly tone: 'success' | 'warning'
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /**
+     * Replace the archive notice with a localized follow-up description.
+     * @param sessionId - Session whose archive has succeeded.
+     * @param next - fallback to the remaining notice providers.
+     * @mode waterfall
+     */
+    'workspace/archive-notice'(sessionId: SessionId, next: () => Promise<ArchiveNotice | undefined>): Promise<ArchiveNotice | undefined>
+    /**
+     * Replace the archive notice when an admitted background operation fails.
+     * @param sessionId - Session whose successful archive remains in effect.
+     * @param text - localized failure and recovery guidance.
+     * @mode emit
+     */
+    'workspace/archive-followup-failed'(sessionId: SessionId, text: string): void
+    /**
+     * Restore the plain archive notice when an announced follow-up ended without acting.
+     * @param sessionId - Session whose successful archive remains in effect.
+     * @mode emit
+     */
+    'workspace/archive-followup-settled'(sessionId: SessionId): void
+  }
+}
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface GlobalStandardProps {
@@ -86,6 +122,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 declare module '@deepseek-ai/dsh-api-session-controller/client' {
   interface SessionReferenceSourceMap {
     workspaceOperation: unknown
+    /** Recently viewed Sessions kept receiving history after leaving the main view. */
+    recentViews: unknown
   }
 }
 
@@ -99,9 +137,12 @@ const NS = 'workspace'
  * (loading/prefetch metadata, never apply sequencing) and neither owner
  * provides a waitable service. apply therefore depends on each slot
  * declaration through `slots.inject()` instead of assuming order.
+ * `uiSession.sessionStatus` provides the `useSessionStatus` hook the browser rows render with, so the plugin unloads
+ * and reloads with it.
  */
 export const inject = ['contextMenus',
   'slots', 'sessions', 'workspaces', 'locale', 'remote', 'remote.directoryPicker', 'layout', 'shortcuts', 'remoteAccess',
+  'uiSession', 'uiSession.sessionStatus',
 ]
 
 /**
@@ -109,8 +150,9 @@ export const inject = ['contextMenus',
  * ledger. Inject factories return plain callbacks; data reads use the
  * framework's global hooks.
  * @param ctx - client root context.
+ * @param config - Host-synced navigation configuration.
  */
-export function apply(ctx: Context): void {
+export function apply(ctx: Context, config: SyncedConfig<WorkspaceNavigationConfig>): void {
   const sessions = ctx.get('sessions') as ISessions
   const workspaces = ctx.get('workspaces') as IWorkspaces
   // One viewing-store instance, created here as ui-layout does for its layout
@@ -137,7 +179,7 @@ export function apply(ctx: Context): void {
     raiseToast(toast)
   }
   const uiWorkspace = new UiWorkspaceService(
-    ctx, ctx.remote.directoryPicker, workspaces, sessions, viewInstance.actions, notify,
+    ctx, ctx.remote.directoryPicker, workspaces, sessions, viewInstance.actions, notify, config.recentViewLimit,
   )
   ctx.slots.provideRoot({
     hooks: { workspaces: workspaces.list },
@@ -165,7 +207,7 @@ export function apply(ctx: Context): void {
 
   // Stable per-surface occupancy sources (the renderer's hook cache keys by
   // source identity): true while the surface's directory-flow hole is filled.
-  const flowSource = (hole: 'sidebar.workspaces.directoryFlow' | 'conversation.hero.workspace.directoryFlow'): HostObservable<boolean> => ({
+  const flowSource = (hole: DirectoryFlowSlotName): HostObservable<boolean> => ({
     getSnapshot: () => ctx.slots.entries(hole).length > 0,
     subscribe: listener => ctx.slots.subscribe(hole, listener),
   })
@@ -175,12 +217,16 @@ export function apply(ctx: Context): void {
     subscribe: listener => ctx.on('connection/reset', listener),
   }
   const pickerFlowSource = flowSource('conversation.hero.workspace.directoryFlow')
+  const factoryFlowSource = flowSource('workspace.picker.directoryFlow')
   const openSession: WorkspaceBrowserInjected['open'] = (sessionId) => {
     uiWorkspace.openSession(sessionId)
   }
   // Registry-global sets as Sets, rebuilt only when the Workspace snapshot changes.
   const pinnedSet = derive(workspaces.list, snapshot => new Set<SessionId>(snapshot.pinnedSessionIds))
   const archivedSet = derive(workspaces.list, snapshot => new Set<SessionId>(snapshot.archivedSessionIds))
+  const markSession = (sessionId: SessionId, unread: boolean): void => {
+    ctx.uiSession.sessionStatus.mark(sessionId, unread).catch(() => { notify({ kind: 'readingFailed' }) })
+  }
   // Plugin-private facts the row actions and their overlay surfaces share:
   // the pending rename request and the notice on display. Each business
   // writes through its own injected callback and the surface reads through
@@ -213,6 +259,21 @@ export function apply(ctx: Context): void {
       uiWorkspace.unpinSession(sessionId).catch(() => { notify({ kind: 'unpinFailed' }) })
     },
   })
+  ctx.on('workspace/archive-followup-failed', (sessionId, text) => {
+    if (archivedSet.getSnapshot().has(sessionId)) notify({ kind: 'archived', sessionId, message: text, tone: 'warning' })
+  })
+  ctx.on('workspace/archive-followup-settled', (sessionId) => {
+    if (archivedSet.getSnapshot().has(sessionId)) notify({ kind: 'archived', sessionId })
+  })
+  const archiveNotice = async (sessionId: SessionId, kind: 'archived' | 'stoppedAndArchived'): Promise<void> => {
+    let message: ArchiveNotice | undefined
+    try {
+      message = await ctx.waterfall('workspace/archive-notice', sessionId, () => Promise.resolve(undefined))
+    } catch (error) {
+      console.warn('session archive notice unavailable:', error)
+    }
+    notify({ kind, sessionId, ...message === undefined ? {} : { message: message.text, tone: message.tone } })
+  }
   const archiveInjected = (): ArchiveSessionInjected => ({
     hooks: { archived: archivedSet },
     // Archive preserves the log and the account position, so a quiet Session
@@ -220,9 +281,7 @@ export function apply(ctx: Context): void {
     // The Host's refusal for running work is the one case that asks first:
     // the confirmation names that work and offers to stop it.
     archiveSession: (sessionId) => {
-      uiWorkspace.archiveSession(sessionId).then(() => {
-        notify({ kind: 'archived', sessionId })
-      }).catch((reason: unknown) => {
+      uiWorkspace.archiveSession(sessionId).then(() => archiveNotice(sessionId, 'archived')).catch((reason: unknown) => {
         const activity = activeSessionRefusal(reason)
         if (activity === undefined) {
           console.warn('session archive rejected:', reason)
@@ -241,13 +300,13 @@ export function apply(ctx: Context): void {
   // 快捷键面用的 controls 同样是包装过的：FP 里按下重命名快捷键也不在本地开框。
   installWorkspaceShortcuts(ctx, uiWorkspace, { ...shortcutControls, rename: requestSessionRename },
     archiveInjected().archiveSession,
-    (reason) => { notify({ kind: 'shortcutForkFailed', reason }) })
+    (reason) => { notify({ kind: 'shortcutForkFailed', reason }) }, markSession)
   const archiveConfirmInjected = (): SessionArchiveConfirmInjected => ({
     hooks: { archiveRequest },
     settleSessionArchive: () => { archiveRequest.set(null) },
     stopAndArchiveSession: async (sessionId) => {
       await uiWorkspace.archiveSession(sessionId, { stopActivity: true })
-      notify({ kind: 'stoppedAndArchived', sessionId })
+      await archiveNotice(sessionId, 'stoppedAndArchived')
     },
   })
   const forkInjected = (): ForkSessionInjected => ({
@@ -371,6 +430,7 @@ export function apply(ctx: Context): void {
       'workspace.pin': IconPinOutlineRegular, 'workspace.unpin': IconPinFillRegular,
       'workspace.archive': IconArchiveOutlineRegular, 'workspace.unarchive': IconUnarchiveOutlineRegular,
       'workspace.fork': IconBranchOutlineRegular, 'workspace.copy': IconCopyOutlineRegular,
+      'workspace.markRead': IconMailReadOutlineRegular, 'workspace.markUnread': IconMailUnreadOutlineRegular,
     })) yield ctx.slots.register({ name: 'contextMenu.icon', key }, Icon)
   })
   ctx.effect(() => ctx.contextMenus.register({
@@ -385,17 +445,7 @@ export function apply(ctx: Context): void {
         run: () => { requestWorkspaceAction(workspaceId, displayTitle, 'delete') } }] : [],
   }), 'workspace: delete menu action')
   const browserInjected = (): WorkspaceBrowserInjected => ({
-    openWorkspaceMenu: (workspaceId, path, displayTitle, point, mode) => {
-      const target = ctx.contextMenus.active.getSnapshot()
-      if (mode === 'toggle' && target?.kind === 'workspace' && target.value.workspaceId === workspaceId) ctx.contextMenus.close()
-      else ctx.contextMenus.open({ kind: 'workspace', value: { workspaceId, path, displayTitle } }, point)
-    },
     settleWorkspaceAction: () => { workspaceActionRequest.set(null) },
-    openSessionMenu: (sessionId, displayTitle, point, mode) => {
-      const target = ctx.contextMenus.active.getSnapshot()
-      if (mode === 'toggle' && target?.kind === 'session' && target.value.sessionId === sessionId) ctx.contextMenus.close()
-      else ctx.contextMenus.open({ kind: 'session', value: { sessionId, displayTitle } }, point)
-    },
     // Explicit group actions keep their target; unscoped New Session inherits
     // the current Session Workspace before the recent-Workspace fallback.
     // 没有工作区时上游会走 clearMain：清掉主视图占用、把 dsh.sessions.current 写成空，界面回到
@@ -427,9 +477,9 @@ export function apply(ctx: Context): void {
     hooks: { workspaceActionRequest, contextMenuTarget: ctx.contextMenus.active, directoryFlow: browserFlowSource, hostInfo,
       workspaceShortcuts: shortcutControls.state, shortcuts: ctx.shortcuts.catalog },
   })
-  const pickerInjected = (): WorkspacePickerInjected => ({
+  const pickerInjected = (directoryFlow: HostObservable<boolean>) => (): WorkspacePickerInjected => ({
     createWorkspace: input => workspaces.create(input),
-    hooks: { directoryFlow: pickerFlowSource },
+    hooks: { directoryFlow },
   })
   // Each registration declares its owned children in the same call; slot
   // injection follows both the owner and declaration HMR lifetimes.
@@ -457,6 +507,7 @@ export function apply(ctx: Context): void {
   }, SessionMenu))
   registerSessionMenus(ctx, {
     ...pinInjected(), ...archiveInjected(), ...renameInjected(), ...forkInjected(), ...sessionIdInjected(),
+    markSession,
   })
   ctx.slots.inject('sidebar.workspaces.session.row.action', function* () {
     yield ctx.slots.register({ name: 'sidebar.workspaces.session.row.action', id: 'archive', order: 100, locale: NS, inject: archiveInjected }, ArchiveSessionRowButton)
@@ -480,11 +531,20 @@ export function apply(ctx: Context): void {
     {
       name: 'conversation.hero.workspace',
       children: { 'conversation.hero.workspace.directoryFlow': { kind: 'single', scope: 'root' } },
-      inject: pickerInjected,
+      inject: pickerInjected(pickerFlowSource),
       locale: NS,
     },
     WorkspacePicker,
   ))
+  // The reusable picker depends on no other declaration, so the definition
+  // and its directory-flow hole live for this plugin's lifetime.
+  ctx.slots.registerFactory({
+    name: 'workspace.picker',
+    scope: 'root',
+    children: { 'workspace.picker.directoryFlow': { kind: 'single', scope: 'root' } },
+    inject: pickerInjected(factoryFlowSource),
+    locale: NS,
+  }, WorkspacePickerFactory)
 }
 
 /**

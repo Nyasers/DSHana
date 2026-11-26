@@ -18,7 +18,6 @@ import {
   MUX_CHUNK_BYTES,
   MUX_CHUNK_QUERY,
   MUX_CHUNK_QUERY_VALUE,
-  MUX_CHUNK_WINDOW,
   decodeMuxControlFrame,
   decodeUtf8,
   encodeAck,

@@ -759,16 +759,15 @@ export function installDirectoryPickerBridge(sdk) {
  *     → 回退到内联 Worker 载体（Blob Worker），而 Worker 里的 fetch 是**同源**（= 当前文档的
  *     宿主源，不是中继前缀）→ 宿主凭据闸 403 missing_credential。官方 ui/bootstrap.js 也是
  *     在这里一并设的（__DSH_FILE_UPLOAD__ 挨着 __DSH_TRANSPORT__）。
- *   · dsh-client-hmr 的 /plugins/events（EventSource）与 dsh-client-ui-open-in-app 的
- *     /open-in-app/apps（裸 fetch）没有官方钩子可接，会落到宿主源被 403；这两处**逐个打补丁**
- *     （client-hmr 与 ui-open-in-app）：EventSource 换 URL（桥的 runtimeUrl）、fetch 换
- *     __DSH_TRANSPORT__.fetch。我们同法（integrations/client-hmr、integrations/ui-open-in-app）。
+ *   · dsh-client-ui-open-in-app 的 /open-in-app/apps（裸 fetch）没有官方钩子可接，会落到宿主源
+ *     被 403；这一处**逐个打补丁**：fetch 换 __DSH_TRANSPORT__.fetch（integrations/ui-open-in-app）。
+ *     client-hmr 已不在名单里：它的 plugin-events 走 connection 的 Remote 流载体，不再有 EventSource。
  *
  * 一处接管：installRequestTakeover 直接包住本页的 fetch / XMLHttpRequest / EventSource /
  * WebSocket / sendBeacon 五原语，以及元素自己发起的资源加载（img / video / script / iframe 等的
  * src、link 的 href；属性赋值与 setAttribute 两条路），凡「发给本页 origin、且不在宿主前缀
  * /api/apps/ 下」的 URL 一律改指中继前缀。
- * 上面两处逐包补丁保留（同一目标、互为兼容，不另增第三处）；__DSH_TRANSPORT__ 仍是内核 connection
+ * 上面那处逐包补丁保留（同一目标、互为兼容，不另增第三处）；__DSH_TRANSPORT__ 仍是内核 connection
  * 客户端的 opt-in 通道，语义不变（它对外部 origin 抛错，接管层则原样放行）。
  */
 export interface DshTransport {

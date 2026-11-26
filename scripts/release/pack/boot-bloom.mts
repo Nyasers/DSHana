@@ -99,32 +99,46 @@ const K_FULL = (1.35 / PERIOD_SEC) * 100;
 const K_HOLD = (1.9 / PERIOD_SEC) * 100;
 const K_END = (2.35 / PERIOD_SEC) * 100;
 
-/** 替换掉转圈环的样式，换成花瓣动画。 */
-const BLOOM_CSS = [
-  "._spinner_u7vgf_45{position:relative;width:20px;height:20px;color:var(--dsw-alias-brand-primary, var(--dsh-boot-brand));opacity:var(--dsh-boot-glow,0.55)}",
-  `._spinner_u7vgf_45 svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;display:block;opacity:0;animation:_bloomLife_boot ${PERIOD_SEC.toFixed(2)}s linear infinite both}`,
-  "._spinner_u7vgf_45 svg:nth-child(1){animation-delay:0s}",
-  `._spinner_u7vgf_45 svg:nth-child(2){animation-delay:${String(CYCLE_SEC)}s}`,
-  `._spinner_u7vgf_45 svg:nth-child(3){animation-delay:${(CYCLE_SEC * 2).toFixed(2)}s}`,
-  `._spinner_u7vgf_45 svg:nth-child(4){animation-delay:${(CYCLE_SEC * 3).toFixed(2)}s}`,
-  "._spinner_u7vgf_45 path{fill:none;stroke:currentColor;stroke-width:1.68;stroke-linejoin:round}",
-  `.${PETAL_CLASS}{transform-origin:0 0;animation:_bloomPetal_boot ${PERIOD_SEC.toFixed(2)}s linear infinite both}`,
-  `.${CORE_CLASS}{fill:currentColor;stroke:none;transform-origin:0 0;animation:_bloomCore_boot ${PERIOD_SEC.toFixed(2)}s linear infinite both}`,
-  // 缓动挂在关键帧上时作用于「到下一个关键帧」那一段：开花与消散两段需要 easeInOutCubic 的形状，
-  // 保持段参考实现本来就是直线。花瓣与花心用带回弹的曲线，保留过冲。
-  `@keyframes _bloomLife_boot{0%{opacity:0;transform:rotate(-50deg) scale(.7)}` +
-    `${K_BUD.toFixed(2)}%{opacity:1;transform:rotate(-50deg) scale(1);animation-timing-function:cubic-bezier(.6,-.08,.4,1.08)}` +
-    `${K_FULL.toFixed(2)}%{opacity:1;transform:rotate(0) scale(1)}` +
-    `${K_HOLD.toFixed(2)}%{opacity:1;transform:rotate(4deg) scale(1);animation-timing-function:cubic-bezier(.6,-.08,.4,1.08)}` +
-    `${K_END.toFixed(2)}%{opacity:0;transform:rotate(30deg) scale(.82)}` +
-    "100%{opacity:0;transform:rotate(30deg) scale(.82)}}",
-  `@keyframes _bloomPetal_boot{0%,${K_BUD.toFixed(2)}%{transform:scale(.38,.5);animation-timing-function:cubic-bezier(.36,1.36,.72,.96)}` +
-    `${(((0.35 + 0.6) / PERIOD_SEC) * 100).toFixed(2)}%,100%{transform:scale(1,1)}}`,
-  `@keyframes _bloomCore_boot{0%,${((0.4 / PERIOD_SEC) * 100).toFixed(2)}%{transform:scale(0);animation-timing-function:cubic-bezier(.36,1.36,.72,.96)}` +
-    `${((1.0 / PERIOD_SEC) * 100).toFixed(2)}%{transform:scale(1.05)}` +
-    `${K_FULL.toFixed(2)}%,100%{transform:scale(1)}}`,
-  "@media (prefers-reduced-motion:reduce){._spinner_u7vgf_45 svg{animation:none;opacity:1;transform:none}._spinner_u7vgf_45 svg:not(:first-child){display:none}._bloomPetal_boot,._bloomCore_boot{animation:none;transform:none}}",
-].join("");
+/**
+ * 启动页转圈环那条规则的形状锂点。
+ *
+ * 类名后缀是 CSS Modules 的哈希（0.2.2-rc.1 是 `u7vgf_45`，rc.2 变 `so0he_45`）——上游每次重打包
+ * 都可能换，所以这里只认形状：环形尺寸 + 边框 + 旋转动画这三样同时出现。其余 spinner（如按钮的
+ * `._spinner_1i3xo_37`）不带尺寸三段，不会误中。
+ */
+export const BOOT_SPINNER_RULE =
+  /\._spinner_([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*)\{position:relative;width:20px;height:20px;border-radius:50%/;
+
+/** 替换掉转圈环的样式，换成花瓣动画。
+ * @param sel 转圈环容器选择器（含前导点，哈希从上游产物里读）
+ */
+function bloomCss(sel) {
+  return [
+    `${sel}{position:relative;width:20px;height:20px;color:var(--dsw-alias-brand-primary, var(--dsh-boot-brand));opacity:var(--dsh-boot-glow,0.55)}`,
+    `${sel} svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;display:block;opacity:0;animation:_bloomLife_boot ${PERIOD_SEC.toFixed(2)}s linear infinite both}`,
+    `${sel} svg:nth-child(1){animation-delay:0s}`,
+    `${sel} svg:nth-child(2){animation-delay:${String(CYCLE_SEC)}s}`,
+    `${sel} svg:nth-child(3){animation-delay:${(CYCLE_SEC * 2).toFixed(2)}s}`,
+    `${sel} svg:nth-child(4){animation-delay:${(CYCLE_SEC * 3).toFixed(2)}s}`,
+    `${sel} path{fill:none;stroke:currentColor;stroke-width:1.68;stroke-linejoin:round}`,
+    `.${PETAL_CLASS}{transform-origin:0 0;animation:_bloomPetal_boot ${PERIOD_SEC.toFixed(2)}s linear infinite both}`,
+    `.${CORE_CLASS}{fill:currentColor;stroke:none;transform-origin:0 0;animation:_bloomCore_boot ${PERIOD_SEC.toFixed(2)}s linear infinite both}`,
+    // 缓动挂在关键帧上时作用于「到下一个关键帧」那一段：开花与消散两段需要 easeInOutCubic 的形状，
+    // 保持段参考实现本来就是直线。花瓣与花心用带回弹的曲线，保留过冲。
+    `@keyframes _bloomLife_boot{0%{opacity:0;transform:rotate(-50deg) scale(.7)}` +
+      `${K_BUD.toFixed(2)}%{opacity:1;transform:rotate(-50deg) scale(1);animation-timing-function:cubic-bezier(.6,-.08,.4,1.08)}` +
+      `${K_FULL.toFixed(2)}%{opacity:1;transform:rotate(0) scale(1)}` +
+      `${K_HOLD.toFixed(2)}%{opacity:1;transform:rotate(4deg) scale(1);animation-timing-function:cubic-bezier(.6,-.08,.4,1.08)}` +
+      `${K_END.toFixed(2)}%{opacity:0;transform:rotate(30deg) scale(.82)}` +
+      "100%{opacity:0;transform:rotate(30deg) scale(.82)}}",
+    `@keyframes _bloomPetal_boot{0%,${K_BUD.toFixed(2)}%{transform:scale(.38,.5);animation-timing-function:cubic-bezier(.36,1.36,.72,.96)}` +
+      `${(((0.35 + 0.6) / PERIOD_SEC) * 100).toFixed(2)}%,100%{transform:scale(1,1)}}`,
+    `@keyframes _bloomCore_boot{0%,${((0.4 / PERIOD_SEC) * 100).toFixed(2)}%{transform:scale(0);animation-timing-function:cubic-bezier(.36,1.36,.72,.96)}` +
+      `${((1.0 / PERIOD_SEC) * 100).toFixed(2)}%{transform:scale(1.05)}` +
+      `${K_FULL.toFixed(2)}%,100%{transform:scale(1)}}`,
+    `@media (prefers-reduced-motion:reduce){${sel} svg{animation:none;opacity:1;transform:none}${sel} svg:not(:first-child){display:none}._bloomPetal_boot,._bloomCore_boot{animation:none;transform:none}}`,
+  ].join("");
+}
 
 /**
  * 取 dist/assets 下唯一匹配前缀与后缀的文件名。
@@ -212,16 +226,23 @@ export function applyBootBloom(nodeModulesDir) {
   js = replaceOnce(js, progressFull, progressReplacement, "JS boot page progress");
 
   // 2) CSS：整段换掉转圈环规则（含它的旋转关键帧）。
-  const cssFrom = css.indexOf("._spinner_u7vgf_45{position:relative");
-  const cssEndAnchor = "}@keyframes _spin_u7vgf_45{to{transform:rotate(360deg)}}";
-  if (cssFrom < 0) {
+  //    类名后缀是 CSS Modules 的哈希，上游重新打包就会变（rc.1 的 u7vgf_45 → rc.2 的 so0he_45），
+  //    所以按形状找、不认死名字；找不到就是真变了，报错让人看。
+  const hits = [...css.matchAll(new RegExp(BOOT_SPINNER_RULE.source, "g"))];
+  if (hits.length === 0) {
     throw new Error("boot-bloom: 锚点缺失（CSS spinner）—— 上游产物已变，需要重做这处替换");
   }
+  if (hits.length > 1) {
+    throw new Error(`boot-bloom: 锚点不唯一（CSS spinner）—— 命中 ${String(hits.length)} 处，拒绝猜测`);
+  }
+  const sel = `._spinner_${hits[0][1]}`;
+  const cssFrom = hits[0].index;
+  const cssEndAnchor = `@keyframes _spin_${hits[0][1]}{to{transform:rotate(360deg)}}`;
   const cssTo = css.indexOf(cssEndAnchor, cssFrom);
   if (cssTo < 0) {
     throw new Error("boot-bloom: 锚点缺失（CSS spin keyframes）—— 上游产物已变，需要重做这处替换");
   }
-  css = css.slice(0, cssFrom) + BLOOM_CSS + css.slice(cssTo + cssEndAnchor.length);
+  css = css.slice(0, cssFrom) + bloomCss(sel) + css.slice(cssTo + cssEndAnchor.length);
 
   fs.writeFileSync(jsPath, js);
   fs.writeFileSync(cssPath, css);

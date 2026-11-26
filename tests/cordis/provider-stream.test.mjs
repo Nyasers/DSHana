@@ -9,6 +9,10 @@
 //   ① 增量字段是契约里的 `delta`（不是 text），空增量不发；
 //   ② 同类型连续增量共用一块，类型切换开新块；
 //   ③ 已经流过 delta 的 index 在 done 时**只补 block-end**，不重复 block-start/delta。
+//
+// 与上游 @deepseek-ai/dsh-llm 的 BlockAssembler 对账不放在本文件：本仓不依赖那个包（它只是
+// @deepseek-ai/dsh 的传递依赖，根 node_modules 下没有链接），import 必然 ERR_MODULE_NOT_FOUND。
+// 要验那份契约就临时 `pnpm add -D @deepseek-ai/dsh-llm` 再跑，不在单测里留常驻 skip。
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -116,38 +120,4 @@ test("不传 startedIndexes 时保持旧行为（兼容）", () => {
     { type: "text-delta", index: 0, text: "整段" },
     { type: "block-end", index: 0, block: { type: "text", text: "整段" } },
   ]);
-});
-
-test("真机契约对齐：用 DSH 的 BlockAssembler 组装「增量 + done」序列，得到权威文本", async (t) => {
-  let mod = null;
-  try {
-    mod = await import("@deepseek-ai/dsh-llm/lib/types/assembler.js");
-  } catch {
-    mod = null;
-  }
-  if (!mod || typeof mod.BlockAssembler !== "function") {
-    t.skip("dsh-llm assembler 不在本仓库 node_modules（真机侧验证）");
-    return;
-  }
-  const state = createHanaStreamState();
-  const chunks = [];
-  for (const ev of [
-    { type: "text-delta", delta: "你" },
-    { type: "text-delta", delta: "好" },
-  ]) {
-    chunks.push(...state.push(ev));
-  }
-  chunks.push(
-    ...buildDoneChunks({
-      doneEvent: doneEvent({ content: [{ type: "text", text: "你好（权威）", textSignature: "sig-x" }] }),
-      ...scope,
-      startedIndexes: state.startedIndexes,
-    }),
-  );
-
-  const assembler = new mod.BlockAssembler();
-  for (const chunk of chunks) assembler.push(chunk);
-  const blocks = assembler.blocks();
-  assert.equal(blocks.length, 1);
-  assert.equal(blocks[0].text, "你好（权威）", "block-end 的 block 是权威载荷，覆盖增量累积");
 });

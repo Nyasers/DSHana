@@ -1,20 +1,19 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/host/bridge-freeze.test.mjs — packages/host/src/bridge.ts 控制面与冻结契约单测（真起 http 服务）
-// 覆盖：controlKey 鉴权、prepare-switch/resume 冻结（503、在途调用拒绝、守门失败不半冻）、
-// WS 升级握手头不被剥离（101）、冻结时给已升级 WS 发 1013 关闭帧。
+// tests/host/bridge-control.test.mjs — packages/host/src/bridge.ts 的凭据与控制面契约（真起 http/socket）
+// 覆盖：bridgeKey 与 controlKey 互不通用、失败动作回 409 + 可读原因、控制请求体上限、
+// WS 升级握手头不被剥离（剥了就握手不上，浏览器事件流整条连不通）。
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { createHash } from "node:crypto";
-import { startDshBridge, wsCloseFrame, FREEZE_CLOSE_CODE } from "@dshana/host/bridge.ts";
+import { startDshBridge } from "@dshana/host/bridge.ts";
 
 const KEY = "bridge-key-0123456789abcdef";
 const CONTROL = "control-key-0123456789abcdef";
 const GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const listen = (server) => new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server.address().port)));
 
 /** 最小上游：HTTP 200 + 可选 WS 握手（校验 sec-websocket-key 后才 101）——用来证明中继没剥握手头。 */
@@ -24,10 +23,6 @@ async function startUpstream(opts = {}) {
   const server = http.createServer((req, res) => {
     if (req.method === "POST") hits.post++;
     else hits.get++;
-    if (opts.delayMs && String(req.url).startsWith("/slow")) {
-      setTimeout(() => { res.writeHead(200, { "content-type": "text/plain" }); res.end("slow"); }, opts.delayMs);
-      return;
-    }
     res.writeHead(200, { "content-type": "text/plain" });
     res.end("upstream-ok");
   });
@@ -74,77 +69,108 @@ async function get(port, path = "/", key = KEY) {
   return { status: res.status, text };
 }
 
-async function post(port, path, key = KEY) {
-  const res = await fetch("http://127.0.0.1:" + port + path, { method: "POST", headers: key ? { "x-hana-dsh-bridge": key } : {} });
-  await res.text().catch(() => "");
-  return res.status;
-}
-
-async function control(port, action, key = CONTROL) {
+async function control(port, action, key = CONTROL, rawBody) {
   const res = await fetch("http://127.0.0.1:" + port + "/_control", {
     method: "POST",
     headers: { "content-type": "application/json", ...(key ? { "x-hana-dsh-control": key } : {}) },
-    body: JSON.stringify({ action, args: {} }),
+    body: rawBody === undefined ? JSON.stringify({ action, args: {} }) : rawBody,
   });
   return { status: res.status, body: await res.json().catch(() => null) };
 }
 
-test("bridge: 鉴权 + prepare-switch/resume 冻结（普通请求 503）", async () => {
+test("bridge: 数据面与控制面的凭据互不通用", async () => {
   const upstream = await startUpstream();
   const bridge = await startBridge(upstream);
   try {
-    assert.equal((await get(bridge.port)).status, 200, "带 key 的 GET 应被转发");
+    assert.equal((await get(bridge.port)).status, 200, "带 bridgeKey 的 GET 应被转发");
     assert.equal((await get(bridge.port, "/", null)).status, 403, "无 key 应 403");
+    assert.equal((await get(bridge.port, "/", CONTROL)).status, 403, "controlKey 不得当 bridgeKey 用");
+
+    assert.equal((await control(bridge.port, "rpc")).status, 200, "带 controlKey 的控制请求应放行");
+    assert.equal((await control(bridge.port, "rpc", null)).status, 403, "无 controlKey 应 403");
+    assert.equal((await control(bridge.port, "rpc", KEY)).status, 403, "bridgeKey 不得当 controlKey 用");
     assert.equal((await control(bridge.port, "rpc", "wrong-key-0000000000000000")).status, 403, "错误 controlKey 应 403");
-
-    assert.equal((await control(bridge.port, "prepare-switch")).status, 200);
-    assert.equal((await get(bridge.port)).status, 503, "冻结期普通请求应 503");
-    assert.equal((await control(bridge.port, "prepare-switch")).status, 409, "重复冻结应 409");
-    assert.equal((await control(bridge.port, "rpc")).status, 409, "冻结期控制调用应被拒");
-
-    assert.equal((await control(bridge.port, "resume")).body.resumed, true);
-    assert.equal((await get(bridge.port)).status, 200, "解冻后恢复转发");
   } finally {
     await bridge.close();
     await upstream.close();
   }
 });
 
-test("bridge: prepare-switch 守门失败 → 409 且不半冻", async () => {
+test("bridge: 动作失败（含未知动作）回 409 + 可读原因，不吞成 200", async () => {
   const upstream = await startUpstream();
   const bridge = await startBridge(upstream, async (action) => {
-    if (action === "prepare-switch") throw new Error("DSH 仍有运行中的任务");
+    if (action !== "cwd-check") throw new Error("未知控制动作：" + action);
     return { ok: true };
   });
   try {
-    const r = await control(bridge.port, "prepare-switch");
+    const r = await control(bridge.port, "什么动作");
     assert.equal(r.status, 409);
-    assert.match(String(r.body.error), /运行中/);
-    assert.equal((await get(bridge.port)).status, 200, "守门失败不得留下冻结态");
+    assert.match(String(r.body.error), /未知控制动作/);
+    assert.equal((await control(bridge.port, "cwd-check")).status, 200);
   } finally {
     await bridge.close();
     await upstream.close();
   }
 });
 
-test("bridge: 有在途调用时 prepare-switch 拒绝（409），调用结束后可切换", async () => {
-  const upstream = await startUpstream({ delayMs: 250 });
+test("bridge: 控制请求体超过 256 KiB 被拒（不缓冲成无界内存）", async () => {
+  const upstream = await startUpstream();
   const bridge = await startBridge(upstream);
   try {
-    const inflight = post(bridge.port, "/slow");
-    await sleep(60);
-    const denied = await control(bridge.port, "prepare-switch");
-    assert.equal(denied.status, 409, "在途调用未归零时不得冻结");
-    assert.equal(await inflight, 200);
-    await sleep(40);
-    assert.equal((await control(bridge.port, "prepare-switch")).status, 200);
+    const huge = JSON.stringify({ action: "rpc", args: { body: "x".repeat(300 * 1024) } });
+    const r = await control(bridge.port, "rpc", CONTROL, huge);
+    assert.equal(r.status, 409);
+    assert.match(String(r.body.error), /too large/);
   } finally {
     await bridge.close();
     await upstream.close();
   }
 });
 
-test("bridge: WS 升级握手头不被剥离（101），冻结时已升级连接收到 1013", async () => {
+test("bridge: 请求体边发边超限 → 仍收到 409（不因中途中断迭代而断连）", async () => {
+  const upstream = await startUpstream();
+  const bridge = await startBridge(upstream);
+  try {
+    const total = 2 * 1024 * 1024;
+    const result = await new Promise((resolve, reject) => {
+      const req = http.request({
+        host: "127.0.0.1",
+        port: bridge.port,
+        path: "/_control",
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-hana-dsh-control": CONTROL,
+          "content-length": String(total),
+        },
+      }, (res) => {
+        let text = "";
+        res.setEncoding("utf8");
+        res.on("data", (c) => { text += c; });
+        res.on("end", () => resolve({ status: res.statusCode, text }));
+      });
+      req.on("error", reject);
+      // 分块写：让服务端在请求尚未结束时就越过上限（一次性灌完测不出这个时序）
+      const chunk = "x".repeat(64 * 1024);
+      let written = 0;
+      const pump = () => {
+        while (written < total) {
+          written += chunk.length;
+          if (!req.write(chunk)) { req.once("drain", pump); return; }
+        }
+        req.end();
+      };
+      pump();
+    });
+    assert.equal(result.status, 409, "超限应回可读的 409，而不是连接重置");
+    assert.match(result.text, /too large/);
+  } finally {
+    await bridge.close();
+    await upstream.close();
+  }
+});
+
+test("bridge: WS 升级握手头不被剥离（101）", async () => {
   const upstream = await startUpstream({ ws: true });
   const bridge = await startBridge(upstream);
   try {
@@ -154,26 +180,9 @@ test("bridge: WS 升级握手头不被剥离（101），冻结时已升级连接
       ws.addEventListener("open", () => { clearTimeout(timer); resolve(); }, { once: true });
       ws.addEventListener("error", () => { clearTimeout(timer); reject(new Error("WS 升级失败（握手头可能被剥离）")); }, { once: true });
     });
-    const closed = new Promise((resolve) => ws.addEventListener("close", (ev) => resolve(ev), { once: true }));
-    assert.equal((await control(bridge.port, "prepare-switch")).status, 200);
-    const ev = await closed;
-    assert.equal(ev.code, FREEZE_CLOSE_CODE, "冻结应给已升级 WS 发 1013");
+    ws.close();
   } finally {
     await bridge.close();
     await upstream.close();
   }
-});
-
-test("wsCloseFrame: opcode 0x8 + code + reason（载荷 ≤125）", () => {
-  const bare = wsCloseFrame(FREEZE_CLOSE_CODE, "");
-  assert.equal(bare[0], 0x88);
-  assert.equal(bare[1], 2);
-  assert.equal(bare.readUInt16BE(2), 1013);
-
-  const withReason = wsCloseFrame(1013, "bye");
-  assert.equal(withReason[1], 5);
-  assert.equal(withReason.subarray(4).toString("utf8"), "bye");
-
-  const long = wsCloseFrame(1013, "x".repeat(500));
-  assert.equal(long[1], 125, "reason 截断到 123 字节");
 });

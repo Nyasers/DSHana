@@ -139,10 +139,3 @@ for (const { node, count, packages } of constraintStats) {
 
 console.log('\n===== Packages (with engines.node) =====');
 console.log(JSON.stringify(withEngines, null, 2));
-
-// 如需包含全部（含未声明 engines.node 的），取消下面注释：
-// console.log('\n===== All Packages =====');
-// console.log(JSON.stringify(results, null, 2));
-
-// 如需以 JSON 形式一次性输出总结，取消下面注释：
-// console.log(JSON.stringify({ summary, multiVersion, constraintStats, packages: withEngines }, null, 2));

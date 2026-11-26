@@ -8,7 +8,7 @@
 // 36→37→…→44 就是这么叠起来的。这条只有反复发版才看得出来，所以夹具要模拟「带尾空行的旧文件」。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 

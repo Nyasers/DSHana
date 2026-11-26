@@ -19,7 +19,7 @@ import clsx from 'clsx'
 import {
   ConnectionIndicator, Tooltip, useModalLayer,
   IconAgentPresetOutlineMedium, IconArchiveOutlineMedium, IconCloseOutlineRegular, IconDataOutlineMedium,
-  IconPersonalizationOutlineMedium, IconSettingsOutlineMedium, IconUserOutlineMedium,
+  IconPersonalizationOutlineMedium, IconRemoteConnectionOutlineMedium, IconSettingsOutlineMedium, IconUserOutlineMedium,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConnectionIndicatorState } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SettingsRootComponentProps, SettingsSectionRow } from './shell-contract.ts'
@@ -38,12 +38,14 @@ function navIcon(id: string) {
   if (id === 'agent-presets') return <IconAgentPresetOutlineMedium size={16} />
   if (id === 'plugins') return <IconPersonalizationOutlineMedium size={16} />
   if (id === 'archived-sessions') return <IconArchiveOutlineMedium size={16} />
+  if (id === 'remote-connection') return <IconRemoteConnectionOutlineMedium size={16} />
   return <IconSettingsOutlineMedium size={16} />
 }
 
 type PanelProps = {
   rows: readonly SettingsSectionRow[]
   renderSlot: SettingsRootComponentProps['renderSlot']
+  renderFactorySlot: SettingsRootComponentProps['renderFactorySlot']
   activeId: string | undefined
   onSelect: (id: string) => void
   onClose: () => void
@@ -78,7 +80,7 @@ function hanaBridge(): HanaSettingsBridge | undefined {
  * header button, a mask click, and document-level Escape (mounted only while
  * open, so the listener lifetime is the panel's).
  */
-function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose, embedded = false }: PanelProps) {
+function SettingsPanel({ rows, renderSlot, renderFactorySlot, activeId, onSelect, onClose, embedded = false }: PanelProps) {
   // Entries can unmount underneath the requested id, so the render-time
   // projection falls back to the first row when the id is gone.
   const active = rows.find(r => r.id === activeId)?.id ?? rows[0]?.id
@@ -131,7 +133,7 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose, embedded
           </button>
         </div>
         <div className={css.options}>
-          {active !== undefined && renderSlot('settings.section', { close: onClose }, { only: active })}
+          {active !== undefined && renderFactorySlot('settings.section.view', { id: active, close: onClose })}
         </div>
       </div>
     </div>
@@ -146,7 +148,7 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose, embedded
  */
 export function SettingsRoot(props: SettingsRootComponentProps) {
   const {
-    wide, reconnect, useConnectionState, useSections, useOnboardingSteps, useSessions, renderSlot, t,
+    wide, reconnect, useConnectionState, useSections, useOnboardingSteps, useSessions, renderSlot, renderFactorySlot, t,
     useDesktopUpdate, openDesktopUpdate, useStore, actions, useShortcuts,
   } = props
   const bridge = hanaBridge()
@@ -334,12 +336,17 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
     connectionIndicator = 'recovered'
   }
 
+  // 上游把「打开某分区」这一动作收成了一个本地入口，launcher / notice 两处共用；
+  // 我们的 openSection 已经在写共享状态，这里直接复用同一个入口。
+  const openSettings = openSection
+
   // 设置面：整列 embedded，无触发器、无模态。
   if (role === 'settings') {
     return (
       <SettingsPanel
         rows={rows}
         renderSlot={renderSlot}
+        renderFactorySlot={renderFactorySlot}
         activeId={activeId}
         onSelect={selectState}
         onClose={() => { /* settings 面常开，无关闭语义 */ }}
@@ -352,6 +359,7 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
     <SettingsPanel
       rows={rows}
       renderSlot={renderSlot}
+      renderFactorySlot={renderFactorySlot}
       activeId={activeId}
       onSelect={(id: string) => { selectState(id); publish({ open: true, section: id }) }}
       onClose={close}
@@ -382,12 +390,12 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
 
   // 主卡面：**只画面板，不画触发器**——这就是「FP 点设置、主卡打开」的落点。
   if (role === 'workspace') return <>{panel}{syncFailure}{onboarding}</>
-
   return (
     <>
+      <div className={css.noticeRow} hidden={!wide}><div className={css.notice}>{renderSlot('settings.notice', { openSettings })}</div></div>
       <div className={clsx(css.triggerRow, !wide && css.railRow)}>
         {renderSlot('settings.launcher', {
-          wide, settingsOpen: open, openSettings: openSection,
+          wide, settingsOpen: open, openSettings,
           ...(shortcut?.keys.length ? { settingsShortcut: { keys: shortcut.keys, aria: shortcut.aria } } : {}),
           openOnboarding: (id) => { close(); setRequestedOnboarding(id) },
         }, { fallback: <Tooltip disabled={open} label={t('trigger')} shortcutKeys={shortcut?.keys}>

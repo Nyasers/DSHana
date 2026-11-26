@@ -1,0 +1,16 @@
+{
+  "package": "@deepseek-ai/dsh-client-ui-plugin-manager",
+  "upstreamDir": "packages/client/ui-plugin-manager",
+  "files": [
+    {
+      "path": "src/client/index.ts",
+      "upstreamSha256": "4e178df5c6c5dd0df3175795473daca2358058d3d4fd7befa2339a7b2b1648f5",
+      "deltaSha256": "d9252100164fb26e0cc894ad0b3850c0f5ff1d26989f19827594c6e8fec3ad02"
+    },
+    {
+      "path": "src/client/PluginManagerPage.module.css",
+      "upstreamSha256": "bc31aa15cfa848be303050b5ee55f5cd83b7cd3fe7913b8e73ace13ff16bd910",
+      "deltaSha256": "53a744d39a53c1c5113a1963b9b52b67552bc5bf16aacbe9cd0c24ec7e421612"
+    }
+  ]
+}

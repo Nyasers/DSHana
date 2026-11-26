@@ -254,7 +254,7 @@ function ensureOwnProfile(appBoot, dshHome: string): string {
 }
 
 /**
- * 预检模式（数据源切换探针）：只验证「依赖就位 → 定位 DSH → 产物在位」能否在目标 DSH_HOME 上
+ * 预检模式：只验证「依赖就位 → 定位 DSH → 产物在位」能否在目标 DSH_HOME 上
  * 成立，不连宿主 IPC、不 boot DSH、不起中继，也不往目标 home 写任何东西（profile 由正式启动时
  * 的 ensureOwnProfile 建，预检不碰）。结果写 resultPath（{ok:true} 或 {ok:false,error}，0600）后立即退出。
  * 退出码对齐 classify：0 = 预检通过；4 = deps/locate；5 = 产物缺失。
@@ -336,7 +336,7 @@ export async function main(argv: string[]): Promise<number> {
   // 不建链接）。
   const depsRoot = resolve(opts.depsRoot || join(installRoot, "node_modules"));
   const dshHome = opts.dshHome ? resolve(opts.dshHome) : join(dataDir, ".dsh");
-  // ---- 0) 预检模式（数据源切换探针）：不连宿主 IPC、不起服务，只验证目标环境可用性 ----
+  // ---- 0) 预检模式：不连宿主 IPC、不起服务，只验证目标环境可用性 ----
   if (opts.preflight) {
     return await runPreflight({ opts, dataDir, dshHome, depsRoot });
   }
@@ -479,11 +479,23 @@ export async function main(argv: string[]): Promise<number> {
   const upstreamOrigin = "http://127.0.0.1:" + dshPort;
   let dshCookie = "";
   try {
+    // 0.2.3 起 BrowserAuth 的 `authenticatedUrl` 归认证提供者（host-authentication-token），
+    // connection 服务只剩准入注册表；入口 URL 改由 `webserver/entry-url` 事件收集。
+    // ≤0.2.2 仍把它挂在 connection 上，保留作回退。
     const connection = typeof boot.ctx.get === "function" ? boot.ctx.get("connection") : null;
-    if (!connection || typeof connection.authenticatedUrl !== "function") {
-      throw new Error("dshana profile 未提供官方 connection（BrowserAuth 凭据面）——检查 bundle 层序：需含 @dshana/dsh-app");
+    let launch: string | undefined;
+    if (connection !== null && typeof connection.authenticatedUrl === "function") {
+      launch = connection.authenticatedUrl(upstreamOrigin);
+    } else {
+      const webServer = typeof boot.ctx.get === "function" ? boot.ctx.get("webServer") : null;
+      if (webServer === null || webServer === undefined) throw new Error("DSH 未提供 webServer 服务，无法收集入口 URL");
+      const entries: Array<{ label?: string; url: string; open?: boolean }> = [];
+      boot.ctx.emit(webServer, "webserver/entry-url", `${upstreamOrigin}/`, entries);
+      launch = entries.map((entry) => entry.url).find((url) => typeof url === "string" && url.length > 0);
     }
-    const launch = connection.authenticatedUrl(upstreamOrigin);
+    if (launch === undefined) {
+      throw new Error("DSH 未给出带凭据的入口 URL（webserver/entry-url 收集为空）——检查 host-authentication-token 行是否存在");
+    }
     const exchange = await fetch(launch, { redirect: "manual" });
     const setCookie = typeof exchange.headers.getSetCookie === "function"
       ? exchange.headers.getSetCookie()[0]
@@ -514,28 +526,6 @@ export async function main(argv: string[]): Promise<number> {
       // 这里，由本进程带 cookie 转发到 DSH /api（App 侧不直接摸 DSH HTTP，也不需 network 到中继）。
       // 参数 = 客户端信封本身（buildClientRequest 产物，含 rpcId/method/payload）。
       onControl: async (action, args) => {
-        // prepare-switch：数据源切换前的忙判定守门（冻结标志由中继置位/解除）。0.1.2 下 DSH
-        // 无稳定对外「忙」服务口，故按可用性尽力判定：agents 服务在则查运行中/排队中的
-        // agent；不在则放行（会话忙判定的正式接入见数据源切换刀 T3）。
-        if (action === "prepare-switch") {
-          let busy = false;
-          try {
-            const agents = typeof boot.ctx.get === "function" ? boot.ctx.get("agents") : null;
-            const list = agents && typeof agents.list === "function" ? agents.list() : null;
-            busy = Array.isArray(list) && list.some((agent) => agent && (
-              agent.status === "running"
-              || (agent.inbox && (
-                (Array.isArray(agent.inbox.nextTurn) && agent.inbox.nextTurn.length > 0)
-                || (Array.isArray(agent.inbox.nextStep) && agent.inbox.nextStep.length > 0)
-              ))
-            ));
-          } catch (e) {
-            err("switch-gate", "agents 忙判定不可用（放行）：" + errText(e));
-          }
-          if (busy) throw new Error("DSH 仍有运行中/排队中的任务，先结束或停止它们再切换数据源。");
-          info("switch-gate：无在途工作，允许切换数据源（prepare-switch）");
-          return { ready: true };
-        }
         if (action === "cwd-check") {
           // App 侧（packages/session/src/session-run.ts）在 create 之前问一次：cwd 是给本进程及其子进程用的，
           // 判定必须出自看得见用户路径的这一侧（宿主半的 fs 只覆盖应用自己的目录）。

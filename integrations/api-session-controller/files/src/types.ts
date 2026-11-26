@@ -6,18 +6,20 @@ import type {
   ImageAttachmentLimits, ImageAttachmentRef, ImageMediaType,
 } from '@deepseek-ai/dsh-attachment'
 import type { Branded } from '@deepseek-ai/dsh-brand'
-import type { LlmAttemptId, MessageId } from '@deepseek-ai/dsh-llm/brand'
+import type { LlmAttemptId, MessageId } from '@deepseek-ai/dsh-llm/types'
 import type { LlmModelBadge, TextBlock } from '@deepseek-ai/dsh-llm'
-import type { SessionId, SessionSeqCursor } from '@deepseek-ai/dsh-session/types'
+import type { SessionId, SessionSeq, SessionSeqCursor } from '@deepseek-ai/dsh-session/types'
 import type { SessionProjectionMap, SessionProjectionSummaryExcluded, SessionProjectionSummaryValues } from '@deepseek-ai/dsh-session-projection/types'
 import type { Principal } from '@deepseek-ai/dsh-typert-protocol'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 
+export type { SessionListMetadata } from '@deepseek-ai/dsh-session-query/types'
+
 declare module '@deepseek-ai/dsh-session-projection/types' {
   interface SessionProjectionMap {
-    /** Persisted facts used to summarize a Session without activating it. */
-    sessionListMetadata: SessionListMetadata
+    /** Eligible latest failed turn/end for an empty prompt, or null. */
+    conversationContinuation: SessionSeq | null
     /**
      * Image-intake limits enforced by the Session prompt endpoint. Boot
      * constant, excluded from Session summary payloads: every Session shares
@@ -25,14 +27,6 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
      */
     imageLimits: SessionProjectionSummaryExcluded<ImageAttachmentLimits>
   }
-}
-
-/** Persisted hints used to summarize a cold Session. */
-export interface SessionListMetadata {
-  /** Whether the folded prefix contains no turn. */
-  readonly blank: boolean
-  /** Latest human-authored prompt time in the folded prefix. */
-  readonly lastPromptAt: number | null
 }
 
 /**
@@ -326,11 +320,11 @@ export interface SessionForkValue {
 
 /** Session prompt request. */
 export interface SessionPromptRequest {
-  /** Client-minted identity persisted on the exact accepted user message. */
+  /** Client-minted identity persisted on the accepted inbox input, including empty continuation. */
   readonly requestId: SessionRequestId
   readonly sessionId: SessionId
   readonly mode: 'queue' | 'steer'
-  /** At least one non-whitespace text part or attachment. */
+  /** Non-whitespace text or attachments; an empty array continues an eligible failed idle Session. */
   readonly content: readonly PromptContentPart[]
   readonly clientTimeZone?: string
   /**
@@ -407,6 +401,8 @@ declare module '@deepseek-ai/dsh-llm' {
      * caller other than the owner, so an absent `principal` means the owner.
      */
     'user-rpc': { kind: 'user'; rpcId: SessionRequestId; clientTimeZone?: string; principal?: Principal }
+    /** Empty retry user message with browser prompt correlation and caller metadata. */
+    'retry-rpc': { kind: 'retry'; rpcId: SessionRequestId; clientTimeZone?: string; principal?: Principal }
   }
 }
 

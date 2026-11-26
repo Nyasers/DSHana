@@ -2,6 +2,8 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import agentPresetsRemote from '@deepseek-ai/dsh-agent-preset-registry/remote'
+import agentTeamsRemote from '@deepseek-ai/dsh-agent-team/remote'
+import webRemote from '@deepseek-ai/dsh-web/remote'
 import userQuestionsRemote from '@deepseek-ai/dsh-user-questions/remote'
 import commandsRemote from '@deepseek-ai/dsh-commands/remote'
 import settingsControllerRemote from '@deepseek-ai/dsh-api-settings-controller/remote'
@@ -10,14 +12,17 @@ import scheduleRemote from '@deepseek-ai/dsh-schedule/remote'
 import llmRemote from '@deepseek-ai/dsh-llm/remote'
 import dynamicRemote from '@deepseek-ai/dsh-cordis-host-runner/remote'
 import pluginManagerRemote from '@deepseek-ai/dsh-plugin-manager/remote'
+import mcpManagerRemote from '@deepseek-ai/dsh-mcp-manager/remote'
 import toolResultsRemote from '@deepseek-ai/dsh-client-ui-trajectory/remote'
 import pluginRegistryProbeRemote from '@deepseek-ai/dsh-client-ui-plugin-manager/remote'
+import connectorAccountsRemote from '@deepseek-ai/dsh-client-ui-connector-account/remote'
 import pluginMarketRemote from '@deepseek-ai/dsh-plugin-market/remote'
 import pluginInventoryRemote from '@deepseek-ai/dsh-host-plugin-inventory/remote'
 import permissionPresetsRemote from '@deepseek-ai/dsh-permission-presets/remote'
 import fileUploadsRemote from '@deepseek-ai/dsh-client-file-upload/remote'
 import sessionReferencesRemote from '@deepseek-ai/dsh-session-reference/remote'
 import subagentsRemote from '@deepseek-ai/dsh-subagent/remote'
+import sessionStatusRemote from '@deepseek-ai/dsh-client-ui-session-status/remote'
 import sessionRemote from '@deepseek-ai/dsh-api-session-controller/remote'
 import jobRemote from '@deepseek-ai/dsh-api-job-controller/remote'
 import workspaceRemote from '@deepseek-ai/dsh-api-workspace-controller/remote'
@@ -44,6 +49,8 @@ export type {
 } from '@deepseek-ai/dsh-plugin-market/types'
 export type { PluginInventorySnapshot } from '@deepseek-ai/dsh-host-plugin-inventory/types'
 export type {} from '@deepseek-ai/dsh-agent-preset-registry/remote'
+export type {} from '@deepseek-ai/dsh-agent-team/remote'
+export type {} from '@deepseek-ai/dsh-web/remote'
 export type {} from '@deepseek-ai/dsh-user-questions/remote'
 export type {} from '@deepseek-ai/dsh-commands/remote'
 export type {} from '@deepseek-ai/dsh-api-settings-controller/remote'
@@ -179,12 +186,13 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
   const disposers: Array<() => Promise<void>> = []
   try {
     for (const contribution of [
-      agentPresetsRemote, commandsRemote, settingsControllerRemote,
+      agentPresetsRemote, commandsRemote, agentTeamsRemote, settingsControllerRemote,
       goalsRemote, llmRemote, dynamicRemote, scheduleRemote,
-      pluginInventoryRemote, pluginManagerRemote, pluginMarketRemote, pluginRegistryProbeRemote, toolResultsRemote,
+      pluginInventoryRemote, pluginManagerRemote, mcpManagerRemote, pluginMarketRemote, pluginRegistryProbeRemote,
+      toolResultsRemote, connectorAccountsRemote,
       fileUploadsRemote, sessionReferencesRemote,
-      permissionPresetsRemote, subagentsRemote, sessionRemote, jobRemote, workspaceRemote, workspaceFilesRemote, terminalRemote,
-      userQuestionsRemote,
+      permissionPresetsRemote, subagentsRemote, sessionStatusRemote, sessionRemote, jobRemote, workspaceRemote, workspaceFilesRemote, terminalRemote,
+      userQuestionsRemote, webRemote,
     ]) {
       disposers.push(await ctx.remote.$mount(contribution))
     }

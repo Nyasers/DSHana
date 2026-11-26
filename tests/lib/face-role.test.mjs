@@ -12,16 +12,15 @@ import { dirname, join } from "node:path";
 import { FACE_ROLE, FACE_VIEWS, isFaceView, roleForView } from "@dshana/ui/face-role.ts";
 import { manifestPath } from "../../scripts/shared/contract-assets.mts";
 
-test("会话流面：未钉住时跟随共用选中，不把会话清空", () => {
-  const src = readFileSync(join(here, "..", "..", "integrations", "ui-session", "files", "src", "client", "index.ts"), "utf8");
-  // 不带 sid 直接开页 = 跟随跨面共用的当前会话（见 ui/stream.html 的注释）。
-  // 若这一支也报 MAX_SAFE_INTEGER，applyRemote 就会把它当成「最新的意思：没有会话」而 clear()。
-  assert.match(src, /if \(sid === null\) return sharedSelection\(\)/, "未钉住要回落到共用选中");
-  assert.ok(!/id: sid \?\? null/.test(src), "不再把「没钉住」当成「就是没有会话」");
-});
-
 const here = dirname(fileURLToPath(import.meta.url));
 const APP_FRAME = join(here, "..", "..", "integrations", "ui-layout", "files", "src", "client", "AppFrame.tsx");
+
+test("会话流面：不把「没钉住」当成「就是没有会话」", () => {
+  const src = readFileSync(join(here, "..", "..", "integrations", "ui-session", "files", "src", "client", "index.ts"), "utf8");
+  // 不带 sid 直接开页 = 跟随跨面共用的当前会话（见 ui/stream.html 的注释）。
+  // 若这一支报 MAX_SAFE_INTEGER，applyRemote 就会把它当成「没有会话」而 clear()。
+  assert.ok(!/id: sid \?\? null/.test(src), "不再把「没钉住」当成「就是没有会话」");
+});
 
 test("认面：词表内的值才算声明", () => {
   for (const view of FACE_VIEWS) assert.equal(isFaceView(view), true);

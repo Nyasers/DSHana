@@ -20,11 +20,12 @@ import {
 const WEB_APP = "@deepseek-ai/dsh-web-app";
 
 test("初始层列：底座在前，本层紧随", () => {
-  assert.deepEqual(PROFILE_BUNDLES, [BASE_BUNDLE, OWN_BUNDLE]);
+  // 钉包名本身而不是常量：两个包名是上游与本仓之间的外部契约，层列少了哪个都是静默启动失败。
+  assert.deepEqual(PROFILE_BUNDLES, ["@deepseek-ai/dsh-base", "@dshana/dsh-app"]);
 });
 
 test("退役元组表里的正是早期那份 [底座, 官方 web 层]", () => {
-  assert.deepEqual(RETIRED_TUPLES, [[BASE_BUNDLE, WEB_APP]]);
+  assert.deepEqual(RETIRED_TUPLES, [["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"]]);
 });
 
 test("精确等于退役元组 → 迁到当前初始层列", () => {

@@ -35,7 +35,7 @@
 //   为什么：dsh 的 .frame 与它的启动屏都画 var(--dsw-alias-bg-base, …)，而映射表是一张、
 //   没有面的概念，一律压 --bg 会让侧栏面的启动屏亮一次中列色。
 //
-// 注入脚本内容文件化 + 打包内联（review 修订）：桥脚本正文存独立文件
+// 注入脚本内容文件化 + 打包内联：桥脚本正文存独立文件
 // assets/theme-bridge.js（纯浏览器 JS），经 rspack asset/source 内联进本包
 // bundle（preset 见 packages/app/src/cordis/service-config.mts）。桥脚本唯一动态点是数据表注入占位符
 // __DSH_THEME_TOKENS__（TOKEN_MAP 序列化），模块初始化时一次 replace 替换——
@@ -47,8 +47,7 @@
 // 语义色、toast/tooltip 深色浮层、工具栏半透明、反白文字/边框、骨架屏）。
 //
 // 依赖注入：webServer 服务（host 半部），与 dsh-client-ui-theme 同姿势。日志直接写 cordis
-// 内建 LoggerService（runtime stdout，行首带 [theme] 前缀）——@dshana/logger 已于
-// 
+// 内建 LoggerService（runtime stdout，行首带 [theme] 前缀）。
 
 import bridgeBody from "./assets/theme-bridge.js";
 

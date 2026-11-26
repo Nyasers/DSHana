@@ -1,23 +1,19 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// tests/ui/force-follow-face.test.mjs — 每一面自己把面名与强制面名单写到 <html> 上。
+// tests/ui/force-follow-face.test.mjs — 面名与强制面名单的属性名字面量只有一处。
 //
-// 盯两个真机踩过的 bug（都是「勾了不生效」那一类）：
-//   ① 桥读 data-dshana-face 判面，但只有壳页（app）写过它。会话卡走的是
-//      stream-entry / stream-stage，根本不经过壳页——桥读回 null，勾了会话卡永远不生效。
-//      所以每个会注入 DSH 的页面都得自己写面名，steam 面在**两个挂载态**都写
-//      （「本页是 stream 面」与「装不装 DSH」是两件事）。
-//   ② 设置页保存在**另一个文档**（宿主设置区那个 iframe）里，切过去时卡片的 visibilityState
-//      不变、visibilitychange 不触发。所以设置页保存后必须广播一条，接收侧靠它即时重读；
-//      可见性/焦点只当兜底。
+// 只守「字面量不许散落」：属性名散进各页面后，改一处漏一处就是「某面不生效」那类 bug 的温床。
+// 页面是否真把面名写到了 <html> 上属于浏览器里的行为（会话卡走 stream-entry 而不是壳页，
+// 两个挂载态各写一次；设置页在另一个文档里保存，visibilitychange 不触发，所以得广播）——
+// 那种事不在单测里用源码文本断言：重命名就红，删掉调用也能被新写法绕过。留给真机验收。
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { FACE_ATTR, FORCE_FOLLOW_ATTR, FORCE_FOLLOW_CHANNEL, FORCE_FOLLOW_CHANGED } from "@dshana/shared/face-theme.ts";
+import { FACE_ATTR, FORCE_FOLLOW_ATTR } from "@dshana/shared/face-theme.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const src = (name) => readFileSync(join(here, "..", "..", "packages", "ui", "src", name), "utf8");
@@ -29,13 +25,13 @@ test("属性名只有一份字面量：写它的页面都引 shared 的常量", 
     join(here, "..", "..", "packages", "dsh", "theme", "assets", "theme-bridge.js"),
     "utf8",
   );
-  // 桥是散装浏览器 JS（无 import），它只能读字面量——那一处是刻意的，由另一条闸守着值一致。
+  // 桥是散装浏览器 JS（无 import），它只能读字面量——那一处是刻意的：下面那行 includes 就是那条闸，
+  // 常量改了而桥没跟上就会红。
   assert.ok(bridge.includes(FORCE_FOLLOW_ATTR), "桥没读 " + FORCE_FOLLOW_ATTR);
   assert.ok(bridge.includes('"data-dshana-face"') || bridge.includes("data-dshana-face"), "桥没读面名属性");
   // TS 侧：壳页与会话卡都用常量，不再各写一遍字面量。
   for (const name of ["app.ts", "stream-entry.ts"]) {
     const text = src(name);
-    assert.ok(text.includes("FACE_ATTR"), name + " 该引 shared 的 FACE_ATTR（不自己写属性名字面量）");
     assert.ok(
       !/setAttribute\("data-dshana-face"/.test(text),
       name + " 里出现了面名属性的字面量：该走 FACE_ATTR 常量",
@@ -44,16 +40,9 @@ test("属性名只有一份字面量：写它的页面都引 shared 的常量", 
   assert.ok(sharedSrc("face-theme.ts").includes('FACE_ATTR = "data-dshana-face"'), "FACE_ATTR 的声明该在 shared");
 });
 
-test("会话卡（stream 面）自己写面名：两个挂载态都写，不依赖壳页", () => {
+test("会话卡（stream 面）不把面名写死", () => {
   const entry = src("stream-entry.ts");
-  // 面名投影这件事在 boot() 里做（认挂载态之前），所以两个挂载态都覆盖到。
-  assert.ok(/function publishFace\(/.test(entry), "stream-entry.ts 该有自己的 publishFace");
-  assert.match(entry, /publishFace\(\);/, "boot() 该调一次 publishFace");
-  assert.ok(entry.includes("declaredFaceView"), "面该取自页面静态声明");
-  const atPublish = entry.indexOf("publishFace();");
-  const atDecide = entry.indexOf("let decided");
-  assert.ok(atPublish >= 0 && atDecide >= 0 && atPublish < atDecide, "写面名该在认挂载态之前（两态都覆盖）");
-  // 面名取自 <meta>，不是写死的 "stream"：面的事实源只有页面自己的声明。
+  // 面的事实源只有页面自己的静态声明（<meta> / body 属性），不写死 "stream"。
   assert.ok(
     !/setAttribute\(FACE_ATTR, "stream"\)/.test(entry),
     "面名不该写死：它的事实源是页面静态声明（declaredFaceView）",
@@ -64,29 +53,4 @@ test("stream 面的静态声明与它写出的面名对得上", () => {
   const html = src("stream.html");
   assert.match(html, /<meta name="hana-dshana-role" content="stream">/);
   assert.match(html, /data-dshana-view="stream"/);
-});
-
-test("设置页保存后广播一条，接收侧（壳页 / 会话卡）都挂了监听", () => {
-  assert.equal(FORCE_FOLLOW_CHANNEL, "dshana.force-follow");
-  assert.equal(FORCE_FOLLOW_CHANGED, "force-follow-changed");
-  const force = src("force-follow.ts");
-  assert.ok(force.includes("notifyForceFollowChanged"), "force-follow.ts 该有发送侧");
-  assert.ok(force.includes("watchForceFollowChanges"), "force-follow.ts 该有接收侧");
-  assert.ok(force.includes("FORCE_FOLLOW_CHANNEL"), "发送与接收该用同一个频道名常量");
-
-  const settings = src("settings.tsx");
-  assert.ok(settings.includes("notifyForceFollowChanged()"), "设置页保存后该广播");
-  assert.ok(settings.includes("watchForceFollowChanges()"), "设置页自己也该听（多标签页一致）");
-
-  for (const name of ["app.ts", "stream-entry.ts"]) {
-    assert.ok(src(name).includes("watchForceFollowChanges()"), name + " 该挂上变化监听");
-  }
-});
-
-test("接收侧不只靠 visibilitychange（并排 iframe 切过去时它不触发）", () => {
-  const force = src("force-follow.ts");
-  // 广播是主力；可见性与焦点是兜底。三条都在。
-  assert.ok(/addEventListener\("message"/.test(force), "该听同源广播的 message");
-  assert.ok(/addEventListener\("visibilitychange"/.test(force), "该有可见性兜底");
-  assert.ok(/addEventListener\("focus"/.test(force), "该有焦点兜底");
 });

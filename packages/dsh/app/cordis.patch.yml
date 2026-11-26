@@ -32,6 +32,21 @@
     path: ':memory:'
     openAt: never
 
+# ── Web 搜索/取回的 provider 选择 ───────────────────────────────────────────────
+#
+# 本形态把推理留在宿主（hana）里，dsh 侧只做适配器透传，不持有 DeepSeek 的模型路由凭据。上游
+# rc.5 起 base 不再固定 `searchProvider`，改为由 dsh-web 按会话模型的 provider 路由在
+# `deepseek-official` 与 `deepseek-search-api` 之间选；那套「按路由决定计费口径」在本形态不成立，
+# 搜索只认自己那份 key。所以这里显式钉住 legacy Messages 搜索 provider（web-search-deepseek 的
+# `deepseek-official`），取回仍走 `http`（web-fetch-http）。
+# `deepseek-search-api` 由 web-deepseek-api 注册，本形态不交付那个包（rc.2 起它 import 两个被剔的
+# LLM 适配器），自动选择的另一半本来也落不到。
+# 行不带 name：这是对 base 那条 `web` 行的 config 重写，包仍由 base 自己声明。
+- id: web
+  config:
+    searchProvider: deepseek-official
+    fetchProvider: http
+
 # ── web-only host rows, the transport layer, and the browser roster ─────────
 
 # `dsh.client` rows are the browser roster the modules node half scans into
@@ -77,9 +92,9 @@
     # - id: session-log-download
     #   name: '@deepseek-ai/dsh-session-log-export'
 
-    # Session-header "Open In..." split button over the host application
-    # resolution (macOS/Windows/Linux; a host with no resolved application
-    # renders no button). Two halves: the host routes and the browser surface.
+    # Session-menu application choices over Host resolution on macOS, Windows,
+    # and Linux. An empty catalog hides the action. The Host routes and browser
+    # controls also serve the file-tree directory opener.
     - id: open-in-app
       name: '@deepseek-ai/dsh-host-open-in-app'
       config:
@@ -127,6 +142,12 @@
     - id: session-controller
       name: '@deepseek-ai/dsh-api-session-controller'
 
+    # dshana：上游默认 disabled；这里打开，让 Agent 能给其他会话发消息并收下回执。
+    # Optional session_send_message tool; it activates targets through the
+    # Session controller above and lets an Agent message any ordinary Session.
+    - id: tool-session-control
+      name: '@deepseek-ai/dsh-tool-session-control'
+
     # One background job's observation record streamed over Typert Remote;
     # the roster rides the session control stream above.
     - id: job-controller
@@ -146,17 +167,37 @@
       name: '@deepseek-ai/dsh-schedule'
 
     # 本形态不带账号面：登录、余额、赠金通知、退出登录这一整套（ui-settings-account /
-    # account-controller，以及 base 里给它们供 token 的 deepseek-account 与 llm-deepseek-account）
+    # ui-account-notifications，以及 base 里给它们供 token 的 deepseek-account 与 llm-deepseek-account）
     # 都不进 dependencies。settings.launcher 槽位因此回落到通用齿轮按钮——设置按钮旁不再有
     # 「登录 / 意见反馈」那一列。注释保留供上游对账：
     # - id: ui-settings-account
     #   name: '@deepseek-ai/dsh-client-ui-settings-account'
     #
-    # - id: account-controller
-    #   name: '@deepseek-ai/dsh-api-account-controller'
+    # - id: ui-account-notifications
+    #   name: '@deepseek-ai/dsh-client-ui-account-notifications'
 
     - id: settings-controller
       name: '@deepseek-ai/dsh-api-settings-controller'
+
+    # One shared MCP server fleet: Settings-configured servers plus servers
+    # that installed plugins register, with status and recovery over Remote.
+    # Credential templates and OAuth grants resolve through the credentials
+    # provider, so the manager starts after it.
+    # dshana：MCP 这层宿主不提供（宿主只兜模型推理与凭据），所以由本层自带：管理器起 mcp-client
+    # 实例、管启停与重连；服务器条目来自本包 config.servers 与插件注册；凭据模板与 OAuth 授权
+    # 走 base 层的 credentials 服务（dsh-credentials-local，托管在 $DSH_HOME/.credentials.yaml），
+    # 与宿主侧那套凭据闸分账。
+    - id: mcp-manager
+      name: '@deepseek-ai/dsh-mcp-manager'
+      inject: [credentials]
+
+    # dshana：连接器账号面与 mcp-manager 同进。它读的是管理器的服务器视图，写的是连接器账号
+    # 注册表；没有它，插件页上看不到 MCP 服务器的授权状态，也没地方发起授权。
+    # 它与 provider 账号（登录、余额、赠金，ui-settings-account 那套，未带）不是一回事。
+    # MCP connector accounts on the Plugins page; connectors register their
+    # OAuth server with `ctx.mcpAccounts`.
+    - id: mcp-account
+      name: '@deepseek-ai/dsh-mcp-account'
 
     # Workspace commands and reconnect-safe projection over Typert Remote.
     - id: workspace-controller
@@ -199,11 +240,10 @@
         compressionThresholdBytes: 1024
 
     # Web glue owned by this bundle: resolves the built frontend dist (an
-    # assembly fact of dsh-app, never user config), mounts the
-    # frontend-static fallback owner, registers the bash runtime variable,
-    # prints the URL line, and opens the canonical URL after the full Loader
-    # tree settles and the required-entry audit passes. Invocation-only values
-    # come from the webStartup provider; the advertised application URL is
+    # assembly fact of dsh-web-app, never user config), mounts the
+    # frontend-static fallback owner and registers the bash runtime variable.
+    # Providers contribute entry URLs; this row owns printing and browser handoff.
+    # Invocation-only values come from webStartup; the advertised URL is
     # this row's `publicUrl`, otherwise the bind-address URL.
     - id: web-runtime
       name: '@dshana/dsh-app'
@@ -211,10 +251,10 @@
       config:
         # App 内嵌场景不开系统浏览器、不往 stdout 打印 URL：前者由宿主卡片 / 流内卡承载，
         # 后者那行地址没人看。公告 URL 仍跟 --public-url（宿主不传就是 bind 地址）。
-        openBrowser: false
-        printUrl: false
         publicUrl: !!js ctx.webStartup.publicUrl
         surfaceContext: true
+        openBrowser: false
+        printUrl: false
 
     # Model context for an agent that inspects or extends the harness serving
     # this GUI: value-free prompt sections plus the current checkout and GUI
@@ -224,10 +264,11 @@
     - id: harness-dev-context
       name: '@deepseek-ai/dsh-harness-dev-context'
 
-    # The client-plugin reload chain, always mounted: it is idle until a
-    # rebuild watcher (pnpm run dev:web) actually rewrites client bundles. It
-    # is a row rather than a child of web-runtime because its node half is a
-    # client-side package, which a host-side bundle cannot import.
+    # The plugin-events stream, always mounted: it delivers graph changes,
+    # synced configuration, and rebuilt bundles (the last only while a rebuild
+    # watcher such as pnpm run dev:web rewrites client bundles). It is a row
+    # rather than a child of web-runtime because its node half is a client-side
+    # package, which a host-side bundle cannot import.
     - id: client-hmr
       name: '@deepseek-ai/dsh-client-hmr'
 
@@ -252,6 +293,12 @@
         # deployment values, for example: ['app.internal', ...ctx.webStartup.trustedHosts].
         # The listener's bind IP is accepted separately from this list.
         trustedHosts: !!js ctx.webStartup.trustedHosts
+
+    # dshana：0.2.3 把 BrowserAuth 凭据面收到了这一行（host 侧 `connection` 服务连
+    # `authenticatedUrl()` 都由它提供），宿主那层的凭据交换与中继靠它才能建起来；
+    # 它不是给「另一个浏览器登录」才需要的东西。
+    - id: authentication-token
+      name: '@deepseek-ai/dsh-host-authentication-token'
 
     # Raw Blob and ReadableStream uploads run independently of Connection's
     # RPC and generation service.
@@ -285,6 +332,11 @@
     - id: ui-session
       name: '@deepseek-ai/dsh-client-ui-session'
 
+    # Host reading records (ctx.sessionStatus) and the Session status table behind
+    # ctx.uiSession.sessionStatus and useSessionStatus.
+    - id: ui-session-status
+      name: '@deepseek-ai/dsh-client-ui-session-status'
+
     # Unified resource model: protocol providers behind the useResource hook.
     - id: resources
       name: '@deepseek-ai/dsh-client-resources'
@@ -296,9 +348,16 @@
     - id: ui-sidebar-right
       name: '@deepseek-ai/dsh-client-ui-sidebar-right'
 
-    # 本层不带这条行（Office→PDF 转换交给宿主侧，包一并不进 dependencies）；注释保留供上游对账：
-    # - id: office-to-pdf
-    #   name: '@deepseek-ai/dsh-office-to-pdf'
+    # 本层不带 Office 一整套（office-kit、office 技能与 desktop 侧 Python 环境），包一并不进
+    # dependencies；注释保留供上游对账：
+    # - id: office-kit
+    #   name: '@deepseek-ai/dsh-office-kit'
+    #
+    # - id: workspace-dependencies
+    #   name: '@deepseek-ai/dsh-tool-workspace-dependencies'
+    #
+    # - id: skill-office
+    #   name: '@deepseek-ai/dsh-skill-office'
 
     # The right Sidebar's document tab: bounded file reads with selectable
     # Markdown, code, HTML, PDF, Office, and plain-text renderers.
@@ -322,6 +381,11 @@
     - id: ui-settings-general
       name: '@deepseek-ai/dsh-client-ui-settings-general'
 
+    # 远控面（remote-connection）：上游 0.2.3 新加的客户端面，本形态没有远端宿主可连，
+    # 包也不在交付面里，故注释掉供上游对账：
+    # - id: remote-connection
+    #   name: '@deepseek-ai/dsh-client-remote-connection'
+
     # 设置里的「模型」页：本层不带（它只编辑官方两个 LLM adapter 的 settings 段，而本形态的推理
     # 一律走宿主 @dshana/dsh-provider，凭据在宿主手里；模型配置入口留在 App 设置页的「会话模型」与
     # 「默认模型」两节）；注释保留供上游对账：
@@ -334,10 +398,12 @@
     - id: ui-plugin-manager
       name: '@deepseek-ai/dsh-client-ui-plugin-manager'
 
-    # Read-only Plugin list tab in the Settings Plugins section; the built-in
-    # bundles the sidebar page leaves out are inspected here.
-    - id: ui-settings-plugin-inventory
-      name: '@deepseek-ai/dsh-client-ui-settings-plugin-inventory'
+    # dshana：连接器账号注册表的插件页分区，CLI app plugins 与 MCP connectors 共用这一张表。
+    # 本层带它是因为 MCP 那套已带：mcp-account 把服务器授权状态写进这张表，它负责把表画出来。
+    # Connector account sections on the Plugins page; CLI app plugins and MCP
+    # connectors register their accounts with `ctx.connectorAccounts`.
+    - id: ui-connector-account
+      name: '@deepseek-ai/dsh-client-ui-connector-account'
 
     - id: ui-conversation
       name: '@deepseek-ai/dsh-client-ui-conversation'
@@ -351,7 +417,7 @@
     - id: ui-chat
       name: '@deepseek-ai/dsh-client-ui-chat'
 
-    # Official occupants for the generic sidebar and conversation brand slots.
+    # Official occupants for the sidebar brand slots and the home whale frame layer.
     - id: ui-brand-official
       name: '@deepseek-ai/dsh-client-ui-brand-official'
 
@@ -382,6 +448,24 @@
     - id: workspace-changes
       name: '@deepseek-ai/dsh-workspace-changes'
 
+    # dshana：「让 Agent 创建插件」与「个性化推荐」两套刻意不带。前者在插件页的
+    # 添加菜单里开一个创建模式（后台起 Creator 生成插件并装进 profile），后者是
+    # 回答下方那张推荐卡与设置页的「个性化推荐」开关（开关就是 action-cards 的
+    # enabled 字段）。两者都会改 profile，且要回答「谁来批准插件生成」；这里连
+    # action-cards 插槽一并关掉，因为交付面里只剩它一家贡献者。
+    # - id: action-cards
+    #   name: '@deepseek-ai/dsh-action-cards'
+    # - id: client-ui-action-cards
+    #   name: '@deepseek-ai/dsh-client-ui-action-cards'
+    # - id: creation-recommendations
+    #   name: '@deepseek-ai/dsh-creation-recommendations'
+    # - id: client-ui-creation-recommendations
+    #   name: '@deepseek-ai/dsh-client-ui-creation-recommendations'
+    # - id: plugin-recommendations
+    #   name: '@deepseek-ai/dsh-plugin-recommendations'
+    # - id: client-ui-plugin-recommendations
+    #   name: '@deepseek-ai/dsh-client-ui-plugin-recommendations'
+
 
     - id: ui-workspace
       name: '@deepseek-ai/dsh-client-ui-workspace'
@@ -401,6 +485,9 @@
 
     - id: ui-skill
       name: '@deepseek-ai/dsh-client-ui-skill'
+
+    - id: ui-agent-team
+      name: '@deepseek-ai/dsh-client-ui-agent-team'
 
     - id: ui-subagent
       name: '@deepseek-ai/dsh-client-ui-subagent'
@@ -422,6 +509,11 @@
     # service mounted above.
     - id: ui-schedule
       name: '@deepseek-ai/dsh-client-ui-schedule'
+
+    # Session panel: the header toggle and the floating panel over the main
+    # Conversation body, with the Environment section other plugins extend.
+    - id: ui-session-panel
+      name: '@deepseek-ai/dsh-client-ui-session-panel'
 
     # Goal surface: GoalBar in the input dock over the goal session projection.
     - id: ui-goal
@@ -458,12 +550,6 @@
     # 注释保留供上游对账：
     # - id: ui-settings-session-log
     #   name: '@deepseek-ai/dsh-client-ui-settings-session-log'
-
-    # The Built-in plugins settings section: the navigation entry and the tab
-    # row the inventory tab registers into. The official configuration pages
-    # are the companion rows below.
-    - id: ui-settings-plugins
-      name: '@deepseek-ai/dsh-client-ui-settings-plugins'
 
     # The official settings pages: one companion package per host-plane
     # namespace, each registering its page into the Plugins page while the
@@ -589,12 +675,9 @@
 - id: tool-result-pruner
   disabled: true
 
-# The subagent registry and its backends STAY in the host plane. `subagents` is
-# a process singleton with a cross-session query surface (`listChildren`,
-# `followup`) that the host api-proxy serves to the browser, and a provider
-# registers under a globally unique name, so a per-session copy would both
-# starve that host row and collide on the second session. What a preset
-# chooses is which delegation TOOLS its agent sees, below.
+# The subagent registry and its backends belong in the host composition: browser
+# prompt and interrupt requests share its runtime, and provider names are unique
+# within the registry. Presets select the delegation tools visible to each Agent.
 
 - id: tool-subagent-control
   disabled: true

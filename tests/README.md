@@ -31,3 +31,7 @@
 - 已经成包的那几个源（`@dshana/shared` / `@dshana/host` / `@dshana/runtime` / `@dshana/models` / `@dshana/session` / `@dshana/tools` / `@dshana/app` / `@dshana/ui`）在 import 里写包说明符，
   不写 `node_modules` 路径；只有在 `readFileSync` 那种要磁盘路径的地方才用 `"../../packages/<包>/src/…"`。
 - 夹具与 e2e 各自在 `fixtures/`、`e2e/`，别在组目录里另建同级资源目录。
+- **只锁行为，不锁实现文本**：读源码 + `includes("某函数名")`、比对两个符号的先后顺序、把一段语句的原文
+  写进正则——这类断言重命名或换写法就红，而真出问题时拦不住。要守跨文件一致性，就断言双方共用的那个值
+  或产物（例如用模块导出的属性名去查被跑出来的 DOM）；连产物都没有的浏览器行为，交给真机验收，别用源码
+  文本假装守住了。

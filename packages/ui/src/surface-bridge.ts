@@ -110,19 +110,11 @@ export function credMissingHtml(): string {
     + "请从 Card Center 重新打开本卡。</pre>";
 }
 
-// ---- 跨面共享状态：已退场 ----
-// 本层不再落盘任何值。会话选中的真值是 main view 自己的持久化（见 readSelection），跨面通知走
-// BroadcastChannel 与 storage 事件。这里只留一个空的下线钩子，给仍在调用它的面留位。
-/** 下线钩子：共享键已不存在，无需清理。 */
-export function dropShared(): Promise<unknown> {
-  return Promise.resolve();
-}
-
 // ---- 跨面转发：同源广播一条通道 ----
 // 局部面（FP）发射意图、整幅面落地。跨文档能过的只有意图本身——插件实例与注入的 hook 留在发射端，
 // 接收端拿自己的插件实例把那条面重建出来。词表与载荷归一住在 @dshana/shared/shared-state.ts
 // （纯逻辑，单测直接打）。本层只做运输：同卡的面 join 同一个 BroadcastChannel（频道名按卡片实例
-// 分），谁发谁收都到。指名的直投通道与共享存储都已退场，这里不再有第二台通道。
+// 分），谁发谁收都到。
 
 /** 本页静态声明的面（<meta name="hana-dshana-role"> 或 body[data-dshana-view]）；认不出返回 null。 */
 export function declaredFaceView(): FaceView | null {

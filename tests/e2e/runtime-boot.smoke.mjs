@@ -6,7 +6,7 @@
 //
 // 目的：没有真实 Hana 宿主时尽量验证受管 runtime 子进程的两条路径：
 //   boot 模式（默认）：定位 DSH → profile 种子化 → runProfile → webserver 真实监听 → 起中继
-//   preflight 模式（--preflight）：只验证目标 DSH_HOME 可用性（数据源切换探针），不 boot
+//   preflight 模式（--preflight）：只验证目标 DSH_HOME 可用性（装完自检），不 boot
 // 用本仓库 node_modules 作 depsRoot（替代随包物化），dataDir 指向临时目录；@dshana 子插件由
 // build:cordis 落进仓库的 node_modules/@dshana（仓库树扮演安装树，与出包后同形）；profile 用官方
 // 随附的 web（DSH 首次加载时自建）：组合层包 @dshana/dsh-app 随包装在安装树的

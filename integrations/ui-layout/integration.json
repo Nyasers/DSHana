@@ -9,7 +9,7 @@
     },
     {
       "path": "src/client/AppFrame.module.css",
-      "upstreamSha256": "ba2b1a8b01d19ba0e5b5d73d70ec686fef1752ddc6f4e2273943a76dc8d871be",
+      "upstreamSha256": "abbba2fca7220a02edf39702a06840379523d653cb78950f935bc46eb72bab4f",
       "deltaSha256": "bf9124ed516f76c1b12bb913f04243c4ebe890773394c86f0510c4b53dceb6f4"
     }
   ]

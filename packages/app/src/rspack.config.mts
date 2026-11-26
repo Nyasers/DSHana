@@ -14,7 +14,7 @@
 //     manifest.entry 直接指 bin/app.mjs。
 //   - 输出 ESM module（纯 ESM 无原生模块，不需要 CJS+loadBundle 沙箱；宿主直接 import）
 //   - library.type=module：入口具名导出（apply）真 emit 成 ESM export，宿主直接 import
-//   - App 图标在 packages/app/src/icon.png（由 build.ts 原样 copy 到交付根，不进 bundle），
+//   - App 图标在 packages/app/src/icon.webp（由 build.ts 原样 copy 到交付根，不进 bundle），
 //     本配置不需要 asset 规则（rules 只收 .ts）
 //   - externalsPresets.node：node 内置模块保持外部 import（零运行时依赖）
 // rspack 解析路径走 packages/app/src/build.ts 的 resolveRspackEntry（RSPACK_ENV 或本地 node_modules）

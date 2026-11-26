@@ -1,28 +1,23 @@
 // SPDX-License-Identifier: MPL-2.0
 // Copyright (c) 2026 Nyasers
 //
-// packages/runtime/src/data-source.ts — DSH 数据来源（private / shared）解析与自持设置存储
+// packages/runtime/src/data-source.ts — DSH 数据目录与自持设置存储
+//
+// 数据目录固定为 <dataDir>/.dsh（命名与 DSH 自身默认 ~/.dsh 统一）：不读 <dataDir>/dsh-home，
+// 不做迁移，也没有运行中换源的通道——DSH_HOME 在子进程启动之前就已定下，一个 App 只有一份。
 //
 // 为什么自持一份设置文件而不是用宿主 contributes.settings / ctx.storage：
-//   · 切换数据源是**生命周期动作**（要停旧 runtime、起新 runtime），不是"一组值"；
 //   · DSH_HOME 必须在子进程启动**之前**定下，而子进程读不到 App ctx.storage（跨进程），
 //     故两进程共享可读处只有 dataDir 下的文件；
 //   · DSH 未运行时（设置页仍可达）也要能读写这份设置。
-//   形态（对齐官方样例 runtime/data-source.mjs）：{version, revision, settings} +
-//   lastShared；0600 + 原子写（.pending → rename）；revision 供乐观并发（T4 的 409 回路）。
+//   形态：{version, revision, settings}；0600 + 原子写（.pending → rename）；
+//   revision 供乐观并发（冲突回 409）。
 //
-// 源身份：private 恒为内置独立目录 <dataDir>/.dsh（命名与 DSH 自身默认 ~/.dsh 统一）；
-// shared 指向外部 DSH 目录（DSH 默认 ~/.dsh，或用户经 picker 选定的目录）。
-// 注：只读 <dataDir>/.dsh，不读 <dataDir>/dsh-home，**不做迁移**。
-// sourceId 由 home+profile 决定：private 用常量便于人读，shared 用哈希区分同路径不同 profile。
-//
-// 本模块是叶子（只依赖 app-runtime 取值助手），不做 runtime 启停；切换编排在别的模块。
-import { createHash } from "node:crypto";
-import { homedir } from "node:os";
+// 本模块是叶子（只依赖 app-runtime 取值助手），不做 runtime 启停。
 import { readFileSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { isAbsolute, join, normalize } from "node:path";
-import { appDataDir, getAppRuntime } from "./app-runtime.ts";
+import { join } from "node:path";
+import { getAppRuntime } from "./app-runtime.ts";
 import { APP_SETTING_DEFAULTS, resolveApprovalTimeoutSec, resolveDefaultTimeoutSec } from "./config.ts";
 import {
   FORCE_FOLLOW_FACES,
@@ -30,17 +25,12 @@ import {
 } from "@dshana/shared/face-theme.ts";
 
 export const SETTINGS_VERSION = 1;
-export const SOURCE_MODES = Object.freeze(["private", "shared"]);
-/** 内置独立目录名：与 DSH 自身默认目录 ~/.dsh 命名统一。 */
+/** 数据目录名：与 DSH 自身默认目录 ~/.dsh 命名统一。 */
 export const PRIVATE_HOME_NAME = ".dsh";
-/** 内置独立目录固定 profile：runtime 只启动壳自有的这一个（目录由壳建并维护，层列钉在
- * packages/host/src/main.ts 的 PROFILE_BUNDLES）。名字要与那里的 PROFILE_NAME 一致；private
- * 模式下只用于描述（不参与启动）。settings 里那个同名的 profile 键只为兼容旧存档保留。 */
+/** 固定 profile：runtime 只启动壳自有的这一个（目录由壳建并维护，层列钉在
+ * packages/host/src/main.ts 的 PROFILE_BUNDLES）。名字要与那里的 PROFILE_NAME 一致。 */
 export const PRIVATE_PROFILE = "dshana";
 export const SETTINGS_KEYS = Object.freeze([
-  "mode",
-  "path",
-  "profile",
   "approvalTimeoutSec",
   "defaultTimeoutSec",
   "sessionModelMode",
@@ -50,9 +40,6 @@ export const SETTINGS_KEYS = Object.freeze([
   "forceFollowFaces",
 ]);
 export const DEFAULT_SETTINGS = Object.freeze({
-  mode: "private",
-  path: null,
-  profile: PRIVATE_PROFILE,
   approvalTimeoutSec: APP_SETTING_DEFAULTS.approvalTimeoutSec,
   defaultTimeoutSec: APP_SETTING_DEFAULTS.defaultTimeoutSec,
   sessionModelMode: APP_SETTING_DEFAULTS.sessionModelMode,
@@ -68,25 +55,17 @@ export const DEFAULT_SETTINGS = Object.freeze({
 /** 会话模型模式：caller = 跟随调用方会话当前在用的那条（缺省），custom = 用固定的一条。 */
 export const SESSION_MODEL_MODES = Object.freeze(["caller", "custom"]);
 
-/** DSH 自己的默认数据目录（shared 的「DSH 默认目录」候选）。 */
-export const defaultDshHome = () => join(homedir(), ".dsh");
-/** 内置独立目录（private）；dataDir 为 App ctx.dataDir。 */
+/** 数据目录（dataDir 为 App ctx.dataDir）。 */
 export const privateHomeOf = (dataDir) => join(dataDir, PRIVATE_HOME_NAME);
 
-/**
- * 归一化 home 用于身份比较：`\` → `/`、去尾斜杠；win32 再小写。
- * 目的：同一目录的不同字面写法（大小写/斜杠/尾斜杠）不得产生伪 source 变更。
- */
-export function normalizeHomeForId(home, platform = process.platform) {
-  const p = String(home).replace(/\\/g, "/").replace(/\/+$/, "");
-  return platform === "win32" ? p.toLowerCase() : p;
+/** 数据源身份：home 给子进程当 DSH_HOME，profileName 给 runProfile，sourceId 给页面回显。 */
+export function privateSource(dataDir) {
+  return { sourceId: "private", home: privateHomeOf(dataDir), profileName: PRIVATE_PROFILE };
 }
-
-const PROFILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 /**
  * 两个超时（秒）：整数 ≥ 0（0 = 显式禁用自动拒绝 / 交给调用方默认）；缺省填默认值。
- * 与数据模式同栈：一份设置、一个 revision（想改就带 expectedRevision，冲突就得 409）。
+ * 与其余设置同栈：一份设置、一个 revision（想改就带 expectedRevision，冲突就得 409）。
  */
 function normalizeTimeouts(input): { approvalTimeoutSec: number; defaultTimeoutSec: number } {
   // 初值即默认（APP_SETTING_DEFAULTS 是常量）；循环只处理显式传入的值，避免 `out = {}`
@@ -154,42 +133,16 @@ function normalizeForceFollowFaces(input) {
 }
 
 /**
- * 设置校验（纯函数）：未知键拒绝、mode 限定、shared 必须是绝对路径、profile 简单名、
- * 两个超时必须是非负整数秒、会话模型模式与自定义选择、强制跟随宿主主题的面必须是候选面
- * （词表外的值/重复项一律拒，见 shared/face-theme.ts）。
- * private 的 profile 被强制为 PRIVATE_PROFILE（内置目录只跑这一个 profile）。
+ * 设置校验（纯函数）：未知键拒绝；两个超时必须是非负整数秒；会话模型模式与自定义选择；
+ * 强制跟随宿主主题的面必须是候选面（词表外的值/重复项一律拒，见 shared/face-theme.ts）。
  */
 export function validateSettings(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
-    throw new Error("DSH 数据来源设置必须是对象");
+    throw new Error("DSH 设置必须是对象");
   }
   const unknown = Object.keys(input).filter((k) => !SETTINGS_KEYS.includes(k));
-  if (unknown.length) throw new Error("DSH 数据来源设置含未知键：" + unknown.join("、"));
-  if (!SOURCE_MODES.includes(input.mode)) {
-    throw new Error("数据来源模式只能是 private 或 shared（收到 " + JSON.stringify(input.mode) + "）");
-  }
-  const profile = input.mode === "private" ? PRIVATE_PROFILE : input.profile;
-  if (typeof profile !== "string" || !PROFILE_RE.test(profile) || profile.includes("..")) {
-    throw new Error("profile 必须是简单名（字母或数字开头，只含字母/数字/._-，≤64 字符）；收到 " + JSON.stringify(profile));
-  }
-  if (input.mode === "shared") {
-    if (typeof input.path !== "string" || !input.path || input.path.includes("\0")) {
-      throw new Error("shared 模式必须给出 DSH 数据目录（非空字符串，不含 NUL）");
-    }
-    if (!isAbsolute(input.path)) throw new Error("shared 目录必须是绝对路径（收到 " + input.path + "）");
-    return {
-      mode: "shared",
-      path: normalize(input.path),
-      profile,
-      ...normalizeTimeouts(input),
-      ...normalizeSessionModel(input),
-      ...normalizeForceFollowFaces(input),
-    };
-  }
+  if (unknown.length) throw new Error("DSH 设置含未知键：" + unknown.join("、"));
   return {
-    mode: "private",
-    path: null,
-    profile,
     ...normalizeTimeouts(input),
     ...normalizeSessionModel(input),
     ...normalizeForceFollowFaces(input),
@@ -197,36 +150,23 @@ export function validateSettings(input) {
 }
 
 /**
- * 由设置推出数据源身份（纯函数）：
- *   home          该源的 DSH_HOME（子进程 env 用）
- *   profileName   该源的 profile 名
- *   shared        是否外部目录
- *   sourceId      private 恒 "private"；shared = sha256(归一化 home + "\0" + profile) 前 24 hex
- */
-export function sourceOf(settings, dataDir) {
-  const s = validateSettings(settings);
-  const home = s.mode === "private" ? privateHomeOf(dataDir) : s.path;
-  const sourceId = s.mode === "private"
-    ? "private"
-    : createHash("sha256").update(normalizeHomeForId(home) + "\0" + s.profile).digest("hex").slice(0, 24);
-  return { sourceId, home, profileName: s.profile, shared: s.mode === "shared", mode: s.mode };
-}
-
-/**
- * 读侧兼容：settings.json 缺这两个键时，从 <dataDir>/config.json 的 global.*
- * 读一次当初始值（只在读路径生效，不当场落盘）；写设置时它们落进 settings.json，这条路
- * 只在缺键时用到。另丢弃已退役的键（会话流卡的展示档位）：它们没有对应行为了，留着只会撞上
- * validateSettings 的未知键拒绝、把整份设置读成失败。
+ * 读侧兼容：settings.json 缺两个超时键时，从 <dataDir>/config.json 的 global.* 读一次当初始值
+ * （只在读路径生效，不当场落盘）；写设置时它们落进 settings.json，这条路只在缺键时用到。
+ * 另丢弃退役键（会话流卡的展示档位；换源时代的 mode/path/profile）：它们没有对应行为了，留着
+ * 只会撞上 validateSettings 的未知键拒绝、把整份设置读成失败。
  */
 function withReadCompat(raw, dataDir) {
   const out = raw && typeof raw === "object" && !Array.isArray(raw) ? { ...raw } : {};
   if (!("approvalTimeoutSec" in out)) out.approvalTimeoutSec = resolveApprovalTimeoutSec({ dataDir });
   if (!("defaultTimeoutSec" in out)) out.defaultTimeoutSec = resolveDefaultTimeoutSec({ dataDir });
   delete out.sessionCardDisplay;
+  delete out.mode;
+  delete out.path;
+  delete out.profile;
   // forceFollowFaces 是后加的键：存量 settings.json 里没有它，读回来必须补缺省（不抛错）。
   // 它不需要在这里先占位——最后铺默认时自然落位，而先占位会让 DEFAULT_SETTINGS 的缺省永远读不到。
   // 显式写了空数组的存档要原样留着（"in" 判定为真，缺省不覆盖它）。
-  // 其余键（mode/path/profile）同样缺省落位；顺序要紧：先补完那两个旧位置的超时，缺哪个补哪个，
+  // 其余键同样缺省落位；顺序要紧：先补完那两个旧位置的超时，缺哪个补哪个，
   // 然后才铺默认，否则默认会先把键占住、那份兼容值就永远读不到了。
   return { ...DEFAULT_SETTINGS, ...out };
 }
@@ -235,21 +175,10 @@ function clone(v) {
   return structuredClone(v);
 }
 
-/** lastShared 只留 {path, profile}（切回 shared 时预填，不自动生效）。 */
-function readLastShared(raw) {
-  if (!raw || typeof raw !== "object") return null;
-  try {
-    const s = validateSettings({ mode: "shared", path: raw.path, profile: raw.profile });
-    return { path: s.path, profile: s.profile };
-  } catch {
-    return null; // 存量非法值按无处理，不阻断读
-  }
-}
-
 /**
  * 自持设置存储（ctx.dataDir/settings.json，0600，原子写）。
- * 读失败（文件损坏/版本不符）抛错——设置是切换数据源的依据，静默回退会切错源；
- * 文件不存在 = 未设置过，回落 private 默认。
+ * 读失败（文件损坏/版本不符）抛错——设置是 DSH 启动与超时判定的依据，静默回退会让行为不可预期；
+ * 文件不存在 = 未设置过，回落默认。
  */
 export function createDataSourceStore(ctx) {
   if (!ctx || typeof ctx.dataDir !== "string" || !ctx.dataDir) {
@@ -273,46 +202,24 @@ export function createDataSourceStore(ctx) {
           };
           return clone(cached);
         }
-        if (e instanceof SyntaxError) throw new Error("DSH 数据来源设置文件不是合法 JSON：" + e.message);
+        if (e instanceof SyntaxError) throw new Error("DSH 设置文件不是合法 JSON：" + e.message);
         throw e;
       }
       if (!stored || typeof stored !== "object" || stored.version !== SETTINGS_VERSION) {
-        throw new Error("DSH 数据来源设置文件版本不受支持（version=" + JSON.stringify(stored && stored.version) + "，本版 " + SETTINGS_VERSION + "）");
+        throw new Error("DSH 设置文件版本不受支持（version=" + JSON.stringify(stored && stored.version) + "，本版 " + SETTINGS_VERSION + "）");
       }
       if (!Number.isSafeInteger(stored.revision) || stored.revision < 0) {
-        throw new Error("DSH 数据来源设置文件 revision 非法（" + JSON.stringify(stored.revision) + "）");
+        throw new Error("DSH 设置文件 revision 非法（" + JSON.stringify(stored.revision) + "）");
       }
-      const lastShared = readLastShared(stored.lastShared);
       cached = {
         version: SETTINGS_VERSION,
         revision: stored.revision,
         settings: validateSettings(withReadCompat(stored.settings, ctx.dataDir)),
-        ...(lastShared ? { lastShared } : {}),
       };
       return clone(cached);
     },
 
-    /** 落盘前校验：shared 目录须存在且是目录；以宿主返回的 canonical 路径为准。 */
-    async validate(input) {
-      const settings = validateSettings(input);
-      if (settings.mode === "shared") {
-        if (!ctx.resources || typeof ctx.resources.stat !== "function") {
-          throw new Error("宿主不支持 ctx.resources.stat（需要 app/resources.read 能力与对应 Hana 版本）——无法校验 shared 目录");
-        }
-        let info;
-        try {
-          info = await ctx.resources.stat({ kind: "local-file", path: settings.path });
-        } catch (e) {
-          throw new Error("无法读取该目录（" + errText(e) + "）：" + settings.path);
-        }
-        if (!info || !info.exists) throw new Error("目录不存在：" + settings.path);
-        if (!info.isDirectory) throw new Error("不是目录：" + settings.path);
-        if (typeof info.filePath === "string" && info.filePath) settings.path = info.filePath; // 宿主 canonicalize 回写
-      }
-      return settings;
-    },
-
-    /** 写入（原子）：revision +1；只写设置，不触碰 any 数据目录内容。 */
+    /** 写入（原子）：revision +1；只写设置，不触碰数据目录内容。 */
     async write(input) {
       const previous = await store.read();
       const settings = validateSettings(input);
@@ -320,9 +227,6 @@ export function createDataSourceStore(ctx) {
         version: SETTINGS_VERSION,
         revision: previous.revision + 1,
         settings,
-        ...(settings.mode === "shared"
-          ? { lastShared: { path: settings.path, profile: settings.profile } }
-          : (previous.lastShared ? { lastShared: previous.lastShared } : {})),
       };
       await mkdir(ctx.dataDir, { recursive: true }); // 目录归宿主建，这里只保证写原子文件时它在
       const pending = filename + ".pending";
@@ -335,23 +239,18 @@ export function createDataSourceStore(ctx) {
   return store;
 }
 
-/** 设置快照（settings.json 的内存形态；settings/lastShared 的形状由 validateSettings 把关）。 */
+/** 设置快照（settings.json 的内存形态；settings 的形状由 validateSettings 把关）。 */
 interface SettingsSnapshot {
   version: number;
   revision: number;
   settings: any;
-  lastShared?: any;
 }
 
 /** 自持设置存储的接口面（createDataSourceStore 的产物）。 */
 export interface DataSourceStore {
   read(): Promise<SettingsSnapshot>;
-  validate(input: unknown): Promise<any>;
   write(input: unknown): Promise<SettingsSnapshot>;
 }
-
-/** 取错误的可读文本。catch 到的值类型未知，字段访问一律经这里。 */
-const errText = (e: unknown): string => ((e as any)?.message as string) || String(e);
 
 let storeRef: DataSourceStore | null = null;
 
@@ -370,7 +269,7 @@ export function resetDataSourceStore() {
 /**
  * 同步读设置：只给同步调用面用（cancel-chain 的超时解析是同步的，异步化会往外扩散）。
  * 不走 store 的内存缓存：这份文件只有几行，"改完即时生效"比省一次读更重要。
- * 读失败（损坏/版本不符）抛错，与 store 同口径；文件不存在则回落 private 默认。
+ * 读失败（损坏/版本不符）抛错，与 store 同口径；文件不存在则回落默认。
  */
 export function readSettingsSync(dataDir) {
   const filename = join(dataDir, "settings.json");
@@ -379,20 +278,13 @@ export function readSettingsSync(dataDir) {
     stored = JSON.parse(readFileSync(filename, "utf8"));
   } catch (e) {
     if ((e as any)?.code === "ENOENT") return validateSettings(withReadCompat({}, dataDir));
-    if (e instanceof SyntaxError) throw new Error("DSH 数据来源设置文件不是合法 JSON：" + e.message);
+    if (e instanceof SyntaxError) throw new Error("DSH 设置文件不是合法 JSON：" + e.message);
     throw e;
   }
   if (!stored || typeof stored !== "object" || stored.version !== SETTINGS_VERSION) {
     throw new Error(
-      "DSH 数据来源设置文件版本不受支持（version=" + JSON.stringify(stored && stored.version) + "，本版 " + SETTINGS_VERSION + "）",
+      "DSH 设置文件版本不受支持（version=" + JSON.stringify(stored && stored.version) + "，本版 " + SETTINGS_VERSION + "）",
     );
   }
   return validateSettings(withReadCompat(stored.settings, dataDir));
-}
-
-/** 当前数据源身份（读设置文件；文件损坏时抛错——不得静默切错源）。 */
-export async function currentSource() {
-  const dataDir = appDataDir();
-  const st = await dataSources().read();
-  return sourceOf(st.settings, dataDir);
 }

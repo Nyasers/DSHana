@@ -21,13 +21,14 @@
 // 正文形状对齐维护者（liliMozi）的更新型 PR：
 //   标题 `chore: approve <kind>/<id> <已登记 tag> -> <本次 tag>`（首次上架不带区间）；
 //   正文 = 「旧 tag → 新 tag」一节（Release / Package / SHA-256）+ Changes + Changelog 段。
+//   投稿流程（分支名、三段手补内容、登记改哪两行）写在 .agents/skills/dshana-market/SKILL.md。
 //   · Changes 段由作者手写（--changes / --changes-file）：权限面差异、minAppVersion 跳变、内嵌依赖
 //     变化这些判断不进脚本——脚本只摆事实，哪条值得写由发版的人定。没给就留一个隐藏占位提示。
 //   · 其余「改了什么」下沉到 Changelog 段——取自本仓 CHANGELOG.md 的**区间**（含各提交链接），
-//     不在这里另写一份，也就不会与它漂移。区间两端都取自外部事实：起点是市场当前登记的版本
-//     （上游 approvals.json），终点是仓库 Latest。
+//     不在这里另写一份，也就不会与它漂移。起点是市场当前登记的版本（上游 approvals.json），
+//     终点是仓库 Latest（市场不收 prerelease，Latest 就是该登记到的那一版）。
 //   · 读者是市场维护者：不写本地核对口径、不写分支怎么推、不写自测过程。图标与截图是首次收录
-//     （enroll）那次才交的审阅材料（见上游 CONTRIBUTING），更新 PR 不重复。
+//     （enroll）那次交的审阅材料（见上游 CONTRIBUTING），更新 PR 只在包内资产有改动时重贴。
 //
 // 用法：
 //   node scripts/release/market-pr.mts                      # 打印标题与正文
@@ -251,7 +252,8 @@ async function publishedApprovals(upstream: string): Promise<{ kind: string; id:
 }
 
 /** 仓库 Latest 的 tag（`gh release view` 不带 tag 即 GitHub 标 Latest 的那个）；读不到返回 null。
- *  Changelog 段的**终点**取它，而不是本地 manifest 的版本：端点应当是仓库真实发布出来的事实。 */
+ *  Changelog 段的**终点**取它，而不是本地 manifest 的版本：端点应当是仓库真实发布到的地方。
+ *  市场不收 prerelease，Latest 必然是已标稳定的那一版，不会把“没登记的版本”带进正文。 */
 function repoLatestTag(repo: string): string | null {
   try {
     const tag = exec("gh", ["release", "view", "--repo", repo, "--json", "tagName", "--jq", ".tagName"]);
@@ -360,7 +362,8 @@ const SECTION_ORDER = ["Features", "Bug Fixes", "Performance Improvements"];
  *
  * 区间而不是单版本，是因为市场只按 approvals 的记录读 Release：上次登记之后直接跳过的那几版
  * 从没出现在任何 PR 正文里，只列本次会把它们丢掉（#30 就是这样把 v1.0.3 并进 v1.0.4 那段的）。
- * 端点取外部事实：终点 `currentVersion` 是仓库 Latest，起点 `sinceVersion` 是市场当前登记版本。
+ * 端点取外部事实：起点 `sinceVersion` 是市场当前登记的版本，终点 `currentVersion` 是仓库 Latest
+ * （市场不收 prerelease，Latest 必然是已标稳定的那一版，也就是该登记到的地方）。
  * 段落按分节归并（同一标题只出一个），条目按版本从新到旧、版本内保持 CHANGELOG 的原序；
  * compare 链接也按区间拼（市场当前 → Latest），而不是照抄 CHANGELOG 标题里那对相邻版本。
  *
@@ -485,8 +488,8 @@ async function main(): Promise<void> {
 
   const title = buildEnrollmentTitle(enr.kind, enr.id, tag, sinceTag);
   const releaseUrl = `https://github.com/${enr.repository}/releases/tag/${tag.replace(/\+/g, "%2B")}`;
-  // Changelog 段的终点取**仓库 Latest**（外部事实），而不是所选 tag：两者不同时（--tag 指旧版本）
-  // 以 Latest 为准，因为那才是仓库当前发布到的地方。读不到 Latest 时退回所选 tag。
+  // Changelog 段的终点取**仓库 Latest**：市场不收 prerelease，Latest 必然是已标稳定的那一版，
+  // 也就是仓库当前真实发布到的地方。本次 tag 比它旧时（`--tag` 指旧版本）提示一声。
   const latest = repoLatestTag(enr.repository);
   const endVersion = latest ? latest.replace(/^v/, "") : version;
   if (latest && versioned && endVersion !== version) {

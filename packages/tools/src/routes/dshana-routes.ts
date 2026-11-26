@@ -2,7 +2,6 @@
 // Copyright (c) 2026 Nyasers
 //
 // packages/tools/src/routes/dshana-routes.ts — dshana App v2 ctx.routes.register 单 registrar
-// 
 //
 // 宿主契约（ctx.routes，实证于 server 0.930.1 bundle / @hana/app-sdk）：
 //   · 单 bundle App 只能 register 一次；registrar 收到宿主创建的 Hono sub-app（本模块
@@ -27,15 +26,13 @@
 //   GET  /dshana/card-state  会话流卡页的状态面（按需取数：读宿主任务记录的绑定；回卡页
 //                            可直接换进 DOM 的状态行 HTML。卡页在非终态期间慢轮询，终态即停）
 //
-// 面间的直投通道（faces/*）已拆：同页的两方（FP ↔ main）走 BroadcastChannel，
-// 面间不再有 HTTP 面。
+// 同页的两方（FP ↔ main）走 BroadcastChannel；面间没有 HTTP 面。
 //
 // 依赖注入（可测性）：deps = { appId, version, getSnapshot(), start(), stop(), log() }。
 // 默认实现经 packages/runtime/src/managed-runtime.ts 读取真实单例；测试注入 fake。
 import { managedRuntimeDetails, ensureManagedRuntime, stopManagedRuntime, bridgeAccess } from "@dshana/runtime/managed-runtime.ts";
 import { buildBootSnapshot, APP_ID } from "@dshana/runtime/boot-state.ts";
-import { dataSources, sourceOf } from "@dshana/runtime/data-source.ts";
-// 数据源切换（packages/runtime/src/source-switch.ts）的入口暂时撤下：链未在真机验证过，见 POST /dshana/settings/restart。
+import { dataSources, privateSource } from "@dshana/runtime/data-source.ts";
 import { groupHostCatalog } from "@dshana/models/model-catalog-view.ts";
 // 面间通道不存在了：跨面只走同页广播（BroadcastChannel），没有 hub、也没有通道协议要引入。
 import {
@@ -57,16 +54,15 @@ export const DASHANA_ROUTE_PREFIX = "/dshana";
 const errText = (e: unknown): string => ((e as any)?.message as string) || String(e);
 
 /**
- * App 级设置的视图：两个超时与数据模式在同一份设置、同一个 revision（W2）。
- * source 由设置推出（home/sourceId 供页面回显与运行时接线），lastShared 供“切回共享”预填。
+ * App 级设置的视图：两个超时、会话模型与主题面在同一份设置、同一个 revision（W2）。
+ * source 是数据目录回显（home/sourceId 供页面显示与诊断；DSH_HOME 恒为 App 私有目录）。
  */
 async function readSettingsView(ctx, dataDir) {
   const st = await dataSources(ctx).read();
   return {
     revision: st.revision,
     settings: st.settings,
-    source: sourceOf(st.settings, dataDir),
-    lastShared: st.lastShared || null,
+    source: privateSource(dataDir),
   };
 }
 
@@ -178,14 +174,13 @@ export function defaultDshanaRouteDeps(ctx) {
         throw Object.assign(err, { code: "SETTINGS_CONFLICT", revision: cur.revision });
       }
       await store.write({ ...cur.settings, ...patch });
-      // 变更广播已退场：宿主 App 存储只有 get/set、没有订阅口，已开页在重新可见时自己重读；
+      // 宿主 App 存储只有 get/set、没有订阅口：没有变更广播，已开页在重新可见时自己重读；
       // 并发写仍由上面的 revision 把关。
       const st = await store.read();
       return {
         revision: st.revision,
         settings: st.settings,
-        source: sourceOf(st.settings, dataDir),
-        lastShared: st.lastShared || null,
+        source: privateSource(dataDir),
       };
     },
     getSnapshot: () => {
@@ -194,7 +189,6 @@ export function defaultDshanaRouteDeps(ctx) {
     },
     start: () => ensureManagedRuntime({}),
     stop: () => stopManagedRuntime(),
-    // 面间通道不存在了：deps 里不再有 facesHub（跨面由同页广播承担）。
   };
 }
 
@@ -217,7 +211,6 @@ export function registerDshanaRoutes(app, deps) {
   const listHostModels = typeof d.listHostModels === "function" ? d.listHostModels : async () => {
     throw new Error("模型候选不可用：deps.listHostModels 未注入");
   };
-  // 面间通道不存在了：不再有 hub 解析（跨面由同页广播承担）。
 
   const json = (c, status, body) => {
     if (typeof c?.json !== "function") {
@@ -299,7 +292,7 @@ export function registerDshanaRoutes(app, deps) {
     });
   }
 
-  // ---- POST /dshana/start：手动触发（v2 无自动链；幂等、不阻塞请求）----
+  // ---- POST /dshana/start：手动触发（App 自动链之外的兜底入口；幂等、不阻塞请求）----
   if (typeof app?.post === "function") {
     app.post(DASHANA_ROUTE_PREFIX + "/start", async (c) => {
       const before = getSnapshot();
@@ -331,9 +324,9 @@ export function registerDshanaRoutes(app, deps) {
       }
     });
 
-    // ---- POST /dshana/settings：只改常规项（两个超时）；数据来源走切换链 ----
-    // 形状：{ settings: {...}, expectedRevision }。带来源字段一律 400：改来源必须先起新源、
-    // 成功才落盘（见 spec D-m），所以那条路归 /settings/restart。
+    // ---- POST /dshana/settings：只改常规项（两个超时、会话模型）；数据来源固定 ----
+    // 形状：{ settings: {...}, expectedRevision }。带来源字段一律 400：数据来源恒为 App 私有目录，
+    // 换源没有通道（它会停掉正在跑的 runtime）。
     // revision 不匹配回 409（不静默覆盖）；设置值非法回 400（存储侧校验的话原样上抬）。
     app.post(DASHANA_ROUTE_PREFIX + "/settings", async (c) => {
       try {
@@ -344,7 +337,7 @@ export function registerDshanaRoutes(app, deps) {
         if (sourceKeys.length) {
           return json(c, 400, {
             ok: false,
-            error: "数据来源不在本端点改（必须先是新源再落盘）：" + sourceKeys.join("/") + " —— 用 POST " + DASHANA_ROUTE_PREFIX + "/settings/restart",
+            error: "数据来源固定为 App 私有目录，不可修改：" + sourceKeys.join("/"),
           });
         }
         const expectedRevision = typeof body.expectedRevision === "number" ? body.expectedRevision : undefined;
@@ -360,18 +353,6 @@ export function registerDshanaRoutes(app, deps) {
         return json(c, 500, { ok: false, error: msg });
       }
     });
-
-    // ---- POST /dshana/settings/restart：数据源切换（入口暂撤）----
-    // 切换链（packages/runtime/src/source-switch.ts）还没跑通：停旧、起新、失败回滚这条链没有在真机上验证过，
-    // 而它第一步就会停掉正在跑的 runtime。为避免半成品被误触发，这里先只回一句明确的
-    // 「未启用」，不碰任何状态。实现原地保留，等切换做完把这层闸去掉即可恢复原状。
-    app.post(DASHANA_ROUTE_PREFIX + "/settings/restart", (c) =>
-      json(c, 503, {
-        ok: false,
-        code: "SWITCH_DISABLED",
-        error: "数据源切换尚未启用（功能未完成，入口暂时撤下）",
-      }),
-    );
   }
 
   return app;
@@ -388,6 +369,5 @@ export function dshanaRoutesTable() {
     ["POST", DASHANA_ROUTE_PREFIX + "/start"],
     ["POST", DASHANA_ROUTE_PREFIX + "/stop"],
     ["POST", DASHANA_ROUTE_PREFIX + "/settings"],
-    ["POST", DASHANA_ROUTE_PREFIX + "/settings/restart"],
   ];
 }

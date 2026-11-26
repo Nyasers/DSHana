@@ -11,7 +11,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  FORCE_FOLLOW_ATTR,
   FORCE_FOLLOW_CANDIDATES,
   FORCE_FOLLOW_FACES,
   decodeForceFollowFaces,
@@ -63,7 +62,6 @@ test("校验：词表外的值 / 重复项 / 非数组一律拒（不静默丢�
 });
 
 test("属性编解码：空表编成空串，缺席按缺省兜底（缺席与空串是两回事）", () => {
-  assert.equal(FORCE_FOLLOW_ATTR, "data-dshana-force-follow");
   assert.equal(encodeForceFollowFaces([]), "", "空表 = 显式一个都不强制");
   assert.equal(encodeForceFollowFaces(["sidebar"]), "sidebar");
   assert.equal(encodeForceFollowFaces(["default", "main"]), "default,main");

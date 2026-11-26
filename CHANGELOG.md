@@ -1,5 +1,48 @@
 # Changelog
 
+## [1.3.6+dsh-0.2.2-rc.5](https://github.com/Nyasers/DSHana/compare/v1.3.5%2Bdsh-0.2.2-rc.4...v1.3.6%2Bdsh-0.2.2-rc.5) (2026-11-20)
+
+## [1.3.5+dsh-0.2.2-rc.4](https://github.com/Nyasers/DSHana/compare/v1.3.4%2Bdsh-0.2.2-rc.3...v1.3.5%2Bdsh-0.2.2-rc.4) (2026-11-18)
+
+## [1.3.4+dsh-0.2.2-rc.3](https://github.com/Nyasers/DSHana/compare/v1.3.3%2Bdsh-0.2.2-rc.2...v1.3.4%2Bdsh-0.2.2-rc.3) (2026-11-14)
+
+### Features
+
+* **dev:** 按需名单对账提前到 CI，不再等出包才报 ([2e8db68](https://github.com/Nyasers/DSHana/commit/2e8db68e7d45f4a7a47563fccd40f3fc12b34655))
+
+### Bug Fixes
+
+* **deps:** 安全修复块按 audit 复核收成两条 ([99bfc90](https://github.com/Nyasers/DSHana/commit/99bfc902c16a7213c35d69703f0a5a0978ea046f))
+* **dsh:** 按需名单跟上 rc.3 新进的 deepseek-chat-import ([80f858a](https://github.com/Nyasers/DSHana/commit/80f858ae1aaed4e93fdd5f33704372fcc39ade99))
+
+## [1.3.3+dsh-0.2.2-rc.2](https://github.com/Nyasers/DSHana/compare/v1.3.2%2Bdsh-0.2.2-rc.1...v1.3.3%2Bdsh-0.2.2-rc.2) (2026-11-13)
+
+### Features
+
+* **dev:** 补三个跟进上游版本的工具脚本与一份操作 skill ([2e04e08](https://github.com/Nyasers/DSHana/commit/2e04e08666a3052575e9ffd0903981c4f8be28b9))
+* **dsh:** 收下 agent-team，它已经不再是实验面 ([19bef34](https://github.com/Nyasers/DSHana/commit/19bef346ef4e229be753044c72e92ca89e7e5bf8))
+
+### Bug Fixes
+
+* **dev:** 根 package.json 的 dsh pin 还原为 0.2.2-rc.1 ([4d86709](https://github.com/Nyasers/DSHana/commit/4d86709da32c0d05403a6f2c26179bb77ab0d23a))
+* **dsh:** 打包链跟上 rc.2 —— 启动页锚点认形状、web 检索的凭据库入树 ([61b834a](https://github.com/Nyasers/DSHana/commit/61b834ada3ec517d5b95f2b5b6a9588ce338eb8c))
+* **dsh:** 恢复 webRemote，并把 web 行的搜索 provider 改成还在树里那一个 ([a1c4348](https://github.com/Nyasers/DSHana/commit/a1c4348753991fd0e20be619500f156a2c08a156))
+
+## [1.3.2+dsh-0.2.2-rc.1](https://github.com/Nyasers/DSHana/compare/v1.3.1%2Bdsh-0.2.2-rc.1...v1.3.2%2Bdsh-0.2.2-rc.1) (2026-11-11)
+
+## [1.3.1+dsh-0.2.2-rc.1](https://github.com/Nyasers/DSHana/compare/v1.3.0%2Bdsh-0.2.2-rc.1...v1.3.1%2Bdsh-0.2.2-rc.1) (2026-11-08)
+
+### Bug Fixes
+
+* **bridge:** 控制面超限 body 读完再拒；来源文案回到事实 ([90a2e27](https://github.com/Nyasers/DSHana/commit/90a2e277125c58f3fe5af13e89dda52a0f2e54e0))
+
+## [1.3.0+dsh-0.2.2-rc.1](https://github.com/Nyasers/DSHana/compare/v1.3.0-rc.1%2Bdsh-0.2.2-alpha.3...v1.3.0%2Bdsh-0.2.2-rc.1) (2026-11-07)
+
+### Bug Fixes
+
+* **ui:** 处理 [#358](https://github.com/Nyasers/DSHana/issues/358) 的审查意见（解压上限、工作区动作重试、渲染期写 ref） ([502a969](https://github.com/Nyasers/DSHana/commit/502a969b9e3b86752f1af61a76f5c7016e7948dd)), references [#348](https://github.com/Nyasers/DSHana/issues/348)
+* **ui:** 收第二轮审查意见（帧头预算、动作重试作废旧请求） ([bafe8cf](https://github.com/Nyasers/DSHana/commit/bafe8cf05ac8348660da25c596b405a43964dbb6))
+
 ## [1.3.0-rc.1+dsh-0.2.2-alpha.3](https://github.com/Nyasers/DSHana/compare/v1.2.6%2Bdsh-0.2.1-rc.5...v1.3.0-rc.1%2Bdsh-0.2.2-alpha.3) (2026-11-03)
 
 ### Features

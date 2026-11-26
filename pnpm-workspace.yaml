@@ -16,6 +16,16 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - "@deepseek-ai/*"
 
+# 安全审计白名单
+# picomatch 4.0.7 命中 GHSA-fc5q-39xc-vjpf（ReDoS via analyzeRepeatedExtglob）：
+# npm latest 与上游最后 release 都是 4.0.7，没有可升的 patched 版本。
+# 跟踪入口 micromatch/picomatch#247：advisory 在争议中，已向 CNA 提交撤回请求，
+# 触发需要外部控制 glob 模式；本仓只在 dsh-hmr 里匹配自己的 ignored 配置，够不到。
+# advisory 被撤销或上游发修复版，任一发生就删掉这条；后者按 overrides 的「安全修复」惯例钉版本。
+auditConfig:
+  ignoreGhsas:
+    - GHSA-fc5q-39xc-vjpf
+
 overrides:
   # HanaApp SDK
   "@hana/app-sdk": "file:vendor/hana-app-sdk/hana-app-sdk.tgz"
@@ -23,25 +33,32 @@ overrides:
   "@hana/plugin-protocol": "file:vendor/hana-app-sdk/hana-plugin-protocol-0.0.0.tgz"
   "@hana/plugin-components": "file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz"
 
+  # vendor 线：上游 alpha.1 的 lib 已改用 1.2.0-alpha.1 的导出（parseEntryYaml /
+  # stringifyEntryYaml、loader 的 EntryValidationError），但它自己声明的仍是 ~1.1.0；
+  # 装 1.1.0 时 profile-boot 会因缺命名导出而 import 失败。所以 include 只能留
+  # 1.2.0-alpha.1，而它与 loader 1.2.0-alpha.1 自带 peer cordis ~4.2.0-alpha.1，
+  # 整条 vendor 线因此被拉到 alpha.2 批。硬把 cordis 钉回 4.1.0 会直接 import 失败，
+  # 这条不能与 a1 同批，只能与 alpha.2 同批。
+  "@deepseek-ai/cordis-plugin-include": "1.2.0-alpha.1"
+
   # 不使用的产品面
   "@deepseek-ai/dsh-acp-app": "-"
-  "@deepseek-ai/dsh-api-account-controller": "-"
   "@deepseek-ai/dsh-client-product-analytics": "-"
+  "@deepseek-ai/dsh-client-ui-account-notifications": "-"
   "@deepseek-ai/dsh-client-ui-entry-customization": "-"
   "@deepseek-ai/dsh-client-ui-message-feedback": "-"
   "@deepseek-ai/dsh-client-ui-settings-account": "-"
   "@deepseek-ai/dsh-client-ui-settings-session-log": "-"
   "@deepseek-ai/dsh-command-feedback": "-"
   "@deepseek-ai/dsh-deepseek-account": "-"
-  "@deepseek-ai/dsh-deepseek-account-platform": "-"
   "@deepseek-ai/dsh-deepseek-llm-api-extensions": "-"
   "@deepseek-ai/dsh-headless": "-"
   "@deepseek-ai/dsh-host-product-telemetry-otel": "-"
-  "@deepseek-ai/dsh-llm-deepseek": "-"
   "@deepseek-ai/dsh-llm-deepseek-account": "-"
   "@deepseek-ai/dsh-llm-deepseek-api-key": "-"
   "@deepseek-ai/dsh-llm-pi-ai": "-"
   "@deepseek-ai/dsh-message-feedback": "-"
+  "@deepseek-ai/dsh-office-kit": "-"
   "@deepseek-ai/dsh-otel": "-"
   "@deepseek-ai/dsh-plugin-package-inventory-deepseek": "-"
   "@deepseek-ai/dsh-sdk-app": "-"
@@ -53,12 +70,15 @@ overrides:
   "@deepseek-ai/dsh-skill-office": "-"
   "@deepseek-ai/dsh-subagent-claude-code": "-"
   "@deepseek-ai/dsh-subagent-codex": "-"
+  "@deepseek-ai/dsh-tool-office": "-"
   "@deepseek-ai/dsh-web-app": "-"
+  "@deepseek-ai/dsh-web-deepseek-api": "-"
 
   # 按需安装的包
   # >>> excluded-on-demand
-  "@deepseek-ai/dsh-personalized-recommendations": "-"
-  "@deepseek-ai/dsh-experimental-agent-team-profile": "-"
+  "@deepseek-ai/dsh-cua-bundle": "-"
+  "@deepseek-ai/dsh-cua-mcp": "-"
+  "@deepseek-ai/dsh-deepseek-chat-import": "-"
   "@deepseek-ai/dsh-experimental-auto-review": "-"
   "@deepseek-ai/dsh-experimental-badge-skill-bundle": "-"
   "@deepseek-ai/dsh-experimental-cot-translation-bundle": "-"
@@ -72,14 +92,13 @@ overrides:
   "@deepseek-ai/dsh-experimental-terminal-bundle": "-"
   "@deepseek-ai/dsh-experimental-tool-worktree": "-"
   "@deepseek-ai/dsh-experimental-voice-input-bundle": "-"
+  "@deepseek-ai/dsh-timeline": "-"
   # <<< excluded-on-demand
 
   # 安全修复
-  ## CVE-2023-54404
-  zod: 4.6.7
-  ## CVE-2026-109869
+  ## GHSA-xjj6-f33q-929c
   undici: 8.12.4
-  ## CVE-2026-111769
+  ## GHSA-6prh-2h8m-c8cw
   "@modelcontextprotocol/client": 2.3.1
 
 # 打包目标设置
