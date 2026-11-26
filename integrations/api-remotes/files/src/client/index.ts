@@ -18,7 +18,6 @@ import pluginRegistryProbeRemote from '@deepseek-ai/dsh-client-ui-plugin-manager
 import connectorAccountsRemote from '@deepseek-ai/dsh-client-ui-connector-account/remote'
 import pluginMarketRemote from '@deepseek-ai/dsh-plugin-market/remote'
 import actionCardsRemote from '@deepseek-ai/dsh-action-cards/remote'
-import pluginRecommendationsRemote from '@deepseek-ai/dsh-plugin-recommendations/remote'
 import pluginInventoryRemote from '@deepseek-ai/dsh-host-plugin-inventory/remote'
 import permissionPresetsRemote from '@deepseek-ai/dsh-permission-presets/remote'
 import fileUploadsRemote from '@deepseek-ai/dsh-client-file-upload/remote'
@@ -191,7 +190,7 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
       agentPresetsRemote, commandsRemote, agentTeamsRemote, settingsControllerRemote,
       goalsRemote, llmRemote, dynamicRemote, scheduleRemote,
       pluginInventoryRemote, pluginManagerRemote, mcpManagerRemote, pluginMarketRemote, pluginRegistryProbeRemote,
-      toolResultsRemote, connectorAccountsRemote, actionCardsRemote, pluginRecommendationsRemote,
+      toolResultsRemote, connectorAccountsRemote, actionCardsRemote,
       fileUploadsRemote, sessionReferencesRemote,
       permissionPresetsRemote, subagentsRemote, sessionStatusRemote, sessionRemote, jobRemote, workspaceRemote, workspaceFilesRemote, terminalRemote,
       userQuestionsRemote, webRemote,

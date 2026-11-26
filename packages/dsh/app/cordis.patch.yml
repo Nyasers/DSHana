@@ -448,22 +448,23 @@
     - id: workspace-changes
       name: '@deepseek-ai/dsh-workspace-changes'
 
-    # dshana：个性化推荐（0.2.3 新增面）不在交付面里，注释供上游对账。
-    # Personalized recommendations: one optional card below an answer that
-    # offers a new personalized page or an official plugin. The two kinds
-    # register into action-cards; its `enabled` field is the Settings switch.
+    # dshana：「让 Agent 创建插件」与「个性化推荐」两套刻意不带。前者会在插件页
+    # 的添加菜单里开一个创建模式（后台起 Creator 生成插件并装进 profile），后者
+    # 是回答下方那张推荐卡与设置页的「个性化推荐」开关。两者都会改 profile，且
+    # 在我们的形态下要回答「谁来批准插件生成」的问题；action-cards 作为卡片插槽
+    # 留下，没有贡献者时不出内容。
     - id: action-cards
       name: '@deepseek-ai/dsh-action-cards'
     - id: client-ui-action-cards
       name: '@deepseek-ai/dsh-client-ui-action-cards'
-    - id: creation-recommendations
-      name: '@deepseek-ai/dsh-creation-recommendations'
-    - id: client-ui-creation-recommendations
-      name: '@deepseek-ai/dsh-client-ui-creation-recommendations'
-    - id: plugin-recommendations
-      name: '@deepseek-ai/dsh-plugin-recommendations'
-    - id: client-ui-plugin-recommendations
-      name: '@deepseek-ai/dsh-client-ui-plugin-recommendations'
+    # - id: creation-recommendations
+    #   name: '@deepseek-ai/dsh-creation-recommendations'
+    # - id: client-ui-creation-recommendations
+    #   name: '@deepseek-ai/dsh-client-ui-creation-recommendations'
+    # - id: plugin-recommendations
+    #   name: '@deepseek-ai/dsh-plugin-recommendations'
+    # - id: client-ui-plugin-recommendations
+    #   name: '@deepseek-ai/dsh-client-ui-plugin-recommendations'
 
 
     - id: ui-workspace
