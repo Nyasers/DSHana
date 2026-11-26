@@ -34,8 +34,11 @@ overrides:
   "@hana/plugin-components": "file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz"
 
   # vendor 线：上游 alpha.1 的 lib 已改用 1.2.0-alpha.1 的导出（parseEntryYaml /
-  # stringifyEntryYaml），但它自己声明的是 ~1.1.0；装 1.1.0 时 config-editor 与
-  # agent-preset-registry 会在 import 阶段失败。
+  # stringifyEntryYaml、loader 的 EntryValidationError），但它自己声明的仍是 ~1.1.0；
+  # 装 1.1.0 时 profile-boot 会因缺命名导出而 import 失败。所以 include 只能留
+  # 1.2.0-alpha.1，而它与 loader 1.2.0-alpha.1 自带 peer cordis ~4.2.0-alpha.1，
+  # 整条 vendor 线因此被拉到 alpha.2 批。硬把 cordis 钉回 4.1.0 会直接 import 失败，
+  # 这条不能与 a1 同批，只能与 alpha.2 同批。
   "@deepseek-ai/cordis-plugin-include": "1.2.0-alpha.1"
 
   # 不使用的产品面
