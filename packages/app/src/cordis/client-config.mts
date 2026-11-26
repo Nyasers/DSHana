@@ -53,6 +53,10 @@ function clientEntry(pkgDir, entry) {
 const INLINE_QUERY = "?inline";
 const TEXT_PREFIX = "\0hanako-text:";
 const CSS_PREFIX = "\0hanako-css:";
+// 全局样式（无 ?inline、非 .module.css）：0.2.3 起上游 ui-theme 改成直写 `import '../styles/x.css'`，
+// 官方链在自己的 tsdown preset 里用 global-css 虚拟模块收下并注入；本链没有那层，
+// 不接管就会整份样式消失（圆角、色板、滚动条全没）。
+const GLOBAL_CSS_PREFIX = "\0hanako-global-css:";
 const VIRTUAL_SUFFIX = ".mjs"; // 规避 tsdown css-guard（匹配 .css 结尾 id，官方同款）
 
 // 通用文本内联虚拟模块："./x.css?inline" / "./x.svg?inline" → export default 文本
@@ -309,6 +313,69 @@ function createCssModulePlugin(id, emitted: CssClassRecord[] = [], pkgDir) {
   };
 }
 
+// 全局 CSS 虚拟 loader："./x.css"（非 module、非 ?inline）→ 样式文本注入 style 标签（幂等）。
+// 与 css-modules 的差别：选择器原样保留（全局语义），只内联本地资产与压一遍文本。
+function createGlobalCssPlugin(id) {
+  return {
+    name: "hanako-global-css",
+    resolveId(source, importer) {
+      if (!source.endsWith(".css")) return null;
+      if (source.includes("?")) return null;
+      if (source.endsWith(".module.css")) return null;
+      if (!importer) return null;
+      const abs = resolve(dirname(importer), source);
+      return GLOBAL_CSS_PREFIX + abs + VIRTUAL_SUFFIX;
+    },
+    load(virtualId) {
+      if (!virtualId.startsWith(GLOBAL_CSS_PREFIX)) return null;
+      const file = virtualId.slice(GLOBAL_CSS_PREFIX.length, -VIRTUAL_SUFFIX.length);
+      const css = readFileSync(file, "utf8");
+      return globalCssSource(id, file, css);
+    },
+  };
+}
+
+// 全局样式虚拟模块源码：文本注入 <style>（去重键与 css-modules 同一套）。
+function globalCssSource(id, fileId, css) {
+  let text = css;
+  // 本地资产内联：注入的是 <style> 文本，相对 URL 按页面解析，不内联必然取不到。
+  const root = postcss.parse(css, { from: fileId });
+  root.walkDecls((decl) => {
+    if (!decl.value || !decl.value.includes("url(")) return;
+    const parsed = valueParser(decl.value);
+    let touched = false;
+    parsed.walk((node) => {
+      if (node.type !== "function" || node.value.toLowerCase() !== "url") return;
+      const inner = node.nodes && node.nodes[0];
+      const raw = inner ? inner.value : "";
+      const quote = inner && inner.type === "string" ? inner.quote || "" : "";
+      const full = valueParser.stringify(node);
+      const inlined = inlineAssetUrl(full, quote, raw, fileId);
+      if (inlined === full) return;
+      const innerText = /^url\(([\s\S]*)\)$/.exec(inlined);
+      if (innerText) {
+        (node as any).nodes = [{ type: "word", value: innerText[1] }];
+        touched = true;
+      }
+    });
+    if (touched) decl.value = parsed.toString();
+  });
+  text = minifyCss(root.toString());
+  const tagId = styleTagId(id, fileId);
+  return [
+    "const css = " + JSON.stringify(text) + ";",
+    "const tagId = " + JSON.stringify(tagId) + ";",
+    "if (typeof document !== 'undefined' && document.querySelector('style[data-plugin-css=' + JSON.stringify(tagId) + ']') === null) {",
+    "  const tag = document.createElement('style');",
+    "  tag.dataset.plugin = " + JSON.stringify(id) + ";",
+    "  tag.dataset.pluginCss = tagId;",
+    "  tag.textContent = css;",
+    "  document.head.appendChild(tag);",
+    "}",
+    "export default css;",
+  ].join("\n");
+}
+
 /**
  * 打一个包的 client 半（closure-factory 自注册 bundle）。
  * @param {object} opts - { id, pkgDir, outDir, externals, defines }：id = 包名（注册与
@@ -346,7 +413,7 @@ export async function buildClientBundle({ id, pkgDir, outDir, externals = ["reac
     deps: {
       neverBundle: (spec) => externals.includes(spec), // requested 保持外部，其余内联
     },
-    plugins: [textInlinePlugin, createCssModulePlugin(id, cssClasses, pkgDir)],
+    plugins: [textInlinePlugin, createCssModulePlugin(id, cssClasses, pkgDir), createGlobalCssPlugin(id)],
     outputOptions: {
       entryFileNames: "client.js",
       banner: "window.__ModuleLoader__.load({ id: " + JSON.stringify(id) + ", factory: (require) => {",
