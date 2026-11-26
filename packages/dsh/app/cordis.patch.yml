@@ -448,15 +448,15 @@
     - id: workspace-changes
       name: '@deepseek-ai/dsh-workspace-changes'
 
-    # dshana：「让 Agent 创建插件」与「个性化推荐」两套刻意不带。前者会在插件页
-    # 的添加菜单里开一个创建模式（后台起 Creator 生成插件并装进 profile），后者
-    # 是回答下方那张推荐卡与设置页的「个性化推荐」开关。两者都会改 profile，且
-    # 在我们的形态下要回答「谁来批准插件生成」的问题；action-cards 作为卡片插槽
-    # 留下，没有贡献者时不出内容。
-    - id: action-cards
-      name: '@deepseek-ai/dsh-action-cards'
-    - id: client-ui-action-cards
-      name: '@deepseek-ai/dsh-client-ui-action-cards'
+    # dshana：「让 Agent 创建插件」与「个性化推荐」两套刻意不带。前者在插件页的
+    # 添加菜单里开一个创建模式（后台起 Creator 生成插件并装进 profile），后者是
+    # 回答下方那张推荐卡与设置页的「个性化推荐」开关（开关就是 action-cards 的
+    # enabled 字段）。两者都会改 profile，且要回答「谁来批准插件生成」；这里连
+    # action-cards 插槽一并关掉，因为交付面里只剩它一家贡献者。
+    # - id: action-cards
+    #   name: '@deepseek-ai/dsh-action-cards'
+    # - id: client-ui-action-cards
+    #   name: '@deepseek-ai/dsh-client-ui-action-cards'
     # - id: creation-recommendations
     #   name: '@deepseek-ai/dsh-creation-recommendations'
     # - id: client-ui-creation-recommendations

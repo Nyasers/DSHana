@@ -1,0 +1,11 @@
+{
+  "package": "@deepseek-ai/dsh-client-ui-agent-preset",
+  "upstreamDir": "packages/client/ui-agent-preset",
+  "files": [
+    {
+      "path": "src/client/index.ts",
+      "upstreamSha256": "73dd72f092a67197ef2363a28806ea82905e4b7500e5df9dcde2378c31fd501a",
+      "deltaSha256": "0afda5d215c91b44efd285631af073a043ddf866ac425921e2146daed41a232e"
+    }
+  ]
+}
