@@ -33,6 +33,11 @@ overrides:
   "@hana/plugin-protocol": "file:vendor/hana-app-sdk/hana-plugin-protocol-0.0.0.tgz"
   "@hana/plugin-components": "file:vendor/hana-app-sdk/hana-plugin-components-0.0.0.tgz"
 
+  # vendor 线：上游 alpha.1 的 lib 已改用 1.2.0-alpha.1 的导出（parseEntryYaml /
+  # stringifyEntryYaml），但它自己声明的是 ~1.1.0；装 1.1.0 时 config-editor 与
+  # agent-preset-registry 会在 import 阶段失败。
+  "@deepseek-ai/cordis-plugin-include": "1.2.0-alpha.1"
+
   # 不使用的产品面
   "@deepseek-ai/dsh-acp-app": "-"
   "@deepseek-ai/dsh-client-product-analytics": "-"

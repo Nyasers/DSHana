@@ -479,11 +479,23 @@ export async function main(argv: string[]): Promise<number> {
   const upstreamOrigin = "http://127.0.0.1:" + dshPort;
   let dshCookie = "";
   try {
+    // 0.2.3 起 BrowserAuth 的 `authenticatedUrl` 归认证提供者（host-authentication-token），
+    // connection 服务只剩准入注册表；入口 URL 改由 `webserver/entry-url` 事件收集。
+    // ≤0.2.2 仍把它挂在 connection 上，保留作回退。
     const connection = typeof boot.ctx.get === "function" ? boot.ctx.get("connection") : null;
-    if (!connection || typeof connection.authenticatedUrl !== "function") {
-      throw new Error("dshana profile 未提供官方 connection（BrowserAuth 凭据面）——检查 bundle 层序：需含 @dshana/dsh-app");
+    let launch: string | undefined;
+    if (connection !== null && typeof connection.authenticatedUrl === "function") {
+      launch = connection.authenticatedUrl(upstreamOrigin);
+    } else {
+      const webServer = typeof boot.ctx.get === "function" ? boot.ctx.get("webServer") : null;
+      if (webServer === null || webServer === undefined) throw new Error("DSH 未提供 webServer 服务，无法收集入口 URL");
+      const entries: Array<{ label?: string; url: string; open?: boolean }> = [];
+      boot.ctx.emit(webServer, "webserver/entry-url", `${upstreamOrigin}/`, entries);
+      launch = entries.map((entry) => entry.url).find((url) => typeof url === "string" && url.length > 0);
     }
-    const launch = connection.authenticatedUrl(upstreamOrigin);
+    if (launch === undefined) {
+      throw new Error("DSH 未给出带凭据的入口 URL（webserver/entry-url 收集为空）——检查 host-authentication-token 行是否存在");
+    }
     const exchange = await fetch(launch, { redirect: "manual" });
     const setCookie = typeof exchange.headers.getSetCookie === "function"
       ? exchange.headers.getSetCookie()[0]
