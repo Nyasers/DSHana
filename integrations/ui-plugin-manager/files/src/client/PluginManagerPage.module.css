@@ -628,17 +628,24 @@
   display: inline-flex;
   flex: none;
   align-items: stretch;
-  /* 接缝靠子元素去掉单侧圆角完成；Button 的基础样式来自另一个包、在同优先级下
-     后注入，会把这几个零圆角顶回去。用组合选择器抬一格优先级，不依赖注入顺序。 */
+  /* 接缝靠子元素去掉单侧圆角完成；Button 的基础样式来自另一个包（primitives 是
+     运行时外部模块，自己一份 bundle），同优先级下后注入会把这几个零圆角顶回去。
+     用后代选择器抬一格优先级，不依赖注入顺序；Tooltip 会把第一个按钮再包一层，
+     所以不能用子代组合符。 */
   gap: 0;
 }
 
-.addGroup > .addPrimary {
+/* Tooltip 的包裹层也是 flex 子项：它自带的间距会把接缝顶开。 */
+.addGroup > * {
+  margin: 0;
+}
+
+.addGroup .addPrimary {
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
 }
 
-.addGroup > .addMore {
+.addGroup .addMore {
   width: 32px;
   padding: 0;
   border-left: 0.5px solid color-mix(in srgb, var(--dsw-alias-label-primary-foreground) 30%, transparent);

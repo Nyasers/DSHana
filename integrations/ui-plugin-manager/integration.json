@@ -10,7 +10,7 @@
     {
       "path": "src/client/PluginManagerPage.module.css",
       "upstreamSha256": "bc31aa15cfa848be303050b5ee55f5cd83b7cd3fe7913b8e73ace13ff16bd910",
-      "deltaSha256": "d454ecc485a478aad155449b38e701a48e7dda025ca06bdbcdc464958e925ccc"
+      "deltaSha256": "53a744d39a53c1c5113a1963b9b52b67552bc5bf16aacbe9cd0c24ec7e421612"
     }
   ]
 }
